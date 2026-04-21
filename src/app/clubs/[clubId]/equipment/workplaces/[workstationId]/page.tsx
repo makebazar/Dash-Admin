@@ -14,12 +14,14 @@ import {
     ChevronRight,
     Cpu,
     Gauge,
+    Keyboard,
     Loader2,
     Pencil,
     Plus,
     RefreshCw,
     Shirt,
     Trash2,
+    Unlink,
     Wifi,
     Wrench,
     X,
@@ -311,11 +313,17 @@ export default function WorkstationDetailsPage() {
         workstation: any;
     } | null>(null)
     const [isTelemetryLoading, setIsTelemetryLoading] = useState(false)
+    const [telemetryError, setTelemetryError] = useState<string | null>(null)
     const [isGeneratingCode, setIsGeneratingCode] = useState(false)
     const [showBindingCode, setShowBindingCode] = useState(false)
+    const [isUnbindingAgent, setIsUnbindingAgent] = useState(false)
 
     const equipmentById = useMemo(() => new Map(equipment.map(item => [item.id, item])), [equipment])
     const workstation = useMemo(() => workstations.find(item => item.id === workstationId) || null, [workstations, workstationId])
+    const effectiveWorkstation = telemetry?.workstation ?? workstation
+    const isAgentOnline = effectiveWorkstation?.agent_status === 'ONLINE' || Boolean(telemetry?.latest)
+    const effectiveBindingCode = effectiveWorkstation?.binding_code ?? null
+    const effectiveLastSeen = effectiveWorkstation?.agent_last_seen ?? null
     const attachedEquipment = useMemo(() => equipment.filter(item => item.workstation_id === workstationId), [equipment, workstationId])
     const primaryEquipment = useMemo(() => attachedEquipment.find(item => item.type === "PC" || item.type === "CONSOLE" || item.type === "TV") || null, [attachedEquipment])
     const peripheralEquipment = useMemo(() => attachedEquipment.filter(item => item.id !== primaryEquipment?.id), [attachedEquipment, primaryEquipment?.id])
@@ -489,14 +497,21 @@ export default function WorkstationDetailsPage() {
     const fetchTelemetry = useCallback(async () => {
         if (!workstationId) return
         setIsTelemetryLoading(true)
+        setTelemetryError(null)
         try {
             const res = await fetch(`/api/agents/telemetry/${workstationId}`, { cache: "no-store" })
             if (res.ok) {
                 const data = await res.json()
                 setTelemetry(data)
+            } else {
+                const body = await res.json().catch(() => null)
+                setTelemetry(null)
+                setTelemetryError(body?.error || `HTTP ${res.status}`)
             }
         } catch (error) {
             console.error("Error fetching telemetry:", error)
+            setTelemetry(null)
+            setTelemetryError("Network error")
         } finally {
             setIsTelemetryLoading(false)
         }
@@ -1592,26 +1607,26 @@ export default function WorkstationDetailsPage() {
                                 <div className="flex items-center gap-3">
                                     <div className={cn(
                                         "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                                        workstation?.agent_status === 'ONLINE' ? "bg-emerald-100" : "bg-slate-100"
+                                        isAgentOnline ? "bg-emerald-100" : "bg-slate-100"
                                     )}>
                                         <Activity className={cn(
                                             "h-5 w-5",
-                                            workstation?.agent_status === 'ONLINE' ? "text-emerald-600" : "text-slate-400"
+                                            isAgentOnline ? "text-emerald-600" : "text-slate-400"
                                         )} />
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2">
                                             <span className={cn(
                                                 "inline-flex h-2 w-2 rounded-full",
-                                                workstation?.agent_status === 'ONLINE' ? "bg-emerald-500" : "bg-slate-300"
+                                                isAgentOnline ? "bg-emerald-500" : "bg-slate-300"
                                             )} />
                                             <span className="text-sm font-semibold text-slate-900">
-                                                {workstation?.agent_status === 'ONLINE' ? 'Агент подключен' : 'Агент не подключен'}
+                                                {isAgentOnline ? 'Агент подключен' : 'Агент не подключен'}
                                             </span>
                                         </div>
-                                        {workstation?.agent_last_seen && (
+                                        {effectiveLastSeen && (
                                             <p className="text-xs text-muted-foreground">
-                                                Последний сигнал: {new Date(workstation.agent_last_seen).toLocaleString('ru-RU')}
+                                                Последний сигнал: {new Date(effectiveLastSeen).toLocaleString('ru-RU')}
                                             </p>
                                         )}
                                     </div>
@@ -1626,40 +1641,71 @@ export default function WorkstationDetailsPage() {
                                         <RefreshCw className={cn("mr-1.5 h-4 w-4", isTelemetryLoading && "animate-spin")} />
                                         Обновить
                                     </Button>
-                                    <Button
-                                        variant="outline"
-                                        className="rounded-xl font-medium"
-                                        onClick={() => {
-                                            setIsGeneratingCode(true)
-                                            fetch(`/api/clubs/${clubId}/workstations`, {
-                                                method: "POST",
-                                                headers: { "Content-Type": "application/json" },
-                                                body: JSON.stringify({
-                                                    action: "generate_binding_code",
-                                                    workstation_id: workstationId
-                                                })
-                                            }).then(res => res.json()).then(data => {
-                                                if (data.binding_code) {
-                                                    mergeWorkstationState(workstationId, { binding_code: data.binding_code })
-                                                    setShowBindingCode(true)
-                                                }
-                                            }).finally(() => setIsGeneratingCode(false))
-                                        }}
-                                        disabled={isGeneratingCode}
-                                    >
-                                        <Wifi className="mr-1.5 h-4 w-4" />
-                                        {workstation?.binding_code ? 'Новый код' : 'Получить код'}
-                                    </Button>
+                                    {isAgentOnline ? (
+                                        <Button
+                                            variant="outline"
+                                            className="rounded-xl font-medium"
+                                            onClick={() => {
+                                                if (!workstationId) return
+                                                if (!confirm("Отвязать агента от этого рабочего места?")) return
+                                                setIsUnbindingAgent(true)
+                                                fetch(`/api/agents/unbind`, {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ workstation_id: workstationId })
+                                                }).then(async (res) => {
+                                                    if (!res.ok) {
+                                                        const body = await res.json().catch(() => null)
+                                                        throw new Error(body?.error || `HTTP ${res.status}`)
+                                                    }
+                                                    mergeWorkstationState(workstationId, { binding_code: null, agent_last_seen: null, agent_status: "OFFLINE" })
+                                                    setTelemetry(null)
+                                                    setShowBindingCode(false)
+                                                }).catch((err) => {
+                                                    alert(err instanceof Error ? err.message : "Не удалось отвязать агента")
+                                                }).finally(() => setIsUnbindingAgent(false))
+                                            }}
+                                            disabled={isUnbindingAgent}
+                                        >
+                                            {isUnbindingAgent ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Unlink className="mr-1.5 h-4 w-4" />}
+                                            Отвязать
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            variant="outline"
+                                            className="rounded-xl font-medium"
+                                            onClick={() => {
+                                                setIsGeneratingCode(true)
+                                                fetch(`/api/clubs/${clubId}/workstations`, {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({
+                                                        action: "generate_binding_code",
+                                                        workstation_id: workstationId
+                                                    })
+                                                }).then(res => res.json()).then(data => {
+                                                    if (data.binding_code) {
+                                                        mergeWorkstationState(workstationId, { binding_code: data.binding_code })
+                                                        setShowBindingCode(true)
+                                                    }
+                                                }).finally(() => setIsGeneratingCode(false))
+                                            }}
+                                            disabled={isGeneratingCode}
+                                        >
+                                            <Wifi className="mr-1.5 h-4 w-4" />
+                                            {effectiveBindingCode ? 'Новый код' : 'Получить код'}
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Binding Code Display */}
-                            {showBindingCode && workstation?.binding_code && (
+                            {showBindingCode && effectiveBindingCode && (
                                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6">
                                     <div className="text-center">
                                         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Код для привязки агента</p>
                                         <div className="flex justify-center gap-2 mb-4">
-                                            {workstation.binding_code.split('').map((char: string, i: number) => (
+                                            {effectiveBindingCode.split('').map((char: string, i: number) => (
                                                 <div key={i} className="flex h-14 w-10 items-center justify-center rounded-lg bg-white border-2 border-slate-200 text-2xl font-bold text-slate-900">
                                                     {char}
                                                 </div>
@@ -1676,12 +1722,32 @@ export default function WorkstationDetailsPage() {
                             )}
 
                             {/* No Agent */}
-                            {!workstation?.binding_code && workstation?.agent_status !== 'ONLINE' && (
+                            {!effectiveBindingCode && !isAgentOnline && (
                                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
                                     <Wifi className="mx-auto h-12 w-12 text-slate-300 mb-3" />
                                     <h3 className="text-lg font-semibold text-slate-900 mb-1">Агент не привязан</h3>
                                     <p className="text-sm text-muted-foreground mb-4">
                                         Нажмите "Получить код", чтобы сгенерировать код для привязки агента мониторинга
+                                    </p>
+                                </div>
+                            )}
+
+                            {!isTelemetryLoading && telemetryError && (
+                                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
+                                    <Activity className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-1">Телеметрия недоступна</h3>
+                                    <p className="text-sm text-muted-foreground mb-4">
+                                        {telemetryError}
+                                    </p>
+                                </div>
+                            )}
+
+                            {!isTelemetryLoading && !telemetryError && telemetry && !telemetry.latest && (
+                                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
+                                    <Activity className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+                                    <h3 className="text-lg font-semibold text-slate-900 mb-1">Телеметрия ещё не получена</h3>
+                                    <p className="text-sm text-muted-foreground mb-4">
+                                        Если агент только что подключили — подожди немного или нажми «Обновить».
                                     </p>
                                 </div>
                             )}
@@ -1708,20 +1774,20 @@ export default function WorkstationDetailsPage() {
                                                     <span className="text-muted-foreground">Температура</span>
                                                     <span className={cn(
                                                         "font-semibold",
-                                                        (telemetry.latest.cpu_temp || 0) > 80 ? "text-rose-600" :
-                                                        (telemetry.latest.cpu_temp || 0) > 60 ? "text-amber-600" : "text-emerald-600"
+                                                        Number(telemetry.latest.cpu_temp || 0) > 80 ? "text-rose-600" :
+                                                        Number(telemetry.latest.cpu_temp || 0) > 60 ? "text-amber-600" : "text-emerald-600"
                                                     )}>
-                                                        {telemetry.latest.cpu_temp ? `${telemetry.latest.cpu_temp}°C` : '—'}
+                                                        {telemetry.latest.cpu_temp ? `${Number(telemetry.latest.cpu_temp).toFixed(0)}°C` : '—'}
                                                     </span>
                                                 </div>
                                                 <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                                                     <div 
                                                         className={cn(
                                                             "h-full rounded-full transition-all",
-                                                            (telemetry.latest.cpu_temp || 0) > 80 ? "bg-rose-500" :
-                                                            (telemetry.latest.cpu_temp || 0) > 60 ? "bg-amber-500" : "bg-emerald-500"
+                                                            Number(telemetry.latest.cpu_temp || 0) > 80 ? "bg-rose-500" :
+                                                            Number(telemetry.latest.cpu_temp || 0) > 60 ? "bg-amber-500" : "bg-emerald-500"
                                                         )}
-                                                        style={{ width: `${Math.min((telemetry.latest.cpu_temp || 0) / 100 * 100, 100)}%` }}
+                                                        style={{ width: `${Math.min(Number(telemetry.latest.cpu_temp || 0), 100)}%` }}
                                                     />
                                                 </div>
                                             </div>
@@ -1729,7 +1795,7 @@ export default function WorkstationDetailsPage() {
                                                 <div className="flex justify-between text-xs mb-1">
                                                     <span className="text-muted-foreground">Загрузка</span>
                                                     <span className="font-semibold text-slate-900">
-                                                        {telemetry.latest.cpu_usage ? `${telemetry.latest.cpu_usage.toFixed(0)}%` : '—'}
+                                                        {telemetry.latest.cpu_usage ? `${Number(telemetry.latest.cpu_usage).toFixed(0)}%` : '—'}
                                                     </span>
                                                 </div>
                                                 <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
@@ -1743,97 +1809,281 @@ export default function WorkstationDetailsPage() {
                                     </div>
 
                                     {/* GPU Cards */}
-                                    {telemetry.latest.gpu_data && Array.isArray(telemetry.latest.gpu_data) && telemetry.latest.gpu_data.length > 0 ? (
-                                        telemetry.latest.gpu_data.map((gpu: any, i: number) => (
-                                            <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6">
+                                    {(() => {
+                                        const gpuRaw = telemetry.latest.gpu_data
+                                        let gpus: any = null
+                                        if (!gpuRaw) gpus = null
+                                        else {
+                                            try {
+                                                gpus = typeof gpuRaw === "string" ? JSON.parse(gpuRaw) : gpuRaw
+                                            } catch {
+                                                gpus = null
+                                            }
+                                        }
+
+                                        if (Array.isArray(gpus) && gpus.length > 0) {
+                                            return gpus.map((gpu: any, i: number) => {
+                                                const memoryTotal = Number(gpu?.memory_total ?? gpu?.memoryTotal ?? 0)
+                                                const memoryUsed = Number(gpu?.memory_used ?? gpu?.memoryUsed ?? 0)
+                                                const memoryPercent = memoryTotal > 0 ? (memoryUsed / memoryTotal) * 100 : 0
+                                                const fanSpeed = Number(gpu?.fan_speed ?? gpu?.fanSpeed ?? 0)
+
+                                                return (
+                                                    <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6">
+                                                        <div className="flex items-center gap-3 mb-4">
+                                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+                                                                <Gauge className="h-5 w-5 text-slate-600" />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-semibold text-slate-900">Видеокарта</h3>
+                                                                <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                                                    {gpu.name || 'GPU'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-3">
+                                                            <div>
+                                                                <div className="flex justify-between text-xs mb-1">
+                                                                    <span className="text-muted-foreground">Температура</span>
+                                                                    <span className={cn(
+                                                                        "font-semibold",
+                                                                        Number(gpu.temp || 0) > 85 ? "text-rose-600" :
+                                                                        Number(gpu.temp || 0) > 70 ? "text-amber-600" : "text-emerald-600"
+                                                                    )}>
+                                                                        {gpu.temp ? `${Number(gpu.temp).toFixed(0)}°C` : '—'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                                    <div 
+                                                                        className={cn(
+                                                                            "h-full rounded-full transition-all",
+                                                                            Number(gpu.temp || 0) > 85 ? "bg-rose-500" :
+                                                                            Number(gpu.temp || 0) > 70 ? "bg-amber-500" : "bg-emerald-500"
+                                                                        )}
+                                                                        style={{ width: `${Math.min(Number(gpu.temp || 0), 100)}%` }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="flex justify-between text-xs mb-1">
+                                                                    <span className="text-muted-foreground">Загрузка</span>
+                                                                    <span className="font-semibold text-slate-900">
+                                                                        {gpu.usage ? `${Number(gpu.usage).toFixed(0)}%` : '—'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                                    <div 
+                                                                        className="h-full rounded-full bg-slate-900 transition-all"
+                                                                        style={{ width: `${Number(gpu.usage) || 0}%` }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            {memoryTotal > 0 && (
+                                                                <div>
+                                                                    <div className="flex justify-between text-xs mb-1">
+                                                                        <span className="text-muted-foreground">Память</span>
+                                                                        <span className="font-semibold text-slate-900">
+                                                                            {`${(memoryUsed / (1024 * 1024 * 1024)).toFixed(1)} / ${(memoryTotal / (1024 * 1024 * 1024)).toFixed(1)} ГБ`}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                                                                        <div 
+                                                                            className="h-full rounded-full bg-blue-500 transition-all"
+                                                                            style={{ width: `${memoryPercent}%` }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {fanSpeed > 0 && (
+                                                                <div>
+                                                                    <div className="flex justify-between text-xs mb-1">
+                                                                        <span className="text-muted-foreground">Вентилятор</span>
+                                                                        <span className="font-semibold text-slate-900">{fanSpeed}%</span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })
+                                        }
+
+                                        return (
+                                            <div className="rounded-2xl border border-slate-200 bg-white p-6">
                                                 <div className="flex items-center gap-3 mb-4">
                                                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
                                                         <Gauge className="h-5 w-5 text-slate-600" />
                                                     </div>
-                                                    <div>
-                                                        <h3 className="text-sm font-semibold text-slate-900">Видеокарта</h3>
-                                                        <p className="text-xs text-muted-foreground truncate max-w-[180px]">
-                                                            {gpu.name || 'GPU'}
-                                                        </p>
-                                                    </div>
+                                                    <h3 className="text-sm font-semibold text-slate-900">Видеокарта</h3>
                                                 </div>
-                                                <div className="space-y-3">
+                                                <p className="text-sm text-muted-foreground">Данные не получены</p>
+                                            </div>
+                                        )
+                                    })()}
+
+                                {/* Memory Card */}
+                                <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+                                            <Activity className="h-5 w-5 text-slate-600" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-slate-900">Оперативная память</h3>
+                                            <p className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                                {(() => {
+                                                    const memoryRaw = (telemetry?.latest as any)?.memory;
+                                                    if (!memoryRaw) return 'RAM';
+                                                    let mem: any = null;
+                                                    try {
+                                                        mem = typeof memoryRaw === 'string' ? JSON.parse(memoryRaw) : memoryRaw;
+                                                    } catch {
+                                                        mem = null;
+                                                    }
+                                                    const totalBytes = Number(mem?.total_bytes ?? mem?.totalBytes ?? 0)
+                                                    return totalBytes > 0
+                                                        ? `${(totalBytes / (1024 * 1024 * 1024)).toFixed(0)} GB`
+                                                        : 'RAM';
+                                                })()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {(() => {
+                                            const memoryRaw = (telemetry?.latest as any)?.memory;
+                                            let mem: any = null;
+                                            if (memoryRaw) {
+                                                try {
+                                                    mem = typeof memoryRaw === 'string' ? JSON.parse(memoryRaw) : memoryRaw;
+                                                } catch {
+                                                    mem = null;
+                                                }
+                                            }
+                                            const totalBytes = Number(mem?.total_bytes ?? mem?.totalBytes ?? 0);
+                                            const usedBytes = Number(mem?.used_bytes ?? mem?.usedBytes ?? 0);
+                                            const usagePercent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+                                            return (
+                                                <>
                                                     <div>
                                                         <div className="flex justify-between text-xs mb-1">
-                                                            <span className="text-muted-foreground">Температура</span>
-                                                            <span className={cn(
-                                                                "font-semibold",
-                                                                (gpu.temp || 0) > 85 ? "text-rose-600" :
-                                                                (gpu.temp || 0) > 70 ? "text-amber-600" : "text-emerald-600"
-                                                            )}>
-                                                                {gpu.temp ? `${gpu.temp}°C` : '—'}
+                                                            <span className="text-muted-foreground">Использовано</span>
+                                                            <span className="font-semibold text-slate-900">
+                                                                {totalBytes > 0 
+                                                                    ? `${(usedBytes / (1024 * 1024 * 1024)).toFixed(1)} / ${(totalBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+                                                                    : '—'}
                                                             </span>
                                                         </div>
                                                         <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                                                             <div 
                                                                 className={cn(
                                                                     "h-full rounded-full transition-all",
-                                                                    (gpu.temp || 0) > 85 ? "bg-rose-500" :
-                                                                    (gpu.temp || 0) > 70 ? "bg-amber-500" : "bg-emerald-500"
+                                                                    usagePercent > 90 ? "bg-rose-500" :
+                                                                    usagePercent > 70 ? "bg-amber-500" : "bg-violet-500"
                                                                 )}
-                                                                style={{ width: `${Math.min((gpu.temp || 0) / 100 * 100, 100)}%` }}
+                                                                style={{ width: `${usagePercent}%` }}
                                                             />
                                                         </div>
                                                     </div>
-                                                    <div>
-                                                        <div className="flex justify-between text-xs mb-1">
-                                                            <span className="text-muted-foreground">Загрузка</span>
-                                                            <span className="font-semibold text-slate-900">
-                                                                {gpu.usage ? `${gpu.usage.toFixed(0)}%` : '—'}
-                                                            </span>
-                                                        </div>
-                                                        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                                                            <div 
-                                                                className="h-full rounded-full bg-slate-900 transition-all"
-                                                                style={{ width: `${gpu.usage || 0}%` }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    {gpu.memory_total > 0 && (
+                                                    {telemetry.latest.memory_usage != null && (
                                                         <div>
                                                             <div className="flex justify-between text-xs mb-1">
-                                                                <span className="text-muted-foreground">Память</span>
+                                                                <span className="text-muted-foreground">Загрузка</span>
                                                                 <span className="font-semibold text-slate-900">
-                                                                    {gpu.memory_used && gpu.memory_total 
-                                                                        ? `${(gpu.memory_used / (1024 * 1024 * 1024)).toFixed(1)} / ${(gpu.memory_total / (1024 * 1024 * 1024)).toFixed(1)} ГБ`
+                                                                    {Number(telemetry.latest.memory_usage).toFixed(0)}%
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+
+                                {/* Disks Section */}
+                                {(() => {
+                                    const disksRaw = (telemetry?.latest as any)?.disks;
+                                    if (!disksRaw) return null;
+                                    let disks: any = null;
+                                    try {
+                                        disks = typeof disksRaw === 'string' ? JSON.parse(disksRaw) : disksRaw;
+                                    } catch {
+                                        return null;
+                                    }
+                                    if (!Array.isArray(disks) || disks.length === 0) return null;
+                                    return (
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+                                                    <Activity className="h-5 w-5 text-slate-600" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-sm font-semibold text-slate-900">Диски</h3>
+                                                    <p className="text-xs text-muted-foreground">{disks.length} накопитель(я)</p>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {disks.map((disk: any, i: number) => {
+                                                    const totalBytes = Number(disk?.total_bytes ?? disk?.totalBytes ?? 0);
+                                                    const freeBytes = Number(disk?.free_bytes ?? disk?.freeBytes ?? 0);
+                                                    const usedBytes = totalBytes - freeBytes;
+                                                    const usagePercent = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+                                                    return (
+                                                        <div key={i}>
+                                                            <div className="flex justify-between text-xs mb-1">
+                                                                <span className="text-muted-foreground font-medium">{disk.mount || disk.name || `Диск ${i + 1}`}</span>
+                                                                <span className="font-semibold text-slate-900">
+                                                                    {totalBytes > 0 
+                                                                        ? `${(usedBytes / (1024 * 1024 * 1024)).toFixed(0)} / ${(totalBytes / (1024 * 1024 * 1024)).toFixed(0)} GB`
                                                                         : '—'}
                                                                 </span>
                                                             </div>
                                                             <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                                                                 <div 
-                                                                    className="h-full rounded-full bg-blue-500 transition-all"
-                                                                    style={{ width: `${gpu.memory_total > 0 ? (gpu.memory_used / gpu.memory_total * 100) : 0}%` }}
+                                                                    className={cn(
+                                                                        "h-full rounded-full transition-all",
+                                                                        usagePercent > 95 ? "bg-rose-500" :
+                                                                        usagePercent > 80 ? "bg-amber-500" : "bg-slate-500"
+                                                                    )}
+                                                                    style={{ width: `${usagePercent}%` }}
                                                                 />
                                                             </div>
                                                         </div>
-                                                    )}
-                                                    {gpu.fan_speed > 0 && (
-                                                        <div>
-                                                            <div className="flex justify-between text-xs mb-1">
-                                                                <span className="text-muted-foreground">Вентилятор</span>
-                                                                <span className="font-semibold text-slate-900">{gpu.fan_speed}%</span>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                    );
+                                                })}
                                             </div>
-                                        ))
-                                    ) : (
-                                        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                                            <div className="flex items-center gap-3 mb-4">
-                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
-                                                    <Gauge className="h-5 w-5 text-slate-600" />
-                                                </div>
-                                                <h3 className="text-sm font-semibold text-slate-900">Видеокарта</h3>
-                                            </div>
-                                            <p className="text-sm text-muted-foreground">Данные не получены</p>
                                         </div>
-                                    )}
+                                    );
+                                })()}
+                            </div>
+                            )}
+
+                            {/* Devices Section */}
+                            {telemetry?.latest?.devices && (
+                                <div className="rounded-2xl border border-slate-200 bg-white p-6">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+                                            <Keyboard className="h-5 w-5 text-slate-600" />
+                                        </div>
+                                        <h3 className="text-sm font-semibold text-slate-900">Подключенные устройства</h3>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {(() => {
+                                            try {
+                                                const devicesRaw: any = (telemetry?.latest as any)?.devices;
+                                                const devices = typeof devicesRaw === "string" ? JSON.parse(devicesRaw) : devicesRaw;
+                                                return Array.isArray(devices) ? devices.map((device: any, i: number) => (
+                                                    <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-slate-50">
+                                                        <span className="text-lg">
+                                                            {device.type === 'keyboard' ? '⌨️' : '🖱️'}
+                                                        </span>
+                                                        <span className="text-sm text-slate-700">{device.name || 'Неизвестное устройство'}</span>
+                                                    </div>
+                                                )) : null;
+                                            } catch {
+                                                return null;
+                                            }
+                                        })()}
+                                    </div>
                                 </div>
                             )}
 
@@ -1847,7 +2097,7 @@ export default function WorkstationDetailsPage() {
                                                 key={i} 
                                                 className="flex-1 rounded-t bg-slate-200 hover:bg-slate-300 transition-colors"
                                                 style={{ height: `${(point.cpu_usage || 0)}%` }}
-                                                title={`${new Date(point.created_at).toLocaleTimeString('ru-RU')} - ${point.cpu_usage?.toFixed(0)}%`}
+                                                title={`${new Date(point.created_at).toLocaleTimeString('ru-RU')} - ${Number(point.cpu_usage)?.toFixed(0)}%`}
                                             />
                                         ))}
                                     </div>

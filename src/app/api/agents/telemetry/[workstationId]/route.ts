@@ -30,7 +30,7 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Get latest telemetry
+        // Get latest telemetry with all fields
         const latest = await query(
             `SELECT * FROM agent_telemetry 
              WHERE workstation_id = $1 
@@ -41,17 +41,18 @@ export async function GET(
 
         // Get history for charts
         const history = await query(
-            `SELECT cpu_temp, cpu_usage, gpu_data, created_at 
+            `SELECT cpu_temp, cpu_usage, cpu_model, gpu_data, created_at 
              FROM agent_telemetry
              WHERE workstation_id = $1 
                AND created_at > NOW() - INTERVAL '1 hour'
-             ORDER BY created_at ASC`,
-            [workstationId]
+             ORDER BY created_at ASC
+             LIMIT $2`,
+            [workstationId, limit]
         );
 
-        // Get workstation info
+        // Get workstation info with binding code
         const workstation = await query(
-            `SELECT id, name, zone, agent_last_seen, agent_status 
+            `SELECT id, name, zone, agent_last_seen, agent_status, binding_code 
              FROM club_workstations WHERE id = $1`,
             [workstationId]
         );

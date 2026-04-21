@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
         const ws = workstation.rows[0];
 
-        // Update last seen
+        // Update last seen and status
         await query(
             `UPDATE club_workstations 
              SET agent_last_seen = NOW(), 
@@ -32,10 +32,18 @@ export async function POST(request: Request) {
             [hostname || null, ws.id]
         );
 
+        // Return MQTT connection details
+        // Agent will use these to connect and subscribe
         return NextResponse.json({
             workstation_id: ws.id,
             club_id: ws.club_id,
-            name: ws.name
+            name: ws.name,
+            mqtt: {
+                broker_url: process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883',
+                username: process.env.MQTT_USERNAME || 'dashadmin',
+                password: process.env.MQTT_PASSWORD || '',
+                telemetry_topic: `agent/${ws.id}/telemetry`
+            }
         });
     } catch (error) {
         console.error('Agent Register Error:', error);
