@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { hasColumn } from '@/lib/db-compat';
 import { formatDateKeyInTimezone, formatLocalDate, parseDateKey } from '@/lib/utils';
 import { requireClubFullAccess } from '@/lib/club-api-access';
-import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { ensureClubSubscriptionActive } from '@/lib/club-subscription-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -169,7 +169,8 @@ export async function PATCH(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const guard = await ensureOwnerSubscriptionActive(clubId, adminId)
+        await requireClubFullAccess(clubId)
+        const guard = await ensureClubSubscriptionActive(clubId)
         if (!guard.ok) return guard.response
 
         const clubRes = await query(
@@ -383,7 +384,8 @@ export async function POST(
 
         if (!adminId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const guard = await ensureOwnerSubscriptionActive(clubId, adminId)
+        await requireClubFullAccess(clubId)
+        const guard = await ensureClubSubscriptionActive(clubId)
         if (!guard.ok) return guard.response
 
         let prevMonth = month - 1;

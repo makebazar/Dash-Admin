@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useParams } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
@@ -9,12 +9,41 @@ import { WorkScheduleGrid } from "@/components/schedule/WorkScheduleGrid"
 
 export default function SchedulePage() {
     const params = useParams()
+    const router = useRouter()
+    const searchParams = useSearchParams()
     const clubId = params.clubId as string
 
-    const [month, setMonth] = useState(new Date().getMonth() + 1)
-    const [year, setYear] = useState(new Date().getFullYear())
+    const now = useMemo(() => new Date(), [])
+    const monthParam = searchParams.get("month")
+    const yearParam = searchParams.get("year")
+
+    const initialMonth = useMemo(() => {
+        const m = monthParam ? parseInt(monthParam, 10) : NaN
+        if (!Number.isFinite(m) || m < 1 || m > 12) return now.getMonth() + 1
+        return m
+    }, [monthParam, now])
+
+    const initialYear = useMemo(() => {
+        const y = yearParam ? parseInt(yearParam, 10) : NaN
+        if (!Number.isFinite(y) || y < 1970 || y > 3000) return now.getFullYear()
+        return y
+    }, [yearParam, now])
+
+    const [month, setMonth] = useState(initialMonth)
+    const [year, setYear] = useState(initialYear)
     const [data, setData] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+        setMonth(initialMonth)
+        setYear(initialYear)
+    }, [initialMonth, initialYear])
+
+    useEffect(() => {
+        if (!monthParam || !yearParam) {
+            router.replace(`?month=${initialMonth}&year=${initialYear}`)
+        }
+    }, [monthParam, yearParam, router, initialMonth, initialYear])
 
     const fetchData = async () => {
         setIsLoading(true)
@@ -47,6 +76,7 @@ export default function SchedulePage() {
         }
         setMonth(newMonth)
         setYear(newYear)
+        router.replace(`?month=${newMonth}&year=${newYear}`)
     }
 
     const monthNames = [

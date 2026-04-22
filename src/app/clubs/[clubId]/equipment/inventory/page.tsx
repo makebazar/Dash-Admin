@@ -938,16 +938,16 @@ export default function EquipmentInventory() {
                 {/* Bulk Actions Bar (Conditional) */}
                 {selectedIds.size > 0 && (
                     <div className="animate-in fade-in slide-in-from-top-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                         <span className="font-medium">Выбрано: {selectedIds.size}</span>
                         <div className="hidden h-4 w-px bg-blue-200 sm:block" />
-                        <Button size="sm" variant="ghost" className="justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={handleBulkRepair}>
+                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={handleBulkRepair}>
                             <Wrench className="h-3.5 w-3.5 mr-2" /> Отправить в ремонт
                         </Button>
-                        <Button size="sm" variant="ghost" className="justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={handleBulkArchive}>
+                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={handleBulkArchive}>
                             <Archive className="h-3.5 w-3.5 mr-2" /> Списать
                         </Button>
-                        <Button size="sm" variant="ghost" className="justify-start hover:bg-blue-100 hover:text-blue-800 sm:ml-auto sm:justify-center" onClick={() => setSelectedIds(new Set())}>
+                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:ml-auto sm:justify-center" onClick={() => setSelectedIds(new Set())}>
                             Снять выделение
                         </Button>
                         </div>
@@ -1189,13 +1189,23 @@ export default function EquipmentInventory() {
 
                                             {/* Group Items */}
                                             {isExpanded && (
-                                                <div className="bg-white border-b border-slate-200 hidden md:grid grid-cols-6 gap-4 px-6 py-2">
-                                                    <div className="col-span-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Оборудование</div>
-                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Идентификация</div>
-                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Расположение</div>
-                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Состояние</div>
-                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Гарантия</div>
-                                                </div>
+                                                <TableRow className="bg-white border-b border-slate-200 hidden md:table-row">
+                                                    <TableCell colSpan={2} className="py-2 pl-6 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                        Оборудование
+                                                    </TableCell>
+                                                    <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                        Идентификация
+                                                    </TableCell>
+                                                    <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                        Расположение
+                                                    </TableCell>
+                                                    <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                        Состояние
+                                                    </TableCell>
+                                                    <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                                        Гарантия
+                                                    </TableCell>
+                                                </TableRow>
                                             )}
                                             {isExpanded && group.items.map((item) => (
                                                 <TableRow 
