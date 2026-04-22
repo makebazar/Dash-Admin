@@ -78,6 +78,10 @@ export interface Formula {
         night_rate?: number
         full_shift_hours?: number
         payout_timing?: 'SHIFT' | 'MONTH'
+        rate_tiers?: {
+            metric_key?: string
+            tiers: { from: number; rate: number }[]
+        }
     }
     bonuses: Bonus[]
     conditions: {
@@ -171,6 +175,19 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
     const [schemeDescription, setSchemeDescription] = useState('')
     const [formula, setFormula] = useState<Formula>(defaultFormula)
     const [standardMonthlyShifts, setStandardMonthlyShifts] = useState(15)
+    const [exampleHours, setExampleHours] = useState(12)
+    const [exampleShiftRevenue, setExampleShiftRevenue] = useState(0)
+    const [exampleRevenueCash, setExampleRevenueCash] = useState(0)
+    const [exampleRevenueCard, setExampleRevenueCard] = useState(0)
+    const [exampleBarPurchases, setExampleBarPurchases] = useState(0)
+    const [exampleMaintenanceRawSum, setExampleMaintenanceRawSum] = useState(0)
+    const [exampleMaintenanceTasksCompleted, setExampleMaintenanceTasksCompleted] = useState(0)
+    const [exampleMaintenanceTasksAssigned, setExampleMaintenanceTasksAssigned] = useState(0)
+    const [exampleMaintenancePenalty, setExampleMaintenancePenalty] = useState(0)
+    const [exampleMetricOverrides, setExampleMetricOverrides] = useState<Record<string, number>>({})
+    const [exampleChecklistScores, setExampleChecklistScores] = useState<Record<string, number>>({})
+    const [previewResult, setPreviewResult] = useState<any>(null)
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false)
 
     useEffect(() => {
         fetchReportMetrics()
@@ -313,6 +330,419 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         return formula.bonuses.some(b => b.type === type)
     }
 
+    const toggleBaseRateTiers = (enabled: boolean) => {
+        setFormula(prev => {
+            if (!enabled) return { ...prev, base: { ...prev.base, rate_tiers: undefined } }
+            const existing = prev.base.rate_tiers
+            const tiers = existing?.tiers?.length ? existing.tiers : [{ from: 20000, rate: 140 }, { from: 25000, rate: 170 }]
+            return { ...prev, base: { ...prev.base, rate_tiers: { metric_key: existing?.metric_key || 'total_revenue', tiers } } }
+        })
+    }
+
+    const addBaseRateTier = () => {
+        setFormula(prev => {
+            const existing = prev.base.rate_tiers
+            const tiers = existing?.tiers?.length ? existing.tiers : []
+            const maxFrom = tiers.reduce((acc, t) => Math.max(acc, Number(t.from) || 0), 0)
+            return {
+                ...prev,
+                base: {
+                    ...prev.base,
+                    rate_tiers: {
+                        metric_key: existing?.metric_key || 'total_revenue',
+                        tiers: [...tiers, { from: maxFrom ? maxFrom + 5000 : 20000, rate: prev.base.amount || 0 }]
+                    }
+                }
+            }
+        })
+    }
+
+    const updateBaseRateTier = (index: number, patch: Partial<{ from: number; rate: number }>) => {
+        setFormula(prev => {
+            const existing = prev.base.rate_tiers
+            if (!existing) return prev
+            const tiers = [...existing.tiers]
+            tiers[index] = { ...tiers[index], ...patch }
+            tiers.sort((a, b) => (Number(a.from) || 0) - (Number(b.from) || 0))
+            return { ...prev, base: { ...prev.base, rate_tiers: { ...existing, tiers } } }
+        })
+    }
+
+    const removeBaseRateTier = (index: number) => {
+        setFormula(prev => {
+            const existing = prev.base.rate_tiers
+            if (!existing) return prev
+            const tiers = existing.tiers.filter((_, i) => i !== index)
+            return { ...prev, base: { ...prev.base, rate_tiers: tiers.length ? { ...existing, tiers } : undefined } }
+        })
+    }
+
+    const checklistTemplateLabel = (templateId: number) => {
+        const template = checklistTemplates.find(t => Number(t.id) === Number(templateId))
+        return template?.name || `Шаблон #${templateId}`
+    }
+
+    const metricOptionsForTiers = useMemo(() => {
+        const base = [
+            { key: 'total_revenue', label: 'Общая выручка' },
+            { key: 'revenue_cash', label: 'Выручка (наличные)' },
+            { key: 'revenue_card', label: 'Выручка (безнал)' }
+        ]
+
+        const existingKeys = new Set(base.map(b => b.key))
+        const extra = reportMetrics
+            .filter(m => !existingKeys.has(m.key))
+            .map(m => ({ key: m.key, label: m.label || m.key }))
+
+        return [...base, ...extra]
+    }, [reportMetrics])
+
+    const requiredMetricKeys = useMemo(() => {
+        const keys = new Set<string>()
+
+        if (formula.base.rate_tiers?.metric_key) keys.add(formula.base.rate_tiers.metric_key)
+        formula.bonuses.forEach(b => {
+            if (b.type === 'percent_revenue' || b.type === 'progressive_percent') {
+                const sourceKey = b.source || 'total'
+                if (sourceKey === 'total') keys.add('total_revenue')
+                else if (sourceKey === 'cash') keys.add('revenue_cash')
+                else if (sourceKey === 'card') keys.add('revenue_card')
+                else keys.add(sourceKey)
+            } else if (b.type === 'maintenance_kpi') {
+                keys.add('maintenance_raw_sum')
+                keys.add('maintenance_tasks_completed')
+                keys.add('maintenance_tasks_assigned')
+            }
+        })
+
+        if (formula.base.type === 'percent_revenue') keys.add('total_revenue')
+        if (keys.size === 0) keys.add('total_revenue')
+
+        return Array.from(keys)
+    }, [formula])
+
+    const needsCashCardSplit = useMemo(() => {
+        const tierKey = formula.base.rate_tiers?.metric_key
+        if (tierKey === 'revenue_cash' || tierKey === 'revenue_card') return true
+        return formula.bonuses.some(b => (b.type === 'percent_revenue' || b.type === 'progressive_percent') && (b.source === 'cash' || b.source === 'card'))
+    }, [formula])
+
+    const hasMaintenanceKpi = useMemo(() => {
+        return formula.bonuses.some(b => b.type === 'maintenance_kpi')
+    }, [formula])
+
+    const exampleReportMetricsForPreview = useMemo(() => {
+        const revenueCash = needsCashCardSplit ? Number(exampleRevenueCash || 0) : Number(exampleShiftRevenue || 0)
+        const revenueCard = needsCashCardSplit ? Number(exampleRevenueCard || 0) : 0
+        const totalRevenue = revenueCash + revenueCard
+
+        const metrics: Record<string, number> = {
+            total_revenue: totalRevenue,
+            revenue_cash: revenueCash,
+            revenue_card: revenueCard,
+            ...Object.fromEntries(Object.entries(exampleMetricOverrides).map(([k, v]) => [k, Number(v || 0)]))
+        }
+
+        if (hasMaintenanceKpi) {
+            metrics.maintenance_raw_sum = Number(exampleMaintenanceRawSum || 0)
+            metrics.maintenance_tasks_completed = Number(exampleMaintenanceTasksCompleted || 0)
+            metrics.maintenance_tasks_assigned = Number(exampleMaintenanceTasksAssigned || 0)
+            metrics.maintenance_overdue_penalty_applied = Number(exampleMaintenancePenalty || 0)
+        }
+
+        return metrics
+    }, [
+        needsCashCardSplit,
+        exampleRevenueCash,
+        exampleRevenueCard,
+        exampleShiftRevenue,
+        exampleMetricOverrides,
+        hasMaintenanceKpi,
+        exampleMaintenanceRawSum,
+        exampleMaintenanceTasksCompleted,
+        exampleMaintenanceTasksAssigned,
+        exampleMaintenancePenalty
+    ])
+
+    const describeMetric = (key?: string, value?: number) => {
+        if (!key) return ''
+        const metricLabel =
+            key === 'total_revenue'
+                ? 'выручки смены'
+                : key === 'revenue_cash'
+                    ? 'выручки (наличные)'
+                    : key === 'revenue_card'
+                        ? 'выручки (безнал)'
+                        : reportMetrics.find(m => m.key === key)?.label || key
+        if (value === undefined || value === null || Number.isNaN(Number(value))) return metricLabel
+        const v = Number(value)
+        return `${metricLabel} (${v.toLocaleString('ru-RU')} ₽)`
+    }
+
+    const baseTierExplanation = useMemo(() => {
+        if (formula.base.type !== 'hourly') return null
+        const tiers = formula.base.rate_tiers?.tiers
+        if (!tiers || tiers.length === 0) return null
+
+        const metricKey = formula.base.rate_tiers?.metric_key || 'total_revenue'
+        const metricValue = Number(exampleReportMetricsForPreview[metricKey] || 0)
+        const sorted = [...tiers].sort((a, b) => (Number(b.from) || 0) - (Number(a.from) || 0))
+        const tier = sorted.find(t => metricValue >= (Number(t.from) || 0))
+        if (!tier) {
+            const minFrom = Math.min(...tiers.map(t => Number(t.from) || 0))
+            return `${describeMetric(metricKey, metricValue)} ниже первого порога ${minFrom.toLocaleString('ru-RU')} ₽`
+        }
+        return `${describeMetric(metricKey, metricValue)} ≥ ${Number(tier.from || 0).toLocaleString('ru-RU')} ₽ → ставка ${Number(tier.rate || 0).toLocaleString('ru-RU')} ₽/ч`
+    }, [formula.base, exampleReportMetricsForPreview, describeMetric])
+
+    const kpiNotAppliedNotes = useMemo(() => {
+        const appliedNames = new Set<string>(
+            Array.isArray(previewResult?.breakdown?.bonuses)
+                ? previewResult.breakdown.bonuses.map((b: any) => String(b.name))
+                : []
+        )
+
+        const notes: { name: string; reason: string }[] = []
+
+        for (const bonus of formula.bonuses) {
+            const name = bonus.name || bonus.type
+            if (appliedNames.has(String(name))) continue
+
+            if (bonus.type === 'fixed') {
+                if (Number(bonus.amount || 0) <= 0) notes.push({ name, reason: 'Сумма 0 ₽' })
+                continue
+            }
+
+            if (bonus.type === 'percent_revenue') {
+                const sourceKey = bonus.source || 'total'
+                const metricKey = sourceKey === 'total' ? 'total_revenue' : sourceKey === 'cash' ? 'revenue_cash' : sourceKey === 'card' ? 'revenue_card' : sourceKey
+                const metricValue = Number(exampleReportMetricsForPreview[metricKey] || 0)
+                const percent = Number(bonus.percent || 0)
+                if (metricValue <= 0) notes.push({ name, reason: `${describeMetric(metricKey, metricValue)} = 0` })
+                else if (percent <= 0) notes.push({ name, reason: 'Процент 0%' })
+                continue
+            }
+
+            if (bonus.type === 'progressive_percent') {
+                if (bonus.mode === 'MONTH') {
+                    notes.push({ name, reason: 'Месячный KPI — не начисляется в смене' })
+                    continue
+                }
+                const sourceKey = bonus.source || 'total'
+                const metricKey = sourceKey === 'total' ? 'total_revenue' : sourceKey === 'cash' ? 'revenue_cash' : sourceKey === 'card' ? 'revenue_card' : sourceKey
+                const metricValue = Number(exampleReportMetricsForPreview[metricKey] || 0)
+                const thresholds = bonus.thresholds || []
+                if (!thresholds.length) {
+                    notes.push({ name, reason: 'Нет порогов' })
+                    continue
+                }
+                const minFrom = Math.min(...thresholds.map(t => Number(t.from) || 0))
+                if (metricValue < minFrom) {
+                    notes.push({ name, reason: `${describeMetric(metricKey, metricValue)} ниже порога ${minFrom.toLocaleString('ru-RU')} ₽` })
+                }
+                continue
+            }
+
+            if (bonus.type === 'checklist') {
+                if (bonus.mode === 'MONTH') {
+                    notes.push({ name, reason: 'Месячный KPI — не начисляется в смене' })
+                    continue
+                }
+                const templateId = Number(bonus.checklist_template_id)
+                const score = Number(exampleChecklistScores[String(templateId)] ?? 100)
+                if (Array.isArray(bonus.checklist_thresholds) && bonus.checklist_thresholds.length > 0) {
+                    const sorted = [...bonus.checklist_thresholds].sort((a, b) => (Number(b.min_score) || 0) - (Number(a.min_score) || 0))
+                    const hit = sorted.find(t => score >= (Number(t.min_score) || 0))
+                    if (!hit) {
+                        const maxNeed = Math.max(...bonus.checklist_thresholds.map(t => Number(t.min_score) || 0))
+                        notes.push({ name, reason: `Оценка ${score.toFixed(0)}% ниже порога ${maxNeed}%` })
+                    }
+                    continue
+                }
+                const minScore = Number(bonus.min_score || 0)
+                if (score < minScore) notes.push({ name, reason: `Оценка ${score.toFixed(0)}% ниже порога ${minScore}%` })
+                continue
+            }
+
+            if (bonus.type === 'maintenance_kpi') {
+                const isMonthlyTiers = bonus.reward_type === 'FIXED' || bonus.calculation_mode === 'MONTHLY' || bonus.calculation_mode === 'MONTHLY_TIERS'
+                if (isMonthlyTiers) {
+                    notes.push({ name, reason: 'Месячный KPI — не начисляется в смене' })
+                    continue
+                }
+                const raw = Number(exampleReportMetricsForPreview.maintenance_raw_sum || 0)
+                if (raw <= 0) notes.push({ name, reason: 'Сумма по задачам 0 ₽' })
+                continue
+            }
+
+            if (bonus.type === 'leaderboard_rank') {
+                notes.push({ name, reason: 'Месячный KPI — не начисляется в смене' })
+                continue
+            }
+        }
+
+        return notes
+    }, [formula.bonuses, previewResult, exampleReportMetricsForPreview, exampleChecklistScores, describeMetric])
+
+    const explainBonusLine = (b: any): string | null => {
+        const cfg = formula.bonuses.find(x => (x.name || x.type) === b.name)
+        const metricKey: string | undefined = b.source_key
+        const metricValue: number | undefined = typeof b.source_value === 'number' ? b.source_value : undefined
+
+        if (b.type === 'CHECKLIST_BONUS') {
+            const score = metricValue ?? 0
+            if (cfg && Array.isArray(cfg.checklist_thresholds) && cfg.checklist_thresholds.length > 0) {
+                const sorted = [...cfg.checklist_thresholds].sort((a, c) => (Number(c.min_score) || 0) - (Number(a.min_score) || 0))
+                const level = sorted.find(t => score >= (Number(t.min_score) || 0))
+                if (level) {
+                    return `Оценка ${score.toFixed(0)}%, сработал уровень ≥ ${level.min_score}%`
+                }
+            }
+            if (cfg && cfg.min_score) {
+                return `Оценка ${score.toFixed(0)}%, порог ${cfg.min_score}%`
+            }
+            return `Оценка по чек-листу ${score.toFixed(0)}%`
+        }
+
+        if (b.type === 'MAINTENANCE_KPI') {
+            const raw = metricValue ?? 0
+            if (b.multiplier && Number(b.multiplier) !== 1) {
+                return `Сумма по задачам ${raw.toFixed(2)} ₽ × множитель эффективности ${Number(b.multiplier).toFixed(2)}`
+            }
+            return `Сумма по задачам ${raw.toFixed(2)} ₽`
+        }
+
+        if (!cfg) {
+            if (metricKey && metricValue !== undefined) return describeMetric(metricKey, metricValue)
+            return null
+        }
+
+        if (cfg.type === 'percent_revenue') {
+            const percent = Number(cfg.percent || 0)
+            return `${percent.toFixed(1).replace(/\\.0$/, '')}% от ${describeMetric(metricKey, metricValue)}`
+        }
+
+        if (cfg.type === 'progressive_percent') {
+            const thresholds = cfg.thresholds || []
+            if (!thresholds.length || metricValue === undefined) {
+                return `Ступенчатый бонус от ${describeMetric(metricKey)}`
+            }
+            const sorted = [...thresholds].sort((a, c) => (Number(c.from) || 0) - (Number(a.from) || 0))
+            const hit = sorted.find(t => metricValue >= (Number(t.from) || 0))
+            if (!hit) {
+                const minFrom = Math.min(...thresholds.map(t => Number(t.from) || 0))
+                return `Текущая метрика ниже первого порога ${minFrom.toLocaleString('ru-RU')} ₽`
+            }
+            const rt = cfg.reward_type || 'PERCENT'
+            if (rt === 'FIXED') {
+                const amt = Number(hit.amount || 0)
+                return `Порог от ${Number(hit.from || 0).toLocaleString('ru-RU')} ₽, фиксированный бонус ${amt.toLocaleString('ru-RU')} ₽`
+            }
+            const perc = Number(hit.percent || cfg.percent || 0)
+            return `Порог от ${Number(hit.from || 0).toLocaleString('ru-RU')} ₽, ${perc.toFixed(1).replace(/\\.0$/, '')}% от ${describeMetric(metricKey, metricValue)}`
+        }
+
+        if (cfg.type === 'fixed') {
+            const amt = Number(cfg.amount || b.amount || 0)
+            return `Фиксированный бонус ${amt.toLocaleString('ru-RU')} ₽`
+        }
+
+        if (cfg.type === 'leaderboard_rank') {
+            const from = cfg.rank_from || 1
+            const to = cfg.rank_to || from
+            return `Место в рейтинге ${from}${to !== from ? `–${to}` : ''}`
+        }
+
+        if (metricKey && metricValue !== undefined) {
+            return describeMetric(metricKey, metricValue)
+        }
+        return null
+    }
+
+    const effectiveHourlyRateForExample = useMemo(() => {
+        if (formula.base.type !== 'hourly') return null
+        const baseRate = Number(formula.base.amount || 0)
+        const tiers = formula.base.rate_tiers?.tiers
+        if (!tiers || tiers.length === 0) return baseRate
+
+        const metricKey = formula.base.rate_tiers?.metric_key || 'total_revenue'
+        const cashValue = needsCashCardSplit ? Number(exampleRevenueCash || 0) : Number(exampleShiftRevenue || 0)
+        const cardValue = needsCashCardSplit ? Number(exampleRevenueCard || 0) : 0
+        const totalRevenue = cashValue + cardValue
+        const metricValue =
+            metricKey === 'revenue_cash'
+                ? cashValue
+                : metricKey === 'revenue_card'
+                    ? cardValue
+                    : metricKey === 'total_revenue'
+                        ? totalRevenue
+                        : Number(exampleMetricOverrides[metricKey] || 0)
+
+        const sorted = [...tiers].sort((a, b) => (Number(b.from) || 0) - (Number(a.from) || 0))
+        const tier = sorted.find(t => metricValue >= (Number(t.from) || 0))
+        if (!tier) return baseRate
+        const r = Number(tier.rate)
+        return Number.isFinite(r) ? r : baseRate
+    }, [formula.base, exampleRevenueCash, exampleRevenueCard, exampleShiftRevenue, exampleMetricOverrides, needsCashCardSplit])
+
+    const handleCalculatePreview = async () => {
+        setIsPreviewLoading(true)
+        try {
+            const revenueCash = needsCashCardSplit ? Number(exampleRevenueCash || 0) : Number(exampleShiftRevenue || 0)
+            const revenueCard = needsCashCardSplit ? Number(exampleRevenueCard || 0) : 0
+            const totalRevenue = revenueCash + revenueCard
+
+            const reportMetricsPayload: Record<string, number> = {
+                ...exampleReportMetricsForPreview,
+                total_revenue: totalRevenue,
+                revenue_cash: revenueCash,
+                revenue_card: revenueCard
+            }
+
+            const checklistTemplateIds = Array.from(
+                new Set(
+                    formula.bonuses
+                        .filter(b => b.type === 'checklist')
+                        .map(b => Number(b.checklist_template_id))
+                        .filter(Boolean)
+                )
+            )
+
+            const evaluations = checklistTemplateIds.map(templateId => ({
+                template_id: templateId,
+                score_percent: Number(exampleChecklistScores[String(templateId)] ?? 100)
+            }))
+
+            const schemePayload = {
+                base: formula.base,
+                bonuses: formula.bonuses,
+                period_bonuses: []
+            }
+
+            const shiftPayload = {
+                id: 'example',
+                total_hours: Number(exampleHours || 0),
+                bar_purchases: Number(exampleBarPurchases || 0),
+                evaluations
+            }
+
+            const res = await fetch(`/api/clubs/${clubId}/salary-schemes/preview`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scheme: schemePayload, shift: shiftPayload, reportMetrics: reportMetricsPayload })
+            })
+
+            const data = await res.json()
+            if (!res.ok) throw new Error(data?.error || 'Ошибка расчёта')
+
+            setPreviewResult(data)
+        } catch (e: any) {
+            alert(e?.message || 'Ошибка расчёта')
+        } finally {
+            setIsPreviewLoading(false)
+        }
+    }
+
     if (isLoading) return <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-purple-600" /></div>
 
     return (
@@ -332,9 +762,10 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             </div>
 
             <Tabs defaultValue="base" className="space-y-6">
-                <TabsList className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-100/50 p-1 text-muted-foreground w-full max-w-md">
+                <TabsList className="inline-flex h-11 items-center justify-center rounded-xl bg-slate-100/50 p-1 text-muted-foreground w-full max-w-2xl">
                     <TabsTrigger value="base" className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm w-full">1. База и Условия</TabsTrigger>
                     <TabsTrigger value="motivation" className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm w-full">2. Мотивация</TabsTrigger>
+                    <TabsTrigger value="example" className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm w-full">3. Пример</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="base" className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-500">
@@ -417,6 +848,78 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                 ? "Оплата за один час работы. Умножается на количество отработанных часов."
                                                                 : "Фиксированная сумма за одну смену. Выплачивается при выполнении нормы часов."}
                                                         </p>
+
+                                                        {formula.base.type === 'hourly' && (
+                                                            <div className="pt-4 mt-4 border-t border-slate-100 space-y-4">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div>
+                                                                        <p className="text-sm font-medium">Ставка по выручке смены</p>
+                                                                        <p className="text-xs text-muted-foreground">Автоматически выбирает ₽/ч по порогам метрики</p>
+                                                                    </div>
+                                                                    <Switch checked={!!formula.base.rate_tiers} onCheckedChange={toggleBaseRateTiers} className="data-[state=checked]:bg-slate-900" />
+                                                                </div>
+
+                                                                {formula.base.rate_tiers && (
+                                                                    <div className="space-y-4">
+                                                                        <div className="flex flex-col md:flex-row gap-3 md:items-end md:justify-between">
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-xs font-medium text-muted-foreground">Метрика для порогов</Label>
+                                                                                <Select
+                                                                                    value={formula.base.rate_tiers.metric_key || 'total_revenue'}
+                                                                                    onValueChange={(v) => setFormula(prev => ({ ...prev, base: { ...prev.base, rate_tiers: prev.base.rate_tiers ? { ...prev.base.rate_tiers, metric_key: v } : { metric_key: v, tiers: [] } } }))}
+                                                                                >
+                                                                                    <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200 w-full md:w-[320px]">
+                                                                                        <SelectValue placeholder="Выберите метрику" />
+                                                                                    </SelectTrigger>
+                                                                                    <SelectContent>
+                                                                                        {metricOptionsForTiers.map(m => (
+                                                                                            <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
+                                                                                        ))}
+                                                                                    </SelectContent>
+                                                                                </Select>
+                                                                            </div>
+                                                                            <Button type="button" variant="outline" className="h-11 rounded-xl px-4 border-slate-200 w-full md:w-auto" onClick={addBaseRateTier}>
+                                                                                <Plus className="mr-2 h-4 w-4" />
+                                                                                Добавить порог
+                                                                            </Button>
+                                                                        </div>
+
+                                                                        <div className="space-y-2">
+                                                                            {formula.base.rate_tiers.tiers.map((t, idx) => (
+                                                                                <div key={idx} className="flex flex-col md:flex-row md:items-center gap-3 bg-white border border-slate-200 rounded-2xl p-4">
+                                                                                    <div className="flex items-center gap-3 w-full">
+                                                                                        <div className="flex-1">
+                                                                                            <Label className="text-xs font-medium text-muted-foreground">От (₽)</Label>
+                                                                                            <Input
+                                                                                                type="number"
+                                                                                                value={t.from}
+                                                                                                onChange={e => updateBaseRateTier(idx, { from: parseFloat(e.target.value || '0') })}
+                                                                                                className="h-11 rounded-xl border-slate-200"
+                                                                                            />
+                                                                                        </div>
+                                                                                        <div className="flex-1">
+                                                                                            <Label className="text-xs font-medium text-muted-foreground">Ставка (₽/ч)</Label>
+                                                                                            <Input
+                                                                                                type="number"
+                                                                                                value={t.rate}
+                                                                                                onChange={e => updateBaseRateTier(idx, { rate: parseFloat(e.target.value || '0') })}
+                                                                                                className="h-11 rounded-xl border-slate-200"
+                                                                                            />
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <Button type="button" variant="outline" size="icon" className="h-11 w-11 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => removeBaseRateTier(idx)}>
+                                                                                        <Trash2 className="h-4 w-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            ))}
+                                                                            {formula.base.rate_tiers.tiers.length === 0 && (
+                                                                                <div className="text-xs text-muted-foreground italic">Добавьте пороги, чтобы ставка менялась автоматически.</div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
@@ -927,6 +1430,244 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                         ))}
                                     </div>
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="example" className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="p-6 md:p-8 space-y-8">
+                            <div className="flex items-center justify-between gap-4 flex-wrap">
+                                <div className="space-y-1">
+                                    <h2 className="text-xl font-semibold">Пример расчёта</h2>
+                                    <p className="text-sm text-muted-foreground">Введите цифры и посмотрите детальный разбор: база, бонусы, удержания, выплаты</p>
+                                </div>
+                                <Button onClick={handleCalculatePreview} disabled={isPreviewLoading} className="h-11 rounded-xl px-6 gap-2 bg-slate-900 text-white hover:bg-slate-800">
+                                    {isPreviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
+                                    Рассчитать
+                                </Button>
+                            </div>
+
+                            <div className="grid lg:grid-cols-2 gap-6">
+                                <Card className="rounded-3xl border-slate-200 shadow-sm">
+                                    <CardHeader>
+                                        <CardTitle className="text-base">Исходные данные</CardTitle>
+                                        <CardDescription>Это не сохраняется — только для проверки логики</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div className="grid sm:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-medium">Часы в смене</Label>
+                                                <Input type="number" value={exampleHours} onChange={e => setExampleHours(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-sm font-medium">Бар (в счёт зарплаты)</Label>
+                                                <Input type="number" value={exampleBarPurchases} onChange={e => setExampleBarPurchases(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-sm font-medium">Выручка смены</Label>
+                                                {needsCashCardSplit && (
+                                                    <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
+                                                        Итого: {Number(exampleRevenueCash || 0) + Number(exampleRevenueCard || 0)} ₽
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            {needsCashCardSplit ? (
+                                                <div className="grid sm:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Наличные</Label>
+                                                        <Input type="number" value={exampleRevenueCash} onChange={e => setExampleRevenueCash(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Безнал</Label>
+                                                        <Input type="number" value={exampleRevenueCard} onChange={e => setExampleRevenueCard(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-2">
+                                                    <Input type="number" value={exampleShiftRevenue} onChange={e => setExampleShiftRevenue(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                </div>
+                                            )}
+
+                                            {formula.base.type === 'hourly' && (
+                                                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                    <div className="text-sm font-medium">Эффективная ставка (₽/ч)</div>
+                                                    <div className="text-sm font-bold">{effectiveHourlyRateForExample ?? 0}</div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {hasMaintenanceKpi && (
+                                            <div className="space-y-3">
+                                                <Label className="text-sm font-medium">Обслуживание (KPI)</Label>
+                                                <div className="grid sm:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Сумма по задачам</Label>
+                                                        <Input type="number" value={exampleMaintenanceRawSum} onChange={e => setExampleMaintenanceRawSum(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Задач выполнено</Label>
+                                                        <Input type="number" value={exampleMaintenanceTasksCompleted} onChange={e => setExampleMaintenanceTasksCompleted(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Задач назначено</Label>
+                                                        <Input type="number" value={exampleMaintenanceTasksAssigned} onChange={e => setExampleMaintenanceTasksAssigned(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Штраф за просрочку</Label>
+                                                        <Input type="number" value={exampleMaintenancePenalty} onChange={e => setExampleMaintenancePenalty(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {(() => {
+                                            const excluded = new Set([
+                                                'total_revenue',
+                                                'revenue_cash',
+                                                'revenue_card',
+                                                'maintenance_raw_sum',
+                                                'maintenance_tasks_completed',
+                                                'maintenance_tasks_assigned',
+                                                'maintenance_overdue_penalty_applied'
+                                            ])
+                                            const keys = requiredMetricKeys.filter(k => !excluded.has(k))
+                                            if (keys.length === 0) return null
+
+                                            return (
+                                                <div className="space-y-3">
+                                                    <Label className="text-sm font-medium">Показатели для KPI/бонусов</Label>
+                                                    <div className="grid sm:grid-cols-2 gap-4">
+                                                        {keys.map(k => {
+                                                            const label = reportMetrics.find(m => m.key === k)?.label || k
+                                                            return (
+                                                                <div key={k} className="space-y-2">
+                                                                    <Label className="text-sm font-medium">{label}</Label>
+                                                                    <Input
+                                                                        type="number"
+                                                                        value={exampleMetricOverrides[k] ?? 0}
+                                                                        onChange={e => setExampleMetricOverrides(prev => ({ ...prev, [k]: parseFloat(e.target.value || '0') || 0 }))}
+                                                                        className="h-11 rounded-xl"
+                                                                    />
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })()}
+
+                                        {(() => {
+                                            const templateIds = Array.from(
+                                                new Set(
+                                                    formula.bonuses
+                                                        .filter(b => b.type === 'checklist')
+                                                        .map(b => Number(b.checklist_template_id))
+                                                        .filter(Boolean)
+                                                )
+                                            )
+                                            if (templateIds.length === 0) return null
+
+                                            return (
+                                                <div className="space-y-3">
+                                                    <Label className="text-sm font-medium">Чек-листы</Label>
+                                                    <div className="grid sm:grid-cols-2 gap-4">
+                                                        {templateIds.map(id => (
+                                                            <div key={id} className="space-y-2">
+                                                                <Label className="text-sm font-medium">{checklistTemplateLabel(id)}</Label>
+                                                                <Input
+                                                                    type="number"
+                                                                    value={exampleChecklistScores[String(id)] ?? 100}
+                                                                    onChange={e => setExampleChecklistScores(prev => ({ ...prev, [String(id)]: parseFloat(e.target.value || '0') || 0 }))}
+                                                                    className="h-11 rounded-xl"
+                                                                />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })()}
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="rounded-3xl border-slate-200 shadow-sm">
+                                    <CardHeader>
+                                        <CardTitle className="text-base">Результат</CardTitle>
+                                        <CardDescription>Детализация точно как в реальном расчёте (через backend)</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        {!previewResult ? (
+                                            <div className="text-sm text-muted-foreground">Нажмите “Рассчитать”, чтобы увидеть разбор.</div>
+                                        ) : (
+                                            <div className="space-y-6">
+                                                <div className="grid sm:grid-cols-2 gap-4">
+                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                        <div className="text-xs text-muted-foreground">Итого зарплата</div>
+                                                        <div className="text-xl font-bold">{previewResult?.breakdown?.total ?? 0} ₽</div>
+                                                    </div>
+                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                        <div className="text-xs text-muted-foreground">Итого виртуальный баланс</div>
+                                                        <div className="text-xl font-bold">{previewResult?.breakdown?.virtual_balance_total ?? 0} ₽</div>
+                                                    </div>
+                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                        <div className="text-xs text-muted-foreground">К выдаче в конце смены</div>
+                                                        <div className="text-xl font-bold">{previewResult?.breakdown?.instant_payout ?? 0} ₽</div>
+                                                    </div>
+                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                        <div className="text-xs text-muted-foreground">В накопление (зарплата)</div>
+                                                        <div className="text-xl font-bold">{previewResult?.breakdown?.accrued_payout ?? 0} ₽</div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="rounded-2xl border border-slate-200 p-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="text-sm font-medium">База</div>
+                                                        <div className="text-sm font-bold">{previewResult?.breakdown?.base ?? 0} ₽</div>
+                                                    </div>
+                                                </div>
+
+                                                {Array.isArray(previewResult?.breakdown?.bonuses) && previewResult.breakdown.bonuses.length > 0 && (
+                                                    <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+                                                        <div className="text-sm font-medium">KPI и бонусы</div>
+                                                        <div className="space-y-2">
+                                                            {previewResult.breakdown.bonuses.map((b: any, idx: number) => (
+                                                                <div key={idx} className="flex items-center justify-between gap-3 text-sm">
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="truncate font-medium text-slate-800">{b.name}</div>
+                                                                        {(() => {
+                                                                            const line = explainBonusLine(b)
+                                                                            if (!line) return null
+                                                                            return <div className="text-[11px] text-muted-foreground truncate">{line}</div>
+                                                                        })()}
+                                                                    </div>
+                                                                    <div className="font-bold whitespace-nowrap">{b.amount} ₽</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {Array.isArray(previewResult?.breakdown?.deductions) && previewResult.breakdown.deductions.length > 0 && (
+                                                    <div className="rounded-2xl border border-rose-200 bg-rose-50/30 p-4 space-y-3">
+                                                        <div className="text-sm font-medium text-rose-700">Удержания</div>
+                                                        <div className="space-y-2">
+                                                            {previewResult.breakdown.deductions.map((d: any, idx: number) => (
+                                                                <div key={idx} className="flex items-center justify-between text-sm">
+                                                                    <div className="text-rose-700 truncate pr-3">{d.name}</div>
+                                                                    <div className="font-bold whitespace-nowrap text-rose-700">-{d.amount} ₽</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
                             </div>
                         </div>
                     </div>

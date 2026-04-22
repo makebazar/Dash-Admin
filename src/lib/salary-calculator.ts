@@ -8,6 +8,10 @@ interface SalaryScheme {
         percent?: number;
         full_shift_hours?: number;
         payout_timing?: 'SHIFT' | 'MONTH';
+        rate_tiers?: {
+            metric_key?: string;
+            tiers?: { from: number; rate: number }[];
+        };
     };
     // Support legacy/flat structure for backward compatibility if needed
     type?: 'hourly' | 'fixed' | 'per_shift' | 'percent_revenue' | 'none';
@@ -49,14 +53,29 @@ export async function calculateSalary(
 
     // ... (existing base normalization) ...
     const type = scheme.base?.type || scheme.type || 'hourly';
-    const amount = scheme.base?.amount ?? scheme.amount ?? 0;
+    const amountRaw = scheme.base?.amount ?? scheme.amount ?? 0;
     const percent = scheme.base?.percent ?? scheme.percent ?? 0;
     const fullShiftHours = scheme.base?.full_shift_hours ?? scheme.full_shift_hours ?? 12;
     const basePayoutTiming = scheme.base?.payout_timing || 'MONTH';
 
     // 1. Base Salary (всегда REAL_MONEY)
     if (type === 'hourly') {
-        baseAmount = amount * (shift.total_hours || 0);
+        let hourlyRate = amountRaw;
+
+        const rateTiers = scheme.base?.rate_tiers;
+        if (rateTiers?.tiers && Array.isArray(rateTiers.tiers) && rateTiers.tiers.length > 0) {
+            const metricKey = rateTiers.metric_key || 'total_revenue';
+            const metricValue = Number(reportMetrics[metricKey] || 0);
+
+            const sorted = [...rateTiers.tiers].sort((a, b) => (Number(b.from) || 0) - (Number(a.from) || 0));
+            const tier = sorted.find(t => metricValue >= (Number(t.from) || 0));
+            if (tier && tier.rate !== undefined && tier.rate !== null) {
+                const parsedRate = Number(tier.rate);
+                if (Number.isFinite(parsedRate)) hourlyRate = parsedRate;
+            }
+        }
+
+        baseAmount = hourlyRate * (shift.total_hours || 0);
     } else if (type === 'fixed' || type === 'per_shift') {
         const hours = shift.total_hours || 0;
         const graceHoursRaw = (scheme.base as any)?.overtime_grace_hours ?? (scheme as any).overtime_grace_hours ?? 2
@@ -65,12 +84,12 @@ export async function calculateSalary(
         if (hours <= 0) {
             baseAmount = 0
         } else if (hours < fullShiftHours) {
-            baseAmount = (amount / fullShiftHours) * hours;
+            baseAmount = (amountRaw / fullShiftHours) * hours;
         } else if (hours <= fullShiftHours + graceHours) {
-            baseAmount = amount;
+            baseAmount = amountRaw;
         } else {
-            const hourlyRate = fullShiftHours > 0 ? (amount / fullShiftHours) : 0
-            baseAmount = amount + (hours - (fullShiftHours + graceHours)) * hourlyRate
+            const hourlyRate = fullShiftHours > 0 ? (amountRaw / fullShiftHours) : 0
+            baseAmount = amountRaw + (hours - (fullShiftHours + graceHours)) * hourlyRate
         }
     } else if (type === 'percent_revenue') {
         const sourceValue = reportMetrics['total_revenue'] || 0;
@@ -367,7 +386,7 @@ export async function calculateSalary(
     if (shift.bar_purchases && shift.bar_purchases > 0) {
         const deduction = parseFloat(shift.bar_purchases.toFixed(2));
         breakdown.deductions.push({
-            name: 'Покупка бара',
+            name: 'Бар (в счёт зарплаты)',
             amount: deduction
         });
         total -= deduction;
