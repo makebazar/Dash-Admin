@@ -150,6 +150,9 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
     const [localEmployees, setLocalEmployees] = useState(initialEmployees || [])
     const [isUpdating, setIsUpdating] = useState<string | null>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
+    const localScheduleRef = useRef<ScheduleMap>(schedule || {})
+    const updateQueueRef = useRef<Map<string, Promise<void>>>(new Map())
+    const updateTokenRef = useRef<Map<string, symbol>>(new Map())
 
     const todayStr = useMemo(() => {
         const d = new Date();
@@ -218,7 +221,9 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
 
     // Sync state when props change
     useEffect(() => {
-        setLocalSchedule(schedule || {})
+        const next = schedule || {}
+        localScheduleRef.current = next
+        setLocalSchedule(next)
     }, [schedule])
 
     useEffect(() => {
@@ -284,50 +289,60 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
         return result;
     }, [month, year])
 
-    const toggleShift = async (userId: string, dateStr: string) => {
+    const enqueueShiftUpdate = (cellId: string, payload: { userId: string; date: string; shiftType: string | null }) => {
+        const token = Symbol(cellId)
+        updateTokenRef.current.set(cellId, token)
+        setIsUpdating(cellId)
+
+        const prev = updateQueueRef.current.get(cellId) ?? Promise.resolve()
+        const next = prev
+            .catch(() => undefined)
+            .then(async () => {
+                try {
+                    const res = await fetch(`/api/clubs/${clubId}/work-schedule`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    })
+                    if (!res.ok) throw new Error('Failed to update')
+                } catch (e) {
+                    console.error(e)
+                    refreshData()
+                }
+            })
+
+        updateQueueRef.current.set(cellId, next)
+        next.finally(() => {
+            if (updateTokenRef.current.get(cellId) === token) setIsUpdating(null)
+        })
+    }
+
+    const toggleShift = (userId: string, dateStr: string) => {
         if (readOnly) return;
 
-        let nextType: string | null = null;
+        const prev = localScheduleRef.current
+        const currentType = prev[userId]?.[dateStr]
 
-        // Use functional update to determine nextType based on most recent state
-        setLocalSchedule((prev: ScheduleMap) => {
-            const currentType = prev[userId]?.[dateStr]
-            
-            if (!currentType) nextType = 'DAY'
-            else if (currentType === 'DAY') nextType = 'NIGHT'
-            else nextType = null
+        let nextType: string | null = null
+        if (!currentType) nextType = 'DAY'
+        else if (currentType === 'DAY') nextType = 'NIGHT'
+        else nextType = null
 
-            const newSchedule = { ...prev }
-            if (!newSchedule[userId]) newSchedule[userId] = {}
-            
-            if (nextType) {
-                newSchedule[userId] = { ...newSchedule[userId], [dateStr]: nextType }
-            } else {
-                const updatedUserSchedule = { ...newSchedule[userId] }
-                delete updatedUserSchedule[dateStr]
-                newSchedule[userId] = updatedUserSchedule
-            }
-            return newSchedule
-        })
-
-        // Wait a tiny bit to ensure nextType is set from the state update above
-        // (State updates are batchable, but the logic inside the setter runs synchronously)
-        
-        const cellId = `${userId}-${dateStr}`
-        setIsUpdating(cellId)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/work-schedule`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, date: dateStr, shiftType: nextType })
-            })
-            if (!res.ok) throw new Error('Failed to update')
-        } catch (e) {
-            console.error(e)
-            refreshData()
-        } finally {
-            setIsUpdating(null)
+        const newSchedule: ScheduleMap = { ...prev }
+        const prevUserSchedule = newSchedule[userId] || {}
+        if (nextType) {
+            newSchedule[userId] = { ...prevUserSchedule, [dateStr]: nextType }
+        } else {
+            const updatedUserSchedule = { ...prevUserSchedule }
+            delete updatedUserSchedule[dateStr]
+            newSchedule[userId] = updatedUserSchedule
         }
+
+        localScheduleRef.current = newSchedule
+        setLocalSchedule(newSchedule)
+
+        const cellId = `${userId}-${dateStr}`
+        enqueueShiftUpdate(cellId, { userId, date: dateStr, shiftType: nextType })
     }
 
     // Calculate coverage
