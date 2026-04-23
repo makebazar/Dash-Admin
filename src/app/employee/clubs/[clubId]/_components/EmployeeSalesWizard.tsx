@@ -26,6 +26,8 @@ import {
     type ShiftReceiptPaymentType
 } from "@/app/clubs/[clubId]/inventory/actions"
 
+const roundMoney = (value: number) => Math.round(value * 100) / 100
+
 interface EmployeeSalesWizardProps {
     clubId: string
     userId: string
@@ -48,7 +50,14 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     const [inputValue, setInputValue] = useState("")
     const [selectedSuggestionIdx, setSelectedSuggestionIdx] = useState(0)
 
-    const [cart, setCart] = useState<{ product_id: number; name: string; quantity: number; price: number }[]>([])
+    const [cart, setCart] = useState<{
+        product_id: number
+        name: string
+        quantity: number
+        selling_price: number
+        cost_price: number
+        price: number
+    }[]>([])
     const [selectedCartProductId, setSelectedCartProductId] = useState<number | null>(null)
     const [paymentType, setPaymentType] = useState<ShiftReceiptPaymentType>('cash')
     const [cashAmount, setCashAmount] = useState<string>("")
@@ -56,6 +65,13 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     const [cashReceived, setCashReceived] = useState<string>("")
     const [receiptNotes, setReceiptNotes] = useState<string>("")
     const [salaryTargetUserId, setSalaryTargetUserId] = useState<string>("")
+    const salaryPricing = useMemo(() => {
+        const candidate = salarySaleCandidates.find((item) => item.id === salaryTargetUserId)
+        return {
+            discountPercent: Number(candidate?.discount_percent ?? 0),
+            priceMode: candidate?.price_mode === "COST" ? "COST" : "SELLING",
+        }
+    }, [salarySaleCandidates, salaryTargetUserId])
 
     // Return/Refund State
     const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false)
@@ -164,6 +180,18 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         return cart.reduce((acc, i) => acc + (i.quantity * i.price), 0)
     }, [cart])
 
+    useEffect(() => {
+        setCart((prev) => prev.map((item) => {
+            const baseUnitPrice = paymentType === "salary"
+                ? (salaryPricing.priceMode === "COST" ? item.cost_price : item.selling_price)
+                : item.selling_price
+            const effectiveUnitPrice = paymentType === "salary" && salaryPricing.priceMode === "SELLING"
+                ? roundMoney(baseUnitPrice * (1 - salaryPricing.discountPercent / 100))
+                : baseUnitPrice
+            return { ...item, price: effectiveUnitPrice }
+        }))
+    }, [paymentType, salaryPricing.discountPercent, salaryPricing.priceMode])
+
     const selectedCartIndex = useMemo(() => {
         if (!selectedCartProductId) return -1
         return cart.findIndex(i => i.product_id === selectedCartProductId)
@@ -176,16 +204,23 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
     }, [receipts])
 
     const addToCart = useCallback((product: any, quantityToAdd: number) => {
-        const price = Number(product.selling_price || 0)
+        const sellingPrice = Number(product.selling_price || 0)
+        const costPrice = Number(product.cost_price || 0)
+        const baseUnitPrice = paymentType === "salary"
+            ? (salaryPricing.priceMode === "COST" ? costPrice : sellingPrice)
+            : sellingPrice
+        const price = paymentType === "salary" && salaryPricing.priceMode === "SELLING"
+            ? roundMoney(baseUnitPrice * (1 - salaryPricing.discountPercent / 100))
+            : baseUnitPrice
         setCart(prev => {
             const idx = prev.findIndex(i => i.product_id === product.id)
-            if (idx === -1) return [...prev, { product_id: product.id, name: product.name, quantity: quantityToAdd, price }]
+            if (idx === -1) return [...prev, { product_id: product.id, name: product.name, quantity: quantityToAdd, selling_price: sellingPrice, cost_price: costPrice, price }]
             const next = [...prev]
-            next[idx] = { ...next[idx], quantity: next[idx].quantity + quantityToAdd }
+            next[idx] = { ...next[idx], quantity: next[idx].quantity + quantityToAdd, price }
             return next
         })
         setSelectedCartProductId(product.id)
-    }, [])
+    }, [paymentType, salaryPricing.discountPercent, salaryPricing.priceMode])
 
     const isInStock = useCallback((p: Product) => {
         const stock = Number((p as any).total_stock ?? p.current_stock ?? 0)

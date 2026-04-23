@@ -16,6 +16,7 @@ export type RawInventorySettings = {
     shift_accountability_mode?: 'DISABLED' | 'WAREHOUSE' | null
     allow_salary_deduction?: boolean
     employee_discount_percent?: number
+    employee_discount_overrides?: Record<string, number>
     allow_cost_price_sale?: boolean
     price_tag_settings?: any
 }
@@ -42,6 +43,21 @@ export function normalizeInventorySettings(raw: RawInventorySettings | null | un
             .map((value) => Number(value))
             .filter((value) => Number.isInteger(value) && value > 0)
         : []
+    const employeeDiscountPercentRaw = Number(source.employee_discount_percent ?? 0)
+    const employeeDiscountPercent = Number.isFinite(employeeDiscountPercentRaw)
+        ? Math.min(100, Math.max(0, employeeDiscountPercentRaw))
+        : 0
+    const rawDiscountOverrides = source.employee_discount_overrides
+    const discountOverridesSource =
+        rawDiscountOverrides && typeof rawDiscountOverrides === "object" && !Array.isArray(rawDiscountOverrides)
+            ? rawDiscountOverrides
+            : {}
+    const employeeDiscountOverrides: Record<string, number> = {}
+    for (const [key, value] of Object.entries(discountOverridesSource)) {
+        const num = Number(value)
+        if (!Number.isFinite(num)) continue
+        employeeDiscountOverrides[String(key)] = Math.min(100, Math.max(0, num))
+    }
     const suppliesEnabled = source.supplies_enabled ?? true
     const stockEnabled = source.stock_enabled ?? true
     const cashboxEnabled = stockEnabled ? (source.cashbox_enabled ?? true) : false
@@ -63,6 +79,8 @@ export function normalizeInventorySettings(raw: RawInventorySettings | null | un
     return {
         ...source,
         employee_allowed_warehouse_ids: allowedWarehouseIds,
+        employee_discount_percent: employeeDiscountPercent,
+        employee_discount_overrides: employeeDiscountOverrides,
         blind_inventory_enabled: source.blind_inventory_enabled ?? true,
         supplies_enabled: suppliesEnabled,
         stock_enabled: stockEnabled,

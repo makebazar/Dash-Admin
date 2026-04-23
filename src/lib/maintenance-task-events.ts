@@ -31,7 +31,7 @@ export async function getMaintenanceTaskCurrentCycle(taskId: string) {
 export async function appendMaintenanceTaskEvent(params: {
     taskId: string
     cycleNo: number
-    eventType: 'SUBMITTED' | 'RESUBMITTED' | 'REJECTED' | 'APPROVED'
+    eventType: 'SUBMITTED' | 'RESUBMITTED' | 'REJECTED' | 'APPROVED' | 'REVERTED'
     actorUserId?: string | null
     note?: string | null
     taskNotes?: string | null

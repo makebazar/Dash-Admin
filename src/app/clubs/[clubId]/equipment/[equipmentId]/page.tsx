@@ -14,6 +14,7 @@ import {
     Loader2,
     RefreshCw,
     Save,
+    Trash2,
     Wrench,
     X,
 } from "lucide-react"
@@ -119,6 +120,7 @@ export default function EquipmentDetailsPage() {
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     useEffect(() => {
         setActiveTab(getInitialTab())
@@ -327,6 +329,28 @@ export default function EquipmentDetailsPage() {
         }
     }
 
+    const handleDelete = async () => {
+        if (!equipment?.id) return
+        if (!confirm(`Удалить "${equipment.name}"? Это действие нельзя отменить.`)) return
+
+        setIsDeleting(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/${equipment.id}`, { method: "DELETE" })
+            if (res.ok) {
+                router.push(`/clubs/${clubId}/equipment/inventory`)
+                router.refresh()
+                return
+            }
+            const data = await res.json().catch(() => null)
+            alert(data?.error || "Не удалось удалить оборудование")
+        } catch (error) {
+            console.error("Error deleting equipment:", error)
+            alert("Не удалось удалить оборудование")
+        } finally {
+            setIsDeleting(false)
+        }
+    }
+
     const openHistoryPhotoViewer = (images: string[], index: number) => {
         setHistoryPhotoViewer({ images, index })
     }
@@ -394,12 +418,23 @@ export default function EquipmentDetailsPage() {
                         <Button
                             form="equipment-page-form"
                             type="submit"
-                            disabled={isSaving || activeTab === "history"}
+                            disabled={isSaving || isDeleting || activeTab === "history"}
                             className="h-10"
                         >
                             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             <Save className="mr-2 h-4 w-4" />
                             Сохранить
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            disabled={isDeleting}
+                            className="h-10"
+                            onClick={handleDelete}
+                        >
+                            {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Удалить
                         </Button>
                     </div>
                 </PageHeader>
@@ -900,11 +935,21 @@ export default function EquipmentDetailsPage() {
                     <Button
                         form="equipment-page-form"
                         type="submit"
-                        disabled={isSaving || activeTab === "history"}
+                        disabled={isSaving || isDeleting || activeTab === "history"}
                         className="h-11 flex-1"
                     >
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                         Сохранить
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={isDeleting}
+                        className="h-11 flex-1"
+                        onClick={handleDelete}
+                    >
+                        {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                        Удалить
                     </Button>
                 </div>
             </div>

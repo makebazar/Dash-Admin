@@ -18,6 +18,8 @@ interface ShiftOpeningWizardProps {
         targetUserId?: string | null
     ) => void
     checklistTemplate: any
+    targetMode?: "SHIFT" | "SELF"
+    fullscreen?: boolean
 }
 
 interface ChecklistOption {
@@ -29,10 +31,13 @@ export function ShiftOpeningWizard({
     isOpen,
     onClose,
     onComplete,
-    checklistTemplate
+    checklistTemplate,
+    targetMode: targetModeProp,
+    fullscreen = false,
 }: ShiftOpeningWizardProps) {
     const params = useParams()
     const clubId = params.clubId as string
+    const targetMode = targetModeProp || (checklistTemplate?.settings?.target_mode === "SELF" ? "SELF" : "SHIFT")
     
     const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, photo_urls: string[], selected_workstations?: string[], is_issue_reported?: boolean }>>({})
     const [uploadingState, setUploadingState] = useState<Record<number, boolean>>({})
@@ -72,35 +77,41 @@ export function ShiftOpeningWizard({
     const [isLoadingShifts, setIsLoadingShifts] = useState(true)
 
     useEffect(() => {
-        // Fetch recent shifts for selection
-        const fetchShifts = async () => {
-            try {
-                const res = await fetch(`/api/clubs/${clubId}/shifts/recent`)
-                if (res.ok) {
-                    const data = await res.json()
-                    setShifts(data.shifts || [])
-                    
-                    // Auto-select logic:
-                    // 1. Priority: Active shift (if employee arrived early and wants to check current shift)
-                    // 2. Fallback: Last CLOSED shift (handover from previous employee)
-                    
-                    const activeShift = data.shifts.find((s: any) => s.status === 'ACTIVE')
-                    const lastClosedShift = data.shifts.find((s: any) => s.status === 'CLOSED')
-                    
-                    if (activeShift) {
-                        setSelectedShiftId(activeShift.id)
-                    } else if (lastClosedShift) {
-                        setSelectedShiftId(lastClosedShift.id)
+        if (!isOpen) return
+
+        setCurrentStep(targetMode === "SELF" ? 0 : -1)
+
+        if (targetMode === "SHIFT") {
+            const fetchShifts = async () => {
+                try {
+                    const res = await fetch(`/api/clubs/${clubId}/shifts/recent`)
+                    if (res.ok) {
+                        const data = await res.json()
+                        setShifts(data.shifts || [])
+                        
+                        const activeShift = data.shifts.find((s: any) => s.status === 'ACTIVE')
+                        const lastClosedShift = data.shifts.find((s: any) => s.status === 'CLOSED')
+                        
+                        if (activeShift) {
+                            setSelectedShiftId(activeShift.id)
+                        } else if (lastClosedShift) {
+                            setSelectedShiftId(lastClosedShift.id)
+                        }
                     }
+                } catch (e) {
+                    console.error("Failed to fetch shifts", e)
+                } finally {
+                    setIsLoadingShifts(false)
                 }
-            } catch (e) {
-                console.error("Failed to fetch shifts", e)
-            } finally {
-                setIsLoadingShifts(false)
             }
+
+            setIsLoadingShifts(true)
+            fetchShifts()
+        } else {
+            setIsLoadingShifts(false)
+            setSelectedShiftId(null)
+            setShifts([])
         }
-        
-        fetchShifts()
 
         // Fetch workstations if any item needs them
         const needsWorkstations = checklistTemplate?.items?.some((item: any) => item.related_entity_type === 'workstations')
@@ -129,7 +140,7 @@ export function ShiftOpeningWizard({
             })
             setChecklistResponses(initial)
         }
-    }, [checklistTemplate, clubId])
+    }, [checklistTemplate, clubId, isOpen, targetMode])
 
     const fetchWorkstations = async () => {
         setIsLoadingWorkstations(true)
@@ -326,9 +337,13 @@ export function ShiftOpeningWizard({
     }
 
     const handleComplete = () => {
+        if (targetMode === "SELF") {
+            onComplete(checklistResponses)
+            return
+        }
+
         const selectedShift = shifts.find(s => s.id === selectedShiftId)
         const selectedUserId = selectedShift?.user_id || null
-        // Final validation (should be redundant if steps are validated)
         onComplete(checklistResponses, selectedShiftId || undefined, selectedUserId)
     }
 
@@ -337,13 +352,16 @@ export function ShiftOpeningWizard({
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="w-full h-full max-w-none m-0 rounded-none sm:rounded-lg sm:max-w-2xl sm:h-auto sm:max-h-[90vh] bg-slate-950 border-slate-800 text-primary-foreground overflow-hidden flex flex-col p-0">
+            <DialogContent className={fullscreen
+                ? "w-full h-full max-w-none m-0 rounded-none bg-slate-950 border-slate-800 text-primary-foreground overflow-hidden flex flex-col p-0 z-[10001]"
+                : "w-full h-full max-w-none m-0 rounded-none sm:rounded-lg sm:max-w-2xl sm:h-auto sm:max-h-[90vh] bg-slate-950 border-slate-800 text-primary-foreground overflow-hidden flex flex-col p-0 z-[10001]"
+            }>
                 
                 {/* Header with Progress */}
                 <div className="p-4 border-b border-slate-800 bg-primary/50 pr-12">
                     <div className="flex items-center justify-between mb-2">
                         <DialogTitle className="text-lg">
-                            {currentStep === -1 ? 'Выбор смены' : 'Приемка смены'}
+                            {currentStep === -1 ? 'Выбор смены' : 'Чеклист'}
                         </DialogTitle>
                         {currentStep >= 0 && (
                             <span className="text-xs text-muted-foreground/70 font-mono">

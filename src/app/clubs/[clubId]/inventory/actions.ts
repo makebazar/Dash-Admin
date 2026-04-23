@@ -1665,9 +1665,26 @@ export type SalarySaleCandidate = {
     reference_shift_id: string
     shifts_in_month: number
     available_amount: number
+    discount_percent: number
+    price_mode: 'SELLING' | 'COST'
 }
 
 async function getSalarySaleCandidatesInternal(client: any, clubId: string) {
+    const inventorySettings = await getClubInventorySettingsInternal(client, clubId)
+    const priceMode: 'SELLING' | 'COST' =
+        inventorySettings.allow_salary_deduction && inventorySettings.allow_cost_price_sale
+            ? 'COST'
+            : 'SELLING'
+    const defaultDiscountRaw = Number(inventorySettings.employee_discount_percent ?? 0)
+    const defaultDiscount = Number.isFinite(defaultDiscountRaw) ? Math.min(100, Math.max(0, defaultDiscountRaw)) : 0
+    const overrideSource = inventorySettings.employee_discount_overrides || {}
+    const resolveDiscountPercent = (userId: string) => {
+        if (priceMode === 'COST') return 0
+        const overrideRaw = Number((overrideSource as any)[userId])
+        const resolved = Number.isFinite(overrideRaw) ? overrideRaw : defaultDiscount
+        return Math.min(100, Math.max(0, resolved))
+    }
+
     const now = new Date()
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
@@ -1746,6 +1763,8 @@ async function getSalarySaleCandidatesInternal(client: any, clubId: string) {
         reference_shift_id: String(row.reference_shift_id),
         shifts_in_month: Number(row.shifts_in_month || 0),
         available_amount: Number(row.available_amount || 0),
+        discount_percent: resolveDiscountPercent(String(row.id)),
+        price_mode: priceMode,
     })) as SalarySaleCandidate[]
 }
 
@@ -3755,6 +3774,9 @@ export async function createShiftReceipt(
         let salaryTargetShiftId: string | null = null
         let countsInRevenue = data.payment_type !== 'salary'
         if (data.payment_type === 'salary') {
+            if (!inventorySettings.allow_salary_deduction) {
+                throw new Error("Продажа в счет ЗП отключена в настройках склада")
+            }
             salaryTargetUserId = data.salary_target_user_id ? String(data.salary_target_user_id) : null
             if (!salaryTargetUserId) {
                 throw new Error("Для продажи в счет ЗП нужно выбрать сотрудника")
@@ -3779,10 +3801,30 @@ export async function createShiftReceipt(
             priceMap.set(Number(r.id), { cost_price: Number(r.cost_price || 0), selling_price: Number(r.selling_price || 0) })
         }
 
+        const roundMoney = (value: number) => Math.round(value * 100) / 100
+        const isSalarySale = data.payment_type === 'salary' && Boolean(salaryTargetUserId)
+        const priceMode: 'SELLING' | 'COST' = isSalarySale && inventorySettings.allow_cost_price_sale ? 'COST' : 'SELLING'
+        const defaultDiscountRaw = Number(inventorySettings.employee_discount_percent ?? 0)
+        const defaultDiscount = Number.isFinite(defaultDiscountRaw) ? Math.min(100, Math.max(0, defaultDiscountRaw)) : 0
+        const overrideSource = inventorySettings.employee_discount_overrides || {}
+        const overrideRaw = salaryTargetUserId ? Number((overrideSource as any)[salaryTargetUserId]) : NaN
+        const discountPercent = isSalarySale && priceMode === 'SELLING'
+            ? Math.min(100, Math.max(0, Number.isFinite(overrideRaw) ? overrideRaw : defaultDiscount))
+            : 0
+
+        const unitPriceMap = new Map<number, number>()
+        for (const productId of productIds) {
+            const p = priceMap.get(productId)
+            if (!p) continue
+            const basePrice = priceMode === 'COST' ? Number(p.cost_price || 0) : Number(p.selling_price || 0)
+            const effectivePrice = priceMode === 'COST' ? basePrice : roundMoney(basePrice * (1 - discountPercent / 100))
+            unitPriceMap.set(productId, effectivePrice)
+        }
+
         const itemsTotal = normalizedItems.reduce((acc, i) => {
-            const p = priceMap.get(i.product_id)
-            if (!p) return acc
-            return acc + (Number(i.quantity) * Number(p.selling_price || 0))
+            const unitPrice = unitPriceMap.get(i.product_id)
+            if (unitPrice === undefined) return acc
+            return acc + (Number(i.quantity) * unitPrice)
         }, 0)
 
         let cashAmount = Number(data.cash_amount || 0)
@@ -3877,12 +3919,14 @@ export async function createShiftReceipt(
             if (!item.quantity || item.quantity <= 0) continue
             const p = priceMap.get(item.product_id)
             if (!p) continue
+            const unitPrice = unitPriceMap.get(item.product_id)
+            if (unitPrice === undefined) continue
             await client.query(
                 `
                 INSERT INTO shift_receipt_items (receipt_id, product_id, quantity, selling_price_snapshot, cost_price_snapshot)
                 VALUES ($1, $2, $3, $4, $5)
                 `,
-                [receiptId, item.product_id, item.quantity, p.selling_price, p.cost_price]
+                [receiptId, item.product_id, item.quantity, unitPrice, p.cost_price]
             )
         }
 
@@ -3896,6 +3940,7 @@ export async function createShiftReceipt(
             )
 
             const p = priceMap.get(item.product_id)!
+            const unitPrice = unitPriceMap.get(item.product_id) ?? p.selling_price
             await logStockMovement(
                 client,
                 clubId,
@@ -3912,7 +3957,7 @@ export async function createShiftReceipt(
                 receiptId,
                 data.shift_id,
                 warehouseId,
-                p.selling_price
+                unitPrice
             )
         }
 

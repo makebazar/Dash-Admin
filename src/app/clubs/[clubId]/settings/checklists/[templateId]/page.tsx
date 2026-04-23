@@ -654,6 +654,29 @@ export default function ChecklistTemplatePage({ params }: { params: Promise<{ cl
                         {currentTemplate.type === 'shift_handover' && (
                             <div className="space-y-4 pt-6 border-t border-slate-100 mt-6">
                                 <h3 className="font-medium text-sm text-muted-foreground ml-1">Настройки приемки</h3>
+                                <div className="flex flex-col gap-3 rounded-2xl bg-slate-50/50 border border-slate-100 p-5 transition-colors hover:bg-slate-50">
+                                    <div className="space-y-1">
+                                        <Label className="text-sm font-medium text-slate-700">Кого проверяем</Label>
+                                        <p className="text-xs text-slate-500 leading-relaxed">
+                                            Для приемки при открытии обычно выбирают смену/сотрудника. Для чеклиста при закрытии — проверка себя.
+                                        </p>
+                                    </div>
+                                    <Select
+                                        value={currentTemplate.settings?.target_mode === 'SELF' ? 'SELF' : 'SHIFT'}
+                                        onValueChange={(val) => setCurrentTemplate({
+                                            ...currentTemplate,
+                                            settings: { ...currentTemplate.settings, target_mode: val }
+                                        })}
+                                    >
+                                        <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200">
+                                            <SelectValue placeholder="Выберите режим" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl border-slate-200">
+                                            <SelectItem value="SHIFT">Выбирать смену / сотрудника</SelectItem>
+                                            <SelectItem value="SELF">Проверка себя</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                                 <div className="flex flex-col gap-4 rounded-2xl bg-slate-50/50 border border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between group/switch transition-colors hover:bg-slate-50">
                                     <div className="space-y-1">
                                         <Label className="text-sm font-medium text-slate-700 cursor-pointer" htmlFor="block-open">Блокировать открытие смены</Label>

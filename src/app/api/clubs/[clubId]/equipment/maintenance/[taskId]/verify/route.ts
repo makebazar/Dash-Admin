@@ -47,7 +47,7 @@ export async function POST(
         }
 
         const taskResult = await query(
-            `SELECT mt.id, mt.equipment_id, mt.task_type, mt.verification_status, mt.completed_at, mt.completed_by, mt.verified_at, mt.verified_by, mt.rejection_reason, mt.verification_note, mt.notes, mt.photos
+            `SELECT mt.id, mt.status, mt.equipment_id, mt.task_type, mt.verification_status, mt.completed_at, mt.completed_by, mt.verified_at, mt.verified_by, mt.rejection_reason, mt.verification_note, mt.notes, mt.photos
              FROM equipment_maintenance_tasks mt
              JOIN equipment e ON mt.equipment_id = e.id
              WHERE mt.id = $1 AND e.club_id = $2`,
@@ -61,6 +61,21 @@ export async function POST(
         const task = taskResult.rows[0];
         await ensureMaintenanceTaskInitialHistory(task);
         const currentCycle = await getMaintenanceTaskCurrentCycle(taskId);
+
+        if (action === 'APPROVE') {
+            const status = String(task.status || '')
+            const v = task.verification_status
+            const canApprove =
+                status === 'COMPLETED' &&
+                (v === null || v === undefined || v === 'PENDING' || v === 'NONE')
+
+            if (!canApprove) {
+                return NextResponse.json(
+                    { error: 'Нельзя одобрить задачу до повторной сдачи после доработки' },
+                    { status: 409 }
+                );
+            }
+        }
 
         let updateQuery = '';
         let queryParams: any[] = [];

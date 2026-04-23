@@ -84,7 +84,7 @@ interface VerificationTaskEvent {
     id: number
     task_id: string
     cycle_no: number
-    event_type: 'SUBMITTED' | 'RESUBMITTED' | 'REJECTED' | 'APPROVED'
+    event_type: 'SUBMITTED' | 'RESUBMITTED' | 'REJECTED' | 'APPROVED' | 'REVERTED'
     note?: string | null
     task_notes?: string | null
     photos?: string[] | null
@@ -515,6 +515,29 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
         } catch (error) {
             console.error("Error verifying task:", error)
             alert("Произошла ошибка")
+        } finally {
+            setIsSubmittingTask(false)
+        }
+    }
+
+    const handleRevertTask = async (task: VerificationTask) => {
+        if (!clubId) return
+        if (!confirm("Вернуть задачу на проверку? Она снова появится в списке 'Ожидают проверки'.")) return
+
+        setIsSubmittingTask(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${task.id}/revert`, {
+                method: 'POST'
+            })
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}))
+                alert(data.error || 'Не удалось вернуть задачу на проверку')
+                return
+            }
+            await fetchTasks(clubId, equipmentTab)
+        } catch (error) {
+            console.error(error)
+            alert('Ошибка сервера')
         } finally {
             setIsSubmittingTask(false)
         }
@@ -1342,12 +1365,31 @@ export default function ChecklistsPage({ params, searchParams }: { params: Promi
                                                                                     >
                                                                                         На доработку
                                                                                     </Button>
-                                                                                    <Button 
-                                                                                        className="w-full sm:flex-1 bg-slate-900 text-white hover:bg-slate-800 text-white shadow-sm h-12 md:h-9 font-semibold" 
-                                                                                        onClick={() => handleVerifyTask(task, 'APPROVE')}
-                                                                                        disabled={isSubmittingTask || Boolean(comment.trim())}
+                                                                                    <div className="w-full sm:flex-1 space-y-1">
+                                                                                        <Button 
+                                                                                            className="w-full bg-slate-900 text-white hover:bg-slate-800 text-white shadow-sm h-12 md:h-9 font-semibold" 
+                                                                                            onClick={() => handleVerifyTask(task, 'APPROVE')}
+                                                                                            disabled={isSubmittingTask || task.status !== 'COMPLETED' || !(task.verification_status === 'PENDING' || task.verification_status === 'NONE' || task.verification_status == null)}
+                                                                                        >
+                                                                                            Одобрить
+                                                                                        </Button>
+                                                                                        {task.verification_status === 'REJECTED' && (
+                                                                                            <div className="text-[11px] font-semibold text-amber-700">
+                                                                                                Ждём пересдачи после доработки
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                            {equipmentTab === 'history' && task.verification_status === 'APPROVED' && (
+                                                                                <div className="pt-2">
+                                                                                    <Button
+                                                                                        variant="outline"
+                                                                                        className="w-full border-slate-200 text-slate-700 hover:bg-slate-50 h-12 md:h-9 font-semibold"
+                                                                                        onClick={() => handleRevertTask(task)}
+                                                                                        disabled={isSubmittingTask}
                                                                                     >
-                                                                                        Одобрить
+                                                                                        Вернуть на проверку
                                                                                     </Button>
                                                                                 </div>
                                                                             )}

@@ -81,6 +81,23 @@ export async function PATCH(
             await query(queryText, userValues);
         }
 
+        if (role_id !== undefined) {
+            let roleName = 'Сотрудник';
+            if (role_id !== null) {
+                const roleRes = await query(`SELECT name FROM roles WHERE id = $1`, [role_id]);
+                if ((roleRes.rowCount || 0) > 0 && roleRes.rows[0]?.name) {
+                    roleName = String(roleRes.rows[0].name);
+                }
+            }
+
+            await query(
+                `UPDATE club_employees
+                 SET role = $1
+                 WHERE club_id = $2 AND user_id = $3`,
+                [roleName, clubId, employeeId]
+            );
+        }
+
         // 2. Update CLUB_EMPLOYEES table (Dismissal / Activation)
         const empUpdates = [];
         const empValues = [];

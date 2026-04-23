@@ -3,12 +3,12 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CategoriesTab } from "./CategoriesTab"
 import { WarehousesTab } from "./WarehousesTab"
-import { Category, Warehouse, updateInventorySettings, PriceTagSettings, Product, getMetrics } from "../actions"
+import { Category, Warehouse, updateInventorySettings, PriceTagSettings, Product, getEmployees, getMetrics } from "../actions"
 import { useRouter, useSearchParams, useParams } from "next/navigation"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { useTransition, useState, useEffect } from "react"
+import { useTransition, useState, useEffect, useMemo } from "react"
 import { RefreshCw, Wallet, Percent, Tag, Package } from "lucide-react"
 import { PriceTagTemplateTab } from "./PriceTagTemplateTab"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -37,6 +37,7 @@ interface SettingsTabProps {
         shift_accountability_mode?: 'DISABLED' | 'WAREHOUSE',
         allow_salary_deduction?: boolean,
         employee_discount_percent?: number,
+        employee_discount_overrides?: Record<string, number>,
         allow_cost_price_sale?: boolean,
         price_tag_settings?: PriceTagSettings
     }
@@ -49,21 +50,42 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
     const clubId = params.clubId as string
     const [isPending, startTransition] = useTransition()
     const [metrics, setMetrics] = useState<{ key: string, label: string }[]>([])
-    const normalizedSettings = normalizeInventorySettings(inventorySettings)
+    const [employees, setEmployees] = useState<{ id: string; full_name: string; role: string }[]>([])
+    const normalizedSettings = useMemo(() => normalizeInventorySettings(inventorySettings), [inventorySettings])
     const defaultWarehouseId = warehouses.find((warehouse) => warehouse.is_default)?.id ?? warehouses[0]?.id ?? null
     
     // Local state for discount input to avoid too many DB updates while typing
     const [discountValue, setDiscountValue] = useState(inventorySettings?.employee_discount_percent?.toString() || "0")
+    const [employeeDiscountOverrides, setEmployeeDiscountOverrides] = useState<Record<string, string>>({})
 
     useEffect(() => {
         setDiscountValue(normalizedSettings?.employee_discount_percent?.toString() || "0")
     }, [normalizedSettings?.employee_discount_percent])
 
     useEffect(() => {
+        const raw = normalizedSettings?.employee_discount_overrides || {}
+        const next: Record<string, string> = {}
+        for (const [key, value] of Object.entries(raw)) {
+            next[key] = String(value)
+        }
+        setEmployeeDiscountOverrides(next)
+    }, [normalizedSettings?.employee_discount_overrides])
+
+    useEffect(() => {
         getMetrics()
             .then(setMetrics)
             .catch(console.error)
     }, [])
+
+    useEffect(() => {
+        if (!normalizedSettings?.allow_salary_deduction) {
+            setEmployees([])
+            return
+        }
+        getEmployees(clubId)
+            .then(setEmployees)
+            .catch(console.error)
+    }, [clubId, normalizedSettings?.allow_salary_deduction])
 
     useEffect(() => {
         if (isPending) return
@@ -105,6 +127,24 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
         const val = Number(discountValue)
         if (isNaN(val)) return
         handleUpdateSetting('employee_discount_percent', val)
+    }
+
+    const handleEmployeeDiscountBlur = (employeeId: string) => {
+        const raw = (employeeDiscountOverrides[employeeId] ?? "").trim()
+        const nextOverrides = { ...(normalizedSettings.employee_discount_overrides || {}) }
+
+        if (!raw) {
+            if (employeeId in nextOverrides) {
+                delete nextOverrides[employeeId]
+                handleUpdateSetting('employee_discount_overrides', nextOverrides)
+            }
+            return
+        }
+
+        const val = Number(raw)
+        if (Number.isNaN(val)) return
+        nextOverrides[employeeId] = Math.min(100, Math.max(0, val))
+        handleUpdateSetting('employee_discount_overrides', nextOverrides)
     }
 
     const handleFeatureToggle = (key: 'supplies_enabled' | 'stock_enabled' | 'cashbox_enabled' | 'report_reconciliation_enabled' | 'shift_accountability_mode', checked: boolean) => {
@@ -385,6 +425,50 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
                                                     />
                                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 font-bold text-xs">%</span>
                                                 </div>
+                                                {employees.length > 0 && (
+                                                    <div className="pt-3 space-y-2">
+                                                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                                                            Персональные скидки
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            {employees.map((emp) => (
+                                                                <div
+                                                                    key={emp.id}
+                                                                    className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-3 py-2"
+                                                                >
+                                                                    <div className="min-w-0">
+                                                                        <div className="text-sm font-semibold text-foreground truncate">
+                                                                            {emp.full_name}
+                                                                        </div>
+                                                                        <div className="text-[10px] text-muted-foreground">
+                                                                            {emp.role}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="relative w-24 shrink-0">
+                                                                        <Input
+                                                                            type="number"
+                                                                            className="w-24 text-right pr-8 font-black text-foreground h-10 rounded-lg border-border focus:ring-blue-500/10 focus:border-blue-500/50"
+                                                                            value={employeeDiscountOverrides[emp.id] ?? ""}
+                                                                            placeholder={String(normalizedSettings.employee_discount_percent ?? 0)}
+                                                                            onChange={(e) => setEmployeeDiscountOverrides((prev) => ({
+                                                                                ...prev,
+                                                                                [emp.id]: e.target.value,
+                                                                            }))}
+                                                                            onBlur={() => handleEmployeeDiscountBlur(emp.id)}
+                                                                            disabled={isPending}
+                                                                            min="0"
+                                                                            max="100"
+                                                                        />
+                                                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 font-bold text-xs">%</span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <p className="text-[10px] italic text-muted-foreground">
+                                                            Оставь поле пустым, чтобы использовать общий процент скидки.
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 

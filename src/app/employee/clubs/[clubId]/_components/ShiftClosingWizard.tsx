@@ -28,6 +28,7 @@ import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDi
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { optimizeFileBeforeUpload } from "@/lib/utils"
 import { cn } from "@/lib/utils"
+import { ShiftOpeningWizard } from "./ShiftOpeningWizard"
 
 interface ShiftClosingWizardProps {
     isOpen: boolean
@@ -197,6 +198,7 @@ export function ShiftClosingWizard({
     const [calculationResult, setCalculationResult] = useState<{ reported: number, calculated: number, diff: number } | null>(null)
     const [requiredChecklist, setRequiredChecklist] = useState<any>(null)
     const [checklistResponses, setChecklistResponses] = useState<Record<number, { score: number, comment: string, photo_urls?: string[], selected_workstations?: string[] }>>({})
+    const [isChecklistWizardOpen, setIsChecklistWizardOpen] = useState(false)
     const [workstations, setWorkstations] = useState<any[]>([])
     const [problematicItems, setProblematicItems] = useState<Record<number, string[]>>({})
     const [uploadingState, setUploadingState] = useState<Record<number, boolean>>({})
@@ -234,6 +236,21 @@ export function ShiftClosingWizard({
     const inventoryStep = isStartShiftMode ? 1 : (isShiftSalesMode ? 3 : 2)
     const finalizeStep = isStartShiftMode ? 2 : (isShiftSalesMode ? 4 : 3)
     const totalSteps = isStartShiftMode ? 2 : (isShiftSalesMode ? (skipInventory ? 2 : 4) : (skipInventory ? 1 : 3))
+
+    const isRequiredChecklistComplete = useMemo(() => {
+        if (!requiredChecklist?.items?.length) return true
+        for (const item of requiredChecklist.items) {
+            const response = checklistResponses[item.id]
+            if (!response) return false
+            if (response.score === -1 || response.score === undefined || response.score === null) return false
+            if (item.is_photo_required) {
+                const uploaded = (response.photo_urls?.length || 0)
+                const minRequired = item.min_photos || 1
+                if (uploaded < minRequired) return false
+            }
+        }
+        return true
+    }, [checklistResponses, requiredChecklist?.items])
 
     const [shiftReceipts, setShiftReceipts] = useState<ShiftReceipt[]>([])
     const [inventorySummary, setInventorySummary] = useState<InventorySummary | null>(null)
@@ -392,6 +409,83 @@ export function ShiftClosingWizard({
         return "Далее: Ревизия"
     }, [skipInventory])
 
+    const stepOneMissingFields = useMemo(() => {
+        const requiredFields = reportTemplate?.schema
+            ?.filter((f: any) => f.is_required)
+            ?.map((f: any) => f.metric_key) || []
+        return requiredFields.filter((key: string) => !hasReportValue(reportData[key]))
+    }, [reportData, reportTemplate?.schema])
+
+    const canProceedFromStep1 = useMemo(() => {
+        if (stepOneMissingFields.length > 0) return false
+        if (requiredChecklist?.items?.length && !isRequiredChecklistComplete) return false
+        if (!isStartShiftMode && usesSalesReconciliation && !revenueKey) return false
+        return true
+    }, [isRequiredChecklistComplete, isStartShiftMode, requiredChecklist?.items?.length, revenueKey, stepOneMissingFields.length, usesSalesReconciliation])
+
+    const stepOneBlockReasons = useMemo(() => {
+        const reasons: string[] = []
+        if (stepOneMissingFields.length > 0) {
+            const schema = Array.isArray(reportTemplate?.schema) ? reportTemplate.schema : []
+            const labels = stepOneMissingFields.map((key: string) => {
+                const field = schema.find((f: any) => f?.metric_key === key)
+                const label = field?.custom_label || field?.metric_key || key
+                return String(label)
+            })
+            reasons.push(`Заполните поля: ${labels.join(", ")}`)
+        }
+        if (requiredChecklist?.items?.length && !isRequiredChecklistComplete) {
+            reasons.push("Пройдите чеклист")
+        }
+        if (!isStartShiftMode && usesSalesReconciliation && !revenueKey) {
+            reasons.push("В настройках склада не выбрана метрика выручки")
+        }
+        return reasons
+    }, [isRequiredChecklistComplete, isStartShiftMode, reportTemplate?.schema, requiredChecklist?.items?.length, revenueKey, stepOneMissingFields, usesSalesReconciliation])
+
+    const shiftCommentRequired = useMemo(() => {
+        if (isStartShiftMode) return false
+        if (usesSalesReconciliation && step === 2) return reconcileSnapshot.diff !== 0
+        if (step === finalizeStep && calculationResult) return calculationResult.diff !== 0
+        return false
+    }, [calculationResult, finalizeStep, isStartShiftMode, reconcileSnapshot.diff, step, usesSalesReconciliation])
+
+    const hasShiftComment = useMemo(() => {
+        const raw = reportData['shift_comment']
+        return typeof raw === 'string' ? raw.trim().length > 0 : Boolean(raw)
+    }, [reportData])
+
+    const canProceedFromReconcile = useMemo(() => {
+        if (!usesSalesReconciliation) return false
+        if (isPending) return false
+        if (shiftCommentRequired && !hasShiftComment) return false
+        return true
+    }, [hasShiftComment, isPending, shiftCommentRequired, usesSalesReconciliation])
+
+    const reconcileBlockReason = useMemo(() => {
+        if (!usesSalesReconciliation) return null
+        if (isPending) return "Идёт обработка…"
+        if (shiftCommentRequired && !hasShiftComment) return "Укажите причину расхождения"
+        return null
+    }, [hasShiftComment, isPending, shiftCommentRequired, usesSalesReconciliation])
+
+    const canFinalizeShift = useMemo(() => {
+        if (isStartShiftMode) return true
+        if (!inventoryId || !calculationResult) return false
+        if (forgottenItems.length > 0) return false
+        if (shiftCommentRequired && !hasShiftComment) return false
+        return !isPending
+    }, [calculationResult, forgottenItems.length, hasShiftComment, inventoryId, isPending, isStartShiftMode, shiftCommentRequired])
+
+    const finalizeBlockReason = useMemo(() => {
+        if (isStartShiftMode) return null
+        if (isPending) return "Идёт обработка…"
+        if (!inventoryId || !calculationResult) return "Нет данных для завершения"
+        if (forgottenItems.length > 0) return `Не посчитано товаров: ${forgottenItems.length}`
+        if (shiftCommentRequired && !hasShiftComment) return "Укажите причину расхождения"
+        return null
+    }, [calculationResult, forgottenItems.length, hasShiftComment, inventoryId, isPending, isStartShiftMode, shiftCommentRequired])
+
     const finalizeSummary = useMemo(() => {
         if (!calculationResult) return null
 
@@ -461,6 +555,7 @@ export function ShiftClosingWizard({
         if (!isOpen) return
         if (!isShiftSalesMode) return
         if (step !== 2) return
+        if (!usesSalesReconciliation) return
 
         const shiftIdStr = String(activeShiftId)
         startTransition(async () => {
@@ -506,7 +601,12 @@ export function ShiftClosingWizard({
             if (saved) {
                 try {
                     const data = JSON.parse(saved)
-                    setStep(data.step || 1)
+                    const rawStep = Number(data.step || 1)
+                    const nextStep =
+                        !isStartShiftMode && !usesSalesReconciliation && rawStep === 2
+                            ? 1
+                            : rawStep
+                    setStep(nextStep as 1 | 2 | 3 | 4)
                     setReportData(data.reportData || {})
                     setInventoryId(data.inventoryId || null)
                     // Auto-count items with expected_stock = 0 when restoring
@@ -527,7 +627,7 @@ export function ShiftClosingWizard({
                 }
             }
         }
-    }, [isOpen, activeShiftId, persistenceKey])
+    }, [isOpen, activeShiftId, isStartShiftMode, persistenceKey, usesSalesReconciliation])
 
     useEffect(() => {
         if (!isOpen || !isStartShiftMode) return
@@ -619,13 +719,6 @@ export function ShiftClosingWizard({
                 
                 if (mandatory) {
                     setRequiredChecklist(mandatory)
-                    const initial: Record<number, { score: number, comment: string, photo_urls: string[], selected_workstations?: string[] }> = {}
-                    mandatory.items?.forEach((item: any) => {
-                        if (item.related_entity_type !== 'workstations') {
-                            initial[item.id] = { score: 1, comment: '', photo_urls: [], selected_workstations: [] }
-                        }
-                    })
-                    setChecklistResponses(initial)
                 } else {
                     setRequiredChecklist(null)
                 }
@@ -645,24 +738,6 @@ export function ShiftClosingWizard({
                     .then(data => {
                         if (Array.isArray(data)) {
                             setWorkstations(data)
-                            // Initial scores for workstations if no saved data
-                            const saved = localStorage.getItem(persistenceKey)
-                            if (!saved) {
-                                const mandatory = checklistTemplates?.find((t: any) => 
-                                    t.type === 'shift_handover' && t.settings?.block_shift_close
-                                )
-                                if (mandatory) {
-                                    setChecklistResponses(prev => {
-                                        const next = { ...prev }
-                                        mandatory.items?.forEach((item: any) => {
-                                            if (item.related_entity_type === 'workstations') {
-                                                next[item.id] = { score: 10, comment: '', photo_urls: [], selected_workstations: [] }
-                                            }
-                                        })
-                                        return next
-                                    })
-                                }
-                            }
                         }
                     })
                     .catch(console.error)
@@ -671,36 +746,15 @@ export function ShiftClosingWizard({
     }, [isOpen])
 
     const handleStep1Submit = () => {
-        const requiredFields = reportTemplate?.schema.filter((f: any) => f.is_required).map((f: any) => f.metric_key) || []
-        const missing = requiredFields.filter((key: string) => !hasReportValue(reportData[key]))
-        if (missing.length > 0) {
+        if (stepOneMissingFields.length > 0) {
             notifyInfo(`Заполните обязательные поля отчета`, "Проверьте данные")
             return
         }
-        
-        // Validation for checklist photos
-        if (requiredChecklist?.items) {
-            for (const item of requiredChecklist.items) {
-                const response = checklistResponses[item.id]
-                if (item.is_photo_required && (!response?.photo_urls || response.photo_urls.length < (item.min_photos || 1))) {
-                    notifyInfo(`Загрузите фото для пункта: ${item.content}`, "Нужно фото")
-                    return
-                }
-            }
-        }
 
-        if (requiredChecklist?.items?.length) {
-            const missingWorkstationComment = requiredChecklist.items.some((item: any) => {
-                if (item.related_entity_type !== 'workstations') return false
-                const issues = problematicItems[item.id] || []
-                if (issues.length === 0) return false
-                const comment = checklistResponses[item.id]?.comment || ''
-                return comment.trim().length === 0
-            })
-            if (missingWorkstationComment) {
-                notifyInfo("Укажите причину для проблемных мест", "Проверьте данные")
-                return
-            }
+        if (requiredChecklist?.items?.length && !isRequiredChecklistComplete) {
+            notifyInfo("Пройдите чеклист перед закрытием смены", "Чеклист обязателен")
+            setIsChecklistWizardOpen(true)
+            return
         }
 
         if (!isStartShiftMode && usesSalesReconciliation && !revenueKey) {
@@ -718,7 +772,7 @@ export function ShiftClosingWizard({
             return
         }
 
-        setStep(2)
+        setStep(inventoryStep)
         startInventory()
     }
 
@@ -1393,120 +1447,37 @@ export function ShiftClosingWizard({
                         {/* Checklist Section if Required */}
                         {requiredChecklist && (
                             <div className="bg-orange-900/10 border border-orange-900/30 p-4 rounded-xl space-y-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="bg-orange-100/10 p-2 rounded-full">
-                                        <CheckCircle2 className="h-5 w-5 text-orange-400" />
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex items-start gap-3">
+                                        <div className="bg-orange-100/10 p-2 rounded-full">
+                                            <CheckCircle2 className="h-5 w-5 text-orange-400" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-medium text-orange-100">Чеклист: {requiredChecklist.name}</h4>
+                                            <p className="text-xs text-orange-200/60">Обязательно перед закрытием</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h4 className="font-medium text-orange-100">Чеклист: {requiredChecklist.name}</h4>
-                                        <p className="text-xs text-orange-200/60">Обязательно перед закрытием</p>
-                                    </div>
+                                    <Badge
+                                        variant="outline"
+                                        className={cn(
+                                            "shrink-0 rounded-full border text-[10px] font-semibold",
+                                            isRequiredChecklistComplete
+                                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                                                : "border-orange-500/30 bg-orange-500/10 text-orange-200"
+                                        )}
+                                    >
+                                        {isRequiredChecklistComplete ? "Пройден" : "Не пройден"}
+                                    </Badge>
                                 </div>
 
-                                <div className="space-y-4 pl-2 border-l-2 border-orange-800/30 ml-4">
-                                    {requiredChecklist.items?.map((item: any) => {
-                                         // Workstation Checklist Logic
-                                         if (item.related_entity_type === 'workstations') {
-                                             const targetWs = workstations.filter(w => w.is_active && (!item.target_zone || item.target_zone === 'all' || w.zone === item.target_zone))
-                                             const currentProblematic = problematicItems[item.id] || []
-                                             const errorPrice = targetWs.length > 0 ? 10 / targetWs.length : 0
-                                             const rawScore = 10 - (currentProblematic.length * errorPrice)
-                                             const currentScore = Math.max(0, Math.round(rawScore * 10) / 10)
-                                             
-                                             return (
-                                                 <div key={item.id} className="space-y-3 py-2">
-                                                     <div className="flex items-center justify-between">
-                                                         <span className="text-sm font-medium text-slate-200">{item.content}</span>
-                                                         <div className="text-xs font-mono bg-primary px-2 py-1 rounded border border-slate-800">
-                                                             <span className={currentScore < 10 ? "text-red-400" : "text-green-400"}>{currentScore}</span>
-                                                             <span className="opacity-50 mx-1">/</span>
-                                                             <span>10</span>
-                                                         </div>
-                                                     </div>
-                                                     <div className="grid grid-cols-3 gap-2">
-                                                         {targetWs.map(ws => (
-                                                             <Button
-                                                                 key={ws.id}
-                                                                 variant="outline"
-                                                                 size="sm"
-                                                                 className={`h-8 text-[10px] ${currentProblematic.includes(ws.id) ? 'bg-red-950/50 border-red-800 text-red-200' : 'bg-primary/50 border-slate-800'}`}
-                                                                 onClick={() => toggleProblematicWorkstation(item.id, ws.id, 10, targetWs)}
-                                                             >
-                                                                 {ws.name}
-                                                             </Button>
-                                                         ))}
-                                                     </div>
-                                                 </div>
-                                             )
-                                         }
-
-                                        return (
-                                            <div key={item.id} className="space-y-4 py-2 border-b border-orange-900/20 last:border-0">
-                                                <div className="flex items-center justify-between gap-4">
-                                                    <span className="text-sm font-medium text-slate-200">{item.content}</span>
-                                                    <div className="flex gap-1 bg-primary p-1 rounded-lg border border-slate-800 shrink-0">
-                                                        <Button 
-                                                            variant={checklistResponses[item.id]?.score === 1 ? 'default' : 'ghost'} 
-                                                            size="sm"
-                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 1 ? 'bg-green-600' : 'text-muted-foreground/70'}`}
-                                                            onClick={() => handleChecklistChange(item.id, 1)}
-                                                        >
-                                                            Да
-                                                        </Button>
-                                                        <Button 
-                                                            variant={checklistResponses[item.id]?.score === 0 ? 'default' : 'ghost'} 
-                                                            size="sm"
-                                                            className={`h-7 px-3 text-xs ${checklistResponses[item.id]?.score === 0 ? 'bg-red-600' : 'text-muted-foreground/70'}`}
-                                                            onClick={() => handleChecklistChange(item.id, 0)}
-                                                        >
-                                                            Нет
-                                                        </Button>
-                                                    </div>
-                                                </div>
-
-                                                {/* Photos & Camera */}
-                                                {(item.is_photo_required || checklistResponses[item.id]?.score === 0 || (checklistResponses[item.id]?.photo_urls?.length || 0) > 0) && (
-                                                    <div className="space-y-3">
-                                                        {checklistResponses[item.id]?.photo_urls && checklistResponses[item.id].photo_urls!.length > 0 && (
-                                                            <div className="grid grid-cols-3 gap-2">
-                                                                {checklistResponses[item.id].photo_urls!.map((url, idx) => (
-                                                                    <div key={idx} className="relative rounded-lg overflow-hidden border border-slate-800 aspect-square group">
-                                                                        <img src={url} alt="Attach" className="h-full w-full object-cover" />
-                                                                        <button 
-                                                                            onClick={() => removePhoto(item.id, url)}
-                                                                            className="absolute top-1 right-1 p-1.5 bg-primary/50 hover:bg-red-600 text-primary-foreground rounded-full backdrop-blur-sm transition-colors"
-                                                                        >
-                                                                            <Trash2 className="h-3 w-3" />
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                        
-                                                        <label className={`
-                                                            flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed transition-all cursor-pointer
-                                                            ${item.is_photo_required && (checklistResponses[item.id]?.photo_urls?.length || 0) < (item.min_photos || 1)
-                                                                ? 'border-orange-500/50 bg-orange-500/5' : 'border-slate-800 bg-primary/30'}
-                                                        `}>
-                                                            {uploadingState[item.id] ? <Loader2 className="h-4 w-4 animate-spin text-orange-400" /> : <Camera className="h-4 w-4 text-orange-400" />}
-                                                            <span className="text-xs font-medium text-orange-200">
-                                                                {uploadingState[item.id] ? 'Загрузка...' : 'Добавить фото'}
-                                                            </span>
-                                                            <input 
-                                                                type="file" 
-                                                                accept="image/*" 
-                                                                multiple 
-                                                                capture="environment" 
-                                                                className="hidden" 
-                                                                onChange={(e) => handlePhotoUpload(item.id, e)}
-                                                                disabled={uploadingState[item.id]}
-                                                            />
-                                                        </label>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )})}
-                                </div>
+                                <Button
+                                    type="button"
+                                    onClick={() => setIsChecklistWizardOpen(true)}
+                                    disabled={isRequiredChecklistComplete}
+                                    className="h-10 w-full rounded-xl bg-orange-500/20 text-orange-100 hover:bg-orange-500/30 disabled:opacity-40 disabled:pointer-events-none"
+                                >
+                                    Открыть чеклист
+                                </Button>
                             </div>
                         )}
 
@@ -1516,7 +1487,9 @@ export function ShiftClosingWizard({
                                 Финансовый отчет
                             </h3>
                             <div className="grid gap-5">
-                                {reportTemplate?.schema.map((field: any, idx: number) => (
+                                {reportTemplate?.schema.map((field: any, idx: number) => {
+                                    const isMissing = stepOneMissingFields.includes(field.metric_key)
+                                    return (
                                     <div key={idx} className="space-y-2">
                                         {field.field_type === 'EXPENSE' || field.field_type === 'EXPENSE_LIST' ? (
                                             <div className="space-y-3">
@@ -1591,7 +1564,10 @@ export function ShiftClosingWizard({
                                             </div>
                                         ) : (
                                             <>
-                                                <Label className="text-muted-foreground/70 text-xs uppercase tracking-wider ml-1">
+                                                <Label className={cn(
+                                                    "text-xs uppercase tracking-wider ml-1",
+                                                    isMissing ? "text-red-400" : "text-muted-foreground/70"
+                                                )}>
                                                     {field.custom_label}
                                                     {field.is_required && <span className="text-red-500 ml-1">*</span>}
                                                 </Label>
@@ -1599,21 +1575,24 @@ export function ShiftClosingWizard({
                                                     required={field.is_required}
                                                     type={field.metric_key.includes('comment') ? 'text' : 'number'}
                                                     inputMode={field.metric_key.includes('comment') ? 'text' : 'numeric'}
-                                                    className="bg-primary border-slate-800 h-12 rounded-xl focus:ring-2 focus:ring-purple-500 transition-all text-lg font-medium"
+                                                    className={cn(
+                                                        "bg-primary h-12 rounded-xl focus:ring-2 transition-all text-lg font-medium",
+                                                        isMissing ? "border-red-500 focus:ring-red-500" : "border-slate-800 focus:ring-purple-500"
+                                                    )}
                                                     value={reportData[field.metric_key] || ''}
                                                     onChange={(e) => setReportData({ ...reportData, [field.metric_key]: e.target.value })}
                                                 />
                                             </>
                                         )}
                                     </div>
-                                ))}
+                                )})}
                             </div>
                         </div>
                     </div>
                 )}
 
                 {/* STEP 2 (SHIFT MODE): RECONCILIATION */}
-                {!isStartShiftMode && isShiftSalesMode && step === 2 && (
+                {!isStartShiftMode && usesSalesReconciliation && isShiftSalesMode && step === 2 && (
                     <div className="space-y-6 max-w-2xl mx-auto pb-20">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="bg-primary/50 p-4 rounded-2xl border border-slate-800">
@@ -1705,9 +1684,15 @@ export function ShiftClosingWizard({
 
                         {reconcileSnapshot.diff !== 0 && (
                             <div className="space-y-3">
-                                <Label className="text-muted-foreground/70 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
+                                <Label className={cn(
+                                    "text-xs uppercase tracking-wider ml-1",
+                                    shiftCommentRequired && !hasShiftComment ? "text-red-400" : "text-muted-foreground/70"
+                                )}>Причина расхождения</Label>
                                 <Input
-                                    className="bg-primary border-slate-800 h-14 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
+                                    className={cn(
+                                        "bg-primary h-14 rounded-xl focus:ring-2 transition-all text-base",
+                                        shiftCommentRequired && !hasShiftComment ? "border-red-500 focus:ring-red-500" : "border-slate-800 focus:ring-blue-500"
+                                    )}
                                     placeholder="Укажите причину..."
                                     value={reportData['shift_comment'] || ''}
                                     onChange={(e) => setReportData({ ...reportData, 'shift_comment': e.target.value })}
@@ -2051,9 +2036,15 @@ export function ShiftClosingWizard({
 
                         {!isStartShiftMode && calculationResult.diff !== 0 && (
                             <div className="space-y-3">
-                                <Label className="text-muted-foreground/70 text-xs uppercase tracking-wider ml-1">Причина расхождения</Label>
+                                <Label className={cn(
+                                    "text-xs uppercase tracking-wider ml-1",
+                                    shiftCommentRequired && !hasShiftComment ? "text-red-400" : "text-muted-foreground/70"
+                                )}>Причина расхождения</Label>
                                 <Input 
-                                    className="bg-primary border-slate-800 h-14 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all text-base"
+                                    className={cn(
+                                        "bg-primary h-14 rounded-xl focus:ring-2 transition-all text-base",
+                                        shiftCommentRequired && !hasShiftComment ? "border-red-500 focus:ring-red-500" : "border-slate-800 focus:ring-blue-500"
+                                    )}
                                     placeholder="Укажите причину..."
                                     value={reportData['shift_comment'] || ''}
                                     onChange={(e) => setReportData({ ...reportData, 'shift_comment': e.target.value })}
@@ -2116,25 +2107,43 @@ export function ShiftClosingWizard({
 
             <footer className="p-4 pb-safe border-t border-slate-800 bg-primary/80 backdrop-blur-md sticky bottom-0 z-50">
                 {step === 1 && !isStartShiftMode && (
-                    <Button onClick={handleStep1Submit} className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700 rounded-2xl shadow-lg shadow-purple-900/20">
-                        {primaryStepOneLabel}
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
-                )}
-                {step === 2 && usesSalesReconciliation && !isStartShiftMode && (
-                    <div className="flex gap-3">
-                        <Button 
-                            variant="outline"
-                            size="icon"
-                            onClick={handleBack}
-                            className="h-14 w-14 border-slate-800 text-muted-foreground/70 hover:bg-primary/90 rounded-2xl shrink-0"
-                        >
-                            <ArrowLeft className="h-6 w-6" />
-                        </Button>
-                        <Button onClick={handleReconcileNext} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20">
-                            {reconcileNextLabel}
+                    <div className="space-y-2">
+                        <Button onClick={handleStep1Submit} disabled={!canProceedFromStep1 || isPending} className="w-full h-14 text-lg font-bold bg-purple-600 hover:bg-purple-700 rounded-2xl shadow-lg shadow-purple-900/20 disabled:opacity-40 disabled:pointer-events-none">
+                            {primaryStepOneLabel}
                             <ArrowRight className="ml-2 h-5 w-5" />
                         </Button>
+                        {!canProceedFromStep1 && stepOneBlockReasons.length > 0 && (
+                            <div className="text-[11px] font-semibold text-amber-400">
+                                {stepOneBlockReasons.map((reason, idx) => (
+                                    <div key={`step1-reason-${idx}`} className={idx === 0 ? "" : "mt-1"}>
+                                        {reason}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+                {step === 2 && usesSalesReconciliation && !isStartShiftMode && (
+                    <div className="space-y-2">
+                        <div className="flex gap-3">
+                            <Button 
+                                variant="outline"
+                                size="icon"
+                                onClick={handleBack}
+                                className="h-14 w-14 border-slate-800 text-muted-foreground/70 hover:bg-primary/90 rounded-2xl shrink-0"
+                            >
+                                <ArrowLeft className="h-6 w-6" />
+                            </Button>
+                            <Button onClick={handleReconcileNext} disabled={!canProceedFromReconcile} className="flex-1 h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/20 disabled:opacity-40 disabled:pointer-events-none">
+                                {reconcileNextLabel}
+                                <ArrowRight className="ml-2 h-5 w-5" />
+                            </Button>
+                        </div>
+                        {!canProceedFromReconcile && reconcileBlockReason && (
+                            <div className="text-[11px] font-semibold text-amber-400">
+                                {reconcileBlockReason}
+                            </div>
+                        )}
                     </div>
                 )}
                 {step === inventoryStep && !usesSalesReconciliation && (
@@ -2183,9 +2192,14 @@ export function ShiftClosingWizard({
                                 <ArrowLeft className="h-6 w-6" />
                             </Button>
                         ) : null}
-                        <Button onClick={handleFinalize} disabled={isPending} className="flex-1 h-14 text-lg font-bold bg-green-600 hover:bg-green-700 rounded-2xl shadow-lg shadow-green-900/20">
+                        <Button onClick={handleFinalize} disabled={!canFinalizeShift} className="flex-1 h-14 text-lg font-bold bg-green-600 hover:bg-green-700 rounded-2xl shadow-lg shadow-green-900/20 disabled:opacity-40 disabled:pointer-events-none">
                             {isStartShiftMode ? "Подтвердить инвентаризацию" : "Подтвердить"}
                         </Button>
+                    </div>
+                )}
+                {step === finalizeStep && !canFinalizeShift && finalizeBlockReason && (
+                    <div className="mt-2 text-[11px] font-semibold text-amber-400">
+                        {finalizeBlockReason}
                     </div>
                 )}
             </footer>
@@ -2254,6 +2268,19 @@ export function ShiftClosingWizard({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            {requiredChecklist && (
+                <ShiftOpeningWizard
+                    isOpen={isChecklistWizardOpen}
+                    onClose={() => setIsChecklistWizardOpen(false)}
+                    onComplete={(responses) => {
+                        setChecklistResponses(responses)
+                        setIsChecklistWizardOpen(false)
+                    }}
+                    checklistTemplate={requiredChecklist}
+                    targetMode="SELF"
+                    fullscreen
+                />
+            )}
             {Dialogs}
         </div>
     ), document.body)

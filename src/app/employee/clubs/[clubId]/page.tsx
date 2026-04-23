@@ -261,8 +261,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     // Оптимизация: мемоизация KPI компонентов (должен быть до useEffect)
     const kpiComponents = useMemo(() => {
         if (!kpiData?.kpi) return null
-        return kpiData.kpi.map((kpi: any) => (
-            <div key={kpi.id} className="space-y-4">
+        return kpiData.kpi.map((kpi: any, idx: number) => (
+            <div key={`kpi-${kpi?.id ?? "unknown"}-${idx}`} className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
                     
                     <h2 className="text-lg font-semibold tracking-tight text-foreground">Выручка: {kpi.name}</h2>
@@ -283,8 +283,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     const checklistComponents = useMemo(() => {
         if (!kpiData?.checklist) return null
-        return kpiData.checklist.map((checklist: any) => (
-            <div key={checklist.id} className="space-y-4">
+        return kpiData.checklist.map((checklist: any, idx: number) => (
+            <div key={`checklist-${checklist?.id ?? "unknown"}-${idx}`} className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
                     
                     <h2 className="text-lg font-semibold tracking-tight text-foreground">Чек-лист</h2>
@@ -657,12 +657,15 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     }
                 }
                 await fetchData(clubId)
+                return data.shift_id ? String(data.shift_id) : null
             } else {
                 alert(data.error || 'Не удалось начать смену')
+                return null
             }
         } catch (error) {
             console.error('Error starting shift:', error)
             alert('Ошибка начала смены')
+            return null
         } finally {
             setIsActionLoading(false)
         }
@@ -1281,7 +1284,39 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                     onClose={() => setIsHandoverOpen(false)}
                     onComplete={async (checklistResponses: Record<number, { score: number, comment: string, photo_urls?: string[] }>, targetShiftId?: string, selectedUserId?: string | null) => {
                         try {
+                            const targetMode = handoverTemplate?.settings?.target_mode === "SELF" ? "SELF" : "SHIFT"
+                            if (targetMode === "SELF") {
+                                setIsHandoverOpen(false)
+                                const newShiftId = await executeStartShift()
+                                if (!newShiftId) return
+
+                                const evalRes = await fetch(`/api/clubs/${clubId}/evaluations`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        template_id: handoverTemplate.id,
+                                        employee_id: currentUserId,
+                                        target_user_id: currentUserId,
+                                        shift_id: newShiftId,
+                                        responses: Object.entries(checklistResponses).map(([k, v]: any) => ({
+                                            item_id: parseInt(k),
+                                            score: v.score,
+                                            comment: v.comment,
+                                            photo_urls: v.photo_urls,
+                                            selected_workstations: v.selected_workstations
+                                        }))
+                                    })
+                                })
+                                if (!evalRes.ok) {
+                                    const err = await evalRes.json().catch(() => ({}))
+                                    alert(err.error || 'Не удалось сохранить результат чеклиста')
+                                }
+                                return
+                            }
+
                             let targetUserId = selectedUserId || null
+                            const effectiveShiftId = targetShiftId || null
+
                             if (!targetUserId && targetShiftId) {
                                 const shiftRes = await fetch(`/api/clubs/${clubId}/shifts/${targetShiftId}`)
                                 if (shiftRes.ok) {
@@ -1307,7 +1342,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                     template_id: handoverTemplate.id,
                                     employee_id: targetUserId,
                                     target_user_id: targetUserId,
-                                    shift_id: targetShiftId,
+                                    shift_id: effectiveShiftId,
                                     responses: Object.entries(checklistResponses).map(([k, v]: any) => ({
                                         item_id: parseInt(k),
                                         score: v.score,
