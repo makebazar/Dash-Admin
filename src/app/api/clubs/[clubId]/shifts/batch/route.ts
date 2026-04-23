@@ -163,7 +163,7 @@ export async function POST(
 
                 // Find scheme
                 const schemeRes = await query(
-                    `SELECT ss.id, ss.name, sv.formula
+                    `SELECT ss.id, ss.name, ss.standard_monthly_shifts, sv.formula
                      FROM employee_salary_assignments esa
                      JOIN salary_schemes ss ON esa.scheme_id = ss.id
                      JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
@@ -184,7 +184,7 @@ export async function POST(
                         id: 'batch-shift',
                         total_hours: total_hours > 0 ? total_hours : 0,
                         report_data: report_data || {}
-                    }, scheme.formula, {
+                    }, { ...(scheme.formula || {}), standard_monthly_shifts: scheme.standard_monthly_shifts }, {
                         total_revenue: (Number(cash_income) || 0) + (Number(card_income) || 0),
                         revenue_cash: Number(cash_income) || 0,
                         revenue_card: Number(card_income) || 0,

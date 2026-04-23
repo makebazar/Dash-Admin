@@ -32,7 +32,7 @@ export async function GET(
 
         // 2. Get salary scheme
         const schemeRes = await query(
-            `SELECT sv.formula
+            `SELECT ss.standard_monthly_shifts, sv.formula
              FROM employee_salary_assignments esa
              JOIN salary_schemes ss ON esa.scheme_id = ss.id
              JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
@@ -46,7 +46,8 @@ export async function GET(
              return NextResponse.json({ projected_instant_payout: 0 });
         }
 
-        const scheme = schemeRes.rows[0].formula;
+        const schemeRow = schemeRes.rows[0];
+        const scheme = { ...(schemeRow.formula || {}), standard_monthly_shifts: schemeRow.standard_monthly_shifts };
 
         // 3. Calculate preliminary salary
         // We use current report_data and assume shift ends now for calculation

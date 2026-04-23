@@ -769,7 +769,7 @@ export async function PATCH(
 
         // Get assigned scheme
         const schemeRes = await query(
-            `SELECT ss.id, ss.name, sv.formula
+            `SELECT ss.id, ss.name, ss.standard_monthly_shifts, sv.formula
              FROM employee_salary_assignments esa
              JOIN salary_schemes ss ON esa.scheme_id = ss.id
              JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
@@ -788,12 +788,29 @@ export async function PATCH(
 
         if ((schemeRes.rowCount || 0) > 0) {
             const scheme = schemeRes.rows[0];
+            const jsDow = new Date(mergedData.check_in).getDay()
+            const dayOfWeek =
+                jsDow === 0
+                    ? 'SUN'
+                    : jsDow === 1
+                        ? 'MON'
+                        : jsDow === 2
+                            ? 'TUE'
+                            : jsDow === 3
+                                ? 'WED'
+                                : jsDow === 4
+                                    ? 'THU'
+                                    : jsDow === 5
+                                        ? 'FRI'
+                                        : 'SAT'
             const calculation = await calculateSalary({
                 id: shiftId,
                 total_hours: Number(mergedData.total_hours) || 0,
                 report_data: mergedData.report_data || {},
-                evaluations: evaluations
-            }, scheme.formula, {
+                evaluations: evaluations,
+                shift_type: mergedData.shift_type || 'DAY',
+                day_of_week: dayOfWeek
+            }, { ...(scheme.formula || {}), standard_monthly_shifts: scheme.standard_monthly_shifts }, {
                 total_revenue: (Number(mergedData.cash_income) || 0) + (Number(mergedData.card_income) || 0),
                 revenue_cash: Number(mergedData.cash_income) || 0,
                 revenue_card: Number(mergedData.card_income) || 0,

@@ -2,6 +2,7 @@
 // Update interface to match actual DB JSON structure
 interface SalaryScheme {
     id?: number;
+    standard_monthly_shifts?: number;
     base?: {
         type: 'hourly' | 'fixed' | 'per_shift' | 'percent_revenue' | 'none';
         amount?: number;
@@ -33,6 +34,8 @@ interface ShiftData {
     report_data?: any;
     evaluations?: any[]; // Added to support checklist bonuses
     bar_purchases?: number; // Added to support bar deductions
+    shift_type?: 'DAY' | 'NIGHT';
+    day_of_week?: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
 }
 
 export async function calculateSalary(
@@ -147,6 +150,76 @@ export async function calculateSalary(
                         }
                     }
                 }
+            } else if (bonus.type === 'personal_overplan') {
+                const dayOfWeek = (shift as any).day_of_week || 'MON'
+                const shiftType = (shift as any).shift_type || 'DAY'
+                const planByDay = (bonus as any).plan_by_day_of_week || {}
+                const planByGroup = (bonus as any).plan_by_day_group || {}
+                const standardMonthlyShiftsRaw = (scheme as any).standard_monthly_shifts ?? 15
+                const standardMonthlyShifts = Number.isFinite(Number(standardMonthlyShiftsRaw)) ? Math.max(1, Number(standardMonthlyShiftsRaw)) : 15
+                const monthlyPlan = Number((bonus as any).monthly_plan || 0) || 0
+
+                const group =
+                    dayOfWeek === 'FRI'
+                        ? 'FRIDAY'
+                        : dayOfWeek === 'SAT' || dayOfWeek === 'SUN'
+                            ? 'WEEKEND'
+                            : 'WEEKDAY'
+
+                const derivedPlanPerShift = monthlyPlan > 0 ? (monthlyPlan / standardMonthlyShifts) : 0
+                const planPerShift =
+                    Number(planByDay?.[dayOfWeek]?.[shiftType]) ||
+                    Number(planByGroup?.[group]?.[shiftType]) ||
+                    Number((bonus as any).plan_per_shift) ||
+                    derivedPlanPerShift ||
+                    0
+
+                const kpiPercent = planPerShift > 0 ? (metricValue / planPerShift) * 100 : 0
+                const overPercent = Math.max(0, kpiPercent - 100)
+
+                const tiers = Array.isArray(bonus.tiers) ? bonus.tiers : []
+                const sorted = [...tiers].sort((a, b) => (Number(b.from_over_percent) || 0) - (Number(a.from_over_percent) || 0))
+                const tier = sorted.find(t => overPercent >= (Number(t.from_over_percent) || 0))
+                const bonusPercent = tier ? (Number(tier.bonus_percent) || 0) : 0
+
+                const rewardBase = String((bonus as any).reward_base || 'BASE').toUpperCase()
+                const rewardBaseValue = rewardBase === 'METRIC' ? metricValue : baseAmount
+                bonusAmount = rewardBaseValue * (bonusPercent / 100)
+
+                if (bonusAmount > 0) {
+                    const payoutType = bonus.payout_type || 'REAL_MONEY';
+
+                    breakdown.bonuses.push({
+                        name: bonus.name || 'Личный бонус',
+                        type: 'PERSONAL_OVERPLAN',
+                        amount: parseFloat(bonusAmount.toFixed(2)),
+                        source_key: sourceKey,
+                        source_value: metricValue,
+                        payout_type: payoutType,
+                        day_of_week: dayOfWeek,
+                        shift_type: shiftType,
+                        plan_per_shift: parseFloat(planPerShift.toFixed(2)),
+                        kpi_percent: parseFloat(kpiPercent.toFixed(2)),
+                        over_percent: parseFloat(overPercent.toFixed(2)),
+                        bonus_percent: parseFloat(bonusPercent.toFixed(2)),
+                        base_amount: parseFloat(baseAmount.toFixed(2)),
+                        reward_base: rewardBase,
+                        reward_base_value: parseFloat(Number(rewardBaseValue || 0).toFixed(2))
+                    });
+
+                    if (payoutType === 'VIRTUAL_BALANCE') {
+                        virtualBalanceTotal += bonusAmount;
+                    } else {
+                        total += bonusAmount;
+                        const payoutTiming = bonus.payout_timing || 'MONTH';
+                        if (payoutTiming === 'SHIFT') {
+                            breakdown.instant_payout += bonusAmount;
+                        } else {
+                            breakdown.accrued_payout += bonusAmount;
+                        }
+                    }
+                }
+                continue;
             } else if (bonus.type === 'checklist') {
                 // Handle checklist bonus (Per Shift mode)
                 if (bonus.mode !== 'MONTH' && shift.evaluations && Array.isArray(shift.evaluations)) {
@@ -265,7 +338,7 @@ export async function calculateSalary(
                 }
             }
 
-            if (bonus.type !== 'checklist' && bonus.type !== 'maintenance_kpi' && bonus.type !== 'leaderboard_rank' && bonusAmount > 0) {
+            if (bonus.type !== 'checklist' && bonus.type !== 'maintenance_kpi' && bonus.type !== 'leaderboard_rank' && bonus.type !== 'personal_overplan' && bonusAmount > 0) {
                 const payoutType = bonus.payout_type || 'REAL_MONEY';
                 const isMonthly = bonus.mode === 'MONTH';
                 

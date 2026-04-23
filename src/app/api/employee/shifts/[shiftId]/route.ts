@@ -29,7 +29,7 @@ export async function PATCH(
 
         // Verify shift belongs to user
         const shiftCheck = await query(
-            `SELECT id, club_id, check_in, user_id FROM shifts WHERE id = $1 AND user_id = $2 AND check_out IS NULL`,
+            `SELECT id, club_id, check_in, user_id, shift_type FROM shifts WHERE id = $1 AND user_id = $2 AND check_out IS NULL`,
             [shiftId, userId]
         );
 
@@ -40,6 +40,22 @@ export async function PATCH(
         const clubId = shiftCheck.rows[0].club_id;
         const checkIn = new Date(shiftCheck.rows[0].check_in);
         const shiftUserId = shiftCheck.rows[0].user_id;
+        const shiftType = shiftCheck.rows[0].shift_type || 'DAY'
+        const jsDow = checkIn.getDay()
+        const dayOfWeek =
+            jsDow === 0
+                ? 'SUN'
+                : jsDow === 1
+                    ? 'MON'
+                    : jsDow === 2
+                        ? 'TUE'
+                        : jsDow === 3
+                            ? 'WED'
+                            : jsDow === 4
+                                ? 'THU'
+                                : jsDow === 5
+                                    ? 'FRI'
+                                    : 'SAT'
 
         const roleAccess = await getEmployeeRoleAccess(String(clubId))
         if (roleAccess.settings.shift_end_mode === 'NO_REPORT') {
@@ -66,7 +82,7 @@ export async function PATCH(
 
         // Get assigned scheme and its latest formula
         const schemeRes = await query(
-            `SELECT ss.id, ss.name, sv.formula
+            `SELECT ss.id, ss.name, ss.standard_monthly_shifts, sv.formula
              FROM employee_salary_assignments esa
              JOIN salary_schemes ss ON esa.scheme_id = ss.id
              JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
@@ -116,8 +132,8 @@ export async function PATCH(
 
             // Pass formula directly - calculator now handles normalization
             const calculation = await calculateSalary(
-                { id: shiftId, total_hours: totalHours, evaluations },
-                formula,
+                { id: shiftId, total_hours: totalHours, evaluations, shift_type: shiftType, day_of_week: dayOfWeek },
+                { ...formula, standard_monthly_shifts: scheme.standard_monthly_shifts },
                 metrics
             );
 

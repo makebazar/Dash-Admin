@@ -604,14 +604,11 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
             <div className="md:hidden space-y-3">
                 {displayedProducts.map(product => {
                     return (
-                        <div key={product.id} className="bg-card rounded-xl border p-4 shadow-sm relative overflow-hidden active:bg-muted transition-colors" onClick={() => {
-                            setEditingProduct(product)
-                            if (product.cost_price > 0 && product.selling_price > 0) {
-                                setDesiredMarkup(((product.selling_price - product.cost_price) / product.cost_price * 100).toFixed(1))
-                                setDesiredMargin(((product.selling_price - product.cost_price) / product.selling_price * 100).toFixed(1))
-                            }
-                            setIsDialogOpen(true)
-                        }}>
+                        <div
+                            key={product.id}
+                            className="bg-card rounded-xl border p-4 shadow-sm relative overflow-hidden active:bg-muted transition-colors"
+                            onClick={() => router.push(`/clubs/${clubId}/inventory/products/${product.id}`)}
+                        >
                             <div className="flex justify-between items-start mb-3">
                                 <div className="flex gap-3">
                                     <div onClick={(e) => e.stopPropagation()}>

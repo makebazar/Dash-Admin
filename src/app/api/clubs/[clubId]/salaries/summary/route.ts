@@ -133,7 +133,8 @@ export async function GET(
                 salary_snapshot,
                 salary_breakdown,
                 status,
-                check_in
+                check_in,
+                shift_type
              FROM shifts
              WHERE club_id = $1 
                AND check_in >= $2 
@@ -633,13 +634,31 @@ export async function GET(
                     bonuses: enriched_scheme_bonuses 
                 };
 
+                const jsDow = new Date(s.check_in).getDay()
+                const dayOfWeek =
+                    jsDow === 0
+                        ? 'SUN'
+                        : jsDow === 1
+                            ? 'MON'
+                            : jsDow === 2
+                                ? 'TUE'
+                                : jsDow === 3
+                                    ? 'WED'
+                                    : jsDow === 4
+                                        ? 'THU'
+                                        : jsDow === 5
+                                            ? 'FRI'
+                                            : 'SAT'
+
                 const result = await calculateSalary(
                     { 
                         id: s.id, 
                         total_hours: parseFloat(s.total_hours || 0), 
                         report_data: s.report_data,
                         evaluations: shiftEvalsMap[s.id] || [],
-                        bar_purchases: parseFloat(s.bar_purchases || 0)
+                        bar_purchases: parseFloat(s.bar_purchases || 0),
+                        shift_type: s.shift_type || 'DAY',
+                        day_of_week: dayOfWeek
                     },
                     schemeWithRewards,
                     reportMetricsForShift
@@ -676,7 +695,7 @@ export async function GET(
                         const isMonthlyKPI = bonuses_status.some(bs => bs.name === b.name || (b.id && bs.id === b.id));
                         const isContribution = b.type === 'PERIOD_BONUS_CONTRIBUTION' || b.mode === 'MONTH';
                         
-                        return (b.type === 'SHIFT_BONUS' || b.type === 'CHECKLIST_BONUS') && 
+                        return (b.type === 'SHIFT_BONUS' || b.type === 'CHECKLIST_BONUS' || b.type === 'PERSONAL_OVERPLAN') && 
                                b.payout_type !== 'VIRTUAL_BALANCE' && 
                                !isMonthlyKPI && !isContribution;
                     })
@@ -892,6 +911,17 @@ export async function GET(
             const total_revenue = monthlyMetrics.total_revenue;
             const total_hours = monthlyMetrics.total_hours;
 
+            const schemeBonusesForFeatures = Array.isArray(activeScheme?.bonuses) ? activeScheme.bonuses : [];
+            const schemePeriodBonusesForFeatures = Array.isArray(activeScheme?.period_bonuses) ? activeScheme.period_bonuses : [];
+            const checklistConfigsForFeatures = schemeBonusesForFeatures.filter((b: any) => b.type === 'checklist');
+            const scheme_features = {
+                has_shift_premium: schemeBonusesForFeatures.some((b: any) => ['bar_percent', 'bar_percent_tiered', 'bar_percent_weekend', 'personal_overplan', 'shift_bonus', 'progressive_bonus'].includes(b.type)) ||
+                    checklistConfigsForFeatures.some((b: any) => String(b.mode || '').toUpperCase() !== 'MONTH'),
+                has_period_kpi: bonuses_status.length > 0 || schemePeriodBonusesForFeatures.length > 0 || enriched_legacy_period_bonuses.length > 0 || schemeBonusesForFeatures.some((b: any) => b.type === 'leaderboard_rank'),
+                has_checklist_month: checklistConfigsForFeatures.some((b: any) => String(b.mode || '').toUpperCase() === 'MONTH'),
+                has_maintenance: schemeBonusesForFeatures.some((b: any) => b.type === 'maintenance_kpi')
+            };
+
             // Revenue breakdown by metric
             const revenue_by_metric: any = {};
             const display_bonuses = activeScheme?.period_bonuses || emp.period_bonuses;
@@ -939,6 +969,7 @@ export async function GET(
                 shift_bonuses_breakdown,
                 has_kpi_feature,
                 has_virtual_balance_feature,
+                scheme_features,
                 // New detailed data
                 breakdown: {
                     base_salary,
@@ -986,23 +1017,31 @@ export async function GET(
                     // 1. Physical shifts from DB
                     ...processedShifts.map((s: any) => {
                         const breakdown = s.breakdown || {};
-                        const kpiBonus = breakdown.bonuses?.reduce((sum: number, b: any) =>
-                            sum + (b.type === 'PERIOD_BONUS_CONTRIBUTION' || b.type === 'SHIFT_BONUS' ? parseFloat(b.amount) || 0 : 0), 0) || 0;
+                        const kpiBonus = breakdown.bonuses?.reduce((sum: number, b: any) => {
+                            const type = String(b.type || '')
+                            if (type === 'PERIOD_BONUS_CONTRIBUTION' || type === 'SHIFT_BONUS' || type === 'CHECKLIST_BONUS' || type === 'PERSONAL_OVERPLAN') {
+                                return sum + (parseFloat(b.amount) || 0)
+                            }
+                            return sum
+                        }, 0) || 0;
                         
                         // Разделяем бонусы по типам выплат
                         const realMoneyBonuses = breakdown.bonuses?.filter((b: any) => b.payout_type !== 'VIRTUAL_BALANCE') || [];
                         const virtualBonuses = breakdown.bonuses?.filter((b: any) => b.payout_type === 'VIRTUAL_BALANCE') || [];
                         const deductions = breakdown.deductions || []
                         const barDeduction = deductions.reduce((sum: number, d: any) => {
-                            if (d?.name !== 'Покупка бара') return sum
+                            if (d?.name !== 'Покупка бара' && d?.name !== 'Бар (в счёт зарплаты)') return sum
                             return sum + (parseFloat(d.amount) || 0)
                         }, 0)
 
                         return {
                             id: s.id,
                             date: s.check_in,
+                            shift_type: s.shift_type,
                             total_hours: parseFloat(s.total_hours || '0'),
                             total_revenue: calculateShiftIncome(s),
+                            revenue_cash: parseFloat(s.cash_income || '0'),
+                            revenue_card: parseFloat(s.card_income || '0'),
                             calculated_salary: s.calculated_salary,  // Только REAL_MONEY
                             virtual_balance_earned: breakdown.virtual_balance_total || 0,  // VIRTUAL_BALANCE
                             base_salary: parseFloat(breakdown.base) || 0,

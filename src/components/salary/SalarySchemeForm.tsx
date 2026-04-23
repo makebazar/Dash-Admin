@@ -24,6 +24,15 @@ const BONUS_TYPES = [
         dotClass: 'bg-emerald-500'
     },
     {
+        type: 'personal_overplan' as const,
+        label: 'Личный бонус',
+        description: 'Процент от базы смены или от выручки, если сотрудник перевыполнил план.',
+        icon: ShieldAlert,
+        activeClass: 'border-slate-900 ring-1 ring-slate-900 bg-slate-50/70',
+        iconClass: 'bg-slate-200 text-slate-800',
+        dotClass: 'bg-slate-900'
+    },
+    {
         type: 'maintenance_kpi' as const,
         label: 'Бонус за обслуживание',
         description: 'Оплата за техническое обслуживание ПК. За каждую задачу или бонус за месяц.',
@@ -91,13 +100,24 @@ export interface Formula {
 }
 
 export interface Bonus {
-    type: 'percent_revenue' | 'fixed' | 'progressive_percent' | 'checklist' | 'maintenance_kpi' | 'leaderboard_rank'
+    type: 'percent_revenue' | 'fixed' | 'progressive_percent' | 'checklist' | 'maintenance_kpi' | 'leaderboard_rank' | 'personal_overplan'
     name?: string
-    source?: 'cash' | 'card' | 'total'
+    source?: string
     percent?: number
     amount?: number
 
     thresholds?: { from: number; percent?: number; amount?: number; label?: string }[]
+    plan_per_shift?: number
+    plan_by_day_of_week?: {
+        MON?: { DAY?: number; NIGHT?: number }
+        TUE?: { DAY?: number; NIGHT?: number }
+        WED?: { DAY?: number; NIGHT?: number }
+        THU?: { DAY?: number; NIGHT?: number }
+        FRI?: { DAY?: number; NIGHT?: number }
+        SAT?: { DAY?: number; NIGHT?: number }
+        SUN?: { DAY?: number; NIGHT?: number }
+    }
+    tiers?: { from_over_percent: number; bonus_percent: number }[]
     checklist_template_id?: number
     min_score?: number
     mode?: 'SHIFT' | 'MONTH'
@@ -176,6 +196,8 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
     const [formula, setFormula] = useState<Formula>(defaultFormula)
     const [standardMonthlyShifts, setStandardMonthlyShifts] = useState(15)
     const [exampleHours, setExampleHours] = useState(12)
+    const [exampleShiftType, setExampleShiftType] = useState<'DAY' | 'NIGHT'>('DAY')
+    const [exampleDayOfWeek, setExampleDayOfWeek] = useState<'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN'>('MON')
     const [exampleShiftRevenue, setExampleShiftRevenue] = useState(0)
     const [exampleRevenueCash, setExampleRevenueCash] = useState(0)
     const [exampleRevenueCard, setExampleRevenueCard] = useState(0)
@@ -184,10 +206,27 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
     const [exampleMaintenanceTasksCompleted, setExampleMaintenanceTasksCompleted] = useState(0)
     const [exampleMaintenanceTasksAssigned, setExampleMaintenanceTasksAssigned] = useState(0)
     const [exampleMaintenancePenalty, setExampleMaintenancePenalty] = useState(0)
+    const [exampleMonthShiftsWorked, setExampleMonthShiftsWorked] = useState(15)
+    const [exampleMonthRank, setExampleMonthRank] = useState(1)
+    const [exampleMonthMetricOverrides, setExampleMonthMetricOverrides] = useState<Record<string, number>>({})
+    const [exampleMonthChecklistScores, setExampleMonthChecklistScores] = useState<Record<string, number>>({})
     const [exampleMetricOverrides, setExampleMetricOverrides] = useState<Record<string, number>>({})
     const [exampleChecklistScores, setExampleChecklistScores] = useState<Record<string, number>>({})
     const [previewResult, setPreviewResult] = useState<any>(null)
     const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+    const [examplePreviewMode, setExamplePreviewMode] = useState<'shift' | 'month'>('shift')
+    const [monthSpecialShifts, setMonthSpecialShifts] = useState<Array<{
+        id: string
+        shift_type: 'DAY' | 'NIGHT'
+        day_of_week: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN'
+        hours: number
+        revenue: number
+        revenue_cash?: number
+        revenue_card?: number
+        bar_purchases: number
+        checklistScores?: Record<string, number>
+    }>>([])
+    const [monthPreview, setMonthPreview] = useState<any>(null)
 
     useEffect(() => {
         fetchReportMetrics()
@@ -296,6 +335,26 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         else if (type === 'fixed') newBonus.amount = 500
 
         else if (type === 'progressive_percent') { newBonus.source = 'total'; newBonus.thresholds = [{ from: 30000, percent: 3 }]; newBonus.reward_type = 'PERCENT' }
+        else if (type === 'personal_overplan') {
+            newBonus.source = 'total'
+            ;(newBonus as any).reward_base = 'BASE'
+            newBonus.plan_per_shift = 10000
+            newBonus.plan_by_day_of_week = {
+                MON: { DAY: 10000, NIGHT: 10000 },
+                TUE: { DAY: 10000, NIGHT: 10000 },
+                WED: { DAY: 10000, NIGHT: 10000 },
+                THU: { DAY: 10000, NIGHT: 10000 },
+                FRI: { DAY: 10000, NIGHT: 10000 },
+                SAT: { DAY: 10000, NIGHT: 10000 },
+                SUN: { DAY: 10000, NIGHT: 10000 }
+            }
+            newBonus.tiers = [
+                { from_over_percent: 0, bonus_percent: 0 },
+                { from_over_percent: 15, bonus_percent: 20 },
+                { from_over_percent: 30, bonus_percent: 30 }
+            ]
+            newBonus.payout_timing = 'MONTH'
+        }
         
         else if (type === 'checklist') { newBonus.amount = 500; newBonus.min_score = 100; newBonus.mode = 'SHIFT' }
         else if (type === 'maintenance_kpi') { newBonus.amount = 50; newBonus.calculation_mode = 'PER_TASK'; newBonus.reward_type = 'FIXED' }
@@ -382,6 +441,31 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         return template?.name || `Шаблон #${templateId}`
     }
 
+    const dayOfWeekLabel = (v?: string) => {
+        if (!v) return ''
+        if (v === 'MON') return 'Пн'
+        if (v === 'TUE') return 'Вт'
+        if (v === 'WED') return 'Ср'
+        if (v === 'THU') return 'Чт'
+        if (v === 'FRI') return 'Пт'
+        if (v === 'SAT') return 'Сб'
+        if (v === 'SUN') return 'Вс'
+        return v
+    }
+
+    const shiftTypeLabel = (v?: string) => {
+        if (!v) return ''
+        if (v === 'DAY') return 'День'
+        if (v === 'NIGHT') return 'Ночь'
+        return v
+    }
+
+    const formatRub = (value: any) => {
+        const n = Number(value || 0)
+        if (!Number.isFinite(n)) return '0'
+        return Math.round(n).toLocaleString('ru-RU')
+    }
+
     const metricOptionsForTiers = useMemo(() => {
         const base = [
             { key: 'total_revenue', label: 'Общая выручка' },
@@ -402,7 +486,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
 
         if (formula.base.rate_tiers?.metric_key) keys.add(formula.base.rate_tiers.metric_key)
         formula.bonuses.forEach(b => {
-            if (b.type === 'percent_revenue' || b.type === 'progressive_percent') {
+            if (b.type === 'percent_revenue' || b.type === 'progressive_percent' || b.type === 'personal_overplan') {
                 const sourceKey = b.source || 'total'
                 if (sourceKey === 'total') keys.add('total_revenue')
                 else if (sourceKey === 'cash') keys.add('revenue_cash')
@@ -424,8 +508,183 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
     const needsCashCardSplit = useMemo(() => {
         const tierKey = formula.base.rate_tiers?.metric_key
         if (tierKey === 'revenue_cash' || tierKey === 'revenue_card') return true
-        return formula.bonuses.some(b => (b.type === 'percent_revenue' || b.type === 'progressive_percent') && (b.source === 'cash' || b.source === 'card'))
+        return formula.bonuses.some(b =>
+            (b.type === 'percent_revenue' || b.type === 'progressive_percent' || b.type === 'personal_overplan') &&
+            (b.source === 'cash' || b.source === 'card' || b.source === 'revenue_cash' || b.source === 'revenue_card')
+        )
     }, [formula])
+
+    const hasPersonalOverplan = useMemo(() => {
+        return formula.bonuses.some(b => b.type === 'personal_overplan')
+    }, [formula.bonuses])
+
+    const personalOverplanPreview = useMemo(() => {
+        if (!hasPersonalOverplan) return null
+        if (!previewResult?.breakdown) return null
+
+        const cfg = formula.bonuses.find(b => b.type === 'personal_overplan')
+        if (!cfg) return null
+
+        const baseAmount = Number(previewResult.breakdown.base || 0)
+        const cashRevenue = needsCashCardSplit ? Number(exampleRevenueCash || 0) : Number(exampleShiftRevenue || 0)
+        const cardRevenue = needsCashCardSplit ? Number(exampleRevenueCard || 0) : 0
+        const totalRevenue = cashRevenue + cardRevenue
+        const metricValue =
+            cfg.source === 'total' || cfg.source === 'total_revenue' || !cfg.source
+                ? totalRevenue
+                : cfg.source === 'cash' || cfg.source === 'revenue_cash'
+                    ? cashRevenue
+                    : cfg.source === 'card' || cfg.source === 'revenue_card'
+                        ? cardRevenue
+                        : Number(exampleMetricOverrides[cfg.source] || 0)
+
+        const planPerShift =
+            Number(cfg.plan_by_day_of_week?.[exampleDayOfWeek]?.[exampleShiftType]) ||
+            Number(cfg.plan_per_shift || 0)
+
+        const kpiPercent = planPerShift > 0 ? (metricValue / planPerShift) * 100 : 0
+        const overPercent = Math.max(0, kpiPercent - 100)
+
+        const tiers = Array.isArray(cfg.tiers) ? cfg.tiers : []
+        const sorted = [...tiers].sort((a, b) => (Number(b.from_over_percent) || 0) - (Number(a.from_over_percent) || 0))
+        const tier = sorted.find(t => overPercent >= (Number(t.from_over_percent) || 0))
+        const bonusPercent = tier ? (Number(tier.bonus_percent) || 0) : 0
+        const rewardBase = String((cfg as any).reward_base || 'BASE').toUpperCase()
+        const rewardBaseValue = rewardBase === 'METRIC' ? metricValue : baseAmount
+        const amount = rewardBaseValue * (bonusPercent / 100)
+
+        return {
+            name: cfg.name || 'Личный бонус',
+            amount: parseFloat(amount.toFixed(2)),
+            plan_per_shift: parseFloat((planPerShift || 0).toFixed(2)),
+            kpi_percent: parseFloat(kpiPercent.toFixed(2)),
+            over_percent: parseFloat(overPercent.toFixed(2)),
+            bonus_percent: parseFloat(bonusPercent.toFixed(2)),
+            metric_value: parseFloat(Number(metricValue || 0).toFixed(2)),
+            base_amount: parseFloat(baseAmount.toFixed(2)),
+            reward_base: rewardBase,
+            reward_base_value: parseFloat(Number(rewardBaseValue || 0).toFixed(2))
+        }
+    }, [
+        hasPersonalOverplan,
+        previewResult,
+        formula.bonuses,
+        needsCashCardSplit,
+        exampleRevenueCash,
+        exampleRevenueCard,
+        exampleShiftRevenue,
+        exampleMetricOverrides,
+        exampleDayOfWeek,
+        exampleShiftType
+    ])
+
+    const personalOverplanAdjustment = useMemo(() => {
+        if (!hasPersonalOverplan) return null
+        if (!personalOverplanPreview) return null
+        if (!previewResult?.breakdown) return null
+
+        const bonuses = Array.isArray(previewResult.breakdown.bonuses) ? previewResult.breakdown.bonuses : []
+        const alreadyIncluded = bonuses.some((b: any) => b?.type === 'PERSONAL_OVERPLAN' || b?.name === personalOverplanPreview.name)
+        if (alreadyIncluded) return { total: 0, instant: 0, accrued: 0, virtual: 0, alreadyIncluded: true }
+
+        const cfg = formula.bonuses.find(b => b.type === 'personal_overplan')
+        if (!cfg) return null
+
+        const amount = Number(personalOverplanPreview.amount || 0)
+        const payoutType = (cfg as any).payout_type || 'REAL_MONEY'
+        const payoutTiming = (cfg as any).payout_timing || 'MONTH'
+
+        if (payoutType === 'VIRTUAL_BALANCE') {
+            return { total: 0, instant: 0, accrued: 0, virtual: amount, alreadyIncluded: false }
+        }
+
+        if (payoutTiming === 'SHIFT') {
+            return { total: amount, instant: amount, accrued: 0, virtual: 0, alreadyIncluded: false }
+        }
+
+        return { total: amount, instant: 0, accrued: amount, virtual: 0, alreadyIncluded: false }
+    }, [hasPersonalOverplan, personalOverplanPreview, previewResult, formula.bonuses])
+
+    const monthShiftBreakdown = useMemo(() => {
+        if (!monthPreview) return null
+
+        const templateCount = Number(monthPreview?.templateCount || 0)
+        const typicalBreakdown = monthPreview?.typical?.result?.breakdown
+        const special = Array.isArray(monthPreview?.special) ? monthPreview.special : []
+
+        const base = (Number(typicalBreakdown?.base || 0) * templateCount) + special.reduce((acc: number, s: any) => acc + Number(s?.result?.breakdown?.base || 0), 0)
+
+        const bonusMap = new Map<string, { name: string; type: string; amount: number; sample?: any }>()
+        const addBonuses = (list: any[], multiplier: number) => {
+            if (!Array.isArray(list)) return
+            list.forEach(b => {
+                const key = `${String(b?.type || '')}||${String(b?.name || '')}`
+                const prev = bonusMap.get(key)
+                const amt = Number(b?.amount || 0) * multiplier
+                if (prev) bonusMap.set(key, { ...prev, amount: prev.amount + amt })
+                else bonusMap.set(key, { name: String(b?.name || ''), type: String(b?.type || ''), amount: amt, sample: b })
+            })
+        }
+        addBonuses(typicalBreakdown?.bonuses, templateCount)
+        special.forEach(s => addBonuses(s?.result?.breakdown?.bonuses, 1))
+
+        const deductionMap = new Map<string, { name: string; amount: number }>()
+        const addDeductions = (list: any[], multiplier: number) => {
+            if (!Array.isArray(list)) return
+            list.forEach(d => {
+                const key = String(d?.name || '')
+                const prev = deductionMap.get(key)
+                const amt = Number(d?.amount || 0) * multiplier
+                if (prev) deductionMap.set(key, { ...prev, amount: prev.amount + amt })
+                else deductionMap.set(key, { name: key, amount: amt })
+            })
+        }
+        addDeductions(typicalBreakdown?.deductions, templateCount)
+        special.forEach(s => addDeductions(s?.result?.breakdown?.deductions, 1))
+
+        return {
+            base: Math.round(base),
+            bonuses: Array.from(bonusMap.values()).map(v => ({ ...v, amount: Math.round(v.amount) })).filter(v => v.amount !== 0),
+            deductions: Array.from(deductionMap.values()).map(v => ({ ...v, amount: Math.round(v.amount) })).filter(v => v.amount !== 0)
+        }
+    }, [monthPreview])
+
+    const monthlyBonuses = useMemo(() => {
+        return formula.bonuses.filter(b => {
+            if (b.type === 'maintenance_kpi') return b.calculation_mode === 'MONTHLY'
+            if (b.type === 'leaderboard_rank') return true
+            return b.mode === 'MONTH'
+        })
+    }, [formula.bonuses])
+
+    const shiftChecklistTemplateIds = useMemo(() => {
+        return Array.from(
+            new Set(
+                formula.bonuses
+                    .filter(b => b.type === 'checklist' && b.mode !== 'MONTH')
+                    .map(b => Number(b.checklist_template_id))
+                    .filter(Boolean)
+            )
+        )
+    }, [formula.bonuses])
+
+    const monthlyMetricKeys = useMemo(() => {
+        const keys = new Set<string>()
+        monthlyBonuses.forEach(b => {
+            if (b.type === 'progressive_percent' || b.type === 'percent_revenue') {
+                const sourceKey = b.source || 'total'
+                if (sourceKey === 'total') keys.add('total_revenue')
+                else if (sourceKey === 'cash') keys.add('revenue_cash')
+                else if (sourceKey === 'card') keys.add('revenue_card')
+                else keys.add(sourceKey)
+            } else if (b.type === 'maintenance_kpi') {
+                keys.add('maintenance_raw_sum')
+                keys.add('maintenance_tasks_completed')
+                keys.add('maintenance_tasks_assigned')
+            }
+        })
+        return Array.from(keys)
+    }, [monthlyBonuses])
 
     const hasMaintenanceKpi = useMemo(() => {
         return formula.bonuses.some(b => b.type === 'maintenance_kpi')
@@ -494,6 +753,163 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         }
         return `${describeMetric(metricKey, metricValue)} ≥ ${Number(tier.from || 0).toLocaleString('ru-RU')} ₽ → ставка ${Number(tier.rate || 0).toLocaleString('ru-RU')} ₽/ч`
     }, [formula.base, exampleReportMetricsForPreview, describeMetric])
+
+    const exampleMonthMetrics = useMemo(() => {
+        const metrics: Record<string, number> = {
+            ...Object.fromEntries(Object.entries(exampleMonthMetricOverrides).map(([k, v]) => [k, Number(v || 0)]))
+        }
+
+        if (monthlyMetricKeys.includes('total_revenue') && metrics.total_revenue === undefined) metrics.total_revenue = 0
+        if (monthlyMetricKeys.includes('revenue_cash') && metrics.revenue_cash === undefined) metrics.revenue_cash = 0
+        if (monthlyMetricKeys.includes('revenue_card') && metrics.revenue_card === undefined) metrics.revenue_card = 0
+
+        if (monthlyMetricKeys.includes('maintenance_raw_sum') && metrics.maintenance_raw_sum === undefined) metrics.maintenance_raw_sum = Number(exampleMaintenanceRawSum || 0)
+        if (monthlyMetricKeys.includes('maintenance_tasks_completed') && metrics.maintenance_tasks_completed === undefined) metrics.maintenance_tasks_completed = Number(exampleMaintenanceTasksCompleted || 0)
+        if (monthlyMetricKeys.includes('maintenance_tasks_assigned') && metrics.maintenance_tasks_assigned === undefined) metrics.maintenance_tasks_assigned = Number(exampleMaintenanceTasksAssigned || 0)
+
+        return metrics
+    }, [exampleMonthMetricOverrides, monthlyMetricKeys, exampleMaintenanceRawSum, exampleMaintenanceTasksCompleted, exampleMaintenanceTasksAssigned])
+
+    const monthlyKpiPreview = useMemo(() => {
+        if (!monthlyBonuses.length) return { totalReal: 0, totalVirtual: 0, items: [] as any[] }
+
+        const shiftsWorked = Math.max(0, Number(exampleMonthShiftsWorked || 0))
+        const standard = Math.max(1, Number(standardMonthlyShifts || 15))
+        const scale = shiftsWorked > 0 ? shiftsWorked / standard : 1
+
+        let totalReal = 0
+        let totalVirtual = 0
+        const items: any[] = []
+
+        const getMonthlyMetricValue = (sourceKey?: string) => {
+            const s = sourceKey || 'total'
+            if (s === 'total') return Number(exampleMonthMetrics.total_revenue || 0)
+            if (s === 'cash') return Number(exampleMonthMetrics.revenue_cash || 0)
+            if (s === 'card') return Number(exampleMonthMetrics.revenue_card || 0)
+            return Number(exampleMonthMetrics[s] || 0)
+        }
+
+        for (const bonus of monthlyBonuses) {
+            const name = bonus.name || bonus.type
+            const payoutType = (bonus as any).payout_type || 'REAL_MONEY'
+            let amount = 0
+            let logic = ''
+
+            if (bonus.type === 'progressive_percent') {
+                const metricValue = getMonthlyMetricValue(bonus.source)
+                const thresholds = (bonus as any).thresholds || []
+                const rewardType = (bonus as any).reward_type || 'PERCENT'
+
+                if (thresholds.length) {
+                    const scaledThresholds = thresholds.map((t: any) => ({ ...t, effective_from: (Number(t.from) || 0) * scale }))
+                    const sorted = [...scaledThresholds].sort((a, b) => (Number(b.effective_from) || 0) - (Number(a.effective_from) || 0))
+                    const hit = sorted.find(t => metricValue >= (Number(t.effective_from) || 0))
+
+                    if (!hit) {
+                        const minFrom = Math.min(...scaledThresholds.map((t: any) => Number(t.effective_from) || 0))
+                        logic = `${describeMetric((bonus.source as any) === 'cash' ? 'revenue_cash' : (bonus.source as any) === 'card' ? 'revenue_card' : (bonus.source ? String(bonus.source) : 'total_revenue'), metricValue)} ниже порога ${minFrom.toLocaleString('ru-RU')} ₽ (масштаб ×${scale.toFixed(2)})`
+                    } else if (rewardType === 'FIXED') {
+                        amount = Number(hit.amount || 0)
+                        logic = `Порог ${Number(hit.effective_from || 0).toLocaleString('ru-RU')} ₽ (масштаб ×${scale.toFixed(2)}), фикс ${amount.toLocaleString('ru-RU')} ₽`
+                    } else {
+                        const perc = Number(hit.percent || 0)
+                        amount = metricValue * (perc / 100)
+                        logic = `Порог ${Number(hit.effective_from || 0).toLocaleString('ru-RU')} ₽ (масштаб ×${scale.toFixed(2)}), ${perc.toFixed(1).replace(/\\.0$/, '')}% от ${metricValue.toLocaleString('ru-RU')} ₽`
+                    }
+                } else {
+                    logic = 'Нет порогов'
+                }
+            } else if (bonus.type === 'percent_revenue') {
+                const metricValue = getMonthlyMetricValue(bonus.source)
+                const percent = Number(bonus.percent || 0)
+                amount = metricValue * (percent / 100)
+                logic = `${percent.toFixed(1).replace(/\\.0$/, '')}% от ${metricValue.toLocaleString('ru-RU')} ₽`
+            } else if (bonus.type === 'checklist') {
+                const templateId = Number(bonus.checklist_template_id)
+                const score = Number(exampleMonthChecklistScores[String(templateId)] ?? 100)
+                if ((bonus as any).checklist_thresholds && Array.isArray((bonus as any).checklist_thresholds) && (bonus as any).checklist_thresholds.length > 0) {
+                    const sorted = [...(bonus as any).checklist_thresholds].sort((a: any, b: any) => (Number(b.min_score) || 0) - (Number(a.min_score) || 0))
+                    const hit = sorted.find((t: any) => score >= (Number(t.min_score) || 0))
+                    if (hit) {
+                        amount = Number(hit.amount || 0)
+                        logic = `Оценка ${score.toFixed(0)}%, уровень ≥ ${Number(hit.min_score || 0)}%`
+                    } else {
+                        const need = Math.max(...(bonus as any).checklist_thresholds.map((t: any) => Number(t.min_score) || 0))
+                        logic = `Оценка ${score.toFixed(0)}% ниже порога ${need}%`
+                    }
+                } else {
+                    const minScore = Number(bonus.min_score || 0)
+                    if (score >= minScore) {
+                        amount = Number(bonus.amount || 0)
+                        logic = `Оценка ${score.toFixed(0)}% ≥ ${minScore}%`
+                    } else {
+                        logic = `Оценка ${score.toFixed(0)}% ниже ${minScore}%`
+                    }
+                }
+            } else if (bonus.type === 'maintenance_kpi') {
+                const completed = Number(exampleMonthMetrics.maintenance_tasks_completed || 0)
+                const assigned = Number(exampleMonthMetrics.maintenance_tasks_assigned || 0)
+                const rawSum = Number(exampleMonthMetrics.maintenance_raw_sum || 0)
+                let efficiency = 100
+                if (assigned > 0) efficiency = (completed / assigned) * 100
+
+                const thresholds = (bonus as any).efficiency_thresholds || []
+                if (thresholds.length) {
+                    const sorted = [...thresholds].sort((a: any, b: any) => (Number(b.from_percent) || 0) - (Number(a.from_percent) || 0))
+                    const hit = sorted.find((t: any) => efficiency >= (Number(t.from_percent) || 0))
+                    if (hit) {
+                        if (hit.amount !== undefined && hit.amount !== null) {
+                            amount = Number(hit.amount || 0)
+                            logic = `Эффективность ${efficiency.toFixed(0)}% ≥ ${Number(hit.from_percent || 0)}% → ${amount.toLocaleString('ru-RU')} ₽`
+                        } else if (hit.multiplier !== undefined && hit.multiplier !== null) {
+                            const mult = Number(hit.multiplier || 1)
+                            amount = rawSum * mult
+                            logic = `Сумма ${rawSum.toLocaleString('ru-RU')} ₽ × ${mult.toFixed(2)} (эффективность ${efficiency.toFixed(0)}%)`
+                        } else {
+                            logic = `Эффективность ${efficiency.toFixed(0)}%`
+                        }
+                    } else {
+                        const minFrom = Math.min(...thresholds.map((t: any) => Number(t.from_percent) || 0))
+                        logic = `Эффективность ${efficiency.toFixed(0)}% ниже ${minFrom}%`
+                    }
+                } else {
+                    logic = `Эффективность ${efficiency.toFixed(0)}%`
+                }
+            } else if (bonus.type === 'leaderboard_rank') {
+                const rank = Number(exampleMonthRank || 1)
+                const from = Number(bonus.rank_from || 1)
+                const to = Number(bonus.rank_to || from)
+                if (rank >= from && rank <= to) {
+                    amount = Number(bonus.amount || 0)
+                    logic = `Место ${rank} попадает в ${from}${to !== from ? `–${to}` : ''}`
+                } else {
+                    logic = `Место ${rank} вне диапазона ${from}${to !== from ? `–${to}` : ''}`
+                }
+            }
+
+            if (amount > 0) {
+                if (payoutType === 'VIRTUAL_BALANCE') totalVirtual += amount
+                else totalReal += amount
+            }
+
+            items.push({
+                name,
+                payoutType,
+                amount: parseFloat(amount.toFixed(2)),
+                logic,
+                isActive: amount > 0
+            })
+        }
+
+        return {
+            totalReal: parseFloat(totalReal.toFixed(2)),
+            totalVirtual: parseFloat(totalVirtual.toFixed(2)),
+            scale: parseFloat(scale.toFixed(4)),
+            shiftsWorked,
+            standard,
+            items
+        }
+    }, [monthlyBonuses, exampleMonthShiftsWorked, standardMonthlyShifts, exampleMonthMetrics, exampleMonthChecklistScores, exampleMonthRank, describeMetric])
 
     const kpiNotAppliedNotes = useMemo(() => {
         const appliedNames = new Set<string>(
@@ -642,6 +1058,20 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             return `Порог от ${Number(hit.from || 0).toLocaleString('ru-RU')} ₽, ${perc.toFixed(1).replace(/\\.0$/, '')}% от ${describeMetric(metricKey, metricValue)}`
         }
 
+        if (cfg.type === 'personal_overplan') {
+            const planPerShift = Number(b.plan_per_shift || 0)
+            const kpiPercent = Number(b.kpi_percent || 0)
+            const overPercent = Number(b.over_percent || 0)
+            const bonusPercent = Number(b.bonus_percent || 0)
+            const baseAmountLocal = Number(b.base_amount || 0)
+            const fact = metricValue ?? 0
+            const dayOfWeek = b.day_of_week ? String(b.day_of_week) : ''
+            const shiftType = b.shift_type ? String(b.shift_type) : ''
+            const prefix = dayOfWeek || shiftType ? `${dayOfWeekLabel(dayOfWeek)}${dayOfWeek && shiftType ? ' / ' : ''}${shiftTypeLabel(shiftType)}: ` : ''
+
+            return `${prefix}факт ${fact.toLocaleString('ru-RU')} ₽ / план ${planPerShift.toLocaleString('ru-RU')} ₽ (${kpiPercent.toFixed(0)}%) → +${overPercent.toFixed(0)}% → ${bonusPercent.toFixed(0)}% от базы ${baseAmountLocal.toLocaleString('ru-RU')} ₽`
+        }
+
         if (cfg.type === 'fixed') {
             const amt = Number(cfg.amount || b.amount || 0)
             return `Фиксированный бонус ${amt.toLocaleString('ru-RU')} ₽`
@@ -716,11 +1146,14 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             const schemePayload = {
                 base: formula.base,
                 bonuses: formula.bonuses,
-                period_bonuses: []
+                period_bonuses: [],
+                standard_monthly_shifts: standardMonthlyShifts
             }
 
             const shiftPayload = {
                 id: 'example',
+                shift_type: exampleShiftType,
+                day_of_week: exampleDayOfWeek,
                 total_hours: Number(exampleHours || 0),
                 bar_purchases: Number(exampleBarPurchases || 0),
                 evaluations
@@ -736,6 +1169,173 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             if (!res.ok) throw new Error(data?.error || 'Ошибка расчёта')
 
             setPreviewResult(data)
+        } catch (e: any) {
+            alert(e?.message || 'Ошибка расчёта')
+        } finally {
+            setIsPreviewLoading(false)
+        }
+    }
+
+    const addMonthSpecialShift = () => {
+        setMonthSpecialShifts(prev => {
+            const id = generateId()
+            return [
+                ...prev,
+                {
+                    id,
+                    shift_type: exampleShiftType,
+                    day_of_week: exampleDayOfWeek,
+                    hours: Number(exampleHours || 0),
+                    revenue: Number(exampleShiftRevenue || 0),
+                    revenue_cash: Number(exampleRevenueCash || 0),
+                    revenue_card: Number(exampleRevenueCard || 0),
+                    bar_purchases: Number(exampleBarPurchases || 0),
+                    checklistScores: { ...exampleChecklistScores }
+                }
+            ]
+        })
+    }
+
+    const removeMonthSpecialShift = (id: string) => {
+        setMonthSpecialShifts(prev => prev.filter(s => s.id !== id))
+    }
+
+    const updateMonthSpecialShift = (id: string, patch: Partial<{
+        shift_type: 'DAY' | 'NIGHT'
+        day_of_week: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN'
+        hours: number
+        revenue: number
+        revenue_cash: number
+        revenue_card: number
+        bar_purchases: number
+    }>) => {
+        setMonthSpecialShifts(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s))
+    }
+
+    const updateMonthSpecialShiftChecklistScore = (id: string, templateId: number, score: number) => {
+        setMonthSpecialShifts(prev => prev.map(s => {
+            if (s.id !== id) return s
+            const next = { ...(s.checklistScores || {}) }
+            next[String(templateId)] = score
+            return { ...s, checklistScores: next }
+        }))
+    }
+
+    const handleCalculateMonthPreview = async () => {
+        setIsPreviewLoading(true)
+        try {
+            const schemePayload = { base: formula.base, bonuses: formula.bonuses, period_bonuses: [], standard_monthly_shifts: standardMonthlyShifts }
+
+            const templateCount = Math.max(0, Number(exampleMonthShiftsWorked || 0) - monthSpecialShifts.length)
+
+            const buildShiftRequest = (shiftInput: {
+                shift_type?: 'DAY' | 'NIGHT'
+                day_of_week?: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN'
+                hours: number
+                revenue: number
+                revenue_cash?: number
+                revenue_card?: number
+                bar_purchases: number
+                checklistScores?: Record<string, number>
+            }) => {
+                const revenueCash = needsCashCardSplit ? Number(shiftInput.revenue_cash || 0) : Number(shiftInput.revenue || 0)
+                const revenueCard = needsCashCardSplit ? Number(shiftInput.revenue_card || 0) : 0
+                const totalRevenue = revenueCash + revenueCard
+
+                const reportMetricsPayload: Record<string, number> = {
+                    ...exampleReportMetricsForPreview,
+                    total_revenue: totalRevenue,
+                    revenue_cash: revenueCash,
+                    revenue_card: revenueCard
+                }
+
+                const evaluations = shiftChecklistTemplateIds.map(templateId => ({
+                    template_id: templateId,
+                    score_percent: Number((shiftInput.checklistScores || {})[String(templateId)] ?? exampleChecklistScores[String(templateId)] ?? 100)
+                }))
+
+                const shiftPayload = {
+                    id: 'example',
+                    shift_type: shiftInput.shift_type || exampleShiftType,
+                    day_of_week: shiftInput.day_of_week || exampleDayOfWeek,
+                    total_hours: Number(shiftInput.hours || 0),
+                    bar_purchases: Number(shiftInput.bar_purchases || 0),
+                    evaluations
+                }
+
+                return { scheme: schemePayload, shift: shiftPayload, reportMetrics: reportMetricsPayload }
+            }
+
+            const typicalRequest = buildShiftRequest({
+                shift_type: exampleShiftType,
+                day_of_week: exampleDayOfWeek,
+                hours: Number(exampleHours || 0),
+                revenue: Number(exampleShiftRevenue || 0),
+                revenue_cash: Number(exampleRevenueCash || 0),
+                revenue_card: Number(exampleRevenueCard || 0),
+                bar_purchases: Number(exampleBarPurchases || 0),
+                checklistScores: { ...exampleChecklistScores }
+            })
+
+            const fetchPreview = async (payload: any) => {
+                const res = await fetch(`/api/clubs/${clubId}/salary-schemes/preview`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                const data = await res.json()
+                if (!res.ok) throw new Error(data?.error || 'Ошибка расчёта')
+                return data
+            }
+
+            const typicalResult = await fetchPreview(typicalRequest)
+            const specialResults = await Promise.all(
+                monthSpecialShifts.map(async s => {
+                    const payload = buildShiftRequest({
+                        shift_type: s.shift_type,
+                        day_of_week: s.day_of_week,
+                        hours: Number(s.hours || 0),
+                        revenue: Number(s.revenue || 0),
+                        revenue_cash: Number(s.revenue_cash || 0),
+                        revenue_card: Number(s.revenue_card || 0),
+                        bar_purchases: Number(s.bar_purchases || 0),
+                        checklistScores: s.checklistScores || {}
+                    })
+                    const result = await fetchPreview(payload)
+                    return { id: s.id, input: s, result }
+                })
+            )
+
+            const sumShiftReal = (Number(typicalResult?.breakdown?.total || 0) * templateCount) + specialResults.reduce((acc, r) => acc + Number(r.result?.breakdown?.total || 0), 0)
+            const sumShiftVirtual = (Number(typicalResult?.breakdown?.virtual_balance_total || 0) * templateCount) + specialResults.reduce((acc, r) => acc + Number(r.result?.breakdown?.virtual_balance_total || 0), 0)
+            const sumShiftInstant = (Number(typicalResult?.breakdown?.instant_payout || 0) * templateCount) + specialResults.reduce((acc, r) => acc + Number(r.result?.breakdown?.instant_payout || 0), 0)
+            const sumShiftAccrued = (Number(typicalResult?.breakdown?.accrued_payout || 0) * templateCount) + specialResults.reduce((acc, r) => acc + Number(r.result?.breakdown?.accrued_payout || 0), 0)
+
+            const monthReal = parseFloat((sumShiftReal + Number(monthlyKpiPreview.totalReal || 0)).toFixed(2))
+            const monthVirtual = parseFloat((sumShiftVirtual + Number(monthlyKpiPreview.totalVirtual || 0)).toFixed(2))
+            const monthInstant = parseFloat(sumShiftInstant.toFixed(2))
+            const monthAccrued = parseFloat((sumShiftAccrued + Number(monthlyKpiPreview.totalReal || 0)).toFixed(2))
+
+            setMonthPreview({
+                templateCount,
+                specialCount: monthSpecialShifts.length,
+                totalCount: Number(exampleMonthShiftsWorked || 0),
+                typical: { input: typicalRequest, result: typicalResult },
+                special: specialResults,
+                shifts: {
+                    real: parseFloat(sumShiftReal.toFixed(2)),
+                    virtual: parseFloat(sumShiftVirtual.toFixed(2)),
+                    instant: parseFloat(sumShiftInstant.toFixed(2)),
+                    accrued: parseFloat(sumShiftAccrued.toFixed(2))
+                },
+                monthly: monthlyKpiPreview,
+                totals: {
+                    real: monthReal,
+                    virtual: monthVirtual,
+                    instant: monthInstant,
+                    accrued: monthAccrued
+                }
+            })
         } catch (e: any) {
             alert(e?.message || 'Ошибка расчёта')
         } finally {
@@ -1041,8 +1641,8 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                             <div id={`bonus-${index}`} key={index} className={`group relative rounded-3xl p-6 md:p-8 border border-slate-100 shadow-sm transition-all duration-300 ${'bg-white hover:shadow-md'}`}>
                                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                                                     <div className="flex items-center gap-4 flex-1">
-                                                        <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shadow-sm ${bonus.type === 'progressive_percent' ? 'bg-emerald-600 text-white' : bonus.type === 'leaderboard_rank' ? 'bg-amber-500 text-white' : 'bg-purple-600 text-white'}`}>{bonus.type === 'percent_revenue' && <Percent className="h-6 w-6" />}{bonus.type === 'fixed' && <Coins className="h-6 w-6" />}{bonus.type === 'progressive_percent' && <TrendingUp className="h-6 w-6" />}{bonus.type === 'checklist' && <ClipboardCheck className="h-6 w-6" />}{bonus.type === 'maintenance_kpi' && <Wrench className="h-6 w-6" />}{bonus.type === 'leaderboard_rank' && <Trophy className="h-6 w-6" />}</div>
-                                                        <div className="space-y-1.5"><Badge variant="secondary" className={`text-xs font-medium px-2.5 py-0.5 rounded-lg ${bonus.type === 'progressive_percent' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : bonus.type === 'leaderboard_rank' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}>{bonus.type === 'percent_revenue' && 'Процент от выручки'}{bonus.type === 'fixed' && 'Фиксированный бонус'}{bonus.type === 'progressive_percent' && 'Бонус за выполнение плана'}{bonus.type === 'checklist' && 'Бонус за чек-лист'}{bonus.type === 'maintenance_kpi' && 'Бонус за обслуживание'}{bonus.type === 'leaderboard_rank' && 'Бонус за место'}</Badge><Input value={bonus.name || ''} onChange={(e) => updateBonus(index, 'name', e.target.value)} className="h-10 text-xl font-semibold bg-transparent border-none p-0 focus-visible:ring-0 focus-visible:outline-none placeholder:text-slate-300" placeholder="Название бонуса..." /></div>
+                                                        <div className={`h-12 w-12 rounded-2xl flex items-center justify-center shadow-sm ${bonus.type === 'progressive_percent' ? 'bg-emerald-600 text-white' : bonus.type === 'leaderboard_rank' ? 'bg-amber-500 text-white' : bonus.type === 'personal_overplan' ? 'bg-slate-900 text-white' : 'bg-purple-600 text-white'}`}>{bonus.type === 'percent_revenue' && <Percent className="h-6 w-6" />}{bonus.type === 'fixed' && <Coins className="h-6 w-6" />}{bonus.type === 'progressive_percent' && <TrendingUp className="h-6 w-6" />}{bonus.type === 'personal_overplan' && <ShieldAlert className="h-6 w-6" />}{bonus.type === 'checklist' && <ClipboardCheck className="h-6 w-6" />}{bonus.type === 'maintenance_kpi' && <Wrench className="h-6 w-6" />}{bonus.type === 'leaderboard_rank' && <Trophy className="h-6 w-6" />}</div>
+                                                        <div className="space-y-1.5"><Badge variant="secondary" className={`text-xs font-medium px-2.5 py-0.5 rounded-lg ${bonus.type === 'progressive_percent' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : bonus.type === 'leaderboard_rank' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : bonus.type === 'personal_overplan' ? 'bg-slate-100 text-slate-800 hover:bg-slate-200' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}>{bonus.type === 'percent_revenue' && 'Процент от выручки'}{bonus.type === 'fixed' && 'Фиксированный бонус'}{bonus.type === 'progressive_percent' && 'Бонус за выполнение плана'}{bonus.type === 'personal_overplan' && 'Личный бонус'}{bonus.type === 'checklist' && 'Бонус за чек-лист'}{bonus.type === 'maintenance_kpi' && 'Бонус за обслуживание'}{bonus.type === 'leaderboard_rank' && 'Бонус за место'}</Badge><Input value={bonus.name || ''} onChange={(e) => updateBonus(index, 'name', e.target.value)} className="h-10 text-xl font-semibold bg-transparent border-none p-0 focus-visible:ring-0 focus-visible:outline-none placeholder:text-slate-300" placeholder="Название бонуса..." /></div>
                                                     </div>
                                                     <Button type="button" variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-red-500 hover:text-white transition-all shrink-0" onClick={() => removeBonus(index)}><Trash2 className="h-5 w-5" /></Button>
                                                 </div>
@@ -1057,6 +1657,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                     {bonus.type === 'fixed' && "Просто фиксированная сумма за выход в смену. Добавляется к базовой ставке независимо от выручки."}
 
                                                                     {bonus.type === 'progressive_percent' && "Мотивирует зарабатывать сверх плана. Чем больше выручка, тем выше процент от суммы превышения порога."}
+                                                                    {bonus.type === 'personal_overplan' && "Личный бонус за перевыполнение плана. Сначала считаем % выполнения (факт / план на смену). Дальше по ступеням перевыполнения выбираем %, который начисляется от выбранной базы (база смены или выручка)."}
                                                                     
                                                                     {bonus.type === 'checklist' && "Премия за дисциплину. Начисляется только если средний балл по чеклистам за смену (или месяц) выше порога."}
                                                                     {bonus.type === 'maintenance_kpi' && "Оплата за техническую работу. Можно платить за каждую выполненную задачу по обслуживанию ПК."}
@@ -1126,6 +1727,255 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                 </div>
                                                             )}
                                                             {bonus.type === 'fixed' && <div className="relative max-w-xs group"><Input type="number" value={bonus.amount} onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-6 pr-12 text-lg font-medium text-slate-700" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">₽</span></div>}
+
+                                                            {bonus.type === 'personal_overplan' && (
+                                                                <div className="space-y-4">
+                                                                    <div className="space-y-2">
+                                                                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Считать бонус от</Label>
+                                                                        <Select value={String((bonus as any).reward_base || 'BASE')} onValueChange={value => updateBonus(index, 'reward_base', value as any)}>
+                                                                            <SelectTrigger className="h-11 rounded-xl border-slate-200 bg-white font-bold">
+                                                                                <SelectValue placeholder="Выберите базу" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                <SelectItem value="BASE">База смены</SelectItem>
+                                                                                <SelectItem value="METRIC">Выручка (как в плане)</SelectItem>
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </div>
+                                                                    <div className="space-y-2">
+                                                                        <Label className="text-[10px] font-black uppercase text-muted-foreground">План на смену (по умолчанию)</Label>
+                                                                        <div className="relative">
+                                                                            <Input
+                                                                                type="number"
+                                                                                value={bonus.plan_per_shift ?? 0}
+                                                                                onChange={e => updateBonus(index, 'plan_per_shift', parseFloat(e.target.value || '0') || 0)}
+                                                                                className="h-11 rounded-xl border-slate-200 bg-white pr-10 font-bold"
+                                                                            />
+                                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₽</span>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="space-y-3 p-4 bg-slate-50/50 rounded-2xl border border-slate-200">
+                                                                        <Label className="text-[10px] font-black uppercase text-slate-700">Планы по дням недели и сменам</Label>
+                                                                        <div className="grid sm:grid-cols-2 gap-4">
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Пн (день)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.MON?.DAY ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), MON: { ...(bonus.plan_by_day_of_week?.MON || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Пн (ночь)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.MON?.NIGHT ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), MON: { ...(bonus.plan_by_day_of_week?.MON || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Вт (день)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.TUE?.DAY ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), TUE: { ...(bonus.plan_by_day_of_week?.TUE || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Вт (ночь)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.TUE?.NIGHT ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), TUE: { ...(bonus.plan_by_day_of_week?.TUE || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Ср (день)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.WED?.DAY ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), WED: { ...(bonus.plan_by_day_of_week?.WED || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Ср (ночь)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.WED?.NIGHT ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), WED: { ...(bonus.plan_by_day_of_week?.WED || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+
+                                                                        <div className="grid sm:grid-cols-2 gap-4">
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Чт (день)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.THU?.DAY ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), THU: { ...(bonus.plan_by_day_of_week?.THU || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Чт (ночь)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.THU?.NIGHT ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), THU: { ...(bonus.plan_by_day_of_week?.THU || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Пт (день)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.FRI?.DAY ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), FRI: { ...(bonus.plan_by_day_of_week?.FRI || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Пт (ночь)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.FRI?.NIGHT ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), FRI: { ...(bonus.plan_by_day_of_week?.FRI || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Сб (день)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.SAT?.DAY ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SAT: { ...(bonus.plan_by_day_of_week?.SAT || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Сб (ночь)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.SAT?.NIGHT ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SAT: { ...(bonus.plan_by_day_of_week?.SAT || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Вс (день)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.SUN?.DAY ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SUN: { ...(bonus.plan_by_day_of_week?.SUN || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-[10px] font-black uppercase text-muted-foreground">Вс (ночь)</Label>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={bonus.plan_by_day_of_week?.SUN?.NIGHT ?? bonus.plan_per_shift ?? 0}
+                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SUN: { ...(bonus.plan_by_day_of_week?.SUN || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
+                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="space-y-2">
+                                                                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Метрика</Label>
+                                                                        <Select value={bonus.source || 'total_revenue'} onValueChange={value => updateBonus(index, 'source', value)}>
+                                                                            <SelectTrigger className="w-full h-11 rounded-xl border-slate-200 bg-white font-medium text-sm">
+                                                                                <SelectValue placeholder="Выберите показатель" />
+                                                                            </SelectTrigger>
+                                                                            <SelectContent>
+                                                                                {metricOptionsForTiers.map(m => (
+                                                                                    <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
+                                                                                ))}
+                                                                            </SelectContent>
+                                                                        </Select>
+                                                                    </div>
+
+                                                                    <div className="space-y-3 p-4 bg-slate-50/50 rounded-2xl border border-slate-200">
+                                                                        <div className="flex items-center justify-between gap-3">
+                                                                            <Label className="text-[10px] font-black uppercase text-slate-700">Ступени (перевыполнение → % от базы)</Label>
+                                                                            <Button
+                                                                                type="button"
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                className="h-9 rounded-xl border-slate-200"
+                                                                                onClick={() => {
+                                                                                    const tiers = Array.isArray(bonus.tiers) ? bonus.tiers : []
+                                                                                    updateBonus(index, 'tiers', [...tiers, { from_over_percent: 10, bonus_percent: 10 }])
+                                                                                }}
+                                                                            >
+                                                                                <Plus className="mr-2 h-4 w-4" />
+                                                                                Добавить
+                                                                            </Button>
+                                                                        </div>
+                                                                        <div className="space-y-2">
+                                                                            {(Array.isArray(bonus.tiers) ? bonus.tiers : []).map((t, tIdx) => (
+                                                                                <div key={tIdx} className="flex items-center gap-2">
+                                                                                    <div className="flex-1 bg-white border border-slate-200 rounded-xl p-2">
+                                                                                        <div className="grid grid-cols-2 gap-2">
+                                                                                            <div className="relative">
+                                                                                                <Input
+                                                                                                    type="number"
+                                                                                                    value={t.from_over_percent}
+                                                                                                    onChange={e => {
+                                                                                                        const next = [...(bonus.tiers || [])]
+                                                                                                        next[tIdx] = { ...t, from_over_percent: parseFloat(e.target.value || '0') || 0 }
+                                                                                                        next.sort((a, b) => (Number(a.from_over_percent) || 0) - (Number(b.from_over_percent) || 0))
+                                                                                                        updateBonus(index, 'tiers', next)
+                                                                                                    }}
+                                                                                                    className="h-10 rounded-lg text-center font-bold"
+                                                                                                />
+                                                                                                <span className="absolute left-2 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">Перевыполн. от %</span>
+                                                                                            </div>
+                                                                                            <div className="relative">
+                                                                                                <Input
+                                                                                                    type="number"
+                                                                                                    value={t.bonus_percent}
+                                                                                                    onChange={e => {
+                                                                                                        const next = [...(bonus.tiers || [])]
+                                                                                                        next[tIdx] = { ...t, bonus_percent: parseFloat(e.target.value || '0') || 0 }
+                                                                                                        updateBonus(index, 'tiers', next)
+                                                                                                    }}
+                                                                                                    className="h-10 rounded-lg text-center font-bold"
+                                                                                                />
+                                                                                                <span className="absolute left-2 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">Бонус %</span>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <Button
+                                                                                        type="button"
+                                                                                        variant="outline"
+                                                                                        size="icon"
+                                                                                        className="h-10 w-10 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                                                        onClick={() => {
+                                                                                            const next = (bonus.tiers || []).filter((_, i) => i !== tIdx)
+                                                                                            updateBonus(index, 'tiers', next)
+                                                                                        }}
+                                                                                    >
+                                                                                        <Trash2 className="h-4 w-4" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            ))}
+                                                                            {(!bonus.tiers || bonus.tiers.length === 0) && (
+                                                                                <div className="text-xs text-muted-foreground italic">Добавьте ступени, чтобы бонус зависел от перевыполнения.</div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
 
                                                             {bonus.type === 'leaderboard_rank' && (
                                                                 <div className="space-y-4">
@@ -1443,10 +2293,28 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                     <h2 className="text-xl font-semibold">Пример расчёта</h2>
                                     <p className="text-sm text-muted-foreground">Введите цифры и посмотрите детальный разбор: база, бонусы, удержания, выплаты</p>
                                 </div>
-                                <Button onClick={handleCalculatePreview} disabled={isPreviewLoading} className="h-11 rounded-xl px-6 gap-2 bg-slate-900 text-white hover:bg-slate-800">
-                                    {isPreviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
-                                    Рассчитать
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <div className="flex p-1 bg-slate-100/50 rounded-xl h-11 items-center">
+                                        <button
+                                            type="button"
+                                            onClick={() => setExamplePreviewMode('shift')}
+                                            className={`px-4 h-9 rounded-lg text-sm font-medium transition-all ${examplePreviewMode === 'shift' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                        >
+                                            Смена
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setExamplePreviewMode('month')}
+                                            className={`px-4 h-9 rounded-lg text-sm font-medium transition-all ${examplePreviewMode === 'month' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                                        >
+                                            Месяц
+                                        </button>
+                                    </div>
+                                    <Button onClick={() => examplePreviewMode === 'month' ? handleCalculateMonthPreview() : handleCalculatePreview()} disabled={isPreviewLoading} className="h-11 rounded-xl px-6 gap-2 bg-slate-900 text-white hover:bg-slate-800">
+                                        {isPreviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
+                                        Рассчитать
+                                    </Button>
+                                </div>
                             </div>
 
                             <div className="grid lg:grid-cols-2 gap-6">
@@ -1466,6 +2334,40 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 <Input type="number" value={exampleBarPurchases} onChange={e => setExampleBarPurchases(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
                                             </div>
                                         </div>
+
+                                        {hasPersonalOverplan && (
+                                            <div className="grid sm:grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm font-medium">Тип смены</Label>
+                                                    <Select value={exampleShiftType} onValueChange={(v: any) => setExampleShiftType(v)}>
+                                                        <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="DAY">День</SelectItem>
+                                                            <SelectItem value="NIGHT">Ночь</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm font-medium">День недели</Label>
+                                                    <Select value={exampleDayOfWeek} onValueChange={(v: any) => setExampleDayOfWeek(v)}>
+                                                        <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="MON">Пн</SelectItem>
+                                                            <SelectItem value="TUE">Вт</SelectItem>
+                                                            <SelectItem value="WED">Ср</SelectItem>
+                                                            <SelectItem value="THU">Чт</SelectItem>
+                                                            <SelectItem value="FRI">Пт</SelectItem>
+                                                            <SelectItem value="SAT">Сб</SelectItem>
+                                                            <SelectItem value="SUN">Вс</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                        )}
 
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
@@ -1494,12 +2396,257 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                             )}
 
                                             {formula.base.type === 'hourly' && (
-                                                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                                                    <div className="text-sm font-medium">Эффективная ставка (₽/ч)</div>
-                                                    <div className="text-sm font-bold">{effectiveHourlyRateForExample ?? 0}</div>
+                                                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="text-sm font-medium">Эффективная ставка (₽/ч)</div>
+                                                        <div className="text-sm font-bold">{effectiveHourlyRateForExample ?? 0}</div>
+                                                    </div>
+                                                    {baseTierExplanation && (
+                                                        <div className="text-[11px] text-muted-foreground truncate">{baseTierExplanation}</div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
+
+                                        {(examplePreviewMode === 'month' || monthlyBonuses.length > 0) && (
+                                            <div className="space-y-4 pt-4 border-t border-slate-100">
+                                                <div className="flex items-center justify-between gap-3 flex-wrap">
+                                                    <div>
+                                                        <p className="text-sm font-medium">Контекст месяца</p>
+                                                        <p className="text-xs text-muted-foreground">{examplePreviewMode === 'month' ? 'Используется для расчёта зарплаты за месяц и KPI “за месяц”' : 'Нужен для KPI “за месяц” (ступени масштабируются по отработанным сменам)'}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
+                                                            Норма: {standardMonthlyShifts} смен
+                                                        </Badge>
+                                                        {examplePreviewMode === 'month' && (
+                                                            <Button type="button" variant="outline" className="h-11 rounded-xl px-4 border-slate-200" onClick={addMonthSpecialShift}>
+                                                                <Plus className="mr-2 h-4 w-4" />
+                                                                Особая смена
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid sm:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">{examplePreviewMode === 'month' ? 'Смен в месяце (всего)' : 'Смен отработано за месяц'}</Label>
+                                                        <Input type="number" value={exampleMonthShiftsWorked} onChange={e => setExampleMonthShiftsWorked(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                    </div>
+                                                    {examplePreviewMode === 'month' ? (
+                                                        <div className="space-y-2">
+                                                            <Label className="text-sm font-medium">Смен по шаблону</Label>
+                                                            <Input type="number" value={Math.max(0, Number(exampleMonthShiftsWorked || 0) - monthSpecialShifts.length)} disabled className="h-11 rounded-xl" />
+                                                        </div>
+                                                    ) : (
+                                                        monthlyBonuses.some(b => b.type === 'leaderboard_rank') && (
+                                                            <div className="space-y-2">
+                                                                <Label className="text-sm font-medium">Рейтинг сотрудника (место)</Label>
+                                                                <Input type="number" value={exampleMonthRank} onChange={e => setExampleMonthRank(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </div>
+
+                                                {examplePreviewMode === 'month' && monthlyBonuses.some(b => b.type === 'leaderboard_rank') && (
+                                                    <div className="space-y-2">
+                                                        <Label className="text-sm font-medium">Рейтинг сотрудника (место)</Label>
+                                                        <Input type="number" value={exampleMonthRank} onChange={e => setExampleMonthRank(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                    </div>
+                                                )}
+
+                                                {examplePreviewMode === 'month' && monthSpecialShifts.length > 0 && (
+                                                    <div className="space-y-3">
+                                                        <Label className="text-sm font-medium">Особые смены</Label>
+                                                        <div className="space-y-3">
+                                                            {monthSpecialShifts.map((s, idx) => (
+                                                                <div key={s.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <div className="text-sm font-medium">Особая смена #{idx + 1}</div>
+                                                                        <Button type="button" variant="outline" size="icon" className="h-10 w-10 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => removeMonthSpecialShift(s.id)}>
+                                                                            <Trash2 className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </div>
+                                                                    {hasPersonalOverplan && (
+                                                                        <div className="grid sm:grid-cols-2 gap-4 mt-4">
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-sm font-medium">Тип смены</Label>
+                                                                                <Select value={s.shift_type} onValueChange={(v: any) => updateMonthSpecialShift(s.id, { shift_type: v })}>
+                                                                                    <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200">
+                                                                                        <SelectValue />
+                                                                                    </SelectTrigger>
+                                                                                    <SelectContent>
+                                                                                        <SelectItem value="DAY">День</SelectItem>
+                                                                                        <SelectItem value="NIGHT">Ночь</SelectItem>
+                                                                                    </SelectContent>
+                                                                                </Select>
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-sm font-medium">День недели</Label>
+                                                                                <Select value={s.day_of_week} onValueChange={(v: any) => updateMonthSpecialShift(s.id, { day_of_week: v })}>
+                                                                                    <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200">
+                                                                                        <SelectValue />
+                                                                                    </SelectTrigger>
+                                                                                    <SelectContent>
+                                                                                        <SelectItem value="MON">Пн</SelectItem>
+                                                                                        <SelectItem value="TUE">Вт</SelectItem>
+                                                                                        <SelectItem value="WED">Ср</SelectItem>
+                                                                                        <SelectItem value="THU">Чт</SelectItem>
+                                                                                        <SelectItem value="FRI">Пт</SelectItem>
+                                                                                        <SelectItem value="SAT">Сб</SelectItem>
+                                                                                        <SelectItem value="SUN">Вс</SelectItem>
+                                                                                    </SelectContent>
+                                                                                </Select>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="grid sm:grid-cols-2 gap-4 mt-4">
+                                                                        <div className="space-y-2">
+                                                                            <Label className="text-sm font-medium">Часы</Label>
+                                                                            <Input type="number" value={s.hours} onChange={e => updateMonthSpecialShift(s.id, { hours: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                        </div>
+                                                                        <div className="space-y-2">
+                                                                            <Label className="text-sm font-medium">Бар</Label>
+                                                                            <Input type="number" value={s.bar_purchases} onChange={e => updateMonthSpecialShift(s.id, { bar_purchases: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="mt-4 space-y-3">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <Label className="text-sm font-medium">Выручка смены</Label>
+                                                                            {needsCashCardSplit && (
+                                                                                <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
+                                                                                    Итого: {Number(s.revenue_cash || 0) + Number(s.revenue_card || 0)} ₽
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
+                                                                        {needsCashCardSplit ? (
+                                                                            <div className="grid sm:grid-cols-2 gap-4">
+                                                                                <div className="space-y-2">
+                                                                                    <Label className="text-sm font-medium">Наличные</Label>
+                                                                                    <Input type="number" value={s.revenue_cash ?? 0} onChange={e => updateMonthSpecialShift(s.id, { revenue_cash: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                                </div>
+                                                                                <div className="space-y-2">
+                                                                                    <Label className="text-sm font-medium">Безнал</Label>
+                                                                                    <Input type="number" value={s.revenue_card ?? 0} onChange={e => updateMonthSpecialShift(s.id, { revenue_card: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="space-y-2">
+                                                                                <Input type="number" value={s.revenue} onChange={e => updateMonthSpecialShift(s.id, { revenue: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {shiftChecklistTemplateIds.length > 0 && (
+                                                                        <div className="mt-4 space-y-3">
+                                                                            <Label className="text-sm font-medium">Чек-листы смены (оценка, %)</Label>
+                                                                            <div className="grid sm:grid-cols-2 gap-4">
+                                                                                {shiftChecklistTemplateIds.map(tid => (
+                                                                                    <div key={tid} className="space-y-2">
+                                                                                        <Label className="text-sm font-medium">{checklistTemplateLabel(tid)}</Label>
+                                                                                        <Input
+                                                                                            type="number"
+                                                                                            value={(s.checklistScores || {})[String(tid)] ?? exampleChecklistScores[String(tid)] ?? 100}
+                                                                                            onChange={e => updateMonthSpecialShiftChecklistScore(s.id, tid, parseFloat(e.target.value || '0') || 0)}
+                                                                                            className="h-11 rounded-xl"
+                                                                                        />
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {(() => {
+                                                    const keys = monthlyMetricKeys.filter(k => !['maintenance_raw_sum', 'maintenance_tasks_completed', 'maintenance_tasks_assigned'].includes(k))
+                                                    if (keys.length === 0) return null
+
+                                                    return (
+                                                        <div className="space-y-3">
+                                                            <Label className="text-sm font-medium">Показатели за месяц</Label>
+                                                            <div className="grid sm:grid-cols-2 gap-4">
+                                                                {keys.map(k => {
+                                                                    const label =
+                                                                        k === 'total_revenue'
+                                                                            ? 'Выручка за месяц'
+                                                                            : k === 'revenue_cash'
+                                                                                ? 'Выручка за месяц (наличные)'
+                                                                                : k === 'revenue_card'
+                                                                                    ? 'Выручка за месяц (безнал)'
+                                                                                    : reportMetrics.find(m => m.key === k)?.label || k
+                                                                    return (
+                                                                        <div key={k} className="space-y-2">
+                                                                            <Label className="text-sm font-medium">{label}</Label>
+                                                                            <Input
+                                                                                type="number"
+                                                                                value={exampleMonthMetricOverrides[k] ?? 0}
+                                                                                onChange={e => setExampleMonthMetricOverrides(prev => ({ ...prev, [k]: parseFloat(e.target.value || '0') || 0 }))}
+                                                                                className="h-11 rounded-xl"
+                                                                            />
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })()}
+
+                                                {monthlyBonuses.some(b => b.type === 'maintenance_kpi') && (
+                                                    <div className="space-y-3">
+                                                        <Label className="text-sm font-medium">Обслуживание за месяц</Label>
+                                                        <div className="grid sm:grid-cols-2 gap-4">
+                                                            <div className="space-y-2">
+                                                                <Label className="text-sm font-medium">Сумма по задачам</Label>
+                                                                <Input type="number" value={exampleMaintenanceRawSum} onChange={e => setExampleMaintenanceRawSum(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <Label className="text-sm font-medium">Задач выполнено</Label>
+                                                                <Input type="number" value={exampleMaintenanceTasksCompleted} onChange={e => setExampleMaintenanceTasksCompleted(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <Label className="text-sm font-medium">Задач назначено</Label>
+                                                                <Input type="number" value={exampleMaintenanceTasksAssigned} onChange={e => setExampleMaintenanceTasksAssigned(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {(() => {
+                                                    const templateIds = Array.from(
+                                                        new Set(
+                                                            monthlyBonuses
+                                                                .filter(b => b.type === 'checklist')
+                                                                .map(b => Number(b.checklist_template_id))
+                                                                .filter(Boolean)
+                                                        )
+                                                    )
+                                                    if (templateIds.length === 0) return null
+
+                                                    return (
+                                                        <div className="space-y-3">
+                                                            <Label className="text-sm font-medium">Чек-листы за месяц (средняя оценка, %)</Label>
+                                                            <div className="grid sm:grid-cols-2 gap-4">
+                                                                {templateIds.map(id => (
+                                                                    <div key={id} className="space-y-2">
+                                                                        <Label className="text-sm font-medium">{checklistTemplateLabel(id)}</Label>
+                                                                        <Input
+                                                                            type="number"
+                                                                            value={exampleMonthChecklistScores[String(id)] ?? 100}
+                                                                            onChange={e => setExampleMonthChecklistScores(prev => ({ ...prev, [String(id)]: parseFloat(e.target.value || '0') || 0 }))}
+                                                                            className="h-11 rounded-xl"
+                                                                        />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })()}
+                                            </div>
+                                        )}
 
                                         {hasMaintenanceKpi && (
                                             <div className="space-y-3">
@@ -1597,74 +2744,243 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                 <Card className="rounded-3xl border-slate-200 shadow-sm">
                                     <CardHeader>
                                         <CardTitle className="text-base">Результат</CardTitle>
-                                        <CardDescription>Детализация точно как в реальном расчёте (через backend)</CardDescription>
                                     </CardHeader>
                                     <CardContent className="space-y-6">
-                                        {!previewResult ? (
-                                            <div className="text-sm text-muted-foreground">Нажмите “Рассчитать”, чтобы увидеть разбор.</div>
-                                        ) : (
-                                            <div className="space-y-6">
-                                                <div className="grid sm:grid-cols-2 gap-4">
-                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                                                        <div className="text-xs text-muted-foreground">Итого зарплата</div>
-                                                        <div className="text-xl font-bold">{previewResult?.breakdown?.total ?? 0} ₽</div>
+                                        {examplePreviewMode === 'shift' ? (
+                                            !previewResult ? (
+                                                <div className="text-sm text-muted-foreground">Нажмите “Рассчитать”, чтобы увидеть разбор.</div>
+                                            ) : (
+                                                <div className="space-y-6">
+                                                    <div className="grid sm:grid-cols-2 gap-4">
+                                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                            <div className="text-xs text-muted-foreground">Итого зарплата</div>
+                                                            <div className="text-xl font-bold">{formatRub(Number(previewResult?.breakdown?.total || 0) + Number(personalOverplanAdjustment?.total || 0))} ₽</div>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                            <div className="text-xs text-muted-foreground">Итого виртуальный баланс</div>
+                                                            <div className="text-xl font-bold">{formatRub(Number(previewResult?.breakdown?.virtual_balance_total || 0) + Number(personalOverplanAdjustment?.virtual || 0))} ₽</div>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                            <div className="text-xs text-muted-foreground">К выдаче в конце смены</div>
+                                                            <div className="text-xl font-bold">{formatRub(Number(previewResult?.breakdown?.instant_payout || 0) + Number(personalOverplanAdjustment?.instant || 0))} ₽</div>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                            <div className="text-xs text-muted-foreground">В накопление (зарплата)</div>
+                                                            <div className="text-xl font-bold">{formatRub(Number(previewResult?.breakdown?.accrued_payout || 0) + Number(personalOverplanAdjustment?.accrued || 0))} ₽</div>
+                                                        </div>
                                                     </div>
-                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                                                        <div className="text-xs text-muted-foreground">Итого виртуальный баланс</div>
-                                                        <div className="text-xl font-bold">{previewResult?.breakdown?.virtual_balance_total ?? 0} ₽</div>
-                                                    </div>
-                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                                                        <div className="text-xs text-muted-foreground">К выдаче в конце смены</div>
-                                                        <div className="text-xl font-bold">{previewResult?.breakdown?.instant_payout ?? 0} ₽</div>
-                                                    </div>
-                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                                                        <div className="text-xs text-muted-foreground">В накопление (зарплата)</div>
-                                                        <div className="text-xl font-bold">{previewResult?.breakdown?.accrued_payout ?? 0} ₽</div>
-                                                    </div>
-                                                </div>
 
-                                                <div className="rounded-2xl border border-slate-200 p-4">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="text-sm font-medium">База</div>
-                                                        <div className="text-sm font-bold">{previewResult?.breakdown?.base ?? 0} ₽</div>
+                                                    <div className="rounded-2xl border border-slate-200 p-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="text-sm font-medium">База</div>
+                                                            <div className="text-sm font-bold">{formatRub(previewResult?.breakdown?.base ?? 0)} ₽</div>
+                                                        </div>
                                                     </div>
-                                                </div>
 
-                                                {Array.isArray(previewResult?.breakdown?.bonuses) && previewResult.breakdown.bonuses.length > 0 && (
-                                                    <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
-                                                        <div className="text-sm font-medium">KPI и бонусы</div>
-                                                        <div className="space-y-2">
-                                                            {previewResult.breakdown.bonuses.map((b: any, idx: number) => (
-                                                                <div key={idx} className="flex items-center justify-between gap-3 text-sm">
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="truncate font-medium text-slate-800">{b.name}</div>
-                                                                        {(() => {
-                                                                            const line = explainBonusLine(b)
-                                                                            if (!line) return null
-                                                                            return <div className="text-[11px] text-muted-foreground truncate">{line}</div>
-                                                                        })()}
+                                                    {Array.isArray(previewResult?.breakdown?.bonuses) && previewResult.breakdown.bonuses.length > 0 && (
+                                                        <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+                                                            <div className="text-sm font-medium">KPI и бонусы</div>
+                                                            <div className="space-y-2">
+                                                                {previewResult.breakdown.bonuses.map((b: any, idx: number) => (
+                                                                    <div key={idx} className="flex items-center justify-between gap-3 text-sm">
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="truncate font-medium text-slate-800">{b.name}</div>
+                                                                            {(() => {
+                                                                                const line = explainBonusLine(b)
+                                                                                if (!line) return null
+                                                                                return <div className="text-[11px] text-muted-foreground whitespace-normal break-words leading-snug">{line}</div>
+                                                                            })()}
+                                                                        </div>
+                                                                        <div className="font-bold whitespace-nowrap">{formatRub(b.amount)} ₽</div>
                                                                     </div>
-                                                                    <div className="font-bold whitespace-nowrap">{b.amount} ₽</div>
-                                                                </div>
-                                                            ))}
+                                                                ))}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                )}
+                                                    )}
 
-                                                {Array.isArray(previewResult?.breakdown?.deductions) && previewResult.breakdown.deductions.length > 0 && (
-                                                    <div className="rounded-2xl border border-rose-200 bg-rose-50/30 p-4 space-y-3">
-                                                        <div className="text-sm font-medium text-rose-700">Удержания</div>
+                                                    {Array.isArray(previewResult?.breakdown?.deductions) && previewResult.breakdown.deductions.length > 0 && (
+                                                        <div className="rounded-2xl border border-rose-200 bg-rose-50/30 p-4 space-y-3">
+                                                            <div className="text-sm font-medium text-rose-700">Удержания</div>
+                                                            <div className="space-y-2">
+                                                                {previewResult.breakdown.deductions.map((d: any, idx: number) => (
+                                                                    <div key={idx} className="flex items-center justify-between text-sm">
+                                                                        <div className="text-rose-700 truncate pr-3">{d.name}</div>
+                                                                        <div className="font-bold whitespace-nowrap text-rose-700">-{formatRub(d.amount)} ₽</div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {monthlyBonuses.length > 0 && (
+                                                        <div className="rounded-2xl border border-slate-200 p-4 space-y-4">
+                                                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                                                                <div className="text-sm font-medium">KPI и бонусы за месяц</div>
+                                                                <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
+                                                                    Масштаб: {monthlyKpiPreview.shiftsWorked}/{monthlyKpiPreview.standard} смен (×{monthlyKpiPreview.scale?.toFixed(2)})
+                                                                </Badge>
+                                                            </div>
+
+                                                            <div className="grid sm:grid-cols-2 gap-4">
+                                                                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                                    <div className="text-xs text-muted-foreground">Итого за месяц (деньги)</div>
+                                                                <div className="text-lg font-bold">{formatRub(monthlyKpiPreview.totalReal ?? 0)} ₽</div>
+                                                                </div>
+                                                                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                                    <div className="text-xs text-muted-foreground">Итого за месяц (депозит)</div>
+                                                                <div className="text-lg font-bold">{formatRub(monthlyKpiPreview.totalVirtual ?? 0)} ₽</div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                {monthlyKpiPreview.items.map((it: any, idx: number) => (
+                                                                    <div key={idx} className="flex items-center justify-between gap-3 text-sm">
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className={cn("truncate font-medium", it.isActive ? "text-slate-800" : "text-slate-500")}>{it.name}</div>
+                                                                        {it.logic && <div className="text-[11px] text-muted-foreground whitespace-normal break-words leading-snug">{it.logic}</div>}
+                                                                        </div>
+                                                                        <div className={cn("font-bold whitespace-nowrap", it.isActive ? "text-slate-900" : "text-slate-400")}>
+                                                                        {formatRub(it.amount)} ₽
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )
+                                        ) : (
+                                            !monthPreview ? (
+                                                <div className="text-sm text-muted-foreground">Нажмите “Рассчитать”, чтобы увидеть зарплату за месяц.</div>
+                                            ) : (
+                                                <div className="space-y-6">
+                                                    <div className="grid sm:grid-cols-2 gap-4">
+                                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                            <div className="text-xs text-muted-foreground">Итого зарплата за месяц</div>
+                                                            <div className="text-xl font-bold">{formatRub(monthPreview?.totals?.real ?? 0)} ₽</div>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                            <div className="text-xs text-muted-foreground">Итого депозит за месяц</div>
+                                                            <div className="text-xl font-bold">{formatRub(monthPreview?.totals?.virtual ?? 0)} ₽</div>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                            <div className="text-xs text-muted-foreground">Выплачено в течение месяца</div>
+                                                            <div className="text-xl font-bold">{formatRub(monthPreview?.totals?.instant ?? 0)} ₽</div>
+                                                        </div>
+                                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                            <div className="text-xs text-muted-foreground">К выплате в конце месяца</div>
+                                                            <div className="text-xl font-bold">{formatRub(monthPreview?.totals?.accrued ?? 0)} ₽</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+                                                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                                                            <div className="text-sm font-medium">Смены</div>
+                                                            <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
+                                                                {monthPreview?.templateCount ?? 0} по шаблону + {monthPreview?.specialCount ?? 0} особых = {monthPreview?.totalCount ?? 0}
+                                                            </Badge>
+                                                        </div>
                                                         <div className="space-y-2">
-                                                            {previewResult.breakdown.deductions.map((d: any, idx: number) => (
-                                                                <div key={idx} className="flex items-center justify-between text-sm">
-                                                                    <div className="text-rose-700 truncate pr-3">{d.name}</div>
-                                                                    <div className="font-bold whitespace-nowrap text-rose-700">-{d.amount} ₽</div>
+                                                            <div className="flex items-center justify-between text-sm">
+                                                                <div className="text-muted-foreground truncate pr-3">Шаблонные смены</div>
+                                                                <div className="font-bold whitespace-nowrap">{formatRub(Number(monthPreview?.typical?.result?.breakdown?.total || 0) * Number(monthPreview?.templateCount || 0))} ₽</div>
+                                                            </div>
+                                                            {Array.isArray(monthPreview?.special) && monthPreview.special.length > 0 && monthPreview.special.map((s: any, idx: number) => (
+                                                                <div key={s.id} className="flex items-center justify-between text-sm">
+                                                                    <div className="text-muted-foreground truncate pr-3">Особая смена #{idx + 1}</div>
+                                                                    <div className="font-bold whitespace-nowrap">{formatRub(s?.result?.breakdown?.total ?? 0)} ₽</div>
                                                                 </div>
                                                             ))}
                                                         </div>
+                                                        <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-sm">
+                                                            <div className="font-medium">Итого по сменам</div>
+                                                            <div className="font-bold">{formatRub(monthPreview?.shifts?.real ?? 0)} ₽</div>
+                                                        </div>
                                                     </div>
-                                                )}
-                                            </div>
+
+                                                    {monthShiftBreakdown && (
+                                                        <>
+                                                            <div className="rounded-2xl border border-slate-200 p-4">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="text-sm font-medium">База (по сменам)</div>
+                                                                    <div className="text-sm font-bold">{formatRub(monthShiftBreakdown.base)} ₽</div>
+                                                                </div>
+                                                            </div>
+
+                                                            {monthShiftBreakdown.bonuses.length > 0 && (
+                                                                <div className="rounded-2xl border border-slate-200 p-4 space-y-3">
+                                                                    <div className="text-sm font-medium">KPI и бонусы (по сменам)</div>
+                                                                    <div className="space-y-2">
+                                                                        {monthShiftBreakdown.bonuses.map((b: any, idx: number) => (
+                                                                            <div key={idx} className="flex items-center justify-between gap-3 text-sm">
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <div className="truncate font-medium text-slate-800">{b.name}</div>
+                                                                                    {(() => {
+                                                                                        const line = b.sample ? explainBonusLine(b.sample) : null
+                                                                                        if (!line) return null
+                                                                                        return <div className="text-[11px] text-muted-foreground whitespace-normal break-words leading-snug">{line}</div>
+                                                                                    })()}
+                                                                                </div>
+                                                                                <div className="font-bold whitespace-nowrap">{formatRub(b.amount)} ₽</div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {monthShiftBreakdown.deductions.length > 0 && (
+                                                                <div className="rounded-2xl border border-rose-200 bg-rose-50/30 p-4 space-y-3">
+                                                                    <div className="text-sm font-medium text-rose-700">Удержания (по сменам)</div>
+                                                                    <div className="space-y-2">
+                                                                        {monthShiftBreakdown.deductions.map((d: any, idx: number) => (
+                                                                            <div key={idx} className="flex items-center justify-between text-sm">
+                                                                                <div className="text-rose-700 truncate pr-3">{d.name}</div>
+                                                                                <div className="font-bold whitespace-nowrap text-rose-700">-{formatRub(d.amount)} ₽</div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+
+                                                    {monthlyBonuses.length > 0 && (
+                                                        <div className="rounded-2xl border border-slate-200 p-4 space-y-4">
+                                                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                                                                <div className="text-sm font-medium">KPI и бонусы за месяц</div>
+                                                                <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
+                                                                    Масштаб: {monthPreview?.monthly?.shiftsWorked}/{monthPreview?.monthly?.standard} смен (×{monthPreview?.monthly?.scale?.toFixed(2)})
+                                                                </Badge>
+                                                            </div>
+
+                                                            <div className="grid sm:grid-cols-2 gap-4">
+                                                                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                                    <div className="text-xs text-muted-foreground">Итого за месяц (деньги)</div>
+                                                                    <div className="text-lg font-bold">{formatRub(monthPreview?.monthly?.totalReal ?? 0)} ₽</div>
+                                                                </div>
+                                                                <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                                                                    <div className="text-xs text-muted-foreground">Итого за месяц (депозит)</div>
+                                                                    <div className="text-lg font-bold">{formatRub(monthPreview?.monthly?.totalVirtual ?? 0)} ₽</div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="space-y-2">
+                                                                {monthPreview?.monthly?.items?.map((it: any, idx: number) => (
+                                                                    <div key={idx} className="flex items-center justify-between gap-3 text-sm">
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className={cn("truncate font-medium", it.isActive ? "text-slate-800" : "text-slate-500")}>{it.name}</div>
+                                                                            {it.logic && <div className="text-[11px] text-muted-foreground whitespace-normal break-words leading-snug">{it.logic}</div>}
+                                                                        </div>
+                                                                        <div className={cn("font-bold whitespace-nowrap", it.isActive ? "text-slate-900" : "text-slate-400")}>
+                                                                            {formatRub(it.amount)} ₽
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )
                                         )}
                                     </CardContent>
                                 </Card>

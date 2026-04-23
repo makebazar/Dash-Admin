@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +15,8 @@ import {
     Plus,
     Percent,
     TrendingUp,
+    ChevronDown,
+    ChevronUp,
     Wallet,
     Wrench,
     Trophy,
@@ -171,6 +173,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [activeTabs, setActiveTabs] = useState<Record<number, string>>({});
     const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
+    const [expandedShiftDetails, setExpandedShiftDetails] = useState<Record<number, string[]>>({});
     const [paymentModal, setPaymentModal] = useState<{ open: boolean; employee: Employee | null }>({ open: false, employee: null });
     const [paymentForm, setPaymentForm] = useState({ amount: '', method: 'CASH', notes: '', paymentType: 'salary' as 'salary' | 'advance' | 'bonus' });
     const [processingPayment, setProcessingPayment] = useState(false);
@@ -193,6 +196,23 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             return newSet;
         });
     };
+
+    const toggleShiftDetail = (employeeId: number, shiftId: any) => {
+        const key = String(shiftId)
+        setExpandedShiftDetails(prev => {
+            const list = Array.isArray(prev[employeeId]) ? [...prev[employeeId]] : []
+            const idx = list.indexOf(key)
+            if (idx >= 0) list.splice(idx, 1)
+            else list.push(key)
+            return { ...prev, [employeeId]: list }
+        })
+    }
+
+    const isShiftExpanded = (employeeId: number, shiftId: any) => {
+        const key = String(shiftId)
+        const list = expandedShiftDetails[employeeId]
+        return Array.isArray(list) && list.includes(key)
+    }
 
     const openPaymentModal = (employee: Employee) => {
         setPaymentModal({ open: true, employee });
@@ -412,6 +432,527 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             maximumFractionDigits: 0
         }).format(amount) + ' ₽';
     };
+
+    const PayrollKpiTab = ({ employee }: { employee: any }) => {
+        const [openThresholds, setOpenThresholds] = useState<Record<string, boolean>>({});
+        const [openMaintenanceThresholds, setOpenMaintenanceThresholds] = useState(false);
+
+        const shifts = (Array.isArray(employee.shifts) ? employee.shifts : []).filter((s: any) => s.type !== 'PERIOD_BONUS');
+        const shiftBonusMap = new Map<string, { name: string; payoutType: string; amount: number }>();
+
+        shifts.forEach((s: any) => {
+            const list = Array.isArray(s.bonuses) ? s.bonuses : [];
+            list.forEach((b: any) => {
+                const type = String(b?.type || '');
+                const mode = String(b?.mode || '');
+                if (type === 'PERIOD_BONUS_CONTRIBUTION' || mode === 'MONTH') return;
+
+                const payoutType = String(b?.payout_type || 'REAL_MONEY');
+                const name = String(b?.name || b?.type || 'Бонус');
+                const key = `${payoutType}||${name}`;
+                const existing = shiftBonusMap.get(key);
+                const amt = parseFloat(b?.amount) || 0;
+                if (existing) existing.amount += amt;
+                else shiftBonusMap.set(key, { name, payoutType, amount: amt });
+            });
+        });
+
+        const shiftBonusesReal = Array.from(shiftBonusMap.values())
+            .filter(v => v.payoutType !== 'VIRTUAL_BALANCE' && v.amount > 0.0001)
+            .sort((a, b) => b.amount - a.amount);
+        const shiftBonusesVirtual = Array.from(shiftBonusMap.values())
+            .filter(v => v.payoutType === 'VIRTUAL_BALANCE' && v.amount > 0.0001)
+            .sort((a, b) => b.amount - a.amount);
+
+        const monthlyKpis = Array.isArray(employee.period_bonuses) ? employee.period_bonuses : [];
+        const monthCash = monthlyKpis.filter((k: any) => k?.payout_type !== 'VIRTUAL_BALANCE' && Number(k?.bonus_amount || 0) > 0);
+        const monthVirtual = monthlyKpis.filter((k: any) => k?.payout_type === 'VIRTUAL_BALANCE' && Number(k?.bonus_amount || 0) > 0);
+
+        const checklist = Array.isArray(employee.checklist_bonuses) ? employee.checklist_bonuses : [];
+
+        const base = Number(employee.breakdown?.base_salary || 0);
+        const premiumTotal = Number(employee.kpi_bonus_amount || 0);
+        const perShiftBonusTotal = shiftBonusesReal.reduce((sum, x) => sum + x.amount, 0);
+        const deductions = Number(employee.total_bar_purchases || 0);
+        const total = Number(employee.total_accrued || 0);
+
+        const instant = Number(employee.breakdown?.instant_payout || 0);
+        const accrued = Number(employee.breakdown?.accrued_payout || 0);
+        const virtualTotal = Number(employee.virtual_balance_accrued || 0);
+
+        const progressPercent = (k: any) => {
+            const p = Number(k?.progress_percent);
+            if (Number.isFinite(p) && p > 0) return Math.max(0, Math.min(100, p));
+            const cur = Number(k?.current_value || 0);
+            const tgt = Number(k?.target_value || 0);
+            if (tgt > 0) return Math.max(0, Math.min(100, (cur / tgt) * 100));
+            return 0;
+        };
+
+        const toggleThresholds = (key: string) => {
+            setOpenThresholds(prev => ({ ...prev, [key]: !prev[key] }));
+        };
+
+        return (
+            <div className="space-y-4">
+                <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                    <div className="p-6">
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                            <div className="min-w-0">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Начисления за месяц</div>
+                                <div className="mt-1 text-3xl font-black tracking-tight text-slate-900">{formatCurrency(total)}</div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 min-w-[260px]">
+                                <div className="rounded-2xl border border-orange-200 bg-orange-50/60 p-3 text-center">
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-orange-700">В конце смен</div>
+                                    <div className="mt-1 text-lg font-black text-orange-800">{formatCurrency(instant)}</div>
+                                </div>
+                                <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-3 text-center">
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-blue-700">В накопление</div>
+                                    <div className="mt-1 text-lg font-black text-blue-800">{formatCurrency(accrued)}</div>
+                                </div>
+                                <div className="col-span-2 rounded-2xl border border-purple-200 bg-purple-50/60 p-3 text-center">
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-purple-700">Виртуальный баланс</div>
+                                    <div className="mt-1 text-lg font-black text-purple-800">{formatCurrency(virtualTotal)}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/30 p-4">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Что вошло</div>
+                                <div className="mt-3 space-y-2 text-sm">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="text-slate-700">База</div>
+                                        <div className="font-black text-slate-900 whitespace-nowrap">{formatCurrency(base)}</div>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="text-slate-700">Премия</div>
+                                        <div className="font-black text-emerald-700 whitespace-nowrap">+{formatCurrency(premiumTotal)}</div>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div className="text-slate-700">Удержания (бар)</div>
+                                        <div className="font-black text-rose-700 whitespace-nowrap">-{formatCurrency(deductions)}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50/30 p-4">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Премия: состав</div>
+                                <div className="mt-3 space-y-2 text-sm">
+                                    {(() => {
+                                        const features = employee.scheme_features || {}
+
+                                        const showShift = (features.has_shift_premium !== undefined) ? !!features.has_shift_premium : shiftBonusesReal.length > 0
+                                        const showMonthKpi = monthlyKpis.length > 0
+                                        const showChecklistMonth = (features.has_checklist_month !== undefined) ? !!features.has_checklist_month : checklist.some((c: any) => String(c?.mode || '').toUpperCase() === 'MONTH')
+                                        const showMaintenance = (features.has_maintenance !== undefined) ? !!features.has_maintenance : !!employee.maintenance_status
+
+                                        const shiftAmount = perShiftBonusTotal
+                                        const monthKpiAmount = monthlyKpis
+                                            .filter((k: any) => String(k?.payout_type || 'REAL_MONEY') !== 'VIRTUAL_BALANCE')
+                                            .reduce((sum: number, k: any) => sum + Number(k?.bonus_amount || 0), 0)
+                                        const checklistMonthAmount = checklist
+                                            .filter((c: any) => String(c?.mode || '').toUpperCase() === 'MONTH' && String(c?.payout_type || 'REAL_MONEY') !== 'VIRTUAL_BALANCE')
+                                            .reduce((sum: number, c: any) => sum + Number(c?.bonus_amount || 0), 0)
+                                        const maintenanceAmount = (employee.maintenance_status && String(employee.maintenance_status.payout_type || 'REAL_MONEY') !== 'VIRTUAL_BALANCE')
+                                            ? Number(employee.maintenance_status.bonus_amount || 0)
+                                            : 0
+
+                                        return (
+                                            <>
+                                                {showShift && (
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <div className="text-slate-700">Бонусы за смены</div>
+                                                        <div className="font-black text-slate-900 whitespace-nowrap">{formatCurrency(shiftAmount)}</div>
+                                                    </div>
+                                                )}
+                                                {showMonthKpi && (
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <div className="text-slate-700">KPI за месяц</div>
+                                                        <div className="font-black text-slate-900 whitespace-nowrap">{formatCurrency(monthKpiAmount)}</div>
+                                                    </div>
+                                                )}
+                                                {showChecklistMonth && (
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <div className="text-slate-700">Чек-листы (месяц)</div>
+                                                        <div className="font-black text-slate-900 whitespace-nowrap">{formatCurrency(checklistMonthAmount)}</div>
+                                                    </div>
+                                                )}
+                                                {showMaintenance && (
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <div className="text-slate-700">Обслуживание</div>
+                                                        <div className="font-black text-slate-900 whitespace-nowrap">{formatCurrency(maintenanceAmount)}</div>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )
+                                    })()}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div className="text-sm font-black text-slate-900">KPI за месяц</div>
+                        <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
+                            План: {employee.planned_shifts || employee.standard_monthly_shifts || 15} смен
+                        </Badge>
+                    </div>
+
+                    {monthlyKpis.length > 0 ? (
+                        <div className="space-y-3">
+                            {monthlyKpis.map((k: any, idx: number) => {
+                                const percent = progressPercent(k);
+                                const bonusAmount = Number(k?.bonus_amount || 0);
+                                const payoutType = String(k?.payout_type || 'REAL_MONEY');
+                                const pill = payoutType === 'VIRTUAL_BALANCE'
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                                const rewardLabel = payoutType === 'VIRTUAL_BALANCE' ? 'Депозит' : 'Деньги';
+                                const current = Number(k?.current_value || 0);
+                                const target = Number(k?.target_value || 0);
+                                const isRankKpi = String(k?.metric_key || '') === 'leaderboard_rank';
+                                const rankValue = employee?.leaderboard?.rank ?? current;
+                                const rankTotal = employee?.leaderboard?.total_participants;
+                                const thresholds = Array.isArray(k?.thresholds) ? k.thresholds : [];
+                                const kKey = String(k?.id || k?.metric_key || `kpi-${idx}`);
+                                const isOpen = !!openThresholds[kKey];
+                                const sortedThresholds = [...thresholds].sort((a: any, b: any) => (Number(a?.from || 0) - Number(b?.from || 0)));
+                                const metThresholdIndex = sortedThresholds.reduce((acc: number, t: any, i: number) => {
+                                    const from = Number(t?.from || 0);
+                                    return current >= from ? i : acc;
+                                }, -1);
+                                const currentTier = metThresholdIndex >= 0 ? sortedThresholds[metThresholdIndex] : null;
+                                const currentTierLabel = currentTier?.label ? String(currentTier.label) : currentTier ? `≥ ${formatCurrency(Number(currentTier.from || 0))}` : '—';
+                                const currentTierReward = currentTier
+                                    ? (Number(currentTier?.amount || 0) > 0 ? formatCurrency(Number(currentTier.amount || 0)) : `${Number(currentTier?.percent || 0)}%`)
+                                    : null;
+                                const tierPos = sortedThresholds.length > 0 ? `${Math.max(0, metThresholdIndex + 1)}/${sortedThresholds.length}` : null;
+
+                                return (
+                                    <div key={k?.id || `kpi-${idx}`} className="rounded-2xl border border-slate-200 p-4">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <div className="text-sm font-black text-slate-900 truncate">{k?.name || 'KPI'}</div>
+                                                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight border ${pill}`}>{rewardLabel}</span>
+                                                </div>
+                                                <div className="mt-1 text-[11px] text-slate-600">
+                                                    {isRankKpi ? (
+                                                        <>
+                                                            Место: <span className="font-bold text-slate-900">{rankValue}</span>
+                                                            {rankTotal ? <span> из <span className="font-bold text-slate-900">{rankTotal}</span></span> : null}
+                                                            {target ? <span> • Цель: <span className="font-bold text-slate-900">{target}</span></span> : null}
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            Текущее значение: <span className="font-bold text-slate-900">{formatCurrency(current)}</span> • Цель: <span className="font-bold text-slate-900">{formatCurrency(target)}</span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                                {sortedThresholds.length > 0 ? (
+                                                    <div className="mt-1 text-[11px] text-slate-600">
+                                                        Ступень: <span className="font-bold text-slate-900">{currentTierLabel}</span> <span className="text-slate-500">({tierPos})</span>
+                                                        {currentTierReward ? <span> • <span className="font-bold text-slate-900">{currentTierReward}</span></span> : null}
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Начислено</div>
+                                                <div className={`text-lg font-black whitespace-nowrap ${payoutType === 'VIRTUAL_BALANCE' ? 'text-purple-700' : 'text-emerald-700'}`}>
+                                                    +{formatCurrency(bonusAmount)}
+                                                </div>
+                                                {sortedThresholds.length > 0 ? (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="mt-2 h-7 px-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-900"
+                                                        onClick={() => toggleThresholds(kKey)}
+                                                    >
+                                                        Ступени {isOpen ? <ChevronUp className="ml-1 h-3.5 w-3.5" /> : <ChevronDown className="ml-1 h-3.5 w-3.5" />}
+                                                    </Button>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 h-2 rounded-full bg-slate-100 overflow-hidden">
+                                            <div className="h-full rounded-full bg-slate-900/70" style={{ width: `${percent}%` }} />
+                                        </div>
+                                        <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                            <span>Прогресс</span>
+                                            <span>{Math.round(percent)}%</span>
+                                        </div>
+                                        {isOpen && sortedThresholds.length > 0 ? (
+                                            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/40 p-3">
+                                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ступени</div>
+                                                <div className="mt-2 space-y-2">
+                                                    {sortedThresholds.map((t: any, ti: number) => {
+                                                        const from = Number(t?.from || 0);
+                                                        const originalFrom = Number(t?.original_from || 0);
+                                                        const amount = Number(t?.amount || 0);
+                                                        const pct = Number(t?.percent || 0);
+                                                        const reward = amount > 0 ? formatCurrency(amount) : `${pct}%`;
+                                                        const isActive = ti === metThresholdIndex;
+                                                        const isMet = current >= from;
+                                                        const rowClass = isActive
+                                                            ? 'rounded-xl border border-slate-300 bg-white px-2 py-1 -mx-2'
+                                                            : isMet
+                                                                ? 'text-slate-700'
+                                                                : 'text-slate-400';
+                                                        return (
+                                                            <div key={`${kKey}-th-${ti}`} className={`flex items-start justify-between gap-4 ${rowClass}`}>
+                                                                <div className="min-w-0">
+                                                                    <div className="text-[11px] font-bold text-slate-900">
+                                                                        {t?.label ? String(t.label) : `≥ ${formatCurrency(from)}`}
+                                                                    </div>
+                                                                    {originalFrom > 0 && originalFrom !== from ? (
+                                                                        <div className="text-[10px] text-slate-500">
+                                                                            База: {formatCurrency(originalFrom)}
+                                                                        </div>
+                                                                    ) : null}
+                                                                </div>
+                                                                <div className="text-[11px] font-black text-slate-900 whitespace-nowrap">{reward}</div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="text-sm text-muted-foreground">KPI за месяц не настроены</div>
+                    )}
+
+                    {employee.maintenance_status && (Number(employee.maintenance_status.bonus_amount || 0) > 0 || Number(employee.maintenance_status.current_value || 0) > 0) ? (
+                        <div className="pt-4 border-t border-slate-200">
+                            {(() => {
+                                const thresholds = Array.isArray(employee.maintenance_status?.thresholds) ? employee.maintenance_status.thresholds : [];
+                                const sortedThresholds = [...thresholds].sort((a: any, b: any) => (Number(a?.from || 0) - Number(b?.from || 0)));
+                                const mode = String(employee.maintenance_status?.calculation_mode || '');
+                                const metricValue = mode === 'MONTHLY' ? Number(employee.maintenance_status?.efficiency || 0) : Number(employee.maintenance_status?.current_value || 0);
+                                const metIndex = sortedThresholds.reduce((acc: number, t: any, i: number) => {
+                                    const from = Number(t?.from || 0);
+                                    return metricValue >= from ? i : acc;
+                                }, -1);
+                                const tier = metIndex >= 0 ? sortedThresholds[metIndex] : null;
+                                const tierLabel = tier?.label ? String(tier.label) : tier ? `≥ ${tier.from}${mode === 'MONTHLY' ? '%' : ''}` : '—';
+                                const tierReward = tier ? formatCurrency(Number(tier?.amount || 0)) : null;
+                                const tierPos = sortedThresholds.length > 0 ? `${Math.max(0, metIndex + 1)}/${sortedThresholds.length}` : null;
+                                const penaltyAmount = Number(employee.maintenance_status?.penalty_amount || 0);
+                                const penaltyRawAmount = Number(employee.maintenance_status?.penalty_raw_amount || 0);
+                                const baseBonusAmount = Number(employee.maintenance_status?.base_bonus_amount || 0);
+                                const qualityPenaltyUnits = Number(employee.maintenance_status?.quality_penalty_units || 0);
+
+                                return (
+                                    <>
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-black text-slate-900">{employee.maintenance_status.name || 'KPI Обслуживание'}</div>
+                                                <div className="mt-1 text-[11px] text-slate-600">
+                                                    Выполнено: <span className="font-bold text-slate-900">{employee.maintenance_status.current_value}</span> из <span className="font-bold text-slate-900">{employee.maintenance_status.target_value}</span> • Эффективность: <span className="font-bold text-slate-900">{Number(employee.maintenance_status.efficiency || 0).toFixed(0)}%</span>
+                                                </div>
+                                                {sortedThresholds.length > 0 ? (
+                                                    <div className="mt-1 text-[11px] text-slate-600">
+                                                        Ступень: <span className="font-bold text-slate-900">{tierLabel}</span> <span className="text-slate-500">({tierPos})</span>
+                                                        {tierReward ? <span> • <span className="font-bold text-slate-900">{tierReward}</span></span> : null}
+                                                    </div>
+                                                ) : null}
+                                                {(penaltyAmount > 0 || qualityPenaltyUnits > 0) ? (
+                                                    <div className="mt-1 text-[11px] text-slate-600">
+                                                        {penaltyAmount > 0 ? (
+                                                            <>
+                                                                Штраф: <span className="font-bold text-rose-700">-{formatCurrency(penaltyAmount)}</span>
+                                                                {baseBonusAmount > 0 ? <span> • База: <span className="font-bold text-slate-900">{formatCurrency(baseBonusAmount)}</span></span> : null}
+                                                            </>
+                                                        ) : null}
+                                                        {qualityPenaltyUnits > 0 ? (
+                                                            <span>{penaltyAmount > 0 ? ' • ' : ''}Качество: <span className="font-bold text-rose-700">-{qualityPenaltyUnits}</span></span>
+                                                        ) : null}
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Начислено</div>
+                                                <div className="text-lg font-black text-indigo-700 whitespace-nowrap">+{formatCurrency(employee.maintenance_status.bonus_amount || 0)}</div>
+                                                {Array.isArray(employee.maintenance_status.thresholds) && employee.maintenance_status.thresholds.length > 0 ? (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="mt-2 h-7 px-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-900"
+                                                        onClick={() => setOpenMaintenanceThresholds(v => !v)}
+                                                    >
+                                                        Ступени {openMaintenanceThresholds ? <ChevronUp className="ml-1 h-3.5 w-3.5" /> : <ChevronDown className="ml-1 h-3.5 w-3.5" />}
+                                                    </Button>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        {openMaintenanceThresholds && Array.isArray(employee.maintenance_status.thresholds) && employee.maintenance_status.thresholds.length > 0 ? (
+                                            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/40 p-3">
+                                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ступени</div>
+                                                <div className="mt-2 space-y-2">
+                                                    {[...employee.maintenance_status.thresholds]
+                                                        .sort((a: any, b: any) => (Number(a?.from || 0) - Number(b?.from || 0)))
+                                                        .map((t: any, ti: number) => {
+                                                            const from = Number(t?.from || 0);
+                                                            const isActive = ti === metIndex;
+                                                            const isMet = metricValue >= from;
+                                                            const rowClass = isActive
+                                                                ? 'rounded-xl border border-slate-300 bg-white px-2 py-1 -mx-2'
+                                                                : isMet
+                                                                    ? 'text-slate-700'
+                                                                    : 'text-slate-400';
+                                                            return (
+                                                                <div key={`maint-th-${ti}`} className={`flex items-start justify-between gap-4 ${rowClass}`}>
+                                                                    <div className="text-[11px] font-bold text-slate-900">
+                                                                        {t?.label ? String(t.label) : `≥ ${t.from}${employee.maintenance_status.calculation_mode === 'MONTHLY' ? '%' : ''}`}
+                                                                    </div>
+                                                                    <div className="text-[11px] font-black text-slate-900 whitespace-nowrap">
+                                                                        {formatCurrency(Number(t?.amount || 0))}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    ) : null}
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
+                        <div className="text-sm font-black text-slate-900">Бонусы за смены</div>
+                        {shiftBonusesReal.length > 0 ? (
+                            <div className="space-y-2">
+                                {shiftBonusesReal.map((b, i) => (
+                                    <div key={`sb-${i}`} className="flex items-start justify-between gap-4">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-bold text-slate-900 truncate">{b.name}</div>
+                                        </div>
+                                        <div className="text-sm font-black text-emerald-700 whitespace-nowrap">+{formatCurrency(b.amount)}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-sm text-muted-foreground">Бонусов за смены нет</div>
+                        )}
+
+                        {shiftBonusesVirtual.length > 0 ? (
+                            <div className="pt-4 border-t border-slate-200">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-purple-600">Виртуальный баланс</div>
+                                <div className="mt-3 space-y-2">
+                                    {shiftBonusesVirtual.map((b, i) => (
+                                        <div key={`sv-${i}`} className="flex items-start justify-between gap-4">
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-bold text-slate-900 truncate">{b.name}</div>
+                                            </div>
+                                            <div className="text-sm font-black text-purple-700 whitespace-nowrap">+{formatCurrency(b.amount)}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
+                        <div className="text-sm font-black text-slate-900">Чек-листы</div>
+                        {checklist.length > 0 ? (
+                            <div className="space-y-3">
+                                {checklist.map((b: any, i: number) => (
+                                    <div key={`cl-${i}`} className="rounded-2xl border border-slate-200 p-4">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-black text-slate-900 truncate">{b?.name || 'Чек-лист'}</div>
+                                                <div className="mt-1 text-[11px] text-slate-600">
+                                                    {String(b?.mode) === 'MONTH' ? 'За месяц' : 'За смены'} • Текущий балл: <span className="font-bold text-slate-900">{Number(b?.current_value || 0).toFixed(1)}%</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Начислено</div>
+                                                <div className={`text-lg font-black whitespace-nowrap ${String(b?.payout_type) === 'VIRTUAL_BALANCE' ? 'text-purple-700' : 'text-emerald-700'}`}>
+                                                    +{formatCurrency(Number(b?.bonus_amount || 0))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-sm text-muted-foreground">Чек-листы не настроены</div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="rounded-3xl border border-rose-200 bg-rose-50/30 shadow-sm p-6 space-y-3">
+                    <div className="text-sm font-black text-rose-700">Удержания</div>
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="text-sm font-bold text-slate-900">Бар (в счёт зарплаты)</div>
+                        <div className="text-sm font-black text-rose-700 whitespace-nowrap">-{formatCurrency(deductions)}</div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const shiftTypeLabel = (v: any) => {
+        const s = String(v || '').toUpperCase()
+        if (s === 'DAY') return 'День'
+        if (s === 'NIGHT') return 'Ночь'
+        return s ? s : '—'
+    }
+
+    const dayOfWeekLabel = (d: Date) => {
+        const js = d.getDay()
+        if (js === 0) return 'Вс'
+        if (js === 1) return 'Пн'
+        if (js === 2) return 'Вт'
+        if (js === 3) return 'Ср'
+        if (js === 4) return 'Чт'
+        if (js === 5) return 'Пт'
+        return 'Сб'
+    }
+
+    const bonusExplainLine = (b: any, shift: any) => {
+        if (!b) return null
+        if (b.type === 'PERSONAL_OVERPLAN') {
+            const dow = String(b.day_of_week || '')
+            const dowRu = dow === 'MON' ? 'Пн' : dow === 'TUE' ? 'Вт' : dow === 'WED' ? 'Ср' : dow === 'THU' ? 'Чт' : dow === 'FRI' ? 'Пт' : dow === 'SAT' ? 'Сб' : dow === 'SUN' ? 'Вс' : dow
+            const st = shiftTypeLabel(b.shift_type)
+            const fact = Number(b.source_value || 0)
+            const plan = Number(b.plan_per_shift || 0)
+            const kpi = Math.round(Number(b.kpi_percent || 0))
+            const over = Math.round(Number(b.over_percent || 0))
+            const perc = Math.round(Number(b.bonus_percent || 0))
+            const base = Number(b.base_amount || 0)
+            return `${dowRu} / ${st}: факт ${formatCurrency(fact)} / план ${formatCurrency(plan)} (${kpi}%) → +${over}% → ${perc}% от базы ${formatCurrency(base)}`
+        }
+
+        if (b.source_key) {
+            const sourceLabels: Record<string, string> = {
+                total_revenue: 'Выручка',
+                revenue_cash: 'Наличные',
+                revenue_card: 'Безнал',
+                total: 'Выручка',
+                cash: 'Наличные',
+                card: 'Безнал',
+                checklist_score: 'Чек-лист',
+                maintenance_tasks: 'Обслуживание'
+            }
+            const label = sourceLabels[String(b.source_key)] || String(b.source_key)
+            if (b.source_key === 'checklist_score') return `${label}: ${Number(b.source_value || 0).toFixed(0)}%`
+            return b.source_value !== undefined && b.source_value !== null ? `${label}: ${formatCurrency(Number(b.source_value || 0))}` : null
+        }
+
+        return null
+    }
 
 
 
@@ -706,79 +1247,9 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                         )}
 
                                         {activeTabs[employee.id] === 'kpi' && (
-                                            <div className="space-y-6 animate-in slide-in-from-left-2 duration-300">
-                                                {/* Maintenance KPI Card */}
-                                                {(() => {
-                                                    const mBonus = employee.metrics?.revenue_by_metric?.['maintenance_bonus']?.total 
-                                                        || (employee.metrics as any)?.maintenance_bonus 
-                                                        || 0;
-                                                    const mCompleted = (employee.metrics as any)?.maintenance_tasks_completed || 0;
-                                                    const mAssigned = (employee.metrics as any)?.maintenance_tasks_assigned || 0;
-                                                    
-                                                    // Check if maintenance KPI is configured in bonuses
-                                                    const hasMaintenanceBonus = employee.bonuses?.some((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
-                                                    
-                                                    // Only show if explicitly configured in the salary scheme
-                                                    if (!hasMaintenanceBonus) return null;
-
-                                                    const efficiency = mAssigned > 0 ? (mCompleted / mAssigned) * 100 : (mCompleted > 0 ? 100 : 0);
-                                                    
-                                                    return (
-                                                        <div className="bg-background border rounded-xl p-4 space-y-4 shadow-sm">
-                                                            <div className="flex justify-between items-center">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                                                                        <Wrench className="h-5 w-5" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <span className="font-bold text-sm">KPI Обслуживания</span>
-                                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Эффективность</p>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="text-right">
-                                                                    <span className="font-bold text-lg text-emerald-600">+{formatCurrency(mBonus)}</span>
-                                                                    <p className="text-[10px] text-muted-foreground">Бонус за период</p>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                                {/* Progress Bar */}
-                                                                <div className="md:col-span-2 space-y-2">
-                                                                    <div className="flex justify-between text-xs font-medium">
-                                                                        <span>Выполнено задач</span>
-                                                                        <span className={efficiency >= 90 ? "text-emerald-600" : efficiency >= 50 ? "text-amber-600" : "text-red-600"}>
-                                                                            {mCompleted} / {mAssigned} ({efficiency.toFixed(0)}%)
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden">
-                                                                        <div 
-                                                                            className={`h-full transition-all duration-500 rounded-full ${
-                                                                                efficiency >= 90 ? 'bg-emerald-500' : 
-                                                                                efficiency >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                                                                            }`} 
-                                                                            style={{ width: `${Math.min(100, efficiency)}%` }} 
-                                                                        />
-                                                                    </div>
-                                                                    <p className="text-[10px] text-muted-foreground">
-                                                                        {efficiency >= 90 ? '🚀 Отличный результат! Максимальный бонус.' : 
-                                                                         efficiency >= 50 ? '⚠️ Нормальный результат. Есть куда расти.' : 
-                                                                         '❌ Низкая эффективность. Бонус может быть не начислен.'}
-                                                                    </p>
-                                                                </div>
-
-                                                                {/* Stats */}
-                                                                <div className="bg-muted/30 rounded-lg p-2 flex flex-col justify-center items-center text-center">
-                                                                    <span className="text-[10px] text-muted-foreground uppercase">Ср. бонус за задачу</span>
-                                                                    <span className="font-bold text-indigo-600">
-                                                                        {mCompleted > 0 ? formatCurrency(mBonus / mCompleted) : '0 ₽'}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })()}
-
-                                                {(() => {
+                                            <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
+                                                <PayrollKpiTab employee={employee} />
+                                                {false && (() => {
                                                     const standardShifts = employee.planned_shifts || employee.standard_monthly_shifts || 15;
 
                                                     return (
@@ -1137,67 +1608,6 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
 
                                         {activeTabs[employee.id] === 'shifts' && (
                                             <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
-                                                {/* Stats Summary for Shifts */}
-                                                {(() => {
-                                                    const shifts = employee.shifts?.filter((s: any) => s.type !== 'PERIOD_BONUS') || [];
-                                                    const totalHours = shifts.reduce((sum: number, s: any) => sum + (s.hours || s.total_hours || 0), 0);
-                                                    const totalRevenue = shifts.reduce((sum: number, s: any) => sum + (s.total_revenue || 0), 0);
-                                                    const totalKpiBonus = shifts.reduce((sum: number, s: any) => sum + (s.kpi_bonus || 0), 0);
-
-                                                    // Find all relevant "OTHER" metrics
-                                                    const metadata = employee.metric_metadata || {};
-                                                    const kpiKeys = (employee.period_bonuses || []).map((b: any) => b.metric_key);
-
-                                                    const otherMetrics = Object.keys(metadata).filter(key =>
-                                                        metadata[key].category === 'OTHER' &&
-                                                        (kpiKeys.includes(key) || metadata[key].is_numeric !== false) &&
-                                                        !key.includes('comment')
-                                                    );
-
-                                                    let otherMetricTotal = 0;
-                                                    let otherMetricLabel = 'Доп. продажи';
-
-                                                    if (otherMetrics.length > 0) {
-                                                        otherMetrics.forEach(key => {
-                                                            otherMetricTotal += shifts.reduce((sum: number, s: any) => {
-                                                                const val = s.metrics?.[key];
-                                                                return sum + (typeof val === 'number' ? val : parseFloat(val || '0') || 0);
-                                                            }, 0);
-                                                        });
-
-                                                        if (otherMetrics.length === 1) {
-                                                            otherMetricLabel = metadata[otherMetrics[0]].label;
-                                                        }
-                                                    }
-
-                                                    const upsellEfficiency = totalHours > 0 ? otherMetricTotal / totalHours : 0;
-                                                    const upsellShare = totalRevenue > 0 ? (otherMetricTotal / totalRevenue) * 100 : 0;
-
-                                                    return (
-                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200 flex flex-col items-center shadow-sm">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Ср. эффективность</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5">
-                                                                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-                                                                    {totalHours > 0 ? formatCurrency(totalRevenue / totalHours) + '/ч' : '0 ₽/ч'}
-                                                                </span>
-                                                            </div>
-                                                            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200 flex flex-col items-center shadow-sm">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Доля {otherMetricLabel}</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5"><Percent className="h-3.5 w-3.5 text-purple-500" /> {upsellShare.toFixed(1)}%</span>
-                                                            </div>
-                                                            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200 flex flex-col items-center shadow-sm">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Эфф. {otherMetricLabel}</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 text-emerald-500" /> {formatCurrency(upsellEfficiency)}/ч</span>
-                                                            </div>
-                                                            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200 flex flex-col items-center shadow-sm">
-                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Бонусы смен</span>
-                                                                <span className="font-bold text-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5 text-purple-500" /> {formatCurrency(totalKpiBonus)}</span>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })()}
-
                                                 {/* Define identification again for the table below */}
                                                 {(() => {
                                                     const metadata = employee.metric_metadata || {};
@@ -1215,175 +1625,167 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         (employee.shifts || []).some((s: any) => (s.virtual_balance_earned || 0) > 0);
 
                                                     return (
-                                                        <div className="rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-sm mt-4">
-                                                            <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
-                                                                <table className="w-full text-[11px] md:text-xs">
-                                                                    <thead className="bg-slate-50 border-b border-slate-100">
-                                                                        <tr className="text-muted-foreground text-left whitespace-nowrap">
-                                                                            <th className="p-3 font-bold uppercase tracking-wider">Дата</th>
-                                                                            <th className="p-3 font-bold uppercase tracking-wider text-center">Часы</th>
-                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right">Выручка</th>
-                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right text-indigo-600">Эффект.</th>
-                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right text-emerald-600">KPI</th>
-                                                                            {hasVirtualBonuses && (
-                                                                                <th className="p-3 font-bold uppercase tracking-wider text-right text-purple-600">Бонусные</th>
-                                                                            )}
-                                                                            <th className="p-3 font-bold uppercase tracking-wider text-right text-blue-600">З/П</th>
-                                                                            <th className="p-3 font-bold uppercase tracking-wider text-center">Статус</th>
-                                                                            <th className="p-3"></th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody className="divide-y divide-slate-50">
-                                                                    {(Array.isArray(employee.shifts) ? employee.shifts : [])
-                                                                        .filter((s: any) => s.type !== 'PERIOD_BONUS')
-                                                                        .map((shift: any) => {
-                                                                            const sDate = new Date(shift.date);
-                                                                            const dayOfWeek = sDate.toLocaleDateString('ru-RU', { weekday: 'short' });
-                                                                            const hours = shift.hours || shift.total_hours || 0;
-                                                                            const revenue = shift.revenue || shift.total_revenue || 0;
-                                                                            const efficiency = hours > 0 ? revenue / hours : 0;
+                                                        <div className="space-y-3 mt-4">
+                                                            {(Array.isArray(employee.shifts) ? employee.shifts : [])
+                                                                .filter((s: any) => s.type !== 'PERIOD_BONUS')
+                                                                .map((shift: any) => {
+                                                                    const sDate = new Date(shift.date);
+                                                                    const dayOfWeek = sDate.toLocaleDateString('ru-RU', { weekday: 'short' });
+                                                                    const hours = shift.hours || shift.total_hours || 0;
+                                                                    const revenue = shift.revenue || shift.total_revenue || 0;
+                                                                    const isExpanded = isShiftExpanded(employee.id, shift.id)
 
-                                                                            return (
-                                                                                <tr key={shift.id} className="hover:bg-muted/40 transition-colors group">
-                                                                                    <td className="p-3">
-                                                                                        <div className="flex flex-col">
-                                                                                            <span className="font-bold">{sDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span>
-                                                                                            <span className="text-[10px] text-muted-foreground uppercase">{dayOfWeek}</span>
-                                                                                        </div>
-                                                                                    </td>
-                                                                                    <td className="p-3 text-center">
-                                                                                        <span className="inline-flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded font-medium">{hours} ч</span>
-                                                                                    </td>
-                                                                                    <td className="p-3 text-right">
-                                                                                        <div className="flex flex-col items-end">
-                                                                                            <span className="font-medium">{formatCurrency(revenue)}</span>
-                                                                                            {(() => {
-                                                                                                // Find primary KPI metric and its value
-                                                                                                const primaryKPI = (employee.period_bonuses || [])[0];
-                                                                                                if (primaryKPI && primaryKPI.metric_key !== 'total_revenue') {
-                                                                                                    const val = shift.metrics?.[primaryKPI.metric_key];
-                                                                                                    const numVal = typeof val === 'number' ? val : parseFloat(val || '0') || 0;
-                                                                                                    const label = metadata[primaryKPI.metric_key]?.label || primaryKPI.name || primaryKPI.metric_key;
-                                                                                                    
-                                                                                                    // Check if it's maintenance or tasks
-                                                                                                    const isMaintenance = primaryKPI.metric_key?.toLowerCase().includes('maintenance') || label.toLowerCase().includes('обслуживани');
-                                                                                                    
-                                                                                                    return (
-                                                                                                        <span className="text-[9px] text-muted-foreground font-bold">
-                                                                                                            {label}: {isMaintenance ? `${numVal} шт.` : formatCurrency(numVal)}
-                                                                                                        </span>
-                                                                                                    );
-                                                                                                }
-                                                                                                return null;
-                                                                                            })()}
-                                                                                        </div>
-                                                                                    </td>
-                                                                                    <td className="p-3 text-right">
-                                                                                        <div className="flex flex-col items-end">
-                                                                                            <span className={`text-[10px] font-bold ${efficiency > 1000 ? 'text-indigo-600' : 'text-muted-foreground'}`}>
-                                                                                                {formatCurrency(efficiency)}/ч
-                                                                                            </span>
-                                                                                            {(() => {
-                                                                                                const shiftOtherTotal = otherMetrics.reduce((sum, key) => {
-                                                                                                    const val = shift.metrics?.[key];
-                                                                                                    return sum + (typeof val === 'number' ? val : parseFloat(val || '0') || 0);
-                                                                                                }, 0);
+                                                                    const realBonuses = Array.isArray(shift.real_money_bonuses)
+                                                                        ? shift.real_money_bonuses
+                                                                        : (Array.isArray(shift.bonuses) ? shift.bonuses.filter((b: any) => b?.payout_type !== 'VIRTUAL_BALANCE') : [])
+                                                                    const virtualBonuses = Array.isArray(shift.virtual_bonuses) ? shift.virtual_bonuses : []
+                                                                    const deductions = Array.isArray(shift.deductions) ? shift.deductions : []
 
-                                                                                                if (shiftOtherTotal > 0 && revenue > 0 && otherMetrics.length > 0) {
-                                                                                                    return (
-                                                                                                        <span className="text-[8px] text-indigo-400 font-bold">
-                                                                                                            {((shiftOtherTotal / revenue) * 100).toFixed(0)}% доля {otherMetricLabel}
-                                                                                                        </span>
-                                                                                                    );
-                                                                                                }
-                                                                                                return null;
-                                                                                            })()}
-                                                                                        </div>
-                                                                                    </td>
-                                                                                    <td className="p-3 text-right">
-                                                                                        {shift.kpi_bonus > 0 ? (
-                                                                                            <div className="flex flex-col items-end">
-                                                                                                <span className="text-emerald-600 font-black">+{formatCurrency(shift.kpi_bonus)}</span>
-                                                                                                {shift.bonuses && shift.bonuses.length > 0 && (
-                                                                                                    <div className="flex flex-col items-end gap-0.5 mt-1 overflow-hidden">
-                                                                                                        {shift.bonuses.filter((b: any) => b.amount > 0).map((b: any, bi: number) => {
-                                                                                                            const sourceLabels: Record<string, string> = {
-                                                                                                                'total': 'Выручка',
-                                                                                                                'cash': 'Нал',
-                                                                                                                'card': 'Карта',
-                                                                                                                'revenue_bar': 'Бар',
-                                                                                                                'revenue_kitchen': 'Кухня'
-                                                                                                            };
-                                                                                                            const label = sourceLabels[b.source_key] || b.name || 'Бонус';
-                                                                                                            
-                                                                                                            // Special handling for maintenance bonuses (show monthly plan status)
-                                                                                                            const isMaintenance = b.name?.toLowerCase().includes('обслуживани') || b.source_key?.toLowerCase().includes('maintenance');
-                                                                                                            const displaySource = isMaintenance && employee.maintenance_status 
-                                                                                                                ? `${employee.maintenance_status.efficiency.toFixed(0)}% плана` 
-                                                                                                                : b.source_value ? formatCurrency(b.source_value) : null;
+                                                                    const bonusesSum = realBonuses.reduce((sum: number, b: any) => sum + (parseFloat(b.amount) || 0), 0)
+                                                                    const deductionsSum = deductions.reduce((sum: number, d: any) => sum + (parseFloat(d.amount) || 0), 0)
+                                                                    const baseSum = Number(shift.base_salary || 0)
+                                                                    const barDeduction = Number(shift.bar_deduction || 0)
 
-                                                                                                            return (
-                                                                                                                <span key={bi} className="text-[8px] text-muted-foreground leading-tight whitespace-nowrap bg-muted/30 px-1 rounded flex items-center gap-1">
-                                                                                                                    {label} {displaySource ? `(${displaySource})` : ''}
-                                                                                                                    <span className="font-bold text-emerald-600">+{formatCurrency(b.amount)}</span>
-                                                                                                                </span>
-                                                                                                            );
-                                                                                                        })}
-                                                                                                    </div>
-                                                                                                )}
+                                                                    const statusLabel = shift.status === 'PAID' || shift.is_paid ? 'Оплачено' : 'Ожидает'
+                                                                    const statusClass = shift.status === 'PAID' || shift.is_paid
+                                                                        ? 'bg-green-100 text-green-700 border border-green-200'
+                                                                        : 'bg-amber-50 text-amber-700 border border-amber-100'
+
+                                                                    return (
+                                                                        <div key={shift.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                                                                            <button
+                                                                                type="button"
+                                                                                className="w-full text-left p-4 hover:bg-slate-50 transition-colors"
+                                                                                onClick={() => toggleShiftDetail(employee.id, shift.id)}
+                                                                            >
+                                                                                <div className="flex items-start justify-between gap-4">
+                                                                                    <div className="min-w-0">
+                                                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                                                            <div className="text-sm font-black text-slate-900">
+                                                                                                {sDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
                                                                                             </div>
-                                                                                        ) : (
-                                                                                            <span className="text-muted-foreground/30">—</span>
-                                                                                        )}
-                                                                                    </td>
-                                                                                    {hasVirtualBonuses && (
-                                                                                        <td className="p-3 text-right">
-                                                                                            {shift.virtual_balance_earned > 0 ? (
-                                                                                                <div className="flex flex-col items-end">
-                                                                                                    <span className="text-purple-600 font-black">+{formatCurrency(shift.virtual_balance_earned)}</span>
-                                                                                                    {shift.virtual_bonuses && shift.virtual_bonuses.length > 0 && (
-                                                                                                        <div className="flex flex-col items-end gap-0.5 mt-1 overflow-hidden">
-                                                                                                            {shift.virtual_bonuses.map((b: any, bi: number) => (
-                                                                                                                <span key={bi} className="text-[8px] text-purple-600 leading-tight whitespace-nowrap bg-purple-50 dark:bg-purple-900/20 px-1 rounded">
-                                                                                                                    {b.name || b.type} <span className="font-bold">+{formatCurrency(b.amount)}</span>
-                                                                                                                </span>
-                                                                                                            ))}
-                                                                                                        </div>
-                                                                                                    )}
+                                                                                            <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                                                                                {dayOfWeek} • {shiftTypeLabel(shift.shift_type)}
+                                                                                            </div>
+                                                                                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight shadow-sm border ${statusClass}`}>
+                                                                                                {statusLabel}
+                                                                                            </span>
+                                                                                        </div>
+
+                                                                                        <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                                                                                            <span className="font-bold text-slate-900">{hours} ч</span>
+                                                                                            <span>Выручка: <span className="font-bold text-slate-900">{formatCurrency(revenue)}</span></span>
+                                                                                            {bonusesSum > 0 ? (
+                                                                                                <span>Бонусы: <span className="font-black text-emerald-700">+{formatCurrency(bonusesSum)}</span></span>
+                                                                                            ) : null}
+                                                                                            {barDeduction > 0 ? (
+                                                                                                <span>Бар: <span className="font-black text-rose-700">-{formatCurrency(barDeduction)}</span></span>
+                                                                                            ) : null}
+                                                                                        </div>
+                                                                                    </div>
+
+                                                                                    <div className="text-right shrink-0">
+                                                                                        <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Итого</div>
+                                                                                        <div className="text-xl font-black text-blue-600">{formatCurrency(shift.calculated_salary)}</div>
+                                                                                        <div className="mt-1 text-[10px] text-muted-foreground whitespace-nowrap">
+                                                                                            База {formatCurrency(baseSum)} • +{formatCurrency(bonusesSum)} • -{formatCurrency(deductionsSum)}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </button>
+
+                                                                            {isExpanded && (
+                                                                                <div className="border-t border-slate-200 p-4 bg-slate-50/30 space-y-4">
+                                                                                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                                                                        <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">Расчёт по шагам</div>
+                                                                                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                                                                                            {formatCurrency(baseSum)} + {formatCurrency(bonusesSum)} − {formatCurrency(deductionsSum)} = <span className="font-black text-blue-700">{formatCurrency(shift.calculated_salary)}</span>
+                                                                                        </div>
+                                                                                    </div>
+
+                                                                                    <div className="grid gap-4 lg:grid-cols-2">
+                                                                                        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                                                                                            <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">Выручка</div>
+                                                                                            <div className="grid grid-cols-3 gap-3">
+                                                                                                <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
+                                                                                                    <div className="text-[10px] text-muted-foreground font-bold uppercase">Итого</div>
+                                                                                                    <div className="text-sm font-black mt-1">{formatCurrency(shift.total_revenue || 0)}</div>
+                                                                                                </div>
+                                                                                                <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
+                                                                                                    <div className="text-[10px] text-muted-foreground font-bold uppercase">Нал</div>
+                                                                                                    <div className="text-sm font-black mt-1">{formatCurrency(shift.revenue_cash || 0)}</div>
+                                                                                                </div>
+                                                                                                <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3">
+                                                                                                    <div className="text-[10px] text-muted-foreground font-bold uppercase">Безнал</div>
+                                                                                                    <div className="text-sm font-black mt-1">{formatCurrency(shift.revenue_card || 0)}</div>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        </div>
+
+                                                                                        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                                                                                            <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">Бонусы</div>
+                                                                                            {realBonuses.length > 0 ? (
+                                                                                                <div className="space-y-2">
+                                                                                                    {realBonuses.map((b: any, bi: number) => {
+                                                                                                        const line = bonusExplainLine(b, shift)
+                                                                                                        return (
+                                                                                                            <div key={`${shift.id}-b-${bi}`} className="flex items-start justify-between gap-4">
+                                                                                                                <div className="min-w-0">
+                                                                                                                    <div className="text-sm font-bold text-slate-900 truncate">{b.name || b.type}</div>
+                                                                                                                    {line && (
+                                                                                                                        <div className="text-[11px] text-muted-foreground whitespace-normal break-words leading-snug">
+                                                                                                                            {line}
+                                                                                                                        </div>
+                                                                                                                    )}
+                                                                                                                </div>
+                                                                                                                <div className="text-sm font-black text-emerald-700 whitespace-nowrap">+{formatCurrency(b.amount || 0)}</div>
+                                                                                                            </div>
+                                                                                                        )
+                                                                                                    })}
                                                                                                 </div>
                                                                                             ) : (
-                                                                                                <span className="text-muted-foreground/30">—</span>
+                                                                                                <div className="text-xs text-muted-foreground italic">Бонусов нет</div>
                                                                                             )}
-                                                                                        </td>
-                                                                                    )}
-                                                                                    <td className="p-3 text-right font-black text-sm text-blue-600">{formatCurrency(shift.calculated_salary)}</td>
-                                                                                    <td className="p-3 text-center">
-                                                                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight shadow-sm ${shift.status === 'PAID' || shift.is_paid
-                                                                                            ? 'bg-green-100 text-green-700 border border-green-200'
-                                                                                            : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
-                                                                                            {shift.status === 'PAID' || shift.is_paid ? 'Оплачено' : 'Ожидает'}
-                                                                                        </span>
-                                                                                    </td>
-                                                                                    <td className="p-3 text-right">
-                                                                                        {(shift.status !== 'PAID' && !shift.is_paid) && (
-                                                                                            <Button
-                                                                                                variant="ghost"
-                                                                                                size="icon"
-                                                                                                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                                                onClick={(e) => { e.stopPropagation(); handleDeleteShift(shift.id); }}
-                                                                                            >
-                                                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                                                            </Button>
+
+                                                                                            {hasVirtualBonuses && virtualBonuses.length > 0 ? (
+                                                                                                <div className="pt-3 border-t border-slate-200">
+                                                                                                    <div className="text-[10px] font-black uppercase tracking-wider text-purple-600">Виртуальный баланс</div>
+                                                                                                    <div className="mt-2 space-y-1">
+                                                                                                        {virtualBonuses.map((b: any, bi: number) => (
+                                                                                                            <div key={`${shift.id}-vb-${bi}`} className="flex items-center justify-between gap-4 text-[11px]">
+                                                                                                                <div className="text-slate-700 truncate">{b.name || b.type}</div>
+                                                                                                                <div className="font-black text-purple-700 whitespace-nowrap">+{formatCurrency(b.amount || 0)}</div>
+                                                                                                            </div>
+                                                                                                        ))}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            ) : null}
+                                                                                        </div>
+                                                                                    </div>
+
+                                                                                    <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                                                                                        <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">Удержания (в том числе бар в счёт З/П)</div>
+                                                                                        {deductions.length > 0 ? (
+                                                                                            <div className="space-y-2">
+                                                                                                {deductions.map((d: any, di: number) => (
+                                                                                                    <div key={`${shift.id}-d-${di}`} className="flex items-center justify-between gap-4">
+                                                                                                        <div className="text-sm font-bold text-slate-900 truncate">{d.name}</div>
+                                                                                                        <div className="text-sm font-black text-rose-700 whitespace-nowrap">-{formatCurrency(d.amount || 0)}</div>
+                                                                                                    </div>
+                                                                                                ))}
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <div className="text-xs text-muted-foreground italic">Удержаний нет</div>
                                                                                         )}
-                                                                                    </td>
-                                                                                </tr>
-                                                                            );
-                                                                        })}
-                                                                </tbody>
-                                                                </table>
-                                                            </div>
-                                                            {(employee.shifts || []).length === 0 && (
-                                                                <div className="p-12 text-center bg-muted/5">
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+
+                                                            {(employee.shifts || []).filter((s: any) => s.type !== 'PERIOD_BONUS').length === 0 && (
+                                                                <div className="p-12 text-center bg-muted/5 rounded-2xl border border-slate-200">
                                                                     <Clock className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
                                                                     <p className="text-sm text-muted-foreground italic">Нет данных по сменам в этом периоде</p>
                                                                 </div>
@@ -1411,40 +1813,66 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                             <thead className="bg-slate-50 border-b border-slate-100">
                                                                 <tr className="text-muted-foreground text-left whitespace-nowrap">
                                                                     <th className="px-4 py-3 font-bold uppercase tracking-wider">Дата</th>
-                                                                    <th className="px-4 py-3 font-bold uppercase tracking-wider">Товар</th>
-                                                                    <th className="px-4 py-3 font-bold uppercase tracking-wider">Смена</th>
+                                                                    <th className="px-4 py-3 font-bold uppercase tracking-wider">Покупки</th>
                                                                     <th className="px-4 py-3 text-right font-bold uppercase tracking-wider">Сумма</th>
-                                                                    <th className="px-4 py-3 w-[50px]"></th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y divide-slate-50">
-                                                                {(employee.bar_details || [])
-                                                                    .map(item => (
-                                                                        <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
-                                                                            <td className="px-4 py-3 whitespace-nowrap font-medium">{new Date(item.date).toLocaleDateString('ru-RU')}</td>
+                                                                {(() => {
+                                                                    const list = Array.isArray(employee.bar_details) ? employee.bar_details : []
+                                                                    const groups = new Map<string, { key: string; date: number; items: any[]; total: number }>()
+
+                                                                    list.forEach((item: any) => {
+                                                                        const ts = new Date(item.date).getTime()
+                                                                        const byShift = item.shift_id ? `shift:${item.shift_id}` : `date:${new Date(item.date).toISOString().slice(0, 10)}`
+                                                                        const g = groups.get(byShift)
+                                                                        if (!g) {
+                                                                            groups.set(byShift, { key: byShift, date: ts, items: [item], total: Number(item.amount || 0) })
+                                                                            return
+                                                                        }
+                                                                        g.items.push(item)
+                                                                        g.total += Number(item.amount || 0)
+                                                                        if (ts > g.date) g.date = ts
+                                                                    })
+
+                                                                    const grouped = Array.from(groups.values()).sort((a, b) => b.date - a.date)
+
+                                                                    return grouped.map((g, gIdx) => (
+                                                                        <tr key={`${g.key}-${g.date}-${gIdx}`} className="hover:bg-slate-50 transition-colors">
+                                                                            <td className="px-4 py-3 whitespace-nowrap font-medium">
+                                                                                {new Date(g.date).toLocaleDateString('ru-RU')}
+                                                                            </td>
                                                                             <td className="px-4 py-3">
-                                                                                <span className="font-bold text-slate-900">{item.product_name}</span>
-                                                                                {item.quantity! > 1 && <span className="ml-1 text-muted-foreground">× {item.quantity}</span>}
+                                                                                <div className="space-y-1.5">
+                                                                                    {g.items.map((item: any, idx: number) => (
+                                                                                        <div key={`${item.id}-${idx}`} className="flex items-start justify-between gap-3">
+                                                                                            <div className="min-w-0">
+                                                                                                <span className="font-bold text-slate-900 break-words">{item.product_name}</span>
+                                                                                                {Number(item.quantity || 1) > 1 ? (
+                                                                                                    <span className="ml-1 text-muted-foreground">× {item.quantity}</span>
+                                                                                                ) : null}
+                                                                                            </div>
+                                                                                            <Button
+                                                                                                variant="ghost"
+                                                                                                size="icon"
+                                                                                                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                                                                onClick={(e) => { e.stopPropagation(); handleDeleteBarPurchase(item.id); }}
+                                                                                            >
+                                                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                                            </Button>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
                                                                             </td>
-                                                                            <td className="px-4 py-3 font-mono text-muted-foreground">
-                                                                                {item.shift_id ? `#${item.shift_id.slice(0, 8)}` : '—'}
-                                                                            </td>
-                                                                            <td className="px-4 py-3 text-right font-black text-rose-600">-{formatCurrency(item.amount)}</td>
-                                                                            <td className="px-4 py-3 text-right">
-                                                                                <Button
-                                                                                    variant="ghost"
-                                                                                    size="icon"
-                                                                                    className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-                                                                                    onClick={(e) => { e.stopPropagation(); handleDeleteBarPurchase(item.id); }}
-                                                                                >
-                                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                                </Button>
+                                                                            <td className="px-4 py-3 text-right font-black text-rose-600 whitespace-nowrap">
+                                                                                -{formatCurrency(g.total)}
                                                                             </td>
                                                                         </tr>
-                                                                    ))}
+                                                                    ))
+                                                                })()}
                                                                 {(!employee.bar_details || employee.bar_details.length === 0) && (
                                                                     <tr>
-                                                                        <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground italic bg-slate-50/20">
+                                                                        <td colSpan={3} className="px-4 py-12 text-center text-muted-foreground italic bg-slate-50/20">
                                                                             <p>В этом периоде покупок не было</p>
                                                                         </td>
                                                                     </tr>

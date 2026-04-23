@@ -188,13 +188,29 @@ export async function POST(
             }
         }
 
+        const jsDow = new Date(check_in).getDay()
+        const dayOfWeek =
+            jsDow === 0
+                ? 'SUN'
+                : jsDow === 1
+                    ? 'MON'
+                    : jsDow === 2
+                        ? 'TUE'
+                        : jsDow === 3
+                            ? 'WED'
+                            : jsDow === 4
+                                ? 'THU'
+                                : jsDow === 5
+                                    ? 'FRI'
+                                    : 'SAT'
+
         // Calculate Salary
         let calculatedSalary = 0;
         let salaryBreakdown = {};
 
         // Get assigned scheme
         const schemeRes = await query(
-            `SELECT ss.id, ss.name, sv.formula
+            `SELECT ss.id, ss.name, ss.standard_monthly_shifts, sv.formula
              FROM employee_salary_assignments esa
              JOIN salary_schemes ss ON esa.scheme_id = ss.id
              JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
@@ -209,8 +225,10 @@ export async function POST(
             const calculation = await calculateSalary({
                 id: 'new-manual-shift', // Placeholder ID
                 total_hours: Number(total_hours) || 0,
-                report_data: report_data || {}
-            }, scheme.formula, {
+                report_data: report_data || {},
+                shift_type: shiftType,
+                day_of_week: dayOfWeek
+            }, { ...(scheme.formula || {}), standard_monthly_shifts: scheme.standard_monthly_shifts }, {
                 total_revenue: (Number(cash_income) || 0) + (Number(card_income) || 0),
                 revenue_cash: Number(cash_income) || 0,
                 revenue_card: Number(card_income) || 0,

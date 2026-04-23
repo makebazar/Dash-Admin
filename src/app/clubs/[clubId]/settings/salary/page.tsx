@@ -71,6 +71,8 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                 const rankFrom = b.rank_from || 1
                 const rankTo = b.rank_to || rankFrom
                 parts.push({ label: b.name || 'Рейтинг', value: `${rankFrom}-${rankTo} место`, icon: Trophy })
+            } else if (b.type === 'personal_overplan') {
+                parts.push({ label: b.name || 'Личный бонус', value: 'план/смена', icon: ShieldAlert })
             }
         })
 
