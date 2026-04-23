@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef, type ComponentProps } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -166,6 +166,60 @@ const defaultFormula: Formula = {
     base: { type: 'hourly', amount: 0 },
     bonuses: [],
     conditions: { shift_type: 'any' }
+}
+
+type NumericInputProps = Omit<ComponentProps<typeof Input>, 'type' | 'value' | 'onChange'> & {
+    value: number
+    onValueChange: (value: number) => void
+    emptyValue?: number
+}
+
+function NumericInput({ value, onValueChange, emptyValue = 0, onBlur, onFocus, ...props }: NumericInputProps) {
+    const [raw, setRaw] = useState<string>(String(value ?? emptyValue))
+    const isEditing = useRef(false)
+
+    useEffect(() => {
+        if (isEditing.current) return
+        setRaw(String(value ?? emptyValue))
+    }, [emptyValue, value])
+
+    return (
+        <Input
+            {...props}
+            type="number"
+            value={raw}
+            onFocus={(e) => {
+                isEditing.current = true
+                onFocus?.(e)
+            }}
+            onBlur={(e) => {
+                isEditing.current = false
+                if (raw.trim() === "") {
+                    const normalized = emptyValue
+                    setRaw(String(normalized))
+                    onValueChange(normalized)
+                } else {
+                    const parsed = Number(raw)
+                    if (Number.isFinite(parsed)) {
+                        setRaw(String(parsed))
+                        onValueChange(parsed)
+                    } else {
+                        const normalized = emptyValue
+                        setRaw(String(normalized))
+                        onValueChange(normalized)
+                    }
+                }
+                onBlur?.(e)
+            }}
+            onChange={(e) => {
+                const nextRaw = e.target.value
+                setRaw(nextRaw)
+                if (nextRaw.trim() === "") return
+                const parsed = Number(nextRaw)
+                if (Number.isFinite(parsed)) onValueChange(parsed)
+            }}
+        />
+    )
 }
 
 interface ReportMetric {
@@ -499,7 +553,6 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             }
         })
 
-        if (formula.base.type === 'percent_revenue') keys.add('total_revenue')
         if (keys.size === 0) keys.add('total_revenue')
 
         return Array.from(keys)
@@ -626,7 +679,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             })
         }
         addBonuses(typicalBreakdown?.bonuses, templateCount)
-        special.forEach(s => addBonuses(s?.result?.breakdown?.bonuses, 1))
+        special.forEach((s: any) => addBonuses(s?.result?.breakdown?.bonuses, 1))
 
         const deductionMap = new Map<string, { name: string; amount: number }>()
         const addDeductions = (list: any[], multiplier: number) => {
@@ -640,7 +693,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             })
         }
         addDeductions(typicalBreakdown?.deductions, templateCount)
-        special.forEach(s => addDeductions(s?.result?.breakdown?.deductions, 1))
+        special.forEach((s: any) => addDeductions(s?.result?.breakdown?.deductions, 1))
 
         return {
             base: Math.round(base),
@@ -981,7 +1034,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             }
 
             if (bonus.type === 'maintenance_kpi') {
-                const isMonthlyTiers = bonus.reward_type === 'FIXED' || bonus.calculation_mode === 'MONTHLY' || bonus.calculation_mode === 'MONTHLY_TIERS'
+                const isMonthlyTiers = bonus.reward_type === 'FIXED' || bonus.calculation_mode === 'MONTHLY'
                 if (isMonthlyTiers) {
                     notes.push({ name, reason: 'Месячный KPI — не начисляется в смене' })
                     continue
@@ -1385,7 +1438,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                     <div className="space-y-2">
                                         <Label className="text-sm font-medium ml-1">Эталон смен</Label>
                                         <div className="flex items-center gap-3">
-                                            <Input type="number" value={standardMonthlyShifts} onChange={e => setStandardMonthlyShifts(parseInt(e.target.value) || 15)} className="h-11 w-24 rounded-xl bg-slate-50/50 text-center font-bold" />
+                                            <NumericInput value={standardMonthlyShifts} onValueChange={(v) => setStandardMonthlyShifts(Math.max(1, Math.trunc(v)))} emptyValue={15} className="h-11 w-24 rounded-xl bg-slate-50/50 text-center font-bold" />
                                             <span className="text-xs text-muted-foreground font-medium">смен в месяц (норма)</span>
                                         </div>
                                         <p className="text-xs text-muted-foreground ml-1">Используется для расчета KPI. Если сотрудник работает больше нормы — план растет.</p>
@@ -1424,12 +1477,12 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <div className="relative group">
                                                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-500"><Sun className="h-4 w-4" /></div>
-                                                                <Input type="number" value={formula.base.day_rate} onChange={e => updateBaseAmount('day_rate', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl border-slate-200 bg-white pl-10 pr-8 text-sm font-medium" />
+                                                                <NumericInput value={Number(formula.base.day_rate || 0)} onValueChange={(v) => updateBaseAmount('day_rate', v)} className="h-11 rounded-xl border-slate-200 bg-white pl-10 pr-8 text-sm font-medium" />
                                                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">₽</span>
                                                             </div>
                                                             <div className="relative group">
                                                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-500"><Moon className="h-4 w-4" /></div>
-                                                                <Input type="number" value={formula.base.night_rate} onChange={e => updateBaseAmount('night_rate', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl border-slate-200 bg-white pl-10 pr-8 text-sm font-medium" />
+                                                                <NumericInput value={Number(formula.base.night_rate || 0)} onValueChange={(v) => updateBaseAmount('night_rate', v)} className="h-11 rounded-xl border-slate-200 bg-white pl-10 pr-8 text-sm font-medium" />
                                                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">₽</span>
                                                             </div>
                                                         </div>
@@ -1440,7 +1493,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 ) : (
                                                     <div className="space-y-2">
                                                         <div className="relative group max-w-[160px]">
-                                                            <Input type="number" value={formula.base.amount} onChange={e => updateBaseAmount('amount', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl border-slate-200 bg-white pl-4 pr-8 text-sm font-medium" />
+                                                            <NumericInput value={Number(formula.base.amount || 0)} onValueChange={(v) => updateBaseAmount('amount', v)} className="h-11 rounded-xl border-slate-200 bg-white pl-4 pr-8 text-sm font-medium" />
                                                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">₽</span>
                                                         </div>
                                                         <p className="text-xs text-muted-foreground leading-snug">
@@ -1490,21 +1543,11 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                                     <div className="flex items-center gap-3 w-full">
                                                                                         <div className="flex-1">
                                                                                             <Label className="text-xs font-medium text-muted-foreground">От (₽)</Label>
-                                                                                            <Input
-                                                                                                type="number"
-                                                                                                value={t.from}
-                                                                                                onChange={e => updateBaseRateTier(idx, { from: parseFloat(e.target.value || '0') })}
-                                                                                                className="h-11 rounded-xl border-slate-200"
-                                                                                            />
+                                                                                            <NumericInput value={Number(t.from || 0)} onValueChange={(v) => updateBaseRateTier(idx, { from: v })} className="h-11 rounded-xl border-slate-200" />
                                                                                         </div>
                                                                                         <div className="flex-1">
                                                                                             <Label className="text-xs font-medium text-muted-foreground">Ставка (₽/ч)</Label>
-                                                                                            <Input
-                                                                                                type="number"
-                                                                                                value={t.rate}
-                                                                                                onChange={e => updateBaseRateTier(idx, { rate: parseFloat(e.target.value || '0') })}
-                                                                                                className="h-11 rounded-xl border-slate-200"
-                                                                                            />
+                                                                                            <NumericInput value={Number(t.rate || 0)} onValueChange={(v) => updateBaseRateTier(idx, { rate: v })} className="h-11 rounded-xl border-slate-200" />
                                                                                         </div>
                                                                                     </div>
                                                                                     <Button type="button" variant="outline" size="icon" className="h-11 w-11 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => removeBaseRateTier(idx)}>
@@ -1559,7 +1602,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                             <div className="flex items-center gap-3">
                                                                 <span className="text-sm font-medium">Полная смена от:</span>
                                                                 <div className="relative w-20">
-                                                                    <Input type="number" value={formula.base.full_shift_hours || 12} onChange={e => updateBaseAmount('full_shift_hours', parseFloat(e.target.value) || 12)} className="h-11 rounded-xl border-slate-200 text-center font-medium pr-6" />
+                                                                    <NumericInput value={Number(formula.base.full_shift_hours ?? 12)} onValueChange={(v) => updateBaseAmount('full_shift_hours', Math.max(0, v))} emptyValue={12} className="h-11 rounded-xl border-slate-200 text-center font-medium pr-6" />
                                                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">ч</span>
                                                                 </div>
                                                             </div>
@@ -1701,7 +1744,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                             {bonus.type === 'percent_revenue' && (
                                                                 <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                                                                     <div className="relative w-24">
-                                                                        <Input type="number" value={bonus.percent} onChange={e => updateBonus(index, 'percent', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl text-center font-medium text-lg border-slate-200" />
+                                                                        <NumericInput value={Number(bonus.percent ?? 0)} onValueChange={(v) => updateBonus(index, 'percent', v)} className="h-11 rounded-xl text-center font-medium text-lg border-slate-200" />
                                                                         <span className="absolute right-3 top-1/2 -translate-y-1/2 font-medium text-muted-foreground">%</span>
                                                                     </div>
                                                                     <span className="text-xs font-medium text-muted-foreground">от</span>
@@ -1726,7 +1769,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                     </Select>
                                                                 </div>
                                                             )}
-                                                            {bonus.type === 'fixed' && <div className="relative max-w-xs group"><Input type="number" value={bonus.amount} onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)} className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-6 pr-12 text-lg font-medium text-slate-700" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">₽</span></div>}
+                                                            {bonus.type === 'fixed' && <div className="relative max-w-xs group"><NumericInput value={Number(bonus.amount ?? 0)} onValueChange={(v) => updateBonus(index, 'amount', v)} className="h-11 rounded-xl border-slate-200 bg-slate-50 pl-6 pr-12 text-lg font-medium text-slate-700" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">₽</span></div>}
 
                                                             {bonus.type === 'personal_overplan' && (
                                                                 <div className="space-y-4">
@@ -1742,150 +1785,68 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                             </SelectContent>
                                                                         </Select>
                                                                     </div>
-                                                                    <div className="space-y-2">
-                                                                        <Label className="text-[10px] font-black uppercase text-muted-foreground">План на смену (по умолчанию)</Label>
-                                                                        <div className="relative">
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={bonus.plan_per_shift ?? 0}
-                                                                                onChange={e => updateBonus(index, 'plan_per_shift', parseFloat(e.target.value || '0') || 0)}
-                                                                                className="h-11 rounded-xl border-slate-200 bg-white pr-10 font-bold"
-                                                                            />
-                                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">₽</span>
-                                                                        </div>
-                                                                    </div>
 
                                                                     <div className="space-y-3 p-4 bg-slate-50/50 rounded-2xl border border-slate-200">
                                                                         <Label className="text-[10px] font-black uppercase text-slate-700">Планы по дням недели и сменам</Label>
                                                                         <div className="grid sm:grid-cols-2 gap-4">
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Пн (день)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.MON?.DAY ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), MON: { ...(bonus.plan_by_day_of_week?.MON || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.MON?.DAY ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), MON: { ...(bonus.plan_by_day_of_week?.MON || {}), DAY: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Пн (ночь)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.MON?.NIGHT ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), MON: { ...(bonus.plan_by_day_of_week?.MON || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.MON?.NIGHT ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), MON: { ...(bonus.plan_by_day_of_week?.MON || {}), NIGHT: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Вт (день)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.TUE?.DAY ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), TUE: { ...(bonus.plan_by_day_of_week?.TUE || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.TUE?.DAY ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), TUE: { ...(bonus.plan_by_day_of_week?.TUE || {}), DAY: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Вт (ночь)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.TUE?.NIGHT ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), TUE: { ...(bonus.plan_by_day_of_week?.TUE || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.TUE?.NIGHT ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), TUE: { ...(bonus.plan_by_day_of_week?.TUE || {}), NIGHT: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Ср (день)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.WED?.DAY ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), WED: { ...(bonus.plan_by_day_of_week?.WED || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.WED?.DAY ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), WED: { ...(bonus.plan_by_day_of_week?.WED || {}), DAY: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Ср (ночь)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.WED?.NIGHT ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), WED: { ...(bonus.plan_by_day_of_week?.WED || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.WED?.NIGHT ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), WED: { ...(bonus.plan_by_day_of_week?.WED || {}), NIGHT: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                         </div>
 
                                                                         <div className="grid sm:grid-cols-2 gap-4">
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Чт (день)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.THU?.DAY ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), THU: { ...(bonus.plan_by_day_of_week?.THU || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.THU?.DAY ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), THU: { ...(bonus.plan_by_day_of_week?.THU || {}), DAY: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Чт (ночь)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.THU?.NIGHT ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), THU: { ...(bonus.plan_by_day_of_week?.THU || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.THU?.NIGHT ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), THU: { ...(bonus.plan_by_day_of_week?.THU || {}), NIGHT: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Пт (день)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.FRI?.DAY ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), FRI: { ...(bonus.plan_by_day_of_week?.FRI || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.FRI?.DAY ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), FRI: { ...(bonus.plan_by_day_of_week?.FRI || {}), DAY: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Пт (ночь)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.FRI?.NIGHT ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), FRI: { ...(bonus.plan_by_day_of_week?.FRI || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.FRI?.NIGHT ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), FRI: { ...(bonus.plan_by_day_of_week?.FRI || {}), NIGHT: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Сб (день)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.SAT?.DAY ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SAT: { ...(bonus.plan_by_day_of_week?.SAT || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.SAT?.DAY ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SAT: { ...(bonus.plan_by_day_of_week?.SAT || {}), DAY: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Сб (ночь)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.SAT?.NIGHT ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SAT: { ...(bonus.plan_by_day_of_week?.SAT || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.SAT?.NIGHT ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SAT: { ...(bonus.plan_by_day_of_week?.SAT || {}), NIGHT: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Вс (день)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.SUN?.DAY ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SUN: { ...(bonus.plan_by_day_of_week?.SUN || {}), DAY: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.SUN?.DAY ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SUN: { ...(bonus.plan_by_day_of_week?.SUN || {}), DAY: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-[10px] font-black uppercase text-muted-foreground">Вс (ночь)</Label>
-                                                                                <Input
-                                                                                    type="number"
-                                                                                    value={bonus.plan_by_day_of_week?.SUN?.NIGHT ?? bonus.plan_per_shift ?? 0}
-                                                                                    onChange={e => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SUN: { ...(bonus.plan_by_day_of_week?.SUN || {}), NIGHT: parseFloat(e.target.value || '0') || 0 } })}
-                                                                                    className="h-11 rounded-xl border-slate-200 bg-white font-bold"
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.plan_by_day_of_week?.SUN?.NIGHT ?? bonus.plan_per_shift ?? 0)} onValueChange={(v) => updateBonus(index, 'plan_by_day_of_week', { ...(bonus.plan_by_day_of_week || {}), SUN: { ...(bonus.plan_by_day_of_week?.SUN || {}), NIGHT: v } })} className="h-11 rounded-xl border-slate-200 bg-white font-bold" />
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -1927,30 +1888,20 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                                     <div className="flex-1 bg-white border border-slate-200 rounded-xl p-2">
                                                                                         <div className="grid grid-cols-2 gap-2">
                                                                                             <div className="relative">
-                                                                                                <Input
-                                                                                                    type="number"
-                                                                                                    value={t.from_over_percent}
-                                                                                                    onChange={e => {
-                                                                                                        const next = [...(bonus.tiers || [])]
-                                                                                                        next[tIdx] = { ...t, from_over_percent: parseFloat(e.target.value || '0') || 0 }
-                                                                                                        next.sort((a, b) => (Number(a.from_over_percent) || 0) - (Number(b.from_over_percent) || 0))
-                                                                                                        updateBonus(index, 'tiers', next)
-                                                                                                    }}
-                                                                                                    className="h-10 rounded-lg text-center font-bold"
-                                                                                                />
+                                                                                                <NumericInput value={Number(t.from_over_percent || 0)} onValueChange={(v) => {
+                                                                                                    const next = [...(bonus.tiers || [])]
+                                                                                                    next[tIdx] = { ...t, from_over_percent: v }
+                                                                                                    next.sort((a, b) => (Number(a.from_over_percent) || 0) - (Number(b.from_over_percent) || 0))
+                                                                                                    updateBonus(index, 'tiers', next)
+                                                                                                }} className="h-10 rounded-lg text-center font-bold" />
                                                                                                 <span className="absolute left-2 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">Перевыполн. от %</span>
                                                                                             </div>
                                                                                             <div className="relative">
-                                                                                                <Input
-                                                                                                    type="number"
-                                                                                                    value={t.bonus_percent}
-                                                                                                    onChange={e => {
-                                                                                                        const next = [...(bonus.tiers || [])]
-                                                                                                        next[tIdx] = { ...t, bonus_percent: parseFloat(e.target.value || '0') || 0 }
-                                                                                                        updateBonus(index, 'tiers', next)
-                                                                                                    }}
-                                                                                                    className="h-10 rounded-lg text-center font-bold"
-                                                                                                />
+                                                                                                <NumericInput value={Number(t.bonus_percent || 0)} onValueChange={(v) => {
+                                                                                                    const next = [...(bonus.tiers || [])]
+                                                                                                    next[tIdx] = { ...t, bonus_percent: v }
+                                                                                                    updateBonus(index, 'tiers', next)
+                                                                                                }} className="h-10 rounded-lg text-center font-bold" />
                                                                                                 <span className="absolute left-2 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">Бонус %</span>
                                                                                             </div>
                                                                                         </div>
@@ -1981,30 +1932,15 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                 <div className="space-y-4">
                                                                     <div className="grid grid-cols-3 gap-4">
                                                                         <div className="relative">
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={bonus.rank_from ?? 1}
-                                                                                onChange={e => updateBonus(index, 'rank_from', Math.max(1, parseInt(e.target.value || '1', 10)))}
-                                                                                className="h-12 rounded-xl text-center font-black border-amber-200 bg-amber-50"
-                                                                            />
+                                                                            <NumericInput value={Number(bonus.rank_from ?? 1)} onValueChange={(v) => updateBonus(index, 'rank_from', Math.max(1, Math.trunc(v)))} emptyValue={1} className="h-12 rounded-xl text-center font-black border-amber-200 bg-amber-50" />
                                                                             <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">С места</span>
                                                                         </div>
                                                                         <div className="relative">
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={bonus.rank_to ?? bonus.rank_from ?? 1}
-                                                                                onChange={e => updateBonus(index, 'rank_to', Math.max(1, parseInt(e.target.value || '1', 10)))}
-                                                                                className="h-12 rounded-xl text-center font-black border-amber-200 bg-amber-50"
-                                                                            />
+                                                                            <NumericInput value={Number(bonus.rank_to ?? bonus.rank_from ?? 1)} onValueChange={(v) => updateBonus(index, 'rank_to', Math.max(1, Math.trunc(v)))} emptyValue={1} className="h-12 rounded-xl text-center font-black border-amber-200 bg-amber-50" />
                                                                             <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">По место</span>
                                                                         </div>
                                                                         <div className="relative">
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={bonus.amount ?? 0}
-                                                                                onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)}
-                                                                                className="h-12 rounded-xl text-center font-black border-amber-200 bg-white"
-                                                                            />
+                                                                            <NumericInput value={Number(bonus.amount ?? 0)} onValueChange={(v) => updateBonus(index, 'amount', v)} className="h-12 rounded-xl text-center font-black border-amber-200 bg-white" />
                                                                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-amber-500">₽</span>
                                                                             <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">Награда</span>
                                                                         </div>
@@ -2076,7 +2012,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                             <div key={tIdx} className="flex items-center gap-2 animate-in slide-in-from-left-2 duration-300">
                                                                                 <div className="flex-1 bg-muted/20 p-2 rounded-xl">
                                                                                     <div className="relative">
-                                                                                        <Input type="number" value={thresh.from} onChange={e => { const newT = [...bonus.thresholds!]; newT[tIdx] = { ...thresh, from: parseFloat(e.target.value) }; updateBonus(index, 'thresholds', newT); }} className="h-9 rounded-lg border-none text-xs font-bold" />
+                                                                                        <NumericInput value={Number(thresh.from || 0)} onValueChange={(v) => { const newT = [...bonus.thresholds!]; newT[tIdx] = { ...thresh, from: v }; updateBonus(index, 'thresholds', newT); }} className="h-9 rounded-lg border-none text-xs font-bold" />
                                                                                         <span className="absolute left-2 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">{bonus.mode === 'MONTH' ? 'От ₽ за месяц' : 'Порог (от ₽)'}</span>
                                                                                     </div>
                                                                                 </div>
@@ -2084,12 +2020,12 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                                 <div className="relative w-24">
                                                                                     {(!bonus.reward_type || bonus.reward_type === 'PERCENT') ? (
                                                                                         <>
-                                                                                            <Input type="number" value={thresh.percent} onChange={e => { const newT = [...bonus.thresholds!]; newT[tIdx] = { ...thresh, percent: parseFloat(e.target.value) }; updateBonus(index, 'thresholds', newT); }} className="h-9 rounded-xl border-emerald-200 bg-emerald-50 text-emerald-700 font-black text-xs text-center" />
+                                                                                            <NumericInput value={Number(thresh.percent || 0)} onValueChange={(v) => { const newT = [...bonus.thresholds!]; newT[tIdx] = { ...thresh, percent: v }; updateBonus(index, 'thresholds', newT); }} className="h-9 rounded-xl border-emerald-200 bg-emerald-50 text-emerald-700 font-black text-xs text-center" />
                                                                                             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-emerald-400">%</span>
                                                                                         </>
                                                                                     ) : (
                                                                                         <>
-                                                                                            <Input type="number" value={thresh.amount} onChange={e => { const newT = [...bonus.thresholds!]; newT[tIdx] = { ...thresh, amount: parseFloat(e.target.value) }; updateBonus(index, 'thresholds', newT); }} className="h-9 rounded-xl border-purple-200 bg-purple-50 text-purple-700 font-black text-xs text-center" />
+                                                                                            <NumericInput value={Number(thresh.amount || 0)} onValueChange={(v) => { const newT = [...bonus.thresholds!]; newT[tIdx] = { ...thresh, amount: v }; updateBonus(index, 'thresholds', newT); }} className="h-9 rounded-xl border-purple-200 bg-purple-50 text-purple-700 font-black text-xs text-center" />
                                                                                             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-purple-400">₽</span>
                                                                                         </>
                                                                                     )}
@@ -2129,13 +2065,13 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                                 <div key={thIdx} className="flex items-center gap-2 animate-in slide-in-from-left-2 duration-300">
                                                                                     <div className="flex-1 bg-muted/20 p-2 rounded-xl">
                                                                                         <div className="relative">
-                                                                                            <Input type="number" value={thresh.min_score} onChange={e => { const newT = [...(bonus.checklist_thresholds || [])]; newT[thIdx] = { ...thresh, min_score: parseFloat(e.target.value) || 0 }; updateBonus(index, 'checklist_thresholds', newT); }} className="h-9 rounded-lg border-none text-xs font-bold" />
+                                                                                            <NumericInput value={Number(thresh.min_score || 0)} onValueChange={(v) => { const newT = [...(bonus.checklist_thresholds || [])]; newT[thIdx] = { ...thresh, min_score: v }; updateBonus(index, 'checklist_thresholds', newT); }} className="h-9 rounded-lg border-none text-xs font-bold" />
                                                                                             <span className="absolute left-2 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">Оценка выше %</span>
                                                                                         </div>
                                                                                     </div>
                                                                                     <ArrowRight className="h-4 w-4 text-muted-foreground opacity-30" />
                                                                                     <div className="relative w-24">
-                                                                                        <Input type="number" value={thresh.amount} onChange={e => { const newT = [...(bonus.checklist_thresholds || [])]; newT[thIdx] = { ...thresh, amount: parseFloat(e.target.value) || 0 }; updateBonus(index, 'checklist_thresholds', newT); }} className="h-9 rounded-xl border-purple-200 bg-white font-black text-xs text-center" />
+                                                                                        <NumericInput value={Number(thresh.amount || 0)} onValueChange={(v) => { const newT = [...(bonus.checklist_thresholds || [])]; newT[thIdx] = { ...thresh, amount: v }; updateBonus(index, 'checklist_thresholds', newT); }} className="h-9 rounded-xl border-purple-200 bg-white font-black text-xs text-center" />
                                                                                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-purple-400">₽</span>
                                                                                     </div>
                                                                                     <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-400" onClick={() => { const newT = (bonus.checklist_thresholds || []).filter((_, i) => i !== thIdx); updateBonus(index, 'checklist_thresholds', newT); }}><Trash2 className="h-3 w-3" /></Button>
@@ -2176,12 +2112,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                         <div className="flex items-center gap-3">
                                                                             <span className="text-xs font-bold">Выплачивать</span>
                                                                             <div className="relative w-32">
-                                                                                <Input 
-                                                                                    type="number" 
-                                                                                    value={bonus.amount} 
-                                                                                    onChange={e => updateBonus(index, 'amount', parseFloat(e.target.value) || 0)} 
-                                                                                    className="h-10 rounded-xl pl-4 pr-10 font-black text-indigo-700 border-indigo-200 bg-white" 
-                                                                                />
+                                                                                <NumericInput value={Number(bonus.amount ?? 0)} onValueChange={(v) => updateBonus(index, 'amount', v)} className="h-10 rounded-xl pl-4 pr-10 font-black text-indigo-700 border-indigo-200 bg-white" />
                                                                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-black text-indigo-400">₽</span>
                                                                             </div>
                                                                             <span className="text-xs font-bold">за каждую задачу</span>
@@ -2196,26 +2127,21 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                                     <div key={thIdx} className="flex items-center gap-2 animate-in slide-in-from-left-2 duration-300">
                                                                                         <div className="flex-1 bg-muted/20 p-2 rounded-xl">
                                                                                             <div className="relative">
-                                                                                                <Input type="number" value={thresh.from_percent} onChange={e => {
-                                                                                                    const newT = [...bonus.efficiency_thresholds!];
-                                                                                                    newT[thIdx] = { ...thresh, from_percent: parseFloat(e.target.value) };
-                                                                                                    updateBonus(index, 'efficiency_thresholds', newT);
+                                                                                                <NumericInput value={Number(thresh.from_percent || 0)} onValueChange={(v) => {
+                                                                                                    const newT = [...bonus.efficiency_thresholds!]
+                                                                                                    newT[thIdx] = { ...thresh, from_percent: v }
+                                                                                                    updateBonus(index, 'efficiency_thresholds', newT)
                                                                                                 }} className="h-9 rounded-lg border-none text-xs font-bold" />
                                                                                                 <span className="absolute left-2 -top-2 bg-white px-1 text-[8px] font-black text-muted-foreground uppercase rounded">Выполнено {'>'} %</span>
                                                                                             </div>
                                                                                         </div>
                                                                                         <ArrowRight className="h-4 w-4 text-muted-foreground opacity-30" />
                                                                                         <div className="relative w-28">
-                                                                                            <Input 
-                                                                                                type="number" 
-                                                                                                value={thresh.amount} 
-                                                                                                onChange={e => {
-                                                                                                    const newT = [...bonus.efficiency_thresholds!];
-                                                                                                    newT[thIdx] = { ...thresh, amount: parseFloat(e.target.value) };
-                                                                                                    updateBonus(index, 'efficiency_thresholds', newT);
-                                                                                                }} 
-                                                                                                className="h-9 rounded-xl border-indigo-200 bg-indigo-50 text-indigo-700 font-black text-xs text-center" 
-                                                                                            />
+                                                                                            <NumericInput value={Number(thresh.amount || 0)} onValueChange={(v) => {
+                                                                                                const newT = [...bonus.efficiency_thresholds!]
+                                                                                                newT[thIdx] = { ...thresh, amount: v }
+                                                                                                updateBonus(index, 'efficiency_thresholds', newT)
+                                                                                            }} className="h-9 rounded-xl border-indigo-200 bg-indigo-50 text-indigo-700 font-black text-xs text-center" />
                                                                                             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-400">₽</span>
                                                                                         </div>
                                                                                         <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-400" onClick={() => updateBonus(index, 'efficiency_thresholds', bonus.efficiency_thresholds?.filter((_, i) => i !== thIdx))}><Trash2 className="h-3 w-3" /></Button>
@@ -2231,12 +2157,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                     <div className="text-[10px] font-black uppercase tracking-widest text-rose-600 mb-3">Штраф за просрочку обслуживания</div>
                                                                     <div className="grid gap-3 md:grid-cols-3">
                                                                         <div className="relative">
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={bonus.overdue_tolerance_days ?? 0}
-                                                                                onChange={e => updateBonus(index, 'overdue_tolerance_days', parseInt(e.target.value || '0', 10))}
-                                                                                className="h-10 rounded-xl"
-                                                                            />
+                                                                            <NumericInput value={Number(bonus.overdue_tolerance_days ?? 0)} onValueChange={(v) => updateBonus(index, 'overdue_tolerance_days', Math.max(0, Math.trunc(v)))} className="h-10 rounded-xl" />
                                                                             <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black uppercase text-muted-foreground rounded">Льготные дни</span>
                                                                         </div>
 
@@ -2259,12 +2180,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                         </div>
 
                                                                         <div className="relative">
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={bonus.overdue_penalty_amount ?? 0}
-                                                                                onChange={e => updateBonus(index, 'overdue_penalty_amount', parseFloat(e.target.value || '0'))}
-                                                                                className="h-10 rounded-xl"
-                                                                            />
+                                                                            <NumericInput value={Number(bonus.overdue_penalty_amount ?? 0)} onValueChange={(v) => updateBonus(index, 'overdue_penalty_amount', v)} className="h-10 rounded-xl" />
                                                                             <span className="absolute left-3 -top-2 bg-white px-1 text-[8px] font-black uppercase text-muted-foreground rounded">Размер штрафа</span>
                                                                         </div>
                                                                     </div>
@@ -2327,11 +2243,11 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                         <div className="grid sm:grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label className="text-sm font-medium">Часы в смене</Label>
-                                                <Input type="number" value={exampleHours} onChange={e => setExampleHours(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                <NumericInput value={Number(exampleHours || 0)} onValueChange={setExampleHours} className="h-11 rounded-xl" />
                                             </div>
                                             <div className="space-y-2">
                                                 <Label className="text-sm font-medium">Бар (в счёт зарплаты)</Label>
-                                                <Input type="number" value={exampleBarPurchases} onChange={e => setExampleBarPurchases(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                <NumericInput value={Number(exampleBarPurchases || 0)} onValueChange={setExampleBarPurchases} className="h-11 rounded-xl" />
                                             </div>
                                         </div>
 
@@ -2382,16 +2298,16 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 <div className="grid sm:grid-cols-2 gap-4">
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Наличные</Label>
-                                                        <Input type="number" value={exampleRevenueCash} onChange={e => setExampleRevenueCash(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                        <NumericInput value={Number(exampleRevenueCash || 0)} onValueChange={setExampleRevenueCash} className="h-11 rounded-xl" />
                                                     </div>
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Безнал</Label>
-                                                        <Input type="number" value={exampleRevenueCard} onChange={e => setExampleRevenueCard(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                        <NumericInput value={Number(exampleRevenueCard || 0)} onValueChange={setExampleRevenueCard} className="h-11 rounded-xl" />
                                                     </div>
                                                 </div>
                                             ) : (
                                                 <div className="space-y-2">
-                                                    <Input type="number" value={exampleShiftRevenue} onChange={e => setExampleShiftRevenue(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                    <NumericInput value={Number(exampleShiftRevenue || 0)} onValueChange={setExampleShiftRevenue} className="h-11 rounded-xl" />
                                                 </div>
                                             )}
 
@@ -2431,7 +2347,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 <div className="grid sm:grid-cols-2 gap-4">
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium">{examplePreviewMode === 'month' ? 'Смен в месяце (всего)' : 'Смен отработано за месяц'}</Label>
-                                                        <Input type="number" value={exampleMonthShiftsWorked} onChange={e => setExampleMonthShiftsWorked(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                        <NumericInput value={Number(exampleMonthShiftsWorked || 0)} onValueChange={setExampleMonthShiftsWorked} className="h-11 rounded-xl" />
                                                     </div>
                                                     {examplePreviewMode === 'month' ? (
                                                         <div className="space-y-2">
@@ -2442,7 +2358,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                         monthlyBonuses.some(b => b.type === 'leaderboard_rank') && (
                                                             <div className="space-y-2">
                                                                 <Label className="text-sm font-medium">Рейтинг сотрудника (место)</Label>
-                                                                <Input type="number" value={exampleMonthRank} onChange={e => setExampleMonthRank(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                                <NumericInput value={Number(exampleMonthRank || 0)} onValueChange={setExampleMonthRank} className="h-11 rounded-xl" />
                                                             </div>
                                                         )
                                                     )}
@@ -2451,7 +2367,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 {examplePreviewMode === 'month' && monthlyBonuses.some(b => b.type === 'leaderboard_rank') && (
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Рейтинг сотрудника (место)</Label>
-                                                        <Input type="number" value={exampleMonthRank} onChange={e => setExampleMonthRank(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                        <NumericInput value={Number(exampleMonthRank || 0)} onValueChange={setExampleMonthRank} className="h-11 rounded-xl" />
                                                     </div>
                                                 )}
 
@@ -2503,11 +2419,11 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                     <div className="grid sm:grid-cols-2 gap-4 mt-4">
                                                                         <div className="space-y-2">
                                                                             <Label className="text-sm font-medium">Часы</Label>
-                                                                            <Input type="number" value={s.hours} onChange={e => updateMonthSpecialShift(s.id, { hours: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                            <NumericInput value={Number(s.hours || 0)} onValueChange={(v) => updateMonthSpecialShift(s.id, { hours: v })} className="h-11 rounded-xl" />
                                                                         </div>
                                                                         <div className="space-y-2">
                                                                             <Label className="text-sm font-medium">Бар</Label>
-                                                                            <Input type="number" value={s.bar_purchases} onChange={e => updateMonthSpecialShift(s.id, { bar_purchases: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                            <NumericInput value={Number(s.bar_purchases || 0)} onValueChange={(v) => updateMonthSpecialShift(s.id, { bar_purchases: v })} className="h-11 rounded-xl" />
                                                                         </div>
                                                                     </div>
                                                                     <div className="mt-4 space-y-3">
@@ -2523,16 +2439,16 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                             <div className="grid sm:grid-cols-2 gap-4">
                                                                                 <div className="space-y-2">
                                                                                     <Label className="text-sm font-medium">Наличные</Label>
-                                                                                    <Input type="number" value={s.revenue_cash ?? 0} onChange={e => updateMonthSpecialShift(s.id, { revenue_cash: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                                    <NumericInput value={Number(s.revenue_cash ?? 0)} onValueChange={(v) => updateMonthSpecialShift(s.id, { revenue_cash: v })} className="h-11 rounded-xl" />
                                                                                 </div>
                                                                                 <div className="space-y-2">
                                                                                     <Label className="text-sm font-medium">Безнал</Label>
-                                                                                    <Input type="number" value={s.revenue_card ?? 0} onChange={e => updateMonthSpecialShift(s.id, { revenue_card: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                                    <NumericInput value={Number(s.revenue_card ?? 0)} onValueChange={(v) => updateMonthSpecialShift(s.id, { revenue_card: v })} className="h-11 rounded-xl" />
                                                                                 </div>
                                                                             </div>
                                                                         ) : (
                                                                             <div className="space-y-2">
-                                                                                <Input type="number" value={s.revenue} onChange={e => updateMonthSpecialShift(s.id, { revenue: parseFloat(e.target.value || '0') || 0 })} className="h-11 rounded-xl" />
+                                                                                <NumericInput value={Number(s.revenue || 0)} onValueChange={(v) => updateMonthSpecialShift(s.id, { revenue: v })} className="h-11 rounded-xl" />
                                                                             </div>
                                                                         )}
                                                                     </div>
@@ -2544,12 +2460,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                                 {shiftChecklistTemplateIds.map(tid => (
                                                                                     <div key={tid} className="space-y-2">
                                                                                         <Label className="text-sm font-medium">{checklistTemplateLabel(tid)}</Label>
-                                                                                        <Input
-                                                                                            type="number"
-                                                                                            value={(s.checklistScores || {})[String(tid)] ?? exampleChecklistScores[String(tid)] ?? 100}
-                                                                                            onChange={e => updateMonthSpecialShiftChecklistScore(s.id, tid, parseFloat(e.target.value || '0') || 0)}
-                                                                                            className="h-11 rounded-xl"
-                                                                                        />
+                                                                                        <NumericInput value={Number((s.checklistScores || {})[String(tid)] ?? exampleChecklistScores[String(tid)] ?? 100)} onValueChange={(v) => updateMonthSpecialShiftChecklistScore(s.id, tid, v)} className="h-11 rounded-xl" />
                                                                                     </div>
                                                                                 ))}
                                                                             </div>
@@ -2581,12 +2492,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                     return (
                                                                         <div key={k} className="space-y-2">
                                                                             <Label className="text-sm font-medium">{label}</Label>
-                                                                            <Input
-                                                                                type="number"
-                                                                                value={exampleMonthMetricOverrides[k] ?? 0}
-                                                                                onChange={e => setExampleMonthMetricOverrides(prev => ({ ...prev, [k]: parseFloat(e.target.value || '0') || 0 }))}
-                                                                                className="h-11 rounded-xl"
-                                                                            />
+                                                                            <NumericInput value={Number(exampleMonthMetricOverrides[k] ?? 0)} onValueChange={(v) => setExampleMonthMetricOverrides(prev => ({ ...prev, [k]: v }))} className="h-11 rounded-xl" />
                                                                         </div>
                                                                     )
                                                                 })}
@@ -2601,15 +2507,15 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                         <div className="grid sm:grid-cols-2 gap-4">
                                                             <div className="space-y-2">
                                                                 <Label className="text-sm font-medium">Сумма по задачам</Label>
-                                                                <Input type="number" value={exampleMaintenanceRawSum} onChange={e => setExampleMaintenanceRawSum(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                                <NumericInput value={Number(exampleMaintenanceRawSum || 0)} onValueChange={setExampleMaintenanceRawSum} className="h-11 rounded-xl" />
                                                             </div>
                                                             <div className="space-y-2">
                                                                 <Label className="text-sm font-medium">Задач выполнено</Label>
-                                                                <Input type="number" value={exampleMaintenanceTasksCompleted} onChange={e => setExampleMaintenanceTasksCompleted(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                                <NumericInput value={Number(exampleMaintenanceTasksCompleted || 0)} onValueChange={setExampleMaintenanceTasksCompleted} className="h-11 rounded-xl" />
                                                             </div>
                                                             <div className="space-y-2">
                                                                 <Label className="text-sm font-medium">Задач назначено</Label>
-                                                                <Input type="number" value={exampleMaintenanceTasksAssigned} onChange={e => setExampleMaintenanceTasksAssigned(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                                <NumericInput value={Number(exampleMaintenanceTasksAssigned || 0)} onValueChange={setExampleMaintenanceTasksAssigned} className="h-11 rounded-xl" />
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2633,12 +2539,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                 {templateIds.map(id => (
                                                                     <div key={id} className="space-y-2">
                                                                         <Label className="text-sm font-medium">{checklistTemplateLabel(id)}</Label>
-                                                                        <Input
-                                                                            type="number"
-                                                                            value={exampleMonthChecklistScores[String(id)] ?? 100}
-                                                                            onChange={e => setExampleMonthChecklistScores(prev => ({ ...prev, [String(id)]: parseFloat(e.target.value || '0') || 0 }))}
-                                                                            className="h-11 rounded-xl"
-                                                                        />
+                                                                        <NumericInput value={Number(exampleMonthChecklistScores[String(id)] ?? 100)} onValueChange={(v) => setExampleMonthChecklistScores(prev => ({ ...prev, [String(id)]: v }))} className="h-11 rounded-xl" />
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -2654,19 +2555,19 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 <div className="grid sm:grid-cols-2 gap-4">
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Сумма по задачам</Label>
-                                                        <Input type="number" value={exampleMaintenanceRawSum} onChange={e => setExampleMaintenanceRawSum(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                        <NumericInput value={Number(exampleMaintenanceRawSum || 0)} onValueChange={setExampleMaintenanceRawSum} className="h-11 rounded-xl" />
                                                     </div>
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Задач выполнено</Label>
-                                                        <Input type="number" value={exampleMaintenanceTasksCompleted} onChange={e => setExampleMaintenanceTasksCompleted(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                        <NumericInput value={Number(exampleMaintenanceTasksCompleted || 0)} onValueChange={setExampleMaintenanceTasksCompleted} className="h-11 rounded-xl" />
                                                     </div>
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Задач назначено</Label>
-                                                        <Input type="number" value={exampleMaintenanceTasksAssigned} onChange={e => setExampleMaintenanceTasksAssigned(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                        <NumericInput value={Number(exampleMaintenanceTasksAssigned || 0)} onValueChange={setExampleMaintenanceTasksAssigned} className="h-11 rounded-xl" />
                                                     </div>
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Штраф за просрочку</Label>
-                                                        <Input type="number" value={exampleMaintenancePenalty} onChange={e => setExampleMaintenancePenalty(parseFloat(e.target.value || '0') || 0)} className="h-11 rounded-xl" />
+                                                        <NumericInput value={Number(exampleMaintenancePenalty || 0)} onValueChange={setExampleMaintenancePenalty} className="h-11 rounded-xl" />
                                                     </div>
                                                 </div>
                                             </div>
@@ -2694,12 +2595,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                             return (
                                                                 <div key={k} className="space-y-2">
                                                                     <Label className="text-sm font-medium">{label}</Label>
-                                                                    <Input
-                                                                        type="number"
-                                                                        value={exampleMetricOverrides[k] ?? 0}
-                                                                        onChange={e => setExampleMetricOverrides(prev => ({ ...prev, [k]: parseFloat(e.target.value || '0') || 0 }))}
-                                                                        className="h-11 rounded-xl"
-                                                                    />
+                                                                    <NumericInput value={Number(exampleMetricOverrides[k] ?? 0)} onValueChange={(v) => setExampleMetricOverrides(prev => ({ ...prev, [k]: v }))} className="h-11 rounded-xl" />
                                                                 </div>
                                                             )
                                                         })}
@@ -2726,12 +2622,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                         {templateIds.map(id => (
                                                             <div key={id} className="space-y-2">
                                                                 <Label className="text-sm font-medium">{checklistTemplateLabel(id)}</Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    value={exampleChecklistScores[String(id)] ?? 100}
-                                                                    onChange={e => setExampleChecklistScores(prev => ({ ...prev, [String(id)]: parseFloat(e.target.value || '0') || 0 }))}
-                                                                    className="h-11 rounded-xl"
-                                                                />
+                                                                <NumericInput value={Number(exampleChecklistScores[String(id)] ?? 100)} onValueChange={(v) => setExampleChecklistScores(prev => ({ ...prev, [String(id)]: v }))} className="h-11 rounded-xl" />
                                                             </div>
                                                         ))}
                                                     </div>

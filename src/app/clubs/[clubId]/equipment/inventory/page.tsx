@@ -20,7 +20,10 @@ import {
     Box,
     Clock3,
     ChevronDown,
-    ChevronRight
+    ChevronRight,
+    Copy,
+    Check,
+    ChevronsUpDown
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -48,6 +51,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -165,6 +169,12 @@ export default function EquipmentInventory() {
     const [isImporting, setIsImporting] = useState(false)
     const [isImportExportDialogOpen, setIsImportExportDialogOpen] = useState(false)
     const importInputRef = useRef<HTMLInputElement | null>(null)
+    const [isCloneDialogOpen, setIsCloneDialogOpen] = useState(false)
+    const [cloneSourceWorkstationId, setCloneSourceWorkstationId] = useState<string>("")
+    const [cloneTargetWorkstationIds, setCloneTargetWorkstationIds] = useState<Set<string>>(new Set())
+    const [isCloneTargetsOpen, setIsCloneTargetsOpen] = useState(false)
+    const [cloneTargetsSearch, setCloneTargetsSearch] = useState("")
+    const [isCloning, setIsCloning] = useState(false)
 
     // Pagination (by places)
     const [page, setPage] = useState(1)
@@ -380,6 +390,113 @@ export default function EquipmentInventory() {
             items.forEach(item => newSet.add(item.id))
         }
         setSelectedIds(newSet)
+    }
+
+    const sortedWorkstations = useMemo(() => {
+        return [...workstations].sort((a, b) => a.name.localeCompare(b.name, "ru"))
+    }, [workstations])
+
+    const cloneTargetsLabel = useMemo(() => {
+        if (cloneTargetWorkstationIds.size === 0) return "Выберите места..."
+        if (cloneTargetWorkstationIds.size === 1) {
+            const id = Array.from(cloneTargetWorkstationIds)[0]
+            const ws = workstations.find((w) => w.id === id)
+            return ws ? ws.name : "1 место"
+        }
+        return `Выбрано мест: ${cloneTargetWorkstationIds.size}`
+    }, [cloneTargetWorkstationIds, workstations])
+
+    useEffect(() => {
+        if (!cloneSourceWorkstationId) return
+        setCloneTargetWorkstationIds((prev) => {
+            if (!prev.has(cloneSourceWorkstationId)) return prev
+            const next = new Set(prev)
+            next.delete(cloneSourceWorkstationId)
+            return next
+        })
+    }, [cloneSourceWorkstationId])
+
+    const openCloneDialog = () => {
+        setCloneSourceWorkstationId("")
+        setCloneTargetWorkstationIds(new Set())
+        setIsCloneTargetsOpen(false)
+        setCloneTargetsSearch("")
+        setIsCloneDialogOpen(true)
+    }
+
+    const toggleCloneTarget = (id: string) => {
+        setCloneTargetWorkstationIds((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    const handleCloneWorkstationInventory = async () => {
+        if (!cloneSourceWorkstationId || cloneTargetWorkstationIds.size === 0) {
+            alert("Выберите место-источник и места-цели")
+            return
+        }
+
+        setIsCloning(true)
+        try {
+            const targets = Array.from(cloneTargetWorkstationIds).filter((id) => id !== cloneSourceWorkstationId)
+            const dryRunRes = await fetch(`/api/clubs/${clubId}/equipment/clone-to-workstations`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    source_workstation_id: cloneSourceWorkstationId,
+                    target_workstation_ids: targets,
+                    dry_run: true
+                })
+            })
+
+            const dryRunData = await dryRunRes.json().catch(() => ({}))
+            if (!dryRunRes.ok) {
+                alert(dryRunData.error || "Не удалось подготовить копирование")
+                return
+            }
+
+            const lines: string[] = []
+            lines.push(`Источник: ${dryRunData.source?.name || ""}`)
+            lines.push(`Скопируем единиц: ${dryRunData.source?.items || 0}`)
+            lines.push(`Мест-целей: ${(dryRunData.targets || []).length}`)
+            lines.push("")
+            lines.push("Перед копированием места будут очищены: оборудование переместится на склад.")
+            lines.push("У новых единиц серийный номер будет пустым.")
+            lines.push("")
+            for (const t of dryRunData.targets || []) {
+                lines.push(`${t.name}: убрать ${t.existing_items || 0}, создать ${dryRunData.source?.items || 0}`)
+            }
+
+            const ok = confirm(lines.join("\n"))
+            if (!ok) return
+
+            const res = await fetch(`/api/clubs/${clubId}/equipment/clone-to-workstations`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    source_workstation_id: cloneSourceWorkstationId,
+                    target_workstation_ids: targets
+                })
+            })
+
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                alert(data.error || "Не удалось выполнить копирование")
+                return
+            }
+
+            alert(`Готово. Создано: ${data.created || 0}. Перемещено на склад: ${data.cleared || 0}.`)
+            setIsCloneDialogOpen(false)
+            fetchData()
+        } catch (error) {
+            console.error(error)
+            alert("Ошибка сервера")
+        } finally {
+            setIsCloning(false)
+        }
     }
 
     // --- Actions ---
@@ -797,8 +914,11 @@ export default function EquipmentInventory() {
                             className="hidden"
                             onChange={handleImportFile}
                         />
-                        <Button variant="outline" onClick={() => setIsImportExportDialogOpen(true)} className="w-full sm:w-auto rounded-xl h-11 px-6 font-medium">
-                            <Download className="mr-2 h-4 w-4" /> Импорт / Экспорт
+                        <Button variant="outline" size="icon" onClick={() => setIsImportExportDialogOpen(true)} className="rounded-xl h-11 w-11">
+                            <Download className="h-5 w-5" />
+                        </Button>
+                        <Button variant="outline" size="icon" onClick={openCloneDialog} className="rounded-xl h-11 w-11">
+                            <Copy className="h-5 w-5" />
                         </Button>
                         <Button onClick={handleCreate} className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 sm:w-auto rounded-xl h-11 px-6 font-medium">
                             <Plus className="mr-2 h-4 w-4" />
@@ -1430,6 +1550,102 @@ export default function EquipmentInventory() {
                     </Button>
                 </div>
             </div>
+
+            <Dialog open={isCloneDialogOpen} onOpenChange={setIsCloneDialogOpen}>
+                <DialogContent className="sm:max-w-[720px]">
+                    <DialogHeader>
+                        <DialogTitle>Копировать наполнение места</DialogTitle>
+                        <DialogDescription>
+                            Полностью заменяет оборудование в выбранных местах на копию набора из места-источника.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-5 pt-2">
+                        <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
+                            Перед копированием целевые места будут очищены: их оборудование переместится на склад.
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Место-источник</Label>
+                                <Select value={cloneSourceWorkstationId} onValueChange={setCloneSourceWorkstationId}>
+                                    <SelectTrigger className="h-12 md:h-12 bg-slate-50 hover:bg-slate-100 border-slate-200 shadow-sm">
+                                        <SelectValue placeholder="Выберите место" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {sortedWorkstations.map((ws) => (
+                                            <SelectItem key={ws.id} value={ws.id}>
+                                                {ws.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Места-цели</Label>
+                                <Popover open={isCloneTargetsOpen} onOpenChange={setIsCloneTargetsOpen}>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            role="combobox"
+                                            aria-expanded={isCloneTargetsOpen}
+                                            className="w-full justify-between h-12 md:h-12 px-3 py-2 bg-slate-50 hover:bg-slate-100 border-slate-200 font-normal shadow-sm"
+                                        >
+                                            {cloneTargetsLabel}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent portalled={false} className="w-[340px] p-0 z-[60]" align="start">
+                                        <div className="border-b p-2">
+                                            <Input
+                                                placeholder="Поиск места..."
+                                                className="h-10 bg-white border-slate-200"
+                                                value={cloneTargetsSearch}
+                                                onChange={(e) => setCloneTargetsSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="max-h-[300px] overflow-y-auto p-1">
+                                            {sortedWorkstations
+                                                .filter((ws) => ws.id !== cloneSourceWorkstationId)
+                                                .filter((ws) => ws.name.toLowerCase().includes(cloneTargetsSearch.trim().toLowerCase()))
+                                                .map((ws) => (
+                                                    <button
+                                                        key={ws.id}
+                                                        type="button"
+                                                        onClick={() => toggleCloneTarget(ws.id)}
+                                                        className="flex w-full items-center rounded-md px-2 py-2 text-sm text-slate-900 hover:bg-slate-50"
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                cloneTargetWorkstationIds.has(ws.id) ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        {ws.name}
+                                                    </button>
+                                                ))}
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button type="button" variant="ghost" onClick={() => setIsCloneDialogOpen(false)} disabled={isCloning}>
+                            Отмена
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={handleCloneWorkstationInventory}
+                            disabled={isCloning || !cloneSourceWorkstationId || cloneTargetWorkstationIds.size === 0}
+                            className="bg-slate-900 text-white hover:bg-slate-800"
+                        >
+                            {isCloning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
+                            Скопировать
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={isImportExportDialogOpen} onOpenChange={setIsImportExportDialogOpen}>
                 <DialogContent className="sm:max-w-[640px]">
