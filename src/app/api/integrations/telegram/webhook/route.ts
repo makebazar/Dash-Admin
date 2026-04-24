@@ -3,6 +3,7 @@ import { query } from "@/db"
 import { runAssistantAgent } from "@/lib/assistant/agent"
 
 type TelegramUpdate = {
+    update_id?: number
     message?: {
         message_id: number
         chat: { id: number | string }
@@ -144,13 +145,9 @@ export async function POST(request: NextRequest) {
     if (!text) return NextResponse.json({ ok: true })
 
     try {
-        setImmediate(() => {
-            handleTelegramText(chatId, text).catch((error) => {
-                console.error("Telegram webhook error:", error)
-            })
-        })
+        await handleTelegramText(chatId, text)
     } catch (error) {
-        console.error("Telegram webhook schedule error:", error)
+        console.error("Telegram webhook error:", error)
     }
 
     return NextResponse.json({ ok: true })
