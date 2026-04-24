@@ -64,34 +64,46 @@ export async function parseAssistantQueryWithOpenRouter(text: string, now: Date 
         const safeReferer = referer ? toByteStringHeaderValue(String(referer)) : null
         const safeTitle = title ? toByteStringHeaderValue(String(title)) : null
 
-        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-                ...(safeReferer ? { "HTTP-Referer": safeReferer } : {}),
-                ...(safeTitle ? { "X-Title": safeTitle } : {}),
-            },
-            body: JSON.stringify({
-                model,
-                temperature: 0,
-                messages: [
-                    {
-                        role: "system",
-                        content:
-                            "Ты маршрутизатор запросов владельца клуба. Верни только валидный JSON без markdown. " +
-                            "Формат: {\"type\":\"query\",\"intent\":\"revenue\"|\"payroll\",\"range_preset\":\"today\"|\"yesterday\"|\"last_7_days\"|\"this_week\"|\"this_month\"|\"last_month\", \"adminsOnly\":boolean}. " +
-                            "Если запрос неоднозначный по периоду или смыслу, верни {\"type\":\"clarify\",\"question\":\"...\"}. " +
-                            "Под 'adminsOnly' ставь true если пользователь явно просит про админов/администраторов.",
-                    },
-                    { role: "user", content: text },
-                ],
-                response_format: { type: "json_object" },
-            }),
-        })
-        if (!res.ok) return parseAssistantQuery(text, now)
-        const json = await res.json().catch(() => null)
-        content = typeof json?.choices?.[0]?.message?.content === "string" ? json.choices[0].message.content : null
+        const timeoutMs = Math.max(2000, Number(process.env.OPENROUTER_TIMEOUT_MS || 20000))
+        const maxAttempts = Math.max(1, Number(process.env.OPENROUTER_MAX_ATTEMPTS || 2))
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    "Content-Type": "application/json",
+                    ...(safeReferer ? { "HTTP-Referer": safeReferer } : {}),
+                    ...(safeTitle ? { "X-Title": safeTitle } : {}),
+                },
+                body: JSON.stringify({
+                    model,
+                    temperature: 0,
+                    messages: [
+                        {
+                            role: "system",
+                            content:
+                                "Ты маршрутизатор запросов владельца клуба. Верни только валидный JSON без markdown. " +
+                                "Формат: {\"type\":\"query\",\"intent\":\"revenue\"|\"payroll\",\"range_preset\":\"today\"|\"yesterday\"|\"last_7_days\"|\"this_week\"|\"this_month\"|\"last_month\", \"adminsOnly\":boolean}. " +
+                                "Если запрос неоднозначный по периоду или смыслу, верни {\"type\":\"clarify\",\"question\":\"...\"}. " +
+                                "Под 'adminsOnly' ставь true если пользователь явно просит про админов/администраторов.",
+                        },
+                        { role: "user", content: text },
+                    ],
+                    response_format: { type: "json_object" },
+                }),
+                signal: AbortSignal.timeout(timeoutMs),
+            })
+
+            if (!res.ok) {
+                if (attempt + 1 >= maxAttempts) return parseAssistantQuery(text, now)
+                continue
+            }
+
+            const json = await res.json().catch(() => null)
+            content = typeof json?.choices?.[0]?.message?.content === "string" ? json.choices[0].message.content : null
+            if (content) break
+        }
     } catch {
         return parseAssistantQuery(text, now)
     }

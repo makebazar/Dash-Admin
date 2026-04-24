@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/db"
-import { runAssistantQuery } from "@/lib/assistant/core"
+import { runAssistantAgent } from "@/lib/assistant/agent"
 
 type TelegramUpdate = {
     message?: {
@@ -117,7 +117,7 @@ async function handleTelegramText(chatId: string, text: string) {
         return
     }
 
-    const result = await runAssistantQuery(clubId, text, new Date())
+    const result = await runAssistantAgent(clubId, text, new Date())
     if (!result.ok) {
         void telegramSendMessage(chatId, result.question || result.error).catch(() => null)
         return

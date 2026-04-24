@@ -1,6 +1,7 @@
 import { query } from "@/db"
 import { parseAssistantQuery, type AssistantRange } from "@/lib/assistant/parse"
 import { parseAssistantQueryWithOpenRouter } from "@/lib/assistant/openrouter"
+import { getClubIncomeMetrics, getShiftExpenses, getShiftIncomeBreakdown } from "@/lib/assistant/income-metrics"
 
 export type AssistantResponse =
     | {
@@ -20,48 +21,52 @@ async function getRevenue(clubId: string, range: AssistantRange) {
     const startIso = range.start.toISOString()
     const endIso = range.end.toISOString()
 
-    const totalRes = await query(
-        `
-        SELECT
-            COALESCE(SUM(COALESCE(cash_income, 0) + COALESCE(card_income, 0)), 0) as revenue_total,
-            COALESCE(SUM(COALESCE(cash_income, 0)), 0) as revenue_cash,
-            COALESCE(SUM(COALESCE(card_income, 0)), 0) as revenue_card,
-            COALESCE(SUM(COALESCE(expenses, 0)), 0) as expenses_total,
-            COUNT(*)::int as shifts_count
-        FROM shifts
-        WHERE club_id = $1
-          AND check_in >= $2
-          AND check_in < $3
-          AND status NOT IN ('ACTIVE', 'CANCELLED')
-        `,
-        [clubId, startIso, endIso]
-    )
-
-    const byDayRes = await query(
+    const { metrics: incomeMetrics } = await getClubIncomeMetrics(clubId)
+    const shiftsRes = await query(
         `
         SELECT
             DATE(check_in) as day,
-            COALESCE(SUM(COALESCE(cash_income, 0) + COALESCE(card_income, 0)), 0) as revenue
+            cash_income,
+            card_income,
+            expenses,
+            report_data
         FROM shifts
         WHERE club_id = $1
           AND check_in >= $2
           AND check_in < $3
           AND status NOT IN ('ACTIVE', 'CANCELLED')
-        GROUP BY 1
-        ORDER BY 1
+        ORDER BY check_in ASC
         `,
         [clubId, startIso, endIso]
     )
 
-    const row = totalRes.rows[0] || {}
-    const revenueTotal = Number(row.revenue_total || 0)
-    const expensesTotal = Number(row.expenses_total || 0)
+    let expensesTotal = 0
+
+    const byDayMap = new Map<string, { day: string; revenue: number }>()
+    const totalsByKey = new Map<string, { key: string; label: string; amount: number }>()
+    shiftsRes.rows.forEach((s: any) => {
+        const income = getShiftIncomeBreakdown(s, incomeMetrics)
+        expensesTotal += getShiftExpenses(s)
+
+        const day = String(s.day)
+        const prev = byDayMap.get(day)
+        if (prev) prev.revenue += income.total
+        else byDayMap.set(day, { day, revenue: income.total })
+
+        income.items.forEach((it) => {
+            const prevIt = totalsByKey.get(it.key)
+            if (prevIt) prevIt.amount += it.amount
+            else totalsByKey.set(it.key, { key: it.key, label: it.label, amount: it.amount })
+        })
+    })
+
+    const revenueItems = Array.from(totalsByKey.values())
+    const revenueTotal = revenueItems.reduce((acc, it) => acc + it.amount, 0)
 
     return {
         revenue: {
             total: revenueTotal,
-            cash: Number(row.revenue_cash || 0),
-            card: Number(row.revenue_card || 0),
+            items: revenueItems,
         },
         expenses: {
             total: expensesTotal,
@@ -69,11 +74,8 @@ async function getRevenue(clubId: string, range: AssistantRange) {
         profit: {
             total: revenueTotal - expensesTotal,
         },
-        shifts_count: Number(row.shifts_count || 0),
-        by_day: byDayRes.rows.map((r: any) => ({
-            day: r.day,
-            revenue: Number(r.revenue || 0),
-        })),
+        shifts_count: Number(shiftsRes.rowCount || 0),
+        by_day: Array.from(byDayMap.values()),
     }
 }
 
@@ -148,14 +150,27 @@ export async function runAssistantQuery(clubId: string, text: string, now: Date 
 
     if (parsed.intent === "revenue") {
         const data = await getRevenue(clubId, parsed.range)
+        const items = Array.isArray((data as any).revenue?.items) ? (data as any).revenue.items : []
+        const parts = items
+            .filter((i: any) => Number(i?.amount || 0) > 0)
+            .sort((a: any, b: any) => {
+                const ak = String(a?.key || "")
+                const bk = String(b?.key || "")
+                if (ak === "cash_income") return -1
+                if (bk === "cash_income") return 1
+                if (ak === "card_income") return -1
+                if (bk === "card_income") return 1
+                return Number(b?.amount || 0) - Number(a?.amount || 0)
+            })
+            .map((i: any) => `${String(i?.label || i?.key)} ${formatRub(Number(i?.amount || 0))}`)
+
+        const breakdown = parts.length ? ` (${parts.join(" / ")})` : ""
         return {
             ok: true,
             intent: "revenue",
             range: { start: parsed.range.start.toISOString(), end: parsed.range.end.toISOString(), label: parsed.range.label },
             data,
-            message: `Выручка за ${parsed.range.label}: ${formatRub(data.revenue.total)} ₽ (нал ${formatRub(data.revenue.cash)} / безнал ${formatRub(
-                data.revenue.card
-            )}), смен: ${data.shifts_count}`,
+            message: `Выручка за ${parsed.range.label}: ${formatRub(data.revenue.total)} ₽${breakdown}, смен: ${data.shifts_count}`,
         }
     }
 
@@ -171,4 +186,3 @@ export async function runAssistantQuery(clubId: string, text: string, now: Date 
         }, смен: ${data.shifts_count}`,
     }
 }
-
