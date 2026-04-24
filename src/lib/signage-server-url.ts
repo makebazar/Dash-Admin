@@ -49,6 +49,11 @@ function isRetryableFetchError(error: unknown) {
   )
 }
 
+function getFetchErrorCode(error: unknown) {
+  const err = error as RetryableFetchError
+  return err?.cause?.code || null
+}
+
 async function fetchWithRetries(
   targetUrl: string,
   init: RequestInit,
@@ -58,18 +63,32 @@ async function fetchWithRetries(
 
   for (let attempt = 0; attempt <= options.retries; attempt++) {
     const controller = new AbortController()
+    const abortFromInit = () => controller.abort()
+    if (init.signal) {
+      if (init.signal.aborted) {
+        controller.abort()
+      } else {
+        init.signal.addEventListener("abort", abortFromInit, { once: true })
+      }
+    }
     const timer = setTimeout(() => controller.abort(), options.timeoutMs)
 
     try {
       return await fetch(targetUrl, { ...init, signal: controller.signal })
     } catch (error) {
       lastError = error
+      if (init.signal?.aborted) {
+        throw error
+      }
       if (attempt >= options.retries || !isRetryableFetchError(error)) {
         throw error
       }
       await sleep(150 * Math.pow(2, attempt))
     } finally {
       clearTimeout(timer)
+      if (init.signal && !init.signal.aborted) {
+        init.signal.removeEventListener("abort", abortFromInit)
+      }
     }
   }
 
@@ -89,6 +108,7 @@ export async function proxyJsonRequest(request: Request, targetUrl: string) {
         },
         body,
         cache: "no-store",
+        signal: request.signal,
       },
       { timeoutMs: 15000, retries: 2 }
     )
@@ -101,9 +121,13 @@ export async function proxyJsonRequest(request: Request, targetUrl: string) {
       },
     })
   } catch (error) {
-    console.error("Signage proxy JSON error:", error)
-    return new Response(JSON.stringify({ error: "Upstream request failed" }), {
-      status: 502,
+    const isTimeout = (error as Error)?.name === "AbortError" && !request.signal.aborted
+    const status = isTimeout ? 504 : 502
+    const code = getFetchErrorCode(error)
+    const message = (error as Error)?.message || String(error)
+    console.error("Signage proxy JSON error:", { status, code, message })
+    return new Response(JSON.stringify({ error: isTimeout ? "Upstream request timed out" : "Upstream request failed" }), {
+      status,
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
@@ -112,7 +136,7 @@ export async function proxyJsonRequest(request: Request, targetUrl: string) {
   }
 }
 
-export async function proxyEventStream(targetUrl: string) {
+export async function proxyEventStream(request: Request, targetUrl: string) {
   try {
     const response = await fetchWithRetries(
       targetUrl,
@@ -123,6 +147,7 @@ export async function proxyEventStream(targetUrl: string) {
           Accept: "text/event-stream",
           "Cache-Control": "no-cache",
         },
+        signal: request.signal,
       },
       { timeoutMs: 20000, retries: 2 }
     )
@@ -137,7 +162,12 @@ export async function proxyEventStream(targetUrl: string) {
       },
     })
   } catch (error) {
-    console.error("Signage proxy SSE error:", error)
+    if (request.signal.aborted) {
+      return new Response(null, { status: 204 })
+    }
+    const code = getFetchErrorCode(error)
+    const message = (error as Error)?.message || String(error)
+    console.error("Signage proxy SSE error:", { code, message })
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       start(controller) {

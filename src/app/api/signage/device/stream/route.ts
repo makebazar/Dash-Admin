@@ -11,7 +11,10 @@ export async function GET(request: Request) {
   const remoteBaseUrl = getSignageRemoteBaseUrl(request)
   if (remoteBaseUrl) {
     const requestUrl = new URL(request.url)
-    return await proxyEventStream(`${remoteBaseUrl}/api/signage/device/stream?${requestUrl.searchParams.toString()}`)
+    return await proxyEventStream(
+      request,
+      `${remoteBaseUrl}/api/signage/device/stream?${requestUrl.searchParams.toString()}`
+    )
   }
 
   const { searchParams } = new URL(request.url)
