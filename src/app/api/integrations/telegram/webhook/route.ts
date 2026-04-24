@@ -17,7 +17,7 @@ async function telegramSendMessage(chatId: string, text: string) {
     const token = process.env.TELEGRAM_BOT_TOKEN
     if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not set")
 
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -25,6 +25,17 @@ async function telegramSendMessage(chatId: string, text: string) {
             text,
         }),
     })
+
+    if (!res.ok) {
+        const body = await res.text().catch(() => "")
+        console.error("Telegram sendMessage failed:", res.status, body)
+        return
+    }
+
+    const json = await res.json().catch(() => null)
+    if (json && json.ok === false) {
+        console.error("Telegram sendMessage failed:", JSON.stringify(json))
+    }
 }
 
 async function bindChatByCode(code: string, chatId: string) {
