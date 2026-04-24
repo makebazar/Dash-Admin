@@ -568,13 +568,28 @@ export async function POST(
 
             if (activeTask) {
                 if (activeTask.status === 'PENDING') {
-                    await query(
-                        `UPDATE equipment_maintenance_tasks
-                         SET due_date = $2,
-                             assigned_user_id = $3
-                         WHERE id = $1`,
-                        [activeTask.id, finalDueDate, finalAssignedUserId]
-                    );
+                    const conflictRes = await query(
+                        `SELECT id
+                         FROM equipment_maintenance_tasks
+                         WHERE equipment_id = $1
+                           AND task_type = $2
+                           AND due_date = $3
+                           AND id <> $4
+                         LIMIT 1`,
+                        [eq.id, task_type, finalDueDate, activeTask.id]
+                    )
+
+                    if ((conflictRes.rowCount || 0) > 0) {
+                        await query(`DELETE FROM equipment_maintenance_tasks WHERE id = $1`, [activeTask.id])
+                    } else {
+                        await query(
+                            `UPDATE equipment_maintenance_tasks
+                             SET due_date = $2,
+                                 assigned_user_id = $3
+                             WHERE id = $1`,
+                            [activeTask.id, finalDueDate, finalAssignedUserId]
+                        );
+                    }
                 }
                 continue;
             }

@@ -9,6 +9,7 @@ import {
     Settings,
     Clock,
     DollarSign,
+    TrendingUp,
     Package,
     Wallet,
     ClipboardCheck,
@@ -82,6 +83,7 @@ export function ClubSidebarContent({ club, clubId, onLinkClick, isCollapsed = fa
     const mainLinks = [
         { href: `/clubs/${clubId}`, label: 'Дашборд', icon: <LayoutDashboard className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: hasPermission('view_dashboard') || isExpiredForOwnerUi },
         { href: `/clubs/${clubId}/shifts`, label: 'Смены', icon: <Clock className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_shifts') },
+        { href: `/clubs/${clubId}/sales-plan`, label: 'План продаж', icon: <TrendingUp className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_shifts') },
         { href: `/clubs/${clubId}/schedule`, label: 'График работы', icon: <Calendar className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_schedule') },
         { href: `/clubs/${clubId}/employees`, label: 'Сотрудники', icon: <Users className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('manage_employees') },
         { href: `/clubs/${clubId}/salaries`, label: 'Зарплаты', icon: <Wallet className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_salaries') },

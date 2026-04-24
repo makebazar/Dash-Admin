@@ -539,7 +539,7 @@ export async function getWarehouses(clubId: string) {
         let warehouseFilter = ""
         if (!scope.canManageInventory) {
             params.push(scope.allowedWarehouseIds)
-            warehouseFilter = " AND w.id = ANY($2)"
+            warehouseFilter = " AND w.id = ANY($2::int[])"
         }
 
         const res = await client.query(
@@ -641,7 +641,7 @@ async function getShiftAccountabilityWarehousesInternal(client: any, clubId: str
     let warehouseFilter = ""
     if (!scope.canManageInventory) {
         params.push(scope.allowedWarehouseIds)
-        warehouseFilter = " AND w.id = ANY($2)"
+        warehouseFilter = " AND w.id = ANY($2::int[])"
     }
 
     const res = await client.query(
@@ -1170,7 +1170,7 @@ async function getShiftZoneDiscrepancyReportInternal(client: any, clubId: string
         JOIN shift_zone_snapshot_items sii ON sii.snapshot_id = ss.id
         JOIN warehouse_products p ON p.id = sii.product_id
         WHERE ss.shift_id = $1
-          AND ss.warehouse_id = ANY($2)
+          AND ss.warehouse_id = ANY($2::int[])
         `,
         [shiftId, warehouseIds]
     )
@@ -1180,7 +1180,7 @@ async function getShiftZoneDiscrepancyReportInternal(client: any, clubId: string
             SELECT warehouse_id, product_id, change_amount, type, reason, created_at, user_id, shift_id, related_entity_type, related_entity_id
         FROM warehouse_stock_movements
         WHERE club_id = $1
-          AND warehouse_id = ANY($2)
+          AND warehouse_id = ANY($2::int[])
           AND created_at >= $3
           AND created_at <= $4
         `,
@@ -1463,7 +1463,7 @@ export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
                 ss.created_at
             FROM shift_zone_snapshots ss
             WHERE ss.club_id = $1
-              AND ss.shift_id = ANY($2)
+              AND ss.shift_id = ANY($2::uuid[])
             ORDER BY ss.created_at DESC
             `,
             [clubId, shiftIds]
@@ -2727,7 +2727,7 @@ async function assertProductsBelongToClub(db: { query: (sql: string, params?: an
     const unique = Array.from(new Set(productIds.filter((id) => Number.isFinite(id)))) as number[]
     if (unique.length === 0) return
     const res = await db.query(
-        'SELECT COUNT(*)::int as cnt FROM warehouse_products WHERE club_id = $1 AND id = ANY($2)',
+        'SELECT COUNT(*)::int as cnt FROM warehouse_products WHERE club_id = $1 AND id = ANY($2::int[])',
         [clubId, unique]
     )
     const cnt = Number(res.rows?.[0]?.cnt || 0)
@@ -2746,7 +2746,7 @@ async function syncProductsCurrentStock(client: any, clubId: string, productIds:
             WHERE ws.product_id = p.id
         )
         WHERE p.club_id = $1
-          AND p.id = ANY($2)
+          AND p.id = ANY($2::int[])
         `,
         [clubId, uniqueProductIds]
     )
@@ -3620,7 +3620,7 @@ async function resolveEmployeeDefaultWarehouseId(
          FROM warehouses
          WHERE club_id = $1
            AND is_active = true
-           AND id = ANY($2)
+           AND id = ANY($2::int[])
          ORDER BY is_default DESC, created_at ASC
          LIMIT 1`,
         [clubId, scope.allowedWarehouseIds]
@@ -3660,7 +3660,7 @@ async function resolvePosWarehouseIdForItems(
             FROM warehouses
             WHERE club_id = $1
               AND is_active = true
-              AND id = ANY($2)
+              AND id = ANY($2::int[])
               AND ($3::int IS NULL OR id = $3)
             ORDER BY CASE WHEN id = $3 THEN 0 ELSE 1 END, is_default DESC, created_at ASC
         `
@@ -3680,8 +3680,8 @@ async function resolvePosWarehouseIdForItems(
         `
         SELECT warehouse_id, product_id, quantity
         FROM warehouse_stock
-        WHERE warehouse_id = ANY($1)
-          AND product_id = ANY($2)
+        WHERE warehouse_id = ANY($1::int[])
+          AND product_id = ANY($2::int[])
         `,
         [warehouseIds, productIds]
     )
@@ -3707,7 +3707,7 @@ async function resolvePosWarehouseIdForItems(
         SELECT id, name
         FROM warehouse_products
         WHERE club_id = $1
-          AND id = ANY($2)
+          AND id = ANY($2::int[])
         `,
         [clubId, productIds]
     )
@@ -3791,7 +3791,7 @@ export async function createShiftReceipt(
             `
             SELECT id, cost_price, selling_price
             FROM warehouse_products
-            WHERE club_id = $1 AND id = ANY($2)
+            WHERE club_id = $1 AND id = ANY($2::int[])
             `,
             [clubId, productIds]
         )
@@ -4601,7 +4601,7 @@ export async function massAssignShiftToMovements(movementIds: number[], shiftId:
     await query(`
         UPDATE warehouse_stock_movements 
         SET shift_id = $1 
-        WHERE id = ANY($2) AND club_id = $3
+        WHERE id = ANY($2::int[]) AND club_id = $3
     `, [shiftId, movementIds, clubId])
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
@@ -4777,7 +4777,7 @@ export async function getProducts(clubId: string) {
     try {
         const userId = await requireClubAccess(clubId)
         const scope = await getInventoryAccessScope(client, clubId, userId)
-        const stockFilter = !scope.canManageInventory && scope.allowedWarehouseIds.length > 0 ? " AND ws.warehouse_id = ANY($2)" : ""
+        const stockFilter = !scope.canManageInventory && scope.allowedWarehouseIds.length > 0 ? " AND ws.warehouse_id = ANY($2::int[])" : ""
         const stockParams: any[] = [clubId]
         if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
             return []
@@ -5084,7 +5084,7 @@ export async function bulkUpdatePrices(ids: number[], clubId: string, type: 'fix
         await query(`
             UPDATE warehouse_products 
             SET selling_price = $1 
-            WHERE id = ANY($2) AND club_id = $3
+            WHERE id = ANY($2::int[]) AND club_id = $3
         `, [value, ids, clubId])
     } else {
         // Percent increase/decrease
@@ -5093,7 +5093,7 @@ export async function bulkUpdatePrices(ids: number[], clubId: string, type: 'fix
         await query(`
             UPDATE warehouse_products 
             SET selling_price = selling_price * (1 + $1::decimal / 100)
-            WHERE id = ANY($2) AND club_id = $3
+            WHERE id = ANY($2::int[]) AND club_id = $3
         `, [value, ids, clubId])
     }
     revalidatePath(`/clubs/${clubId}/inventory`)
@@ -5306,11 +5306,19 @@ export async function getSupplyItems(clubId: string, supplyId: number) {
     return res.rows as SupplyItem[]
 }
 
-export async function deleteSupply(supplyId: number, clubId: string, userId: string) {
-    await assertUserCanAccessClub(clubId, userId)
+export async function deleteSupply(supplyId: number, clubId: string, userId?: string) {
+    const sessionUserId = await requireClubAccess(clubId)
+    if (userId && userId !== sessionUserId) {
+        throw new Error("Недостаточно прав для выполнения операции")
+    }
+    const effectiveUserId = userId || sessionUserId
     const client = await import("@/db").then(m => m.getClient())
+    let usesStock = false
     try {
         await client.query('BEGIN')
+
+        const inventorySettings = await getClubInventorySettingsInternal(client, clubId)
+        usesStock = inventorySettings.stock_enabled
         
         const supplyRes = await client.query('SELECT * FROM warehouse_supplies WHERE id = $1 AND club_id = $2', [supplyId, clubId])
         if (supplyRes.rows.length === 0) throw new Error('Поставка не найдена')
@@ -5320,38 +5328,33 @@ export async function deleteSupply(supplyId: number, clubId: string, userId: str
             const itemsRes = await client.query('SELECT * FROM warehouse_supply_items WHERE supply_id = $1', [supplyId])
             const warehouseId = supply.warehouse_id
 
-            for (const item of itemsRes.rows) {
-                // Check for later inventories
-                const laterInvRes = await client.query(`
-                    SELECT id FROM warehouse_inventories 
-                    WHERE club_id = $1 AND status = 'CLOSED' AND closed_at > $2
-                    LIMIT 1
-                `, [clubId, supply.created_at])
+            const touchedProductIds = new Set<number>()
 
-                if (laterInvRes.rows.length === 0 && warehouseId) {
-                    await client.query(`
-                        UPDATE warehouse_stock 
-                        SET quantity = GREATEST(0, quantity - $1)
-                        WHERE warehouse_id = $2 AND product_id = $3
-                    `, [item.quantity, warehouseId, item.product_id])
-                    
-                    await client.query(`
-                        UPDATE warehouse_products
-                        SET current_stock = (SELECT COALESCE(SUM(quantity), 0) FROM warehouse_stock WHERE product_id = $1)
-                        WHERE id = $1 AND club_id = $2
-                    `, [item.product_id, clubId])
+            if (usesStock) {
+                if (!warehouseId) throw new Error("У поставки не указан склад")
+                await assertUserCanUseWarehouses(client, clubId, sessionUserId, [Number(warehouseId)])
+
+                for (const item of itemsRes.rows) {
+                    await applyWarehouseStockDelta(client, Number(warehouseId), Number(item.product_id), -Number(item.quantity))
+                    touchedProductIds.add(Number(item.product_id))
                 }
-                
-                // Delete movement
-                await client.query(`
-                    DELETE FROM warehouse_stock_movements 
-                    WHERE club_id = $1 AND related_entity_type = 'SUPPLY' AND related_entity_id = $2 AND product_id = $3
-                `, [clubId, supplyId, item.product_id])
+
+                await syncProductsCurrentStock(client, clubId, touchedProductIds)
             }
+
+            await client.query(
+                `
+                DELETE FROM warehouse_stock_movements
+                WHERE club_id = $1
+                  AND related_entity_type = 'SUPPLY'
+                  AND related_entity_id = $2
+                `,
+                [clubId, supplyId]
+            )
         }
         
         await client.query('DELETE FROM warehouse_supplies WHERE id = $1 AND club_id = $2', [supplyId, clubId])
-        await logOperation(clubId, userId, 'DELETE_SUPPLY', 'SUPPLY', supplyId)
+        await logOperation(clubId, effectiveUserId, 'DELETE_SUPPLY', 'SUPPLY', supplyId)
         
         await client.query('COMMIT')
     } catch (e) {
@@ -5361,6 +5364,10 @@ export async function deleteSupply(supplyId: number, clubId: string, userId: str
         client.release()
     }
     revalidatePath(`/clubs/${clubId}/inventory`)
+
+    if (usesStock) {
+        await checkReplenishmentNeeds(clubId)
+    }
 }
 
 export async function getProductPriceHistory(productId: number, clubId: string) {
@@ -5391,7 +5398,7 @@ export async function getInventories(clubId: string) {
         let warehouseFilter = ""
         if (!scope.canManageInventory) {
             params.push(scope.allowedWarehouseIds)
-            warehouseFilter = " AND i.warehouse_id = ANY($2)"
+            warehouseFilter = " AND i.warehouse_id = ANY($2::int[])"
         }
 
         const res = await client.query(
@@ -5625,7 +5632,7 @@ export async function createInventory(clubId: string, userId: string, targetMetr
                      FROM warehouses
                      WHERE club_id = $1
                        AND is_active = true
-                       AND id = ANY($2)
+                       AND id = ANY($2::int[])
                      ORDER BY is_default DESC, created_at ASC
                      LIMIT 1`,
                     [clubId, accessScope.allowedWarehouseIds]
@@ -6081,9 +6088,9 @@ export async function updateInventoryItem(itemId: number, actualStock: number | 
 
         await client.query(`
             UPDATE warehouse_inventory_items ii
-            SET actual_stock = $1,
-                counted_at = CASE WHEN $1 IS NULL THEN NULL ELSE NOW() END,
-                counted_by = CASE WHEN $1 IS NULL THEN NULL ELSE $4::uuid END
+            SET actual_stock = $1::int,
+                counted_at = CASE WHEN $1::int IS NULL THEN NULL ELSE NOW() END,
+                counted_by = CASE WHEN $1::int IS NULL THEN NULL ELSE $4::uuid END
             FROM warehouse_inventories i
             WHERE ii.id = $2 AND ii.inventory_id = i.id AND i.club_id = $3
         `, [normalizedActualStock, itemId, clubId, sessionUserId])
@@ -6119,9 +6126,9 @@ export async function bulkUpdateInventoryItems(items: { id: number, actual_stock
             }
             await client.query(`
                 UPDATE warehouse_inventory_items ii
-                SET actual_stock = $1,
-                    counted_at = CASE WHEN $1 IS NULL THEN NULL ELSE NOW() END,
-                    counted_by = CASE WHEN $1 IS NULL THEN NULL ELSE $4::uuid END
+                SET actual_stock = $1::int,
+                    counted_at = CASE WHEN $1::int IS NULL THEN NULL ELSE NOW() END,
+                    counted_by = CASE WHEN $1::int IS NULL THEN NULL ELSE $4::uuid END
                 FROM warehouse_inventories i
                 WHERE ii.id = $2 AND ii.inventory_id = i.id AND i.club_id = $3
             `, [normalizedActualStock, item.id, clubId, sessionUserId])
@@ -6446,7 +6453,7 @@ export async function getProduct(clubId: string, productId: number) {
     try {
         const userId = await requireClubAccess(clubId)
         const scope = await getInventoryAccessScope(client, clubId, userId)
-        const stockFilter = !scope.canManageInventory && scope.allowedWarehouseIds.length > 0 ? " AND ws.warehouse_id = ANY($2)" : ""
+        const stockFilter = !scope.canManageInventory && scope.allowedWarehouseIds.length > 0 ? " AND ws.warehouse_id = ANY($2::int[])" : ""
         const stockParams: any[] = [clubId, productId]
         if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
             return null

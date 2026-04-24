@@ -376,7 +376,7 @@ export function EmployeeSalesWizard({ clubId, userId, activeShiftId, onExit }: E
         } catch {
             return false
         }
-    }, [clubId, isInStock])
+    }, [addToCart, clubId, isInStock])
 
     const handleInputEnter = async () => {
         if (!activeShiftId) return

@@ -20,22 +20,22 @@ interface SupplyDetailsProps {
 export function SupplyDetailsClient({ clubId, supply, items }: SupplyDetailsProps) {
     const router = useRouter()
     const [isPending, startTransition] = useTransition()
-    const { confirmAction, showMessage } = useUiDialogs()
+    const { confirmAction, showMessage, Dialogs } = useUiDialogs()
 
     const handleDelete = async () => {
         const confirmed = await confirmAction({
             title: "Удаление поставки",
-            description: "Вы уверены? Это действие может изменить остатки на складе (если не было инвентаризации).",
+            description: "Вы уверены? Остатки товаров будут откатаны назад.",
             confirmText: "Удалить"
         })
         if (!confirmed) return
         
         startTransition(async () => {
             try {
-                await deleteSupply(supply.id, clubId, "SYSTEM") // Current user isn't strictly passed here, ideally we get from context, but server action handles it
+                await deleteSupply(supply.id, clubId)
                 router.push(`/clubs/${clubId}/inventory?tab=supplies`)
             } catch (e) {
-                showMessage({ title: "Ошибка", description: "Ошибка при удалении" })
+                showMessage({ title: "Ошибка", description: e instanceof Error ? e.message : "Ошибка при удалении" })
             }
         })
     }
@@ -183,6 +183,7 @@ export function SupplyDetailsClient({ clubId, supply, items }: SupplyDetailsProp
                     <Trash2 className="h-4 w-4 mr-2" /> Удалить
                 </Button>
             </div>
+            {Dialogs}
         </PageShell>
     )
 }
