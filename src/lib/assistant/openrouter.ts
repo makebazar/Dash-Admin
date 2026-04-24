@@ -14,6 +14,13 @@ function isObject(value: any): value is Record<string, any> {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
+function toByteStringHeaderValue(value: string) {
+    return value
+        .split("")
+        .filter((ch) => ch.charCodeAt(0) <= 255)
+        .join("")
+}
+
 function coerceLlmResult(value: any): LlmResult | null {
     if (!isObject(value)) return null
     const type = value.type
@@ -54,13 +61,16 @@ export async function parseAssistantQueryWithOpenRouter(text: string, now: Date 
 
     let content: string | null = null
     try {
+        const safeReferer = referer ? toByteStringHeaderValue(String(referer)) : null
+        const safeTitle = title ? toByteStringHeaderValue(String(title)) : null
+
         const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
                 Authorization: `Bearer ${apiKey}`,
                 "Content-Type": "application/json",
-                ...(referer ? { "HTTP-Referer": referer } : {}),
-                ...(title ? { "X-Title": title } : {}),
+                ...(safeReferer ? { "HTTP-Referer": safeReferer } : {}),
+                ...(safeTitle ? { "X-Title": safeTitle } : {}),
             },
             body: JSON.stringify({
                 model,
