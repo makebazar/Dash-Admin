@@ -208,14 +208,14 @@ export async function executeAssistantTool(clubId: string, tool: AssistantToolCa
         if (!metric) return { error: "Unknown metric_key" }
 
         const month = typeof tool.arguments.month === "number" ? tool.arguments.month : null
-        const year = typeof tool.arguments.year === "number" ? tool.arguments.year : null
+        const year = typeof tool.arguments.year === "number" ? tool.arguments.year : now.getFullYear()
         const preset = tool.arguments.range_preset || "this_month"
 
         let start: Date
         let end: Date
         let label: string
 
-        if (month && year) {
+        if (month) {
             start = new Date(year, month - 1, 1, 0, 0, 0, 0)
             end = new Date(year, month, 1, 0, 0, 0, 0)
             label = formatMonthLabel(month, year)
