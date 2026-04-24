@@ -53,6 +53,7 @@ function coerceToolCall(tool: ToolCallMessage): AssistantToolCall | null {
     if (!args || typeof args !== "object") return null
 
     if (name === "income_metrics") return { name, arguments: {} }
+    if (name === "metric_catalog") return { name, arguments: {} }
 
     const range_preset = String((args as any).range_preset || "")
     const adminsOnly = Boolean((args as any).adminsOnly)
@@ -93,6 +94,20 @@ function coerceToolCall(tool: ToolCallMessage): AssistantToolCall | null {
         return null
     }
 
+    if (name === "revenue_metric_stats" || name === "revenue_metric_by_day" || name === "compare_revenue_metric") {
+        if (!metric_key) return null
+        const m = typeof month === "number" ? month : null
+        const y = typeof year === "number" ? year : null
+        const monthOk = m == null || (Number.isInteger(m) && m >= 1 && m <= 12)
+        const yearOk = y == null || (Number.isInteger(y) && y >= 2000 && y <= 2100)
+        if (!monthOk || !yearOk) return null
+        const argsOut: any = { metric_key }
+        if (hasRange) argsOut.range_preset = range_preset
+        if (m != null) argsOut.month = m
+        if (y != null) argsOut.year = y
+        return { name: name as any, arguments: argsOut }
+    }
+
     return null
 }
 
@@ -116,9 +131,12 @@ export async function runAssistantAgent(clubId: string, text: string, now: Date 
             content:
                 "Ты карманный управляющий клуба. Ты умеешь считать выручку и начисления по зарплате по данным из системы. " +
                 "Ты НЕ придумываешь цифры. Если данных недостаточно — задаёшь короткий уточняющий вопрос. " +
-                "Если вопрос про конкретный канал дохода (например 'бар', 'сбп', 'наличные', 'карта') — используй income_metrics и затем revenue_metric. " +
-                "Если вопрос про месяц словами (например 'в апреле', 'за март 2026') — используй revenue_metric с month/year (январь=1, февраль=2, март=3, апрель=4, май=5, июнь=6, июль=7, август=8, сентябрь=9, октябрь=10, ноябрь=11, декабрь=12) и считай именно этот месяц, а не last_month. " +
-                "Используй tools, чтобы получить цифры. После получения цифр верни короткий ответ на русском. " +
+                "Формат ответа по умолчанию: 5–7 строк, без простыней. В первой строке — итог и период. Далее 2–4 строки: среднее/день, пик, минимум, смены. " +
+                "Не перечисляй все дни. По дням давай только если пользователь явно просит: 'по дням', 'покажи дни', 'детализация по дням'. " +
+                "Сравнение давай только если пользователь явно просит: 'сравни', 'по сравнению', 'динамика', 'vs'. " +
+                "Если вопрос про конкретный показатель (например 'бар', 'сбп', 'наличные', 'карта') — сначала получи metric_catalog (или income_metrics для доходов) и затем используй revenue_metric_stats или revenue_metric. " +
+                "Если вопрос про месяц словами (например 'в апреле', 'за март 2026') — используй month/year (январь=1, февраль=2, март=3, апрель=4, май=5, июнь=6, июль=7, август=8, сентябрь=9, октябрь=10, ноябрь=11, декабрь=12) и считай именно этот месяц. " +
+                "Используй tools, чтобы получить цифры. После получения цифр верни ответ на русском, без markdown-списков со звёздочками. " +
                 "Про админов: ставь adminsOnly=true только если в запросе явно есть 'админ'/'администратор'.",
         },
         { role: "user", content: text },

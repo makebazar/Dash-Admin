@@ -27,6 +27,24 @@ export async function maxSendMessage(chatId: string, text: string) {
     }
 }
 
+export async function maxSendChatAction(chatId: string, action: "typing_on" | "sending_photo" | "sending_video" | "sending_audio" | "sending_file") {
+    const token = process.env.MAX_BOT_TOKEN
+    if (!token) throw new Error("MAX_BOT_TOKEN is not set")
+
+    const res = await fetch(`${API_BASE}/chats/${encodeURIComponent(chatId)}/actions`, {
+        method: "POST",
+        headers: {
+            Authorization: token,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action }),
+    })
+
+    if (!res.ok) return
+    const json = await res.json().catch(() => null)
+    if (json && json.success === false) return
+}
+
 export async function maxSetWebhookSubscription(webhookUrl: string, secret: string) {
     const token = process.env.MAX_BOT_TOKEN
     if (!token) throw new Error("MAX_BOT_TOKEN is not set")
@@ -56,4 +74,3 @@ export async function maxSetWebhookSubscription(webhookUrl: string, secret: stri
 
     return json
 }
-

@@ -38,6 +38,20 @@ async function telegramSendMessage(chatId: string, text: string) {
     }
 }
 
+async function telegramSendChatAction(chatId: string, action: "typing") {
+    const token = process.env.TELEGRAM_BOT_TOKEN
+    if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not set")
+
+    await fetch(`https://api.telegram.org/bot${token}/sendChatAction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            chat_id: chatId,
+            action,
+        }),
+    }).catch(() => null)
+}
+
 async function bindChatByCode(code: string, chatId: string) {
     const linkRes = await query(
         `
@@ -129,6 +143,7 @@ async function handleTelegramText(chatId: string, text: string) {
         return
     }
 
+    void telegramSendChatAction(chatId, "typing").catch(() => null)
     const result = await runAssistantAgent(clubId, text, new Date())
     if (!result.ok) {
         void telegramSendMessage(chatId, result.question || result.error).catch(() => null)

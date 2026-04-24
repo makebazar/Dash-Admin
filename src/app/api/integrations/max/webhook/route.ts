@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { query } from "@/db"
 import { runAssistantAgent } from "@/lib/assistant/agent"
-import { maxSendMessage } from "@/lib/integrations/max/api"
+import { maxSendChatAction, maxSendMessage } from "@/lib/integrations/max/api"
 
 type MaxUpdate =
     | {
@@ -87,6 +87,8 @@ async function handleMessage(chatId: string, text: string) {
         return
     }
 
+    void maxSendChatAction(chatId, "typing_on").catch(() => null)
+
     const clubId = await findClubIdByChat(chatId)
     if (!clubId) {
         await maxSendMessage(chatId, "Чат не привязан к клубу. Открой DashAdmin → подключение MAX → получи ссылку и перейди по ней.")
@@ -150,4 +152,3 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true })
 }
-

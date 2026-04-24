@@ -93,10 +93,47 @@ export function getShiftIncomeBreakdown(
 }
 
 export function getShiftIncomeValue(shift: any, metricKey: string) {
+    return getShiftMetricValue(shift, metricKey)
+}
+
+export function getShiftMetricValue(shift: any, metricKey: string) {
     if (metricKey === "cash_income") return sanitizeNumber(shift?.cash_income)
     if (metricKey === "card_income") return sanitizeNumber(shift?.card_income)
     const reportData = parseReportData(shift?.report_data)
     return sanitizeNumber(reportData?.[metricKey])
+}
+
+export async function getClubMetricCatalog(clubId: string) {
+    const templateRes = await query(
+        `SELECT schema FROM club_report_templates
+         WHERE club_id = $1 AND is_active = true
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [clubId]
+    )
+
+    const schema = templateRes.rows[0]?.schema
+    const fields = normalizeFields(schema)
+
+    const fromTemplate = fields
+        .map((f) => {
+            const key = String(f.metric_key || f.key || "").trim()
+            const label = String(f.custom_label || f.label || f.metric_key || f.key || "").trim()
+            return { key, label }
+        })
+        .filter((m) => Boolean(m.key))
+
+    const defaults = [
+        { key: "cash_income", label: "Наличные" },
+        { key: "card_income", label: "Карта" },
+    ]
+
+    const unique = new Map<string, { key: string; label: string }>()
+    for (const m of [...defaults, ...fromTemplate]) {
+        if (!unique.has(m.key)) unique.set(m.key, m)
+    }
+
+    return { metrics: Array.from(unique.values()), hasTemplate: Boolean(templateRes.rowCount) }
 }
 
 export function getShiftExpenses(shift: any) {
