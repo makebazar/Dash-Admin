@@ -79,6 +79,53 @@ async function findClubIdByChat(chatId: string) {
     return String(res.rows[0].club_id)
 }
 
+async function handleTelegramText(chatId: string, text: string) {
+    if (!text) return
+
+    const normalized = text.trim().toLowerCase()
+    if (normalized === "привет" || normalized === "hello" || normalized === "hi") {
+        void telegramSendMessage(
+            chatId,
+            "Привет. Спроси, например: \"выручка за последнюю неделю\" или \"сколько по зарплате за этот месяц\"."
+        ).catch(() => null)
+        return
+    }
+
+    if (text.startsWith("/start")) {
+        const parts = text.split(" ").map((s) => s.trim()).filter(Boolean)
+        const code = parts[1] || ""
+        if (!code) {
+            void telegramSendMessage(chatId, "Пришли ссылку из DashAdmin: /start <code>").catch(() => null)
+            return
+        }
+
+        const bind = await bindChatByCode(code, chatId)
+        if (!bind.ok) {
+            void telegramSendMessage(chatId, bind.error).catch(() => null)
+            return
+        }
+
+        void telegramSendMessage(chatId, "Ок, чат подключён. Пиши вопросы про выручку или зарплату.").catch(() => null)
+        return
+    }
+
+    const clubId = await findClubIdByChat(chatId)
+    if (!clubId) {
+        void telegramSendMessage(chatId, "Чат не привязан к клубу. Открой DashAdmin → подключение Telegram → получи ссылку.").catch(
+            () => null
+        )
+        return
+    }
+
+    const result = await runAssistantQuery(clubId, text, new Date())
+    if (!result.ok) {
+        void telegramSendMessage(chatId, result.question || result.error).catch(() => null)
+        return
+    }
+
+    void telegramSendMessage(chatId, result.message).catch(() => null)
+}
+
 export async function POST(request: NextRequest) {
     const secret = process.env.TELEGRAM_WEBHOOK_SECRET
     if (secret) {
@@ -97,41 +144,14 @@ export async function POST(request: NextRequest) {
     if (!text) return NextResponse.json({ ok: true })
 
     try {
-        if (text.startsWith("/start")) {
-            const parts = text.split(" ").map((s) => s.trim()).filter(Boolean)
-            const code = parts[1] || ""
-            if (!code) {
-                await telegramSendMessage(chatId, "Пришли ссылку из DashAdmin: /start <code>")
-                return NextResponse.json({ ok: true })
-            }
-
-            const bind = await bindChatByCode(code, chatId)
-            if (!bind.ok) {
-                await telegramSendMessage(chatId, bind.error)
-                return NextResponse.json({ ok: true })
-            }
-
-            await telegramSendMessage(chatId, "Ок, чат подключён. Пиши вопросы про выручку или зарплату.")
-            return NextResponse.json({ ok: true })
-        }
-
-        const clubId = await findClubIdByChat(chatId)
-        if (!clubId) {
-            await telegramSendMessage(chatId, "Чат не привязан к клубу. Открой DashAdmin → подключение Telegram → получи ссылку.")
-            return NextResponse.json({ ok: true })
-        }
-
-        const result = await runAssistantQuery(clubId, text, new Date())
-        if (!result.ok) {
-            await telegramSendMessage(chatId, result.question || result.error)
-            return NextResponse.json({ ok: true })
-        }
-
-        await telegramSendMessage(chatId, result.message)
-        return NextResponse.json({ ok: true })
+        setImmediate(() => {
+            handleTelegramText(chatId, text).catch((error) => {
+                console.error("Telegram webhook error:", error)
+            })
+        })
     } catch (error) {
-        console.error("Telegram webhook error:", error)
-        return NextResponse.json({ ok: true })
+        console.error("Telegram webhook schedule error:", error)
     }
-}
 
+    return NextResponse.json({ ok: true })
+}
