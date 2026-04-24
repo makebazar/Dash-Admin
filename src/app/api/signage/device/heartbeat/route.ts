@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   try {
     const remoteBaseUrl = getSignageRemoteBaseUrl(request)
     if (remoteBaseUrl) {
-      return proxyJsonRequest(request, `${remoteBaseUrl}/api/signage/device/heartbeat`)
+      return await proxyJsonRequest(request, `${remoteBaseUrl}/api/signage/device/heartbeat`)
     }
 
     const body = await request.json()
