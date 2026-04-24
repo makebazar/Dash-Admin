@@ -33,6 +33,7 @@ export type Product = {
     selling_price: number
     current_stock: number
     min_stock_level: number
+    deleted_at?: string | null
     // Legacy fields (kept for type compatibility but deprecated)
     front_stock?: number
     back_stock?: number
@@ -4772,13 +4773,18 @@ export async function createWriteOff(clubId: string, userId: string, data: { ite
     }
 }
 
-export async function getProducts(clubId: string) {
+export async function getProducts(clubId: string, opts?: { includeArchived?: boolean, onlyArchived?: boolean }) {
     const client = await import("@/db").then(m => m.getClient())
     try {
         const userId = await requireClubAccess(clubId)
         const scope = await getInventoryAccessScope(client, clubId, userId)
         const stockFilter = !scope.canManageInventory && scope.allowedWarehouseIds.length > 0 ? " AND ws.warehouse_id = ANY($2::int[])" : ""
         const stockParams: any[] = [clubId]
+        const archiveCondition = opts?.onlyArchived
+            ? " AND p.deleted_at IS NOT NULL"
+            : opts?.includeArchived
+                ? ""
+                : " AND p.deleted_at IS NULL"
         if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
             return []
         }
@@ -4818,7 +4824,7 @@ export async function getProducts(clubId: string) {
             ) as price_history
             FROM warehouse_products p 
             LEFT JOIN warehouse_categories c ON p.category_id = c.id 
-            WHERE p.club_id = $1 
+            WHERE p.club_id = $1${archiveCondition}
             ORDER BY CASE WHEN p.abc_category IS NULL THEN 4 WHEN p.abc_category = 'A' THEN 1 WHEN p.abc_category = 'B' THEN 2 ELSE 3 END, p.name
         `, stockParams)
         
@@ -5071,9 +5077,162 @@ export async function getProductHistory(clubId: string, productId: number) {
     return res.rows
 }
 
+export async function getProductDeletionStatus(clubId: string, productId: number) {
+    await requireClubAccess(clubId)
+    const res = await query(`
+        SELECT
+            EXISTS(
+                SELECT 1
+                FROM warehouse_supply_items si
+                JOIN warehouse_supplies s ON s.id = si.supply_id
+                WHERE s.club_id = $1 AND si.product_id = $2
+            ) AS has_supplies,
+            EXISTS(
+                SELECT 1
+                FROM warehouse_inventory_items ii
+                JOIN warehouse_inventories i ON i.id = ii.inventory_id
+                WHERE i.club_id = $1 AND ii.product_id = $2
+            ) AS has_inventories,
+            EXISTS(
+                SELECT 1
+                FROM inventory_post_close_corrections pc
+                JOIN warehouse_inventories i ON i.id = pc.inventory_id
+                WHERE i.club_id = $1 AND pc.product_id = $2
+            ) AS has_post_close_corrections,
+            EXISTS(
+                SELECT 1
+                FROM shift_zone_snapshot_items szi
+                JOIN shift_zone_snapshots sz ON sz.id = szi.snapshot_id
+                WHERE sz.club_id = $1 AND szi.product_id = $2
+            ) AS has_shift_snapshots,
+            EXISTS(
+                SELECT 1
+                FROM warehouse_stock_movements m
+                WHERE m.club_id = $1 AND m.product_id = $2
+            ) AS has_movements,
+            EXISTS(
+                SELECT 1
+                FROM warehouse_stock ws
+                JOIN warehouses w ON w.id = ws.warehouse_id
+                WHERE w.club_id = $1 AND ws.product_id = $2
+            ) AS has_stock
+    `, [clubId, productId])
+
+    const row = res.rows[0] || {}
+    const hasAny = Boolean(row.has_supplies || row.has_inventories || row.has_post_close_corrections || row.has_shift_snapshots || row.has_movements || row.has_stock)
+
+    return { ...row, can_hard_delete: !hasAny } as {
+        has_supplies: boolean
+        has_inventories: boolean
+        has_post_close_corrections: boolean
+        has_shift_snapshots: boolean
+        has_movements: boolean
+        has_stock: boolean
+        can_hard_delete: boolean
+    }
+}
+
+export async function archiveProduct(id: number, clubId: string) {
+    await requireClubAccess(clubId)
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        const stockRes = await client.query(`
+            SELECT COALESCE(SUM(ws.quantity), 0) as total
+            FROM warehouse_stock ws
+            JOIN warehouses w ON w.id = ws.warehouse_id
+            WHERE ws.product_id = $1 AND w.club_id = $2
+        `, [id, clubId])
+        const total = Number(stockRes.rows[0]?.total) || 0
+        if (total > 0) {
+            throw new Error(`Нельзя архивировать товар с остатком ${total}. Сначала доведите остатки до 0.`)
+        }
+
+        await client.query(`
+            UPDATE warehouse_products
+            SET deleted_at = NOW(), is_active = false
+            WHERE id = $1 AND club_id = $2 AND deleted_at IS NULL
+        `, [id, clubId])
+
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
+    revalidatePath(`/clubs/${clubId}/inventory`)
+    revalidatePath(`/clubs/${clubId}/inventory/products/${id}`)
+}
+
+export async function restoreProduct(id: number, clubId: string) {
+    await requireClubAccess(clubId)
+    await query(`
+        UPDATE warehouse_products
+        SET deleted_at = NULL, is_active = true
+        WHERE id = $1 AND club_id = $2
+    `, [id, clubId])
+    revalidatePath(`/clubs/${clubId}/inventory`)
+    revalidatePath(`/clubs/${clubId}/inventory/products/${id}`)
+}
+
 export async function deleteProduct(id: number, clubId: string) {
     await requireClubAccess(clubId)
-    await query(`DELETE FROM warehouse_products WHERE id = $1 AND club_id = $2`, [id, clubId])
+    const client = await import("@/db").then(m => m.getClient())
+    try {
+        await client.query('BEGIN')
+        const status = await client.query(`
+            SELECT
+                EXISTS(
+                    SELECT 1
+                    FROM warehouse_supply_items si
+                    JOIN warehouse_supplies s ON s.id = si.supply_id
+                    WHERE s.club_id = $1 AND si.product_id = $2
+                ) AS has_supplies,
+                EXISTS(
+                    SELECT 1
+                    FROM warehouse_inventory_items ii
+                    JOIN warehouse_inventories i ON i.id = ii.inventory_id
+                    WHERE i.club_id = $1 AND ii.product_id = $2
+                ) AS has_inventories,
+                EXISTS(
+                    SELECT 1
+                    FROM inventory_post_close_corrections pc
+                    JOIN warehouse_inventories i ON i.id = pc.inventory_id
+                    WHERE i.club_id = $1 AND pc.product_id = $2
+                ) AS has_post_close_corrections,
+                EXISTS(
+                    SELECT 1
+                    FROM shift_zone_snapshot_items szi
+                    JOIN shift_zone_snapshots sz ON sz.id = szi.snapshot_id
+                    WHERE sz.club_id = $1 AND szi.product_id = $2
+                ) AS has_shift_snapshots,
+                EXISTS(
+                    SELECT 1
+                    FROM warehouse_stock_movements m
+                    WHERE m.club_id = $1 AND m.product_id = $2
+                ) AS has_movements,
+                EXISTS(
+                    SELECT 1
+                    FROM warehouse_stock ws
+                    JOIN warehouses w ON w.id = ws.warehouse_id
+                    WHERE w.club_id = $1 AND ws.product_id = $2
+                ) AS has_stock
+        `, [clubId, id])
+        const row = status.rows[0] || {}
+        const hasAny = Boolean(row.has_supplies || row.has_inventories || row.has_post_close_corrections || row.has_shift_snapshots || row.has_movements || row.has_stock)
+        if (hasAny) {
+            throw new Error("Нельзя удалить товар: есть история или остатки. Используйте архив.")
+        }
+
+        await client.query(`DELETE FROM warehouse_products WHERE id = $1 AND club_id = $2`, [id, clubId])
+        await client.query('COMMIT')
+    } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+    } finally {
+        client.release()
+    }
     revalidatePath(`/clubs/${clubId}/inventory`)
 }
 

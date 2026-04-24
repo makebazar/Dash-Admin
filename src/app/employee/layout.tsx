@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
-import { Zap, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X, Crown, ClipboardCheck, Monitor, BookOpen, Headphones } from "lucide-react"
+import { Zap, LogOut, User, LayoutDashboard, Calendar, Brush, Clock, Menu, X, Crown, ClipboardCheck, Monitor, BookOpen, Headphones, Gamepad2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -193,6 +193,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                                             { href: `/employee/clubs/${club.id}/schedule`, icon: Calendar, label: "График смен" },
                                             { href: `/employee/clubs/${club.id}/equipment`, icon: Monitor, label: "Рабочие места" },
                                             { href: `/employee/clubs/${club.id}/tasks`, icon: Brush, label: "Обслуживание" },
+                                            { href: `/employee/clubs/${club.id}/calibration`, icon: Gamepad2, label: "Калибровка" },
                                             { href: `/employee/clubs/${club.id}/history`, icon: Clock, label: "История смен" },
                                             { href: `/employee/clubs/${club.id}/evaluations`, icon: ClipboardCheck, label: "Проверки" },
                                             { href: `/employee/clubs/${club.id}/kb`, icon: BookOpen, label: "База знаний" },

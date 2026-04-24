@@ -1,6 +1,6 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { getProduct, getCategories, getWarehouses, getProductHistory, getReplenishmentRulesForProduct, getClubSettings } from "../../actions"
+import { getProduct, getCategories, getWarehouses, getProductHistory, getReplenishmentRulesForProduct, getClubSettings, getProductDeletionStatus } from "../../actions"
 import { ProductDetailsClient } from "./ProductDetailsClient"
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ clubId: string, productId: string }> }) {
@@ -13,6 +13,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     let product = null
     let history = []
     let rules: any[] = []
+    let deletionStatus: any = null
     
     if (!isNew) {
         product = await getProduct(clubId, Number(productId))
@@ -21,6 +22,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         }
         history = await getProductHistory(clubId, Number(productId))
         rules = await getReplenishmentRulesForProduct(clubId, Number(productId))
+        deletionStatus = await getProductDeletionStatus(clubId, Number(productId))
     }
 
     const [categories, warehouses, clubSettings] = await Promise.all([
@@ -40,6 +42,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             history={history}
             rules={rules}
             clubSettings={clubSettings}
+            deletionStatus={deletionStatus}
         />
     )
 }

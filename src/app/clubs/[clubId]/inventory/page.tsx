@@ -30,7 +30,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
     }
 
     const [products, categories, supplies, inventories, warehouses, tasks, procurementLists, suppliers, clubSettings, sales, shifts, shiftZoneOverview] = await Promise.all([
-        getProducts(clubId),
+        getProducts(clubId, { includeArchived: true }),
         getCategories(clubId),
         getSupplies(clubId),
         getInventories(clubId),

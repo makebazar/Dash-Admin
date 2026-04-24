@@ -345,9 +345,14 @@ CREATE TABLE IF NOT EXISTS warehouse_products (
     selling_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
     current_stock INTEGER NOT NULL DEFAULT 0,
     is_active BOOLEAN DEFAULT TRUE,
+    deleted_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_warehouse_products_club ON warehouse_products(club_id);
+
+ALTER TABLE warehouse_products
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_warehouse_products_deleted_at ON warehouse_products(club_id, deleted_at);
 
 -- SUPPLIES (INCOMING STOCK)
 CREATE TABLE IF NOT EXISTS warehouse_supplies (

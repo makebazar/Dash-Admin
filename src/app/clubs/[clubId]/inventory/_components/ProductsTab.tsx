@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, ReplenishmentRule, Warehouse, PriceTagSettings } from "../actions"
+import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, ReplenishmentRule, Warehouse, PriceTagSettings, archiveProduct, restoreProduct } from "../actions"
 import { PageToolbar, ToolbarGroup, SearchInput } from "@/components/layout/PageShell"
 import { useParams, useRouter } from "next/navigation"
 import { format } from "date-fns"
@@ -37,6 +37,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
     
     const [search, setSearch] = useState("")
     const [categoryFilter, setCategoryFilter] = useState("all")
+    const [productsView, setProductsView] = useState<"active" | "archived">("active")
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
     const [isPrintDialogOpen, setIsPrintDialogOpen] = useState(false)
 
@@ -102,12 +103,13 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
 
     // Filter Logic
     const filteredProducts = products.filter(p => {
+        const matchesArchive = productsView === "archived" ? Boolean(p.deleted_at) : !p.deleted_at
         const matchesSearch = 
             p.name.toLowerCase().includes(search.toLowerCase()) || 
             (p.barcode && p.barcode.includes(search)) ||
             (p.barcodes && p.barcodes.some(b => b.includes(search)))
         const matchesCategory = categoryFilter === "all" || (p.category_id?.toString() === categoryFilter)
-        return matchesSearch && matchesCategory
+        return matchesArchive && matchesSearch && matchesCategory
     })
 
     const displayedProducts = useMemo(() => {
@@ -316,7 +318,49 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
         })
         if (!confirmed) return
         startTransition(async () => {
-            await deleteProduct(id, clubId)
+            try {
+                await deleteProduct(id, clubId)
+                router.refresh()
+                setSelectedIds(new Set())
+            } catch (err: any) {
+                showMessage({ title: "Ошибка", description: err.message || "Не удалось удалить" })
+            }
+        })
+    }
+
+    const handleArchive = async (id: number) => {
+        const confirmed = await confirmAction({
+            title: "Архивация товара",
+            description: "Скрыть товар из списка? История сохранится.",
+            confirmText: "Архивировать"
+        })
+        if (!confirmed) return
+        startTransition(async () => {
+            try {
+                await archiveProduct(id, clubId)
+                router.refresh()
+                setSelectedIds(new Set())
+            } catch (err: any) {
+                showMessage({ title: "Ошибка", description: err.message || "Не удалось архивировать" })
+            }
+        })
+    }
+
+    const handleRestore = async (id: number) => {
+        const confirmed = await confirmAction({
+            title: "Восстановление товара",
+            description: "Вернуть товар из архива?",
+            confirmText: "Восстановить"
+        })
+        if (!confirmed) return
+        startTransition(async () => {
+            try {
+                await restoreProduct(id, clubId)
+                router.refresh()
+                setSelectedIds(new Set())
+            } catch (err: any) {
+                showMessage({ title: "Ошибка", description: err.message || "Не удалось восстановить" })
+            }
         })
     }
 
@@ -402,6 +446,21 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                             {categories.map(c => (
                                 <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
                             ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={productsView}
+                        onValueChange={(v) => {
+                            setProductsView(v as "active" | "archived")
+                            setSelectedIds(new Set())
+                        }}
+                    >
+                        <SelectTrigger className="w-[120px] md:w-[140px] h-9 bg-white">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="active">Активные</SelectItem>
+                            <SelectItem value="archived">Архив</SelectItem>
                         </SelectContent>
                     </Select>
                 </ToolbarGroup>
@@ -581,9 +640,36 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex justify-end">
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
-                                                <MoreVertical className="h-4 w-4" />
-                                            </Button>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-slate-400 hover:text-slate-600"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <MoreVertical className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                                    <DropdownMenuItem onClick={() => router.push(`/clubs/${clubId}/inventory/products/${product.id}`)}>
+                                                        Открыть
+                                                    </DropdownMenuItem>
+                                                    {product.deleted_at ? (
+                                                        <DropdownMenuItem onClick={() => handleRestore(product.id)}>
+                                                            Восстановить
+                                                        </DropdownMenuItem>
+                                                    ) : (
+                                                        <DropdownMenuItem onClick={() => handleArchive(product.id)}>
+                                                            Архивировать
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem className="text-rose-600" onClick={() => handleDelete(product.id)}>
+                                                        Удалить
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </TableCell>
                                 </TableRow>

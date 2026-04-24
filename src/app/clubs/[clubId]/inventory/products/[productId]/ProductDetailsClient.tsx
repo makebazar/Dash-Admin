@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Save, Trash2, Plus, Barcode, TrendingUp, ArrowUpDown, History, Package, Box, RefreshCw } from "lucide-react"
-import { Product, Category, Warehouse, ReplenishmentRule, createProduct, updateProduct, deleteProduct, adjustWarehouseStock, createReplenishmentRule, deleteReplenishmentRule } from "../../actions"
+import { Product, Category, Warehouse, ReplenishmentRule, createProduct, updateProduct, deleteProduct, adjustWarehouseStock, createReplenishmentRule, deleteReplenishmentRule, archiveProduct, restoreProduct } from "../../actions"
 import { useUiDialogs } from "../../_components/useUiDialogs"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
@@ -25,12 +25,16 @@ interface ProductDetailsClientProps {
     history: any[]
     rules: ReplenishmentRule[]
     clubSettings: any
+    deletionStatus: { can_hard_delete: boolean } | null
 }
 
-export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, categories, warehouses, history, rules, clubSettings }: ProductDetailsClientProps) {
+export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, categories, warehouses, history, rules, clubSettings, deletionStatus }: ProductDetailsClientProps) {
     const router = useRouter()
     const [isPending, startTransition] = useTransition()
-    const { confirmAction, showMessage } = useUiDialogs()
+    const { confirmAction, showMessage, Dialogs } = useUiDialogs()
+
+    const isArchived = Boolean(initialProduct?.deleted_at)
+    const canHardDelete = Boolean(deletionStatus?.can_hard_delete)
 
     const [editingProduct, setEditingProduct] = useState<Partial<Product>>(
         initialProduct || { is_active: true, current_stock: 0, cost_price: 0, selling_price: 0, barcodes: [] }
@@ -123,6 +127,46 @@ export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, ca
 
     const handleDelete = async () => {
         if (isNew) return
+        if (!initialProduct) return
+
+        if (isArchived) {
+            const confirmed = await confirmAction({
+                title: "Восстановление товара",
+                description: "Вернуть товар из архива?",
+                confirmText: "Восстановить"
+            })
+            if (!confirmed) return
+            startTransition(async () => {
+                try {
+                    await restoreProduct(initialProduct.id, clubId)
+                    router.refresh()
+                    showMessage({ title: "Успешно", description: "Товар восстановлен" })
+                } catch (err: any) {
+                    showMessage({ title: "Ошибка", description: err.message || "Не удалось восстановить" })
+                }
+            })
+            return
+        }
+
+        if (!canHardDelete) {
+            const confirmed = await confirmAction({
+                title: "Архивация товара",
+                description: "Скрыть товар из списка? История сохранится.",
+                confirmText: "Архивировать"
+            })
+            if (!confirmed) return
+            startTransition(async () => {
+                try {
+                    await archiveProduct(initialProduct.id, clubId)
+                    router.refresh()
+                    showMessage({ title: "Успешно", description: "Товар отправлен в архив" })
+                } catch (err: any) {
+                    showMessage({ title: "Ошибка", description: err.message || "Не удалось архивировать" })
+                }
+            })
+            return
+        }
+
         const confirmed = await confirmAction({
             title: "Удаление товара",
             description: "Вы уверены? Это действие нельзя отменить.",
@@ -130,19 +174,38 @@ export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, ca
         })
         if (!confirmed) return
         startTransition(async () => {
-            await deleteProduct(initialProduct!.id, clubId)
-            router.push(`/clubs/${clubId}/inventory`)
+            try {
+                await deleteProduct(initialProduct.id, clubId)
+                router.push(`/clubs/${clubId}/inventory`)
+            } catch (err: any) {
+                showMessage({ title: "Ошибка", description: err.message || "Не удалось удалить" })
+            }
         })
     }
 
     const handleStockAdjust = async (warehouseId: number) => {
         if (!initialProduct) return
-        const amount = Number(stockAdjustments[warehouseId])
-        if (!amount || amount === 0) return
+        const raw = stockAdjustments[warehouseId]
+        if (raw === undefined || raw === "") return
+
+        const newQuantity = Number(raw)
+        if (!Number.isFinite(newQuantity) || !Number.isInteger(newQuantity) || newQuantity < 0) {
+            return showMessage({
+                title: "Ошибка",
+                description: "Остаток должен быть целым неотрицательным числом"
+            })
+        }
         
         startTransition(async () => {
             try {
-                await adjustWarehouseStock(clubId, userId, Number(initialProduct.id), Number(warehouseId), amount, stockReasons[warehouseId] || "Ручная корректировка")
+                await adjustWarehouseStock(
+                    clubId,
+                    userId,
+                    Number(initialProduct.id),
+                    Number(warehouseId),
+                    newQuantity,
+                    stockReasons[warehouseId] || "Ручная корректировка"
+                )
                 setStockAdjustments(prev => ({ ...prev, [warehouseId]: "" }))
                 setStockReasons(prev => ({ ...prev, [warehouseId]: "" }))
                 router.refresh()
@@ -208,6 +271,7 @@ export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, ca
 
     return (
         <PageShell maxWidth="5xl" className="pb-24 md:pb-8">
+            {Dialogs}
             <div className="mb-6 hidden md:block">
                 <Link href={`/clubs/${clubId}/inventory`} className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors mb-4">
                     <ArrowLeft className="mr-2 h-4 w-4" /> Назад к складу
@@ -240,8 +304,21 @@ export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, ca
                     </div>
                     <div className="flex items-center gap-2">
                         {!isNew && (
-                            <Button variant="outline" className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200" onClick={handleDelete} disabled={isPending}>
-                                <Trash2 className="h-4 w-4 mr-2" /> Удалить
+                            <Button
+                                variant="outline"
+                                className={cn(
+                                    "border-slate-200",
+                                    isArchived
+                                        ? "text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-200"
+                                        : canHardDelete
+                                            ? "text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
+                                            : "text-slate-700 hover:text-slate-900 hover:bg-slate-50"
+                                )}
+                                onClick={handleDelete}
+                                disabled={isPending}
+                            >
+                                {isArchived ? <RefreshCw className="h-4 w-4 mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                                {isArchived ? "Восстановить" : canHardDelete ? "Удалить" : "Архив"}
                             </Button>
                         )}
                         <Button onClick={handleSave} disabled={isPending} className="bg-slate-900 text-white hover:bg-slate-800">
@@ -620,7 +697,7 @@ export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, ca
                                             <div className="flex gap-2">
                                                 <Input 
                                                     type="number" 
-                                                    placeholder="± Кол-во" 
+                                                    placeholder="Новый остаток" 
                                                     className="h-8 text-xs bg-white border-slate-200"
                                                     value={stockAdjustments[w.id] || ""}
                                                     onChange={e => setStockAdjustments(p => ({ ...p, [w.id]: e.target.value }))}
@@ -631,7 +708,7 @@ export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, ca
                                                     value={stockReasons[w.id] || ""}
                                                     onChange={e => setStockReasons(p => ({ ...p, [w.id]: e.target.value }))}
                                                 />
-                                                <Button size="sm" className="h-8 px-2" onClick={() => handleStockAdjust(w.id)} disabled={!stockAdjustments[w.id]}>
+                                                <Button size="sm" className="h-8 px-2" onClick={() => handleStockAdjust(w.id)} disabled={stockAdjustments[w.id] === undefined || stockAdjustments[w.id] === ""}>
                                                     <Save className="h-3 w-3" />
                                                 </Button>
                                             </div>
