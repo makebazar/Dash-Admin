@@ -1,17 +1,27 @@
 import { query } from "@/db"
 import { resolveAssistantRangePreset, type AssistantRangePreset } from "@/lib/assistant/range"
 import type { AssistantIntent } from "@/lib/assistant/parse"
-import { getClubIncomeMetrics, getShiftExpenses, getShiftIncomeBreakdown } from "@/lib/assistant/income-metrics"
+import { getClubIncomeMetrics, getShiftExpenses, getShiftIncomeBreakdown, getShiftIncomeValue } from "@/lib/assistant/income-metrics"
 
 export type AssistantToolCall =
+    | { name: "income_metrics"; arguments: {} }
     | { name: "revenue_summary"; arguments: { range_preset: AssistantRangePreset } }
     | { name: "revenue_by_day"; arguments: { range_preset: AssistantRangePreset } }
+    | { name: "revenue_metric"; arguments: { metric_key: string; range_preset?: AssistantRangePreset; month?: number; year?: number } }
     | { name: "payroll_accrued"; arguments: { range_preset: AssistantRangePreset; adminsOnly?: boolean } }
     | { name: "compare_revenue"; arguments: { range_preset: AssistantRangePreset } }
 
 export function getAssistantToolsSchema() {
     const rangeEnum = ["today", "yesterday", "last_7_days", "this_week", "this_month", "last_month"]
     return [
+        {
+            type: "function",
+            function: {
+                name: "income_metrics",
+                description: "Список каналов дохода (ключи и подписи): например, Наличные, Карта, СБП, Бар и т.д.",
+                parameters: { type: "object", properties: {}, additionalProperties: false },
+            },
+        },
         {
             type: "function",
             function: {
@@ -34,6 +44,25 @@ export function getAssistantToolsSchema() {
                     type: "object",
                     properties: { range_preset: { type: "string", enum: rangeEnum } },
                     required: ["range_preset"],
+                    additionalProperties: false,
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "revenue_metric",
+                description:
+                    "Сумма выручки по одному каналу дохода (metric_key) за период. Период можно задать range_preset или конкретным month/year.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        metric_key: { type: "string" },
+                        range_preset: { type: "string", enum: rangeEnum },
+                        month: { type: "integer", minimum: 1, maximum: 12 },
+                        year: { type: "integer", minimum: 2000, maximum: 2100 },
+                    },
+                    required: ["metric_key"],
                     additionalProperties: false,
                 },
             },
@@ -70,7 +99,31 @@ export function getAssistantToolsSchema() {
     ]
 }
 
+function formatMonthLabel(month: number, year: number) {
+    const names = [
+        "январь",
+        "февраль",
+        "март",
+        "апрель",
+        "май",
+        "июнь",
+        "июль",
+        "август",
+        "сентябрь",
+        "октябрь",
+        "ноябрь",
+        "декабрь",
+    ]
+    const idx = Math.max(1, Math.min(12, month)) - 1
+    return `${names[idx]} ${year}`
+}
+
 export async function executeAssistantTool(clubId: string, tool: AssistantToolCall, now: Date) {
+    if (tool.name === "income_metrics") {
+        const { metrics } = await getClubIncomeMetrics(clubId)
+        return { metrics }
+    }
+
     if (tool.name === "revenue_summary") {
         const range = resolveAssistantRangePreset(tool.arguments.range_preset, now, "revenue")
         const startIso = range.start.toISOString()
@@ -145,6 +198,53 @@ export async function executeAssistantTool(clubId: string, tool: AssistantToolCa
         return {
             range: { label: range.label, start: startIso, end: endIso },
             days: Array.from(byDayMap.values()),
+        }
+    }
+
+    if (tool.name === "revenue_metric") {
+        const { metrics } = await getClubIncomeMetrics(clubId)
+        const metricKey = String(tool.arguments.metric_key || "").trim()
+        const metric = metrics.find((m) => m.key === metricKey) || null
+        if (!metric) return { error: "Unknown metric_key" }
+
+        const month = typeof tool.arguments.month === "number" ? tool.arguments.month : null
+        const year = typeof tool.arguments.year === "number" ? tool.arguments.year : null
+        const preset = tool.arguments.range_preset || "this_month"
+
+        let start: Date
+        let end: Date
+        let label: string
+
+        if (month && year) {
+            start = new Date(year, month - 1, 1, 0, 0, 0, 0)
+            end = new Date(year, month, 1, 0, 0, 0, 0)
+            label = formatMonthLabel(month, year)
+        } else {
+            const range = resolveAssistantRangePreset(preset, now, "revenue")
+            start = range.start
+            end = range.end
+            label = range.label
+        }
+
+        const shiftsRes = await query(
+            `
+            SELECT cash_income, card_income, report_data
+            FROM shifts
+            WHERE club_id = $1
+              AND check_in >= $2
+              AND check_in < $3
+              AND status NOT IN ('ACTIVE', 'CANCELLED')
+            `,
+            [clubId, start.toISOString(), end.toISOString()]
+        )
+
+        const total = shiftsRes.rows.reduce((acc: number, s: any) => acc + getShiftIncomeValue(s, metricKey), 0)
+
+        return {
+            range: { label, start: start.toISOString(), end: end.toISOString() },
+            metric: { key: metric.key, label: metric.label },
+            amount: total,
+            shifts_count: Number(shiftsRes.rowCount || 0),
         }
     }
 

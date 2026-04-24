@@ -92,6 +92,13 @@ export function getShiftIncomeBreakdown(
     return { total, items }
 }
 
+export function getShiftIncomeValue(shift: any, metricKey: string) {
+    if (metricKey === "cash_income") return sanitizeNumber(shift?.cash_income)
+    if (metricKey === "card_income") return sanitizeNumber(shift?.card_income)
+    const reportData = parseReportData(shift?.report_data)
+    return sanitizeNumber(reportData?.[metricKey])
+}
+
 export function getShiftExpenses(shift: any) {
     return sanitizeNumber(shift?.expenses)
 }

@@ -52,24 +52,46 @@ function coerceToolCall(tool: ToolCallMessage): AssistantToolCall | null {
     const args = parsed.ok ? parsed.value : null
     if (!args || typeof args !== "object") return null
 
+    if (name === "income_metrics") return { name, arguments: {} }
+
     const range_preset = String((args as any).range_preset || "")
     const adminsOnly = Boolean((args as any).adminsOnly)
+    const metric_key = String((args as any).metric_key || "").trim()
+    const month = (args as any).month
+    const year = (args as any).year
 
-    if (
-        range_preset !== "today" &&
-        range_preset !== "yesterday" &&
-        range_preset !== "last_7_days" &&
-        range_preset !== "this_week" &&
-        range_preset !== "this_month" &&
-        range_preset !== "last_month"
-    ) {
-        return null
+    const hasRange =
+        range_preset === "today" ||
+        range_preset === "yesterday" ||
+        range_preset === "last_7_days" ||
+        range_preset === "this_week" ||
+        range_preset === "this_month" ||
+        range_preset === "last_month"
+
+    if (name === "revenue_summary" || name === "revenue_by_day" || name === "compare_revenue" || name === "payroll_accrued") {
+        if (!hasRange) return null
+        if (name === "revenue_summary") return { name, arguments: { range_preset } }
+        if (name === "revenue_by_day") return { name, arguments: { range_preset } }
+        if (name === "compare_revenue") return { name, arguments: { range_preset } }
+        return { name, arguments: { range_preset, adminsOnly } }
     }
 
-    if (name === "revenue_summary") return { name, arguments: { range_preset } }
-    if (name === "revenue_by_day") return { name, arguments: { range_preset } }
-    if (name === "compare_revenue") return { name, arguments: { range_preset } }
-    if (name === "payroll_accrued") return { name, arguments: { range_preset, adminsOnly } }
+    if (name === "revenue_metric") {
+        if (!metric_key) return null
+        const m = typeof month === "number" ? month : null
+        const y = typeof year === "number" ? year : null
+        const monthOk = m == null || (Number.isInteger(m) && m >= 1 && m <= 12)
+        const yearOk = y == null || (Number.isInteger(y) && y >= 2000 && y <= 2100)
+        if (!monthOk || !yearOk) return null
+        if (hasRange || (m != null && y != null) || (!hasRange && m == null && y == null)) {
+            const argsOut: any = { metric_key }
+            if (hasRange) argsOut.range_preset = range_preset
+            if (m != null) argsOut.month = m
+            if (y != null) argsOut.year = y
+            return { name, arguments: argsOut }
+        }
+        return null
+    }
 
     return null
 }
@@ -94,6 +116,8 @@ export async function runAssistantAgent(clubId: string, text: string, now: Date 
             content:
                 "Ты карманный управляющий клуба. Ты умеешь считать выручку и начисления по зарплате по данным из системы. " +
                 "Ты НЕ придумываешь цифры. Если данных недостаточно — задаёшь короткий уточняющий вопрос. " +
+                "Если вопрос про конкретный канал дохода (например 'бар', 'сбп', 'наличные', 'карта') — используй income_metrics и затем revenue_metric. " +
+                "Если вопрос про месяц словами (например 'в апреле', 'за март 2026') — используй revenue_metric с month/year (январь=1, февраль=2, март=3, апрель=4, май=5, июнь=6, июль=7, август=8, сентябрь=9, октябрь=10, ноябрь=11, декабрь=12) и считай именно этот месяц, а не last_month. " +
                 "Используй tools, чтобы получить цифры. После получения цифр верни короткий ответ на русском. " +
                 "Про админов: ставь adminsOnly=true только если в запросе явно есть 'админ'/'администратор'.",
         },
