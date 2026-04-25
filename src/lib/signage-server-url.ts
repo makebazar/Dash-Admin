@@ -121,6 +121,9 @@ export async function proxyJsonRequest(request: Request, targetUrl: string) {
       },
     })
   } catch (error) {
+    if (request.signal.aborted) {
+      return new Response(null, { status: 204 })
+    }
     const isTimeout = (error as Error)?.name === "AbortError" && !request.signal.aborted
     const status = isTimeout ? 504 : 502
     const code = getFetchErrorCode(error)
