@@ -90,6 +90,35 @@ export async function POST(
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
         const { schema } = await request.json();
+        const normalizedSchema = Array.isArray(schema) ? schema : [];
+        const requestedAccountIds = Array.from(
+            new Set(
+                normalizedSchema
+                    .map((field: any) => Number(field?.account_id))
+                    .filter((id: number) => Number.isFinite(id) && id > 0)
+            )
+        );
+        const validAccountsRes =
+            requestedAccountIds.length > 0
+                ? await query(
+                      `SELECT id
+                       FROM finance_accounts
+                       WHERE club_id = $1 AND is_active = TRUE AND id = ANY($2::int[])`,
+                      [clubId, requestedAccountIds]
+                  )
+                : { rows: [] as any[] };
+        const validAccountIds = new Set(validAccountsRes.rows.map((row: any) => Number(row.id)));
+        const sanitizedSchema = normalizedSchema.map((field: any) => {
+            const nextField = field && typeof field === 'object' ? { ...field } : field;
+            if (!nextField || typeof nextField !== 'object') return nextField;
+            if (nextField.account_id === undefined || nextField.account_id === null || nextField.account_id === '') {
+                nextField.account_id = null;
+                return nextField;
+            }
+            const id = Number(nextField.account_id);
+            nextField.account_id = validAccountIds.has(id) ? id : null;
+            return nextField;
+        });
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -112,7 +141,7 @@ export async function POST(
             `INSERT INTO club_report_templates (club_id, schema, is_active)
        VALUES ($1, $2, TRUE)
        RETURNING id, schema, created_at`,
-            [clubId, JSON.stringify(schema)]
+            [clubId, JSON.stringify(sanitizedSchema)]
         );
 
         await query('COMMIT');
@@ -121,7 +150,7 @@ export async function POST(
         // Update existing finance_transactions that don't have an account_id 
         // using the new mapping from the schema
         try {
-            const incomeFields = schema.filter((f: any) => f.field_type === 'INCOME' && f.account_id);
+            const incomeFields = sanitizedSchema.filter((f: any) => f.field_type === 'INCOME' && f.account_id);
 
             for (const field of incomeFields) {
                 const metricKeys = [field.metric_key];

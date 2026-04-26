@@ -967,7 +967,6 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         const uniqueEmployees = new Map<string, string>()
 
         shifts.forEach((shift) => {
-            if (!hasShiftReport(shift)) return
             if (!shift.user_id || !shift.employee_name) return
             if (!uniqueEmployees.has(shift.user_id)) {
                 uniqueEmployees.set(shift.user_id, shift.employee_name)
@@ -977,7 +976,7 @@ export default function ShiftsPage({ params }: { params: Promise<{ clubId: strin
         return Array.from(uniqueEmployees.entries())
             .map(([id, full_name]) => ({ id, full_name }))
             .sort((a, b) => a.full_name.localeCompare(b.full_name, 'ru'))
-    }, [shifts, hasShiftReport])
+    }, [shifts])
 
     // Filter shifts based on employee
     const filteredShifts = useMemo(() => {

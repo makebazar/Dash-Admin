@@ -670,8 +670,19 @@ export default function ShiftDetailsPage() {
                 body: JSON.stringify({ status: nextStatus }),
             })
             if (!res.ok) {
-                const data = await res.json()
-                alert(data.error || "Ошибка изменения статуса")
+                const data = await res.json().catch(() => ({} as any))
+                const message = data?.error || "Ошибка изменения статуса"
+                if (
+                    typeof message === "string" &&
+                    (message.includes("Нет финансовых счетов") || message.includes("Некорректная привязка к финансовому счету"))
+                ) {
+                    const shouldOpenSettings = confirm(`${message}\n\nОткрыть настройки финансов?`)
+                    if (shouldOpenSettings) {
+                        router.push(`/clubs/${clubId}/finance/settings`)
+                    }
+                    return
+                }
+                alert(message)
                 return
             }
             await fetchShiftDetails()

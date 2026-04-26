@@ -13,6 +13,54 @@ type OwnerCorrectionChange = {
     after: any;
 };
 
+async function resolveFinanceAccountId(
+    clubId: number,
+    requestedAccountId: unknown,
+    preferredAccountTypes: string[]
+) {
+    const candidateId = Number(requestedAccountId);
+    if (Number.isFinite(candidateId) && candidateId > 0) {
+        const validRes = await query(
+            `SELECT id
+             FROM finance_accounts
+             WHERE id = $1 AND club_id = $2 AND is_active = TRUE
+             LIMIT 1`,
+            [candidateId, clubId]
+        );
+        if (validRes.rows.length > 0) return Number(validRes.rows[0].id);
+    }
+
+    if (preferredAccountTypes.length > 0) {
+        const preferredRes = await query(
+            `SELECT id
+             FROM finance_accounts
+             WHERE club_id = $1
+               AND is_active = TRUE
+               AND account_type = ANY($2::text[])
+             ORDER BY array_position($2::text[], account_type) NULLS LAST, created_at ASC
+             LIMIT 1`,
+            [clubId, preferredAccountTypes]
+        );
+        if (preferredRes.rows.length > 0) return Number(preferredRes.rows[0].id);
+    }
+
+    const anyRes = await query(
+        `SELECT id
+         FROM finance_accounts
+         WHERE club_id = $1 AND is_active = TRUE
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        [clubId]
+    );
+    return anyRes.rows.length > 0 ? Number(anyRes.rows[0].id) : null;
+}
+
+function getPreferredAccountTypesForShiftIncome(metricKey: string) {
+    if (metricKey === 'cash_income') return ['cash'];
+    if (metricKey === 'card_income') return ['card', 'bank'];
+    return ['other', 'cash', 'bank', 'card'];
+}
+
 const SHIFT_CHANGE_LABELS: Record<string, string> = {
     check_in: 'Начало смены',
     check_out: 'Окончание смены',
@@ -139,6 +187,19 @@ async function createFinanceTransactionsFromShift(
     userId: string,
     shiftData: any
 ) {
+    const anyAccountRes = await query(
+        `SELECT id
+         FROM finance_accounts
+         WHERE club_id = $1 AND is_active = TRUE
+         LIMIT 1`,
+        [clubId]
+    );
+    if (anyAccountRes.rows.length === 0) {
+        const err: any = new Error('Нет финансовых счетов. Создайте хотя бы один счёт в Финансы → Счета и повторите.');
+        err.status = 400;
+        throw err;
+    }
+
     // Get report template to determine income fields
     const templateResult = await query(
         `SELECT schema FROM club_report_templates 
@@ -198,6 +259,11 @@ async function createFinanceTransactionsFromShift(
         }
 
         if (amount > 0) {
+            const accountId = await resolveFinanceAccountId(
+                clubId,
+                field.account_id,
+                getPreferredAccountTypesForShiftIncome(field.metric_key)
+            );
             await query(
                 `INSERT INTO finance_transactions (
                     club_id, category_id, amount, type, payment_method,
@@ -210,7 +276,7 @@ async function createFinanceTransactionsFromShift(
                     amount,
                     'income',
                     field.metric_key,
-                    field.account_id,
+                    accountId,
                     shiftId,
                     shiftData.check_in,
                     field.custom_label || field.metric_key,
@@ -229,6 +295,11 @@ async function createFinanceTransactionsFromShift(
             for (const item of value) {
                 const amount = Number(item.amount) || 0;
                 if (amount > 0) {
+                    const accountId = await resolveFinanceAccountId(
+                        clubId,
+                        field.account_id,
+                        ['cash', 'other', 'bank', 'card']
+                    );
                     await query(
                         `INSERT INTO finance_transactions (
                             club_id, category_id, amount, type, payment_method,
@@ -241,7 +312,7 @@ async function createFinanceTransactionsFromShift(
                             amount,
                             'expense',
                             'cash',
-                            field.account_id || 9, // Fallback to Kassa
+                            accountId,
                             shiftId,
                             shiftData.check_in,
                             item.comment || field.custom_label || field.metric_key,
@@ -256,6 +327,11 @@ async function createFinanceTransactionsFromShift(
             const amount = Number(value) || 0;
 
             if (amount > 0) {
+                const accountId = await resolveFinanceAccountId(
+                    clubId,
+                    field.account_id,
+                    ['cash', 'other', 'bank', 'card']
+                );
                 await query(
                     `INSERT INTO finance_transactions (
                         club_id, category_id, amount, type, payment_method,
@@ -268,7 +344,7 @@ async function createFinanceTransactionsFromShift(
                         amount,
                         'expense',
                         'cash', // Expenses from shifts are usually cash
-                        field.account_id || 9, // Fallback to Kassa
+                        accountId,
                         shiftId,
                         shiftData.check_in,
                         field.custom_label || field.metric_key,
@@ -966,6 +1042,16 @@ export async function PATCH(
         return NextResponse.json({ success: true, shift: result.rows[0] });
 
     } catch (error: any) {
+        const status = error?.status
+        if (status) {
+            return NextResponse.json({ error: error.message }, { status })
+        }
+        if (error?.code === '23503') {
+            return NextResponse.json(
+                { error: 'Некорректная привязка к финансовому счету. Проверьте настройки шаблона отчёта и счета клуба.' },
+                { status: 400 }
+            )
+        }
         console.error('Update Shift Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

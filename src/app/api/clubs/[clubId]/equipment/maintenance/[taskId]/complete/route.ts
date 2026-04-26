@@ -22,7 +22,8 @@ export async function POST(
         } catch (e) {
             body = {};
         }
-        const photos = body.photos || null;
+        const photosRaw = body.photos;
+        const photos = Array.isArray(photosRaw) ? photosRaw : null;
         const notes = body.notes || null;
 
         if (!userId) {
@@ -51,6 +52,51 @@ export async function POST(
 
         if (!currentTaskSnapshot) {
             return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+        }
+
+        try {
+            const settingsRes = await query(
+                `SELECT require_photos_on_completion, min_photos, require_notes_on_completion
+                 FROM club_maintenance_settings
+                 WHERE club_id = $1`,
+                [clubId]
+            );
+            const settingsRow = settingsRes.rows[0] || null;
+            const requirePhotos = settingsRow?.require_photos_on_completion !== false;
+            const minPhotos = requirePhotos ? Math.max(1, Number(settingsRow?.min_photos) || 1) : 0;
+            const requireNotes = settingsRow?.require_notes_on_completion === true;
+
+            if (minPhotos > 0) {
+                const photoCount = Array.isArray(photosRaw) ? photosRaw.length : 0;
+                if (photoCount < minPhotos) {
+                    return NextResponse.json(
+                        { error: `Нужно приложить минимум фото: ${minPhotos}` },
+                        { status: 400 }
+                    );
+                }
+            }
+
+            if (requireNotes) {
+                const noteStr = String(notes || '').trim();
+                if (!noteStr) {
+                    return NextResponse.json(
+                        { error: 'Нужно заполнить комментарий к выполнению' },
+                        { status: 400 }
+                    );
+                }
+            }
+        } catch (e) {
+            const requirePhotos = true;
+            const minPhotos = 1;
+            if (requirePhotos) {
+                const photoCount = Array.isArray(photosRaw) ? photosRaw.length : 0;
+                if (photoCount < minPhotos) {
+                    return NextResponse.json(
+                        { error: `Нужно приложить минимум фото: ${minPhotos}` },
+                        { status: 400 }
+                    );
+                }
+            }
         }
 
         await ensureMaintenanceTaskInitialHistory(currentTaskSnapshot);

@@ -35,12 +35,25 @@ interface MaintenanceSessionWizardProps {
     onComplete: () => void
 }
 
+type MaintenanceSettings = {
+    require_photos_on_completion: boolean
+    min_photos: number
+    require_notes_on_completion: boolean
+}
+
+const DEFAULT_MAINTENANCE_SETTINGS: MaintenanceSettings = {
+    require_photos_on_completion: true,
+    min_photos: 1,
+    require_notes_on_completion: false,
+}
+
 export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }: MaintenanceSessionWizardProps) {
     const { clubId } = useParams()
     const [currentIndex, setCurrentIndex] = useState(0)
     const [instructions, setInstructions] = useState<Record<string, string>>({})
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [maintenanceSettings, setMaintenanceSettings] = useState<MaintenanceSettings>(DEFAULT_MAINTENANCE_SETTINGS)
     
     // Issue reporting state
     const [reportMode, setReportMode] = useState<TaskReportMode>("OK")
@@ -59,6 +72,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
     useEffect(() => {
         if (isOpen && tasks.length > 0) {
             fetchInstructions()
+            fetchMaintenanceSettings()
             setCurrentIndex(0)
             resetIssueForm()
         }
@@ -80,6 +94,25 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
             console.error("Error fetching instructions:", error)
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const fetchMaintenanceSettings = async () => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/settings/maintenance`, { cache: "no-store" })
+            const data = await res.json()
+            if (!res.ok) {
+                setMaintenanceSettings(DEFAULT_MAINTENANCE_SETTINGS)
+                return
+            }
+            setMaintenanceSettings({
+                require_photos_on_completion: data.require_photos_on_completion !== false,
+                min_photos: Math.max(0, Number(data.min_photos) || 0),
+                require_notes_on_completion: data.require_notes_on_completion === true,
+            })
+        } catch (error) {
+            console.error("Error fetching maintenance settings:", error)
+            setMaintenanceSettings(DEFAULT_MAINTENANCE_SETTINGS)
         }
     }
 
@@ -137,7 +170,8 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
             })
 
             if (!completeRes.ok) {
-                throw new Error("Failed to complete task")
+                const data = await completeRes.json().catch(() => ({} as any))
+                throw new Error(data?.error || "Не удалось завершить задачу")
             }
 
             if (hasReport && issueTitle) {
@@ -185,7 +219,7 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
             }
         } catch (error) {
             console.error("Error completing task:", error)
-            alert("Ошибка при завершении задачи. Попробуйте снова.")
+            alert(error instanceof Error ? error.message : "Ошибка при завершении задачи. Попробуйте снова.")
         } finally {
             setIsSubmitting(false)
         }
@@ -198,6 +232,13 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
     const isLaundryEquipment = isLaundryEquipmentType(currentTask.equipment_type)
     const hasReport = reportMode === "ISSUE" || reportMode === "LAUNDRY"
     const isLaundryReport = reportMode === "LAUNDRY"
+    const minPhotosRequired = maintenanceSettings.require_photos_on_completion
+        ? Math.max(1, Number(maintenanceSettings.min_photos) || 1)
+        : 0
+    const notesRequired = maintenanceSettings.require_notes_on_completion
+    const hasNotes = hasReport
+        ? Boolean(issueTitle.trim())
+        : Boolean(generalNotes.trim())
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -328,7 +369,11 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                             <div className="space-y-4 pt-4 border-t border-border/50">
                                 <Label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-widest flex items-center justify-between">
                                     Фотоотчет
-                                    <span className="text-rose-500 normal-case tracking-normal font-bold bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20">Обязательно</span>
+                                    {minPhotosRequired > 0 && (
+                                        <span className="text-rose-500 normal-case tracking-normal font-bold bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20">
+                                            Обязательно {minPhotosRequired > 1 ? `(${minPhotosRequired})` : ""}
+                                        </span>
+                                    )}
                                 </Label>
                                 <div className="flex flex-wrap gap-2">
                                     {photos.map((file, idx) => (
@@ -413,7 +458,13 @@ export function MaintenanceSessionWizard({ isOpen, onClose, tasks, onComplete }:
                     <div className="flex gap-3 w-full sm:w-auto order-1 sm:order-2">
                         <Button 
                             onClick={handleCompleteTask} 
-                            disabled={isSubmitting || isUploading || (hasReport && !issueTitle) || (photos.length === 0)}
+                            disabled={
+                                isSubmitting
+                                || isUploading
+                                || (hasReport && !issueTitle)
+                                || (minPhotosRequired > 0 && photos.length < minPhotosRequired)
+                                || (notesRequired && !hasNotes)
+                            }
                             className="w-full sm:w-auto h-12 px-8 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold transition-all disabled:opacity-50"
                         >
                             {isSubmitting || isUploading ? (

@@ -11,6 +11,7 @@ import { SettingsTab } from "./_components/SettingsTab"
 import { AbcAnalysisTab } from "./_components/AbcAnalysisTab"
 import { InventoryTabsWrapper } from "./_components/InventoryTabsWrapper"
 import { ShiftZonesOverviewTab } from "./_components/ShiftZonesOverviewTab"
+import { InventoryErrorState } from "./_components/InventoryErrorState"
 import { cookies } from "next/headers"
 import { normalizeInventorySettings } from "@/lib/inventory-settings"
 import { PageShell } from "@/components/layout/PageShell"
@@ -29,20 +30,38 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         return <div className="p-8 text-red-500">Доступ к управлению складом закрыт для вашей роли.</div>
     }
 
-    const [products, categories, supplies, inventories, warehouses, tasks, procurementLists, suppliers, clubSettings, sales, shifts, shiftZoneOverview] = await Promise.all([
-        getProducts(clubId, { includeArchived: true }),
-        getCategories(clubId),
-        getSupplies(clubId),
-        getInventories(clubId),
-        getWarehouses(clubId),
-        getClubTasks(clubId),
-        getProcurementLists(clubId),
-        getSuppliersForSelect(clubId),
-        getClubSettings(clubId),
-        getSalesAnalytics(clubId),
-        getActiveShiftsForClub(clubId),
-        getShiftZoneOverview(clubId, month)
-    ])
+    let products: any[] = []
+    let categories: any[] = []
+    let supplies: any[] = []
+    let inventories: any[] = []
+    let warehouses: any[] = []
+    let tasks: any[] = []
+    let procurementLists: any[] = []
+    let suppliers: any[] = []
+    let clubSettings: any = null
+    let sales: any = null
+    let shifts: any[] = []
+    let shiftZoneOverview: any = null
+
+    try {
+        [products, categories, supplies, inventories, warehouses, tasks, procurementLists, suppliers, clubSettings, sales, shifts, shiftZoneOverview] = await Promise.all([
+            getProducts(clubId, { includeArchived: true }),
+            getCategories(clubId),
+            getSupplies(clubId),
+            getInventories(clubId),
+            getWarehouses(clubId),
+            getClubTasks(clubId),
+            getProcurementLists(clubId),
+            getSuppliersForSelect(clubId),
+            getClubSettings(clubId),
+            getSalesAnalytics(clubId),
+            getActiveShiftsForClub(clubId),
+            getShiftZoneOverview(clubId, month)
+        ])
+    } catch (error: any) {
+        const message = error?.message || "Не удалось загрузить данные склада"
+        return <InventoryErrorState clubId={clubId} message={message} />
+    }
 
     const hasAdminPrivileges = access.isFullAccess
     const inventorySettings = normalizeInventorySettings(clubSettings.inventory_settings)

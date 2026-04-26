@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
-import { ArrowLeft, ChevronLeft, FileText, MapPin, Settings2 } from "lucide-react"
+import { ArrowLeft, ChevronLeft, FileText, MapPin, Settings2, Wrench } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { PageShell } from "@/components/layout/PageShell"
 import { InstructionsTab } from "../inventory/InstructionsTab"
 import { EquipmentTypesTab } from "./EquipmentTypesTab"
 import { ZonesSettingsTab } from "./ZonesSettingsTab"
+import { MaintenanceCompletionSettingsTab } from "./MaintenanceCompletionSettingsTab"
 
 export default function EquipmentSettingsPage() {
     const { clubId } = useParams()
@@ -17,6 +18,8 @@ export default function EquipmentSettingsPage() {
         ? "zones"
         : searchParams.get("tab") === "types"
             ? "types"
+            : searchParams.get("tab") === "maintenance"
+                ? "maintenance"
             : "standards"
 
     return (
@@ -54,6 +57,10 @@ export default function EquipmentSettingsPage() {
                                 <Settings2 className="h-4 w-4" />
                                 Типы оборудования
                             </TabsTrigger>
+                            <TabsTrigger value="maintenance" className="relative shrink-0 rounded-none border-b-2 border-transparent px-0 pb-4 pt-2 font-medium text-slate-500 hover:text-slate-700 data-[state=active]:border-slate-900 data-[state=active]:text-slate-900 data-[state=active]:shadow-none data-[state=active]:bg-transparent transition-all gap-2">
+                                <Wrench className="h-4 w-4" />
+                                Обслуживание
+                            </TabsTrigger>
                         </TabsList>
                     </div>
 
@@ -67,6 +74,10 @@ export default function EquipmentSettingsPage() {
 
                     <TabsContent value="types" className="mt-0 space-y-6">
                         <EquipmentTypesTab />
+                    </TabsContent>
+
+                    <TabsContent value="maintenance" className="mt-0 space-y-6">
+                        <MaintenanceCompletionSettingsTab clubId={clubId as string} />
                     </TabsContent>
                 </Tabs>
 

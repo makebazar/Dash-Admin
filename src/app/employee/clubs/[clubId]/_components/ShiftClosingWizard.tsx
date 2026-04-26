@@ -168,11 +168,24 @@ function normalizeExpenseEntries(value: any) {
 
 function hasReportValue(value: any) {
     if (Array.isArray(value)) {
-        return value.some((item) => (Number(item?.amount) || 0) > 0)
+        return value.some((item) => {
+            const raw = item?.amount
+            if (raw === null || raw === undefined) return false
+            const s = String(raw).trim()
+            if (s === '') return false
+            const n = Number(s)
+            return Number.isFinite(n)
+        })
     }
 
-    if (typeof value === 'number') return value > 0
-    if (typeof value === 'string') return value.trim() !== '' && Number(value) > 0
+    if (typeof value === 'number') return Number.isFinite(value)
+    if (typeof value === 'string') {
+        const s = value.trim()
+        if (s === '') return false
+        const n = Number(s)
+        if (Number.isFinite(n)) return true
+        return true
+    }
     return Boolean(value)
 }
 
@@ -1498,20 +1511,37 @@ export function ShiftClosingWizard({
                                                         {field.custom_label || field.metric_key}
                                                         {field.is_required && <span className="text-red-500 ml-1">*</span>}
                                                     </Label>
-                                                    <Button 
-                                                        variant="ghost" 
-                                                        size="sm" 
-                                                        onClick={() => {
-                                                            const currentList = normalizeExpenseEntries(reportData[field.metric_key])
-                                                            setReportData({
-                                                                ...reportData,
-                                                                [field.metric_key]: [...currentList, { amount: '', comment: '' }]
-                                                            })
-                                                        }}
-                                                        className="h-7 text-[10px] text-purple-400 hover:text-purple-300 hover:bg-purple-400/10"
-                                                    >
-                                                        <Plus className="h-3 w-3 mr-1" /> Добавить расход
-                                                    </Button>
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                                setReportData({
+                                                                    ...reportData,
+                                                                    [field.metric_key]: '0'
+                                                                })
+                                                            }}
+                                                            className="h-7 text-[10px] text-muted-foreground hover:text-slate-200 hover:bg-slate-700/20"
+                                                        >
+                                                            Нет расходов
+                                                        </Button>
+                                                        <Button 
+                                                            type="button"
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            onClick={() => {
+                                                                const currentList = normalizeExpenseEntries(reportData[field.metric_key])
+                                                                setReportData({
+                                                                    ...reportData,
+                                                                    [field.metric_key]: [...currentList, { amount: '', comment: '' }]
+                                                                })
+                                                            }}
+                                                            className="h-7 text-[10px] text-purple-400 hover:text-purple-300 hover:bg-purple-400/10"
+                                                        >
+                                                            <Plus className="h-3 w-3 mr-1" /> Добавить расход
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                                 
                                                 <div className="space-y-3">

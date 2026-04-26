@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Plus, Wallet, Edit, Trash2, Users, Coins, Calculator, TrendingUp, Info, ArrowRight, Clock, ShieldAlert, ClipboardCheck, Wrench, Trophy } from "lucide-react"
+import { Loader2, Plus, Wallet, Edit, Trash2, Users, Coins, Calculator, TrendingUp, Info, ArrowRight, Clock, ShieldAlert, ClipboardCheck, Wrench, Trophy, ArchiveRestore } from "lucide-react"
 import { SalaryScheme, Formula, PeriodBonus } from "@/components/salary/SalarySchemeForm"
 import { PageShell } from "@/components/layout/PageShell"
 
@@ -12,17 +12,22 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
     const [clubId, setClubId] = useState('')
     const [schemes, setSchemes] = useState<SalaryScheme[]>([])
     const [isLoading, setIsLoading] = useState(true)
+    const [view, setView] = useState<'active' | 'archived'>('active')
 
     useEffect(() => {
         params.then(p => {
             setClubId(p.clubId)
-            fetchSchemes(p.clubId)
+            fetchSchemes(p.clubId, 'active')
         })
     }, [params])
 
-    const fetchSchemes = async (id: string) => {
+    const fetchSchemes = async (id: string, nextView: 'active' | 'archived' = view) => {
+        setIsLoading(true)
         try {
-            const res = await fetch(`/api/clubs/${id}/salary-schemes`)
+            const url = nextView === 'archived'
+                ? `/api/clubs/${id}/salary-schemes?archived=1`
+                : `/api/clubs/${id}/salary-schemes`
+            const res = await fetch(url)
             const data = await res.json()
             if (res.ok) {
                 setSchemes(Array.isArray(data.schemes) ? data.schemes : [])
@@ -34,15 +39,30 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
         }
     }
 
-    const handleDelete = async (scheme: SalaryScheme) => {
-        if (!confirm(`Удалить схему "${scheme.name}"? Назначения сотрудникам будут сняты.`)) return
+    const handleArchive = async (scheme: SalaryScheme) => {
+        if (!confirm(`Отправить схему "${scheme.name}" в архив? Назначения сотрудникам будут сняты.`)) return
 
         try {
             const res = await fetch(`/api/clubs/${clubId}/salary-schemes/${scheme.id}`, {
                 method: 'DELETE'
             })
             if (res.ok) {
-                fetchSchemes(clubId)
+                fetchSchemes(clubId, view)
+            }
+        } catch (error) {
+            console.error('Error:', error)
+        }
+    }
+
+    const handleRestore = async (scheme: SalaryScheme) => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/salary-schemes/${scheme.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_active: true })
+            })
+            if (res.ok) {
+                fetchSchemes(clubId, view)
             }
         } catch (error) {
             console.error('Error:', error)
@@ -107,29 +127,64 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                 </div>
             </div>
 
+            <div className="flex items-center gap-2">
+                <Button
+                    type="button"
+                    variant={view === 'active' ? 'default' : 'outline'}
+                    className={view === 'active'
+                        ? 'rounded-xl h-10 px-4 bg-slate-900 text-white hover:bg-slate-800'
+                        : 'rounded-xl h-10 px-4 border-slate-200 text-slate-700 hover:bg-slate-50'}
+                    onClick={() => {
+                        setView('active')
+                        fetchSchemes(clubId, 'active')
+                    }}
+                >
+                    Активные
+                </Button>
+                <Button
+                    type="button"
+                    variant={view === 'archived' ? 'default' : 'outline'}
+                    className={view === 'archived'
+                        ? 'rounded-xl h-10 px-4 bg-slate-900 text-white hover:bg-slate-800'
+                        : 'rounded-xl h-10 px-4 border-slate-200 text-slate-700 hover:bg-slate-50'}
+                    onClick={() => {
+                        setView('archived')
+                        fetchSchemes(clubId, 'archived')
+                    }}
+                >
+                    Архив
+                </Button>
+            </div>
+
             {/* Empty State */}
             {schemes.length === 0 ? (
                 <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-12 text-center text-slate-500">
                     <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 mb-6">
                         <Wallet className="h-10 w-10 text-slate-400" />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 mb-2">Схемы пока не созданы</h3>
+                    <h3 className="text-xl font-bold text-slate-900 mb-2">
+                        {view === 'archived' ? 'Архив пуст' : 'Схемы пока не созданы'}
+                    </h3>
                     <p className="text-slate-500 text-sm max-w-md mx-auto mb-8">
-                        Создайте первую схему оплаты, чтобы система могла автоматически рассчитывать зарплаты ваших сотрудников.
+                        {view === 'archived'
+                            ? 'Переместите схемы в архив, чтобы они появлялись здесь.'
+                            : 'Создайте первую схему оплаты, чтобы система могла автоматически рассчитывать зарплаты ваших сотрудников.'}
                     </p>
-                    <Button asChild className="rounded-xl h-11 px-6 font-medium bg-slate-900 text-white hover:bg-slate-800">
-                        <Link href={`/clubs/${clubId}/settings/salary/scheme/new`}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Добавить схему
-                        </Link>
-                    </Button>
+                    {view !== 'archived' && (
+                        <Button asChild className="rounded-xl h-11 px-6 font-medium bg-slate-900 text-white hover:bg-slate-800">
+                            <Link href={`/clubs/${clubId}/settings/salary/scheme/new`}>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Добавить схему
+                            </Link>
+                        </Button>
+                    )}
                 </div>
             ) : (
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
                     {schemes.map(scheme => {
                         const formulaParts = formatFormulaSummary(scheme.formula)
                         return (
-                            <div key={scheme.id} className={`bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 flex flex-col justify-between transition-all hover:shadow-md ${!scheme.is_active ? 'opacity-60 grayscale' : ''}`}>
+                            <div key={scheme.id} className={`bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 flex flex-col justify-between transition-all hover:shadow-md ${view === 'archived' ? 'opacity-70' : ''}`}>
                                 <div>
                                     <div className="flex items-start justify-between mb-6">
                                         <div className="space-y-1 min-w-0 pr-4">
@@ -204,20 +259,35 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                     {/* Actions */}
                                     </div>
                                 <div className="flex items-center gap-2 pt-6 border-t border-slate-100 mt-auto">
-                                    <Button asChild variant="outline" className="flex-1 rounded-xl h-11 font-medium border-slate-200 text-slate-700 hover:bg-slate-50">
-                                        <Link href={`/clubs/${clubId}/settings/salary/scheme/${scheme.id}`}>
-                                            <Edit className="mr-2 h-4 w-4" />
-                                            Настроить
-                                        </Link>
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-11 w-11 shrink-0 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                        onClick={() => handleDelete(scheme)}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    {view !== 'archived' ? (
+                                        <>
+                                            <Button asChild variant="outline" className="flex-1 rounded-xl h-11 font-medium border-slate-200 text-slate-700 hover:bg-slate-50">
+                                                <Link href={`/clubs/${clubId}/settings/salary/scheme/${scheme.id}`}>
+                                                    <Edit className="mr-2 h-4 w-4" />
+                                                    Настроить
+                                                </Link>
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-11 w-11 shrink-0 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                onClick={() => handleArchive(scheme)}
+                                                title="В архив"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="flex-1 rounded-xl h-11 font-medium border-slate-200 text-slate-700 hover:bg-slate-50"
+                                            onClick={() => handleRestore(scheme)}
+                                        >
+                                            <ArchiveRestore className="mr-2 h-4 w-4" />
+                                            Восстановить
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         )

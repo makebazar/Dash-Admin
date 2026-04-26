@@ -11,6 +11,10 @@ export async function GET(
     try {
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId } = await params;
+        const url = new URL(request.url);
+        const archivedParam = url.searchParams.get('archived');
+        const archived = archivedParam === '1' || archivedParam === 'true';
+        const desiredActive = !archived;
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -41,8 +45,9 @@ export async function GET(
                  LIMIT 1
              ) v ON true
              WHERE s.club_id = $1
+               AND s.is_active = $2
              ORDER BY s.created_at DESC`,
-            [clubId]
+            [clubId, desiredActive]
         );
 
         return NextResponse.json({ schemes: result.rows });
