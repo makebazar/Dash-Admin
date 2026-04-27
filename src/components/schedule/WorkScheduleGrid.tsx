@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { cn, formatLocalDate } from "@/lib/utils"
 import { Sun, Moon, Plus, Loader2, GripVertical, Calendar as CalendarIcon } from "lucide-react"
 import { Card } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
 import {
     DndContext,
     closestCenter,
@@ -33,7 +34,7 @@ interface WorkScheduleGridProps {
 
 type ScheduleMap = Record<string, Record<string, string>>
 
-function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggleShift, readOnly, todayStr }: any) {
+function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggleShift, readOnly, todayStr, countFullAsTwo }: any) {
     const {
         attributes,
         listeners,
@@ -53,8 +54,13 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
     const shiftCount = useMemo(() => {
         if (!localSchedule[emp.id]) return 0;
         const prefix = `${year}-${month.toString().padStart(2, '0')}`;
-        return Object.keys(localSchedule[emp.id]).filter(date => date.startsWith(prefix)).length;
-    }, [localSchedule, emp.id, month, year]);
+        return Object.entries(localSchedule[emp.id])
+            .filter(([date]) => String(date).startsWith(prefix))
+            .reduce((sum: number, [, type]: any) => {
+                if (type === 'FULL') return sum + (countFullAsTwo ? 2 : 1)
+                return sum + 1
+            }, 0);
+    }, [localSchedule, emp.id, month, year, countFullAsTwo]);
 
     return (
         <tr
@@ -160,6 +166,24 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
     const localScheduleRef = useRef<ScheduleMap>(schedule || {})
     const updateQueueRef = useRef<Map<string, Promise<void>>>(new Map())
     const updateTokenRef = useRef<Map<string, symbol>>(new Map())
+    const [countFullAsTwo, setCountFullAsTwo] = useState(true)
+
+    useEffect(() => {
+        try {
+            const key = `work-schedule:count-full-as-two:${clubId}`
+            const raw = window.localStorage.getItem(key)
+            if (raw === '1') setCountFullAsTwo(false)
+            if (raw === '2') setCountFullAsTwo(true)
+        } catch {}
+    }, [clubId])
+
+    const updateCountFullAsTwo = (next: boolean) => {
+        setCountFullAsTwo(next)
+        try {
+            const key = `work-schedule:count-full-as-two:${clubId}`
+            window.localStorage.setItem(key, next ? '2' : '1')
+        } catch {}
+    }
 
     const todayStr = useMemo(() => {
         const d = new Date();
@@ -567,6 +591,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                             toggleShift={toggleShift}
                             readOnly={readOnly}
                             todayStr={todayStr}
+                            countFullAsTwo={countFullAsTwo}
                         />
                     ))}
                 </SortableContext>
@@ -644,6 +669,10 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                         <span className="font-medium text-muted-foreground">Выходной (Кликните для выбора)</span>
                     </div>
                 )}
+                <div className="flex items-center gap-3 sm:ml-auto">
+                    <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Сутки = 2 смены</div>
+                    <Switch checked={countFullAsTwo} onCheckedChange={updateCountFullAsTwo} />
+                </div>
             </div>
         </div>
     )
