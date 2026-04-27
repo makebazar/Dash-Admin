@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import bcrypt from 'bcrypt';
 import { normalizePhone } from '@/lib/phone-utils';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { hasColumn } from '@/lib/db-compat';
 
 const SALT_ROUNDS = 10;
 
@@ -22,6 +23,25 @@ export async function PATCH(
         const guard = await ensureOwnerSubscriptionActive(clubId, userId)
         if (!guard.ok) return guard.response
 
+        const hasIsActiveColumn = await hasColumn('club_employees', 'is_active')
+        const hasShowInScheduleColumn = await hasColumn('club_employees', 'show_in_schedule')
+        if (!hasIsActiveColumn || !hasShowInScheduleColumn) {
+            await query(`
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_employees' AND column_name='is_active') THEN
+                        ALTER TABLE club_employees ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_employees' AND column_name='show_in_schedule') THEN
+                        ALTER TABLE club_employees ADD COLUMN show_in_schedule BOOLEAN DEFAULT TRUE;
+                    END IF;
+                END $$;
+            `);
+        }
+
+        const { full_name, role_id, password, phone_number, dismissed_at, is_active, show_in_schedule } = await request.json();
+        console.log('[API] Updating employee:', { employeeId, full_name, role_id, phone_number, dismissed_at, is_active, show_in_schedule });
+
         // Verify employee belongs to this club
         const employeeCheck = await query(
             `SELECT id FROM club_employees WHERE club_id = $1 AND user_id = $2`,
@@ -29,11 +49,23 @@ export async function PATCH(
         );
 
         if (employeeCheck.rowCount === 0) {
-            return NextResponse.json({ error: 'Employee not found in this club' }, { status: 404 });
-        }
+            const clubRes = await query(`SELECT owner_id FROM clubs WHERE id = $1`, [clubId])
+            const ownerId = clubRes.rows[0]?.owner_id
+            const isTargetOwner = ownerId && String(ownerId) === String(employeeId)
 
-        const { full_name, role_id, password, phone_number, dismissed_at, is_active, show_in_schedule } = await request.json();
-        console.log('[API] Updating employee:', { employeeId, full_name, role_id, phone_number, dismissed_at, is_active, show_in_schedule });
+            if (!isTargetOwner) {
+                return NextResponse.json({ error: 'Employee not found in this club' }, { status: 404 });
+            }
+
+            await query(
+                `
+                INSERT INTO club_employees (club_id, user_id, role, is_active, dismissed_at, show_in_schedule)
+                VALUES ($1, $2, 'Владелец', TRUE, NULL, $3)
+                ON CONFLICT (club_id, user_id) DO NOTHING
+                `,
+                [clubId, employeeId, show_in_schedule ?? true]
+            )
+        }
 
         // 1. Update USERS table
         const userUpdates = [];

@@ -464,7 +464,39 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             .filter(v => v.payoutType === 'VIRTUAL_BALANCE' && v.amount > 0.0001)
             .sort((a, b) => b.amount - a.amount);
 
-        const monthlyKpis = Array.isArray(employee.period_bonuses) ? employee.period_bonuses : [];
+        const rawMonthlyKpis = Array.isArray(employee.period_bonuses) ? employee.period_bonuses : [];
+        const kpiGroups = new Map<string, any[]>();
+        rawMonthlyKpis.forEach((k: any) => {
+            const key = String(k?.metric_key || k?.source || k?.name || '');
+            const arr = kpiGroups.get(key) || [];
+            arr.push(k);
+            kpiGroups.set(key, arr);
+        });
+        const kpiGroupMeta = new Map<string, { showRole: boolean, dedupe: boolean }>();
+        kpiGroups.forEach((arr, key) => {
+            if (!key || arr.length <= 1) {
+                kpiGroupMeta.set(key, { showRole: false, dedupe: false });
+                return;
+            }
+            const first = arr[0];
+            const allSame = arr.every((x: any) =>
+                Number(x?.bonus_amount || 0) === Number(first?.bonus_amount || 0) &&
+                Number(x?.target_value || 0) === Number(first?.target_value || 0) &&
+                String(x?.payout_type || 'REAL_MONEY') === String(first?.payout_type || 'REAL_MONEY')
+            );
+            kpiGroupMeta.set(key, { showRole: !allSame, dedupe: allSame });
+        });
+        const seenKpiKeys = new Set<string>();
+        const monthlyKpis = rawMonthlyKpis.filter((k: any) => {
+            const key = String(k?.metric_key || k?.source || k?.name || '');
+            const meta = kpiGroupMeta.get(key);
+            if (meta?.dedupe) {
+                if (seenKpiKeys.has(key)) return false;
+                seenKpiKeys.add(key);
+                return true;
+            }
+            return true;
+        });
         const monthCash = monthlyKpis.filter((k: any) => k?.payout_type !== 'VIRTUAL_BALANCE' && Number(k?.bonus_amount || 0) > 0);
         const monthVirtual = monthlyKpis.filter((k: any) => k?.payout_type === 'VIRTUAL_BALANCE' && Number(k?.bonus_amount || 0) > 0);
 
@@ -612,6 +644,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                     ? 'bg-purple-50 text-purple-700 border-purple-200'
                                     : 'bg-emerald-50 text-emerald-700 border-emerald-200';
                                 const rewardLabel = payoutType === 'VIRTUAL_BALANCE' ? 'Депозит' : 'Деньги';
+                                const kpiKey = String(k?.metric_key || k?.source || k?.name || '');
+                                const showRoleBadge = !!kpiGroupMeta.get(kpiKey)?.showRole;
                                 const current = Number(k?.current_value || 0);
                                 const target = Number(k?.target_value || 0);
                                 const isRankKpi = String(k?.metric_key || '') === 'leaderboard_rank';
@@ -639,6 +673,11 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <div className="text-sm font-black text-slate-900 truncate">{k?.name || 'KPI'}</div>
                                                     <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight border ${pill}`}>{rewardLabel}</span>
+                                                    {showRoleBadge && k?.role_name ? (
+                                                        <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight border bg-slate-50 text-slate-700 border-slate-200">
+                                                            {String(k.role_name)}
+                                                        </span>
+                                                    ) : null}
                                                 </div>
                                                 <div className="mt-1 text-[11px] text-slate-600">
                                                     {isRankKpi ? (
@@ -1667,6 +1706,11 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                                                             <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
                                                                                                 {dayOfWeek} • {shiftTypeLabel(shift.shift_type)}
                                                                                             </div>
+                                                                                            {shift.role_name ? (
+                                                                                                <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight border bg-slate-50 text-slate-700 border-slate-200">
+                                                                                                    {shift.role_name}
+                                                                                                </span>
+                                                                                            ) : null}
                                                                                             <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight shadow-sm border ${statusClass}`}>
                                                                                                 {statusLabel}
                                                                                             </span>

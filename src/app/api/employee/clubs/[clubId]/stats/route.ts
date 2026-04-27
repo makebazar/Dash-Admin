@@ -64,23 +64,84 @@ export async function GET(
         });
 
         // 2. Get scheme for KPI
+        await query(`
+            CREATE TABLE IF NOT EXISTS club_employee_roles (
+                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+                priority INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(club_id, user_id, role_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_club_employee_roles_club_user ON club_employee_roles(club_id, user_id);
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS club_employee_role_preferences (
+                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                active_role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL,
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(club_id, user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_club_employee_role_preferences_club_user ON club_employee_role_preferences(club_id, user_id);
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS employee_role_salary_assignments (
+                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+                scheme_id INTEGER NULL REFERENCES salary_schemes(id) ON DELETE SET NULL,
+                assigned_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(club_id, user_id, role_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_employee_role_salary_assignments_club_user ON employee_role_salary_assignments(club_id, user_id);
+        `);
+
+        const prefRes = await query(
+            `SELECT active_role_id FROM club_employee_role_preferences WHERE club_id = $1 AND user_id = $2 LIMIT 1`,
+            [clubId, userId]
+        );
+        const preferredRoleId = prefRes.rows[0]?.active_role_id ? Number(prefRes.rows[0].active_role_id) : null;
+
+        const roleListRes = await query(
+            `SELECT role_id FROM club_employee_roles WHERE club_id = $1 AND user_id = $2 ORDER BY priority ASC LIMIT 1`,
+            [clubId, userId]
+        );
+        const defaultRoleId = roleListRes.rows[0]?.role_id ? Number(roleListRes.rows[0].role_id) : null;
+
+        const fallbackUserRoleRes = await query(`SELECT role_id FROM users WHERE id = $1 LIMIT 1`, [userId]);
+        const fallbackUserRoleId = fallbackUserRoleRes.rows[0]?.role_id ? Number(fallbackUserRoleRes.rows[0].role_id) : null;
+
+        const effectiveRoleId = Number.isFinite(preferredRoleId as any)
+            ? preferredRoleId
+            : Number.isFinite(defaultRoleId as any)
+                ? defaultRoleId
+                : Number.isFinite(fallbackUserRoleId as any)
+                    ? fallbackUserRoleId
+                    : null;
+
         const schemeRes = await query(
-            `SELECT 
+            `
+            SELECT 
                 ss.*,
                 v.formula as scheme_formula
-             FROM users u
-             LEFT JOIN employee_salary_assignments esa ON u.id = esa.user_id AND esa.club_id = $2
-             LEFT JOIN salary_schemes ss ON ss.id = esa.scheme_id
-             LEFT JOIN LATERAL (
-                 SELECT formula 
-                 FROM salary_scheme_versions 
-                 WHERE scheme_id = ss.id 
-                 ORDER BY version DESC 
-                 LIMIT 1
-             ) v ON true
-             WHERE u.id = $1
-             ORDER BY esa.assigned_at DESC LIMIT 1`,
-            [userId, clubId]
+            FROM salary_schemes ss
+            LEFT JOIN LATERAL (
+                SELECT formula 
+                FROM salary_scheme_versions 
+                WHERE scheme_id = ss.id 
+                ORDER BY version DESC 
+                LIMIT 1
+            ) v ON true
+            WHERE ss.id = COALESCE(
+                (SELECT scheme_id FROM employee_role_salary_assignments WHERE club_id = $2 AND user_id = $1 AND role_id = $3),
+                (SELECT scheme_id FROM employee_salary_assignments WHERE club_id = $2 AND user_id = $1)
+            )
+              AND ss.club_id = $2
+            LIMIT 1
+            `,
+            [userId, clubId, effectiveRoleId]
         );
 
         const rawScheme = schemeRes.rows[0];
@@ -91,9 +152,11 @@ export async function GET(
             ? rawScheme.period_bonuses 
             : (formula.period_bonuses || []);
 
-        const scheme = { ...rawScheme, ...formula, period_bonuses: period_bonuses_config };
+        const scheme = rawScheme
+            ? { ...rawScheme, ...formula, period_bonuses: period_bonuses_config }
+            : { amount: 0, standard_monthly_shifts: 15, period_bonuses: [] as any[] };
         
-        const hourlyRate = parseFloat(scheme?.amount || '150');
+        const hourlyRate = parseFloat(scheme?.amount || '0');
         const standard_monthly_shifts = scheme?.standard_monthly_shifts || 15;
         const leaderboardState = await getClubEmployeeLeaderboardState(clubId, year, month);
         const leaderboard = leaderboardState.leaderboard;

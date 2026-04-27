@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
     Clock, Loader2, LogIn, LogOut, Wallet, Activity, Calendar,
     TrendingUp, Target, Zap, ChevronRight, Trophy, Brush, ClipboardCheck, Monitor, AlertCircle, Ban, ArrowRightLeft, MessageSquare, ShoppingCart
@@ -222,6 +223,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [employeeAccess, setEmployeeAccess] = useState<any>(null)
     const [evaluationScore, setEvaluationScore] = useState<number | null>(null)
     const [isEvaluationsLoading, setIsEvaluationsLoading] = useState(false)
+    const [availableShiftRoles, setAvailableShiftRoles] = useState<{ id: number, name: string }[]>([])
+    const [selectedShiftRoleId, setSelectedShiftRoleId] = useState<number | null>(null)
     const normalizedInventorySettings = useMemo(() => normalizeInventorySettings(club?.inventory_settings), [club?.inventory_settings])
     const isEmployeeAccessLoaded = employeeAccess !== null
     const employeeSettings = employeeAccess?.settings || {}
@@ -260,7 +263,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     // Оптимизация: мемоизация KPI компонентов (должен быть до useEffect)
     const kpiComponents = useMemo(() => {
-        if (!kpiData?.kpi) return null
+        if (kpiData?.hidden) return null
+        if (!kpiData?.kpi?.length) return null
         return kpiData.kpi.map((kpi: any, idx: number) => (
             <div key={`kpi-${kpi?.id ?? "unknown"}-${idx}`} className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
@@ -282,7 +286,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     }, [kpiData?.kpi, kpiData?.remaining_shifts, kpiData?.shifts_count, kpiData?.completed_shifts, kpiData?.planned_shifts, kpiData?.days_remaining, activeShift?.id])
 
     const checklistComponents = useMemo(() => {
-        if (!kpiData?.checklist) return null
+        if (kpiData?.hidden) return null
+        if (!kpiData?.checklist?.length) return null
         return kpiData.checklist.map((checklist: any, idx: number) => (
             <div key={`checklist-${checklist?.id ?? "unknown"}-${idx}`} className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
@@ -349,6 +354,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     }, [activeShift?.id, canUseShiftZoneHandover, clubId, hasShiftAccountability, isOpenZoneSnapshotModalOpen])
 
     const maintenanceComponent = useMemo(() => {
+        if (kpiData?.hidden) return null
         if (!kpiData?.maintenance) return null
         return (
             <div className="space-y-4">
@@ -384,6 +390,38 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             fetchData(clubId)
         }
     }, [clubId, employeeClubs])
+
+    useEffect(() => {
+        if (!clubId) return
+        fetchShiftRoles(clubId)
+    }, [clubId])
+
+    const updateSelectedShiftRole = useCallback(async (nextRoleId: number) => {
+        setSelectedShiftRoleId(nextRoleId)
+        try {
+            await fetch(`/api/employee/clubs/${clubId}/roles`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active_role_id: nextRoleId })
+            })
+            const accessRes = await fetch(`/api/employee/clubs/${clubId}/me`, { cache: 'no-store' })
+            const accessJson = await accessRes.json().catch(() => ({}))
+            if (accessRes.ok) {
+                setEmployeeAccess(accessJson)
+                const settings = accessJson?.settings || {}
+                const localCanUseEmployeeChecklists = settings.handover_checklist_on_start !== 'DISABLED' || settings.closing_checklist_enabled === true
+                if (localCanUseEmployeeChecklists) {
+                    await fetchChecklistTemplates(clubId)
+                } else {
+                    setChecklistTemplates([])
+                }
+            }
+            const kpiRes = await fetch(`/api/employee/clubs/${clubId}/kpi`, { cache: 'no-store' })
+            if (kpiRes.ok) setKpiData(await kpiRes.json())
+        } catch (e) {
+            console.error(e)
+        }
+    }, [clubId])
 
     useEffect(() => {
         if (!clubId || !currentUserId || !canUseEmployeeChecklists) return
@@ -631,13 +669,32 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         }
     }
 
+    async function fetchShiftRoles(id: string) {
+        try {
+            const res = await fetch(`/api/employee/clubs/${id}/roles`, { cache: 'no-store' })
+            const data = await res.json()
+            if (!res.ok) return
+            const roles = Array.isArray(data.roles) ? data.roles : []
+            const normalized = roles
+                .map((r: any) => ({ id: Number(r.id), name: String(r.name) }))
+                .filter((r: any) => Number.isFinite(r.id))
+            setAvailableShiftRoles(normalized)
+            const activeId = data.active_role_id === null || data.active_role_id === undefined ? null : Number(data.active_role_id)
+            const defaultId = data.default_role_id === null || data.default_role_id === undefined ? null : Number(data.default_role_id)
+            const next = (Number.isFinite(activeId) ? activeId : null) ?? (Number.isFinite(defaultId) ? defaultId : null) ?? (normalized[0]?.id ?? null)
+            setSelectedShiftRoleId(next)
+        } catch (e) {
+            console.error(e)
+        }
+    }
+
     const executeStartShift = useCallback(async () => {
         setIsActionLoading(true)
         try {
             const res = await fetch('/api/employee/shifts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ club_id: parseInt(clubId) }),
+                body: JSON.stringify({ club_id: parseInt(clubId), role_id: selectedShiftRoleId }),
             })
 
             const data = await res.json()
@@ -669,7 +726,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         } finally {
             setIsActionLoading(false)
         }
-    }, [canUseShiftZoneHandover, clubId])
+    }, [canUseShiftZoneHandover, clubId, selectedShiftRoleId])
 
     // Оптимизация: мемоизация обработчиков
     const handleStartShift = useCallback(async () => {
@@ -1059,6 +1116,26 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                     <p className="text-sm text-muted-foreground">Начните смену для учёта рабочего времени</p>
                                 </div>
 
+                                {availableShiftRoles.length > 1 ? (
+                                    <div className="w-full max-w-[320px] px-6">
+                                        <Select
+                                            value={selectedShiftRoleId ? String(selectedShiftRoleId) : ""}
+                                            onValueChange={(v) => updateSelectedShiftRole(parseInt(v))}
+                                        >
+                                            <SelectTrigger className="h-11 rounded-xl bg-background">
+                                                <SelectValue placeholder="Выберите роль" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableShiftRoles.map(r => (
+                                                    <SelectItem key={r.id} value={String(r.id)}>
+                                                        {r.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                ) : null}
+
                                 <Button
                                     className="h-11 px-8 shadow-none"
                                     onClick={handleStartShift}
@@ -1271,7 +1348,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 </section>
             )}
 
-            {(!kpiData || (!kpiData.kpi?.length && !kpiData.checklist?.length && !kpiData.maintenance)) && (
+            {(!kpiData || (!kpiData.hidden && !kpiData.kpi?.length && !kpiData.checklist?.length && !kpiData.maintenance)) && (
                 <section className="pt-10 mt-10 border-t">
                     <p className="text-sm text-muted-foreground text-center py-8">KPI показатели пока не назначены</p>
                 </section>

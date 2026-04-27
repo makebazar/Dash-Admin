@@ -123,11 +123,18 @@ function SortableRow({ emp, days, month, year, localSchedule, isUpdating, toggle
                             "w-full h-14 flex items-center justify-center transition-all duration-200",
                             type === 'DAY' && "bg-amber-500/10 text-amber-500 shadow-sm inset-y-0",
                             type === 'NIGHT' && "bg-indigo-500/10 text-indigo-400 shadow-sm inset-y-0",
+                            type === 'FULL' && "bg-slate-900/5 text-slate-700 shadow-sm inset-y-0",
                             !type && "text-muted-foreground/20",
                             updating && "opacity-40 scale-90"
                         )}>
                             {type === 'DAY' && <Sun className="h-5 w-5" />}
                             {type === 'NIGHT' && <Moon className="h-5 w-5" />}
+                            {type === 'FULL' && (
+                                <div className="flex items-center gap-1">
+                                    <Sun className="h-4 w-4 text-amber-500" />
+                                    <Moon className="h-4 w-4 text-indigo-400" />
+                                </div>
+                            )}
                             {!type && !readOnly && <Plus className="h-3 w-3 opacity-0 group-hover/cell:opacity-100 transition-opacity" />}
                         </div>
                         {updating && (
@@ -326,6 +333,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
         let nextType: string | null = null
         if (!currentType) nextType = 'DAY'
         else if (currentType === 'DAY') nextType = 'NIGHT'
+        else if (currentType === 'NIGHT') nextType = 'FULL'
         else nextType = null
 
         const newSchedule: ScheduleMap = { ...prev }
@@ -353,7 +361,12 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
         Object.entries(localSchedule).forEach(([, shifts]: [any, any]) => {
             Object.entries(shifts).forEach(([dateStr, type]: [any, any]) => {
                 if (counts[dateStr]) {
-                    counts[dateStr][type as 'DAY' | 'NIGHT']++
+                    if (type === 'FULL') {
+                        counts[dateStr].DAY++
+                        counts[dateStr].NIGHT++
+                    } else if (type === 'DAY' || type === 'NIGHT') {
+                        counts[dateStr][type]++
+                    }
                 }
             })
         })
@@ -372,6 +385,7 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                 // Find workers for this day
                 const dayWorkers = localEmployees.filter((e: any) => localSchedule[e.id]?.[dateStr] === 'DAY')
                 const nightWorkers = localEmployees.filter((e: any) => localSchedule[e.id]?.[dateStr] === 'NIGHT')
+                const fullWorkers = localEmployees.filter((e: any) => localSchedule[e.id]?.[dateStr] === 'FULL')
                 
                 return (
                     <div key={dateStr} className={cn(
@@ -462,6 +476,30 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                                         ))
                                     ) : (
                                         <span className="text-xs font-medium text-indigo-400/50 italic">Нет смен</span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg bg-slate-900/5 p-3 border border-slate-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Sun className="h-3.5 w-3.5 text-amber-500" />
+                                    <Moon className="h-3.5 w-3.5 text-indigo-400 -ml-1" />
+                                    <span className="text-[11px] font-bold uppercase tracking-widest text-slate-600">
+                                        Сутки
+                                    </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {fullWorkers.length > 0 ? (
+                                        fullWorkers.map((w: any) => (
+                                            <div key={w.id} className="inline-flex items-center rounded bg-slate-900/5 px-2 py-1 border border-slate-200">
+                                                <div className="h-1.5 w-1.5 rounded-full bg-slate-400 mr-1.5"></div>
+                                                <span className="text-xs font-medium text-slate-700">
+                                                    {w.full_name?.split(' ')[0] || 'Без имени'}
+                                                </span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <span className="text-xs font-medium text-slate-500/60 italic">Нет смен</span>
                                     )}
                                 </div>
                             </div>
@@ -594,6 +632,11 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                     <div className="w-4 h-4 rounded bg-indigo-500/20 border border-indigo-500/50" />
                     <span className="font-bold text-foreground">Ночная смена</span>
                     <span className="text-muted-foreground font-medium">({clubSettings?.night_start_hour || '21'}:00 - {clubSettings?.day_start_hour || '09'}:00)</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                    <div className="w-4 h-4 rounded bg-slate-900/10 border border-slate-200" />
+                    <span className="font-bold text-foreground">Сутки</span>
+                    <span className="text-muted-foreground font-medium">(день + ночь)</span>
                 </div>
                 {!readOnly && (
                     <div className="flex items-center gap-2.5">

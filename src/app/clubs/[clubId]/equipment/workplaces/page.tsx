@@ -102,9 +102,24 @@ export default function WorkplacesPage() {
     }, [fetchData])
 
     const zones = useMemo(() => {
-        const fromList = zoneList.map(z => z.name)
-        const fromWorkstations = workstations.map(w => w.zone)
-        return Array.from(new Set([...fromList, ...fromWorkstations])).sort()
+        const listOrdered = [...zoneList]
+            .filter(z => z?.name)
+            .sort((a, b) => {
+                const ao = Number(a?.display_order || 0)
+                const bo = Number(b?.display_order || 0)
+                if (ao !== bo) return ao - bo
+                return String(a.name).localeCompare(String(b.name), "ru", { sensitivity: "base" })
+            })
+            .map(z => z.name)
+
+        const known = new Set(listOrdered)
+        const extra = workstations
+            .map(w => w.zone)
+            .filter(Boolean)
+            .filter((z: any) => !known.has(z))
+            .sort((a: any, b: any) => String(a).localeCompare(String(b), "ru", { sensitivity: "base" }))
+
+        return [...listOrdered, ...extra]
     }, [zoneList, workstations])
 
     const mergeEquipmentState = useCallback((equipmentId: string, patch: Partial<Equipment>) => {

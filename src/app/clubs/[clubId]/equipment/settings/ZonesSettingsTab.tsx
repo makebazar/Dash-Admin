@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, MapPin, Pencil, Plus, Save, Trash2, User, X } from "lucide-react"
+import { ChevronDown, ChevronUp, Loader2, MapPin, Pencil, Plus, Save, Trash2, User, X } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface Zone {
     id: string
     name: string
+    display_order?: number
     assigned_user_id: string | null
     assigned_user_name: string | null
     workstation_count: number
@@ -161,6 +162,27 @@ export function ZonesSettingsTab({ clubId }: ZonesSettingsTabProps) {
         setEditResponsible(zone.assigned_user_id)
     }
 
+    const moveZone = async (zoneId: string, direction: "UP" | "DOWN") => {
+        setIsSaving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/zones/${zoneId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ move: direction })
+            })
+            if (!res.ok) {
+                const data = await res.json().catch(() => null)
+                throw new Error(data?.error || "Не удалось изменить порядок")
+            }
+            fetchData()
+        } catch (error) {
+            console.error(error)
+            alert(error instanceof Error ? error.message : "Ошибка при изменении порядка")
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
     return (
         <Card className="shadow-sm">
             <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -234,7 +256,7 @@ export function ZonesSettingsTab({ clubId }: ZonesSettingsTabProps) {
                                         Зон пока нет. Создайте первую зону для схемы клуба.
                                     </TableCell>
                                 </TableRow>
-                            ) : zones.map((zone) => (
+                            ) : zones.map((zone, idx) => (
                                 <TableRow key={zone.id}>
                                     <TableCell>
                                         {editingZoneId === zone.id ? (
@@ -285,6 +307,22 @@ export function ZonesSettingsTab({ clubId }: ZonesSettingsTabProps) {
                                                 </>
                                             ) : (
                                                 <>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        onClick={() => moveZone(zone.id, "UP")}
+                                                        disabled={isSaving || idx === 0}
+                                                    >
+                                                        <ChevronUp className="h-4 w-4 text-muted-foreground/70 hover:text-slate-900" />
+                                                    </Button>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        onClick={() => moveZone(zone.id, "DOWN")}
+                                                        disabled={isSaving || idx === zones.length - 1}
+                                                    >
+                                                        <ChevronDown className="h-4 w-4 text-muted-foreground/70 hover:text-slate-900" />
+                                                    </Button>
                                                     <Button size="icon" variant="ghost" onClick={() => startEditing(zone)}>
                                                         <Pencil className="h-4 w-4 text-muted-foreground/70 hover:text-blue-600" />
                                                     </Button>

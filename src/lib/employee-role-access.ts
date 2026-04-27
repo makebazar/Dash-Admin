@@ -63,30 +63,96 @@ export async function getEmployeeRoleAccess(clubId: string): Promise<EmployeeRol
         throw error
     }
 
+    await query(`
+        CREATE TABLE IF NOT EXISTS club_employee_roles (
+            club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+            priority INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(club_id, user_id, role_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_club_employee_roles_club_user ON club_employee_roles(club_id, user_id);
+    `)
+    await query(`
+        CREATE TABLE IF NOT EXISTS club_employee_role_preferences (
+            club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            active_role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL,
+            updated_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(club_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_club_employee_role_preferences_club_user ON club_employee_role_preferences(club_id, user_id);
+    `)
+
+    await query(`INSERT INTO roles (name, default_kpi_settings) VALUES ('Владелец', '{}'::jsonb) ON CONFLICT (name) DO NOTHING`)
+
     const accessRes = await query(
         `
+        WITH membership AS (
+            SELECT 1 as ok
+            WHERE (
+                EXISTS (
+                    SELECT 1
+                    FROM club_employees ce
+                    WHERE ce.club_id = $2
+                      AND ce.user_id = $1
+                      AND ce.dismissed_at IS NULL
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM clubs c
+                    WHERE c.id = $2
+                      AND c.owner_id = $1
+                )
+            )
+        ),
+        preferred_role AS (
+            SELECT active_role_id as role_id
+            FROM club_employee_role_preferences
+            WHERE club_id = $2 AND user_id = $1
+            LIMIT 1
+        ),
+        assigned_role AS (
+            SELECT role_id
+            FROM club_employee_roles
+            WHERE club_id = $2 AND user_id = $1
+            ORDER BY priority ASC
+            LIMIT 1
+        ),
+        owner_role AS (
+            SELECT r.id as role_id
+            FROM roles r
+            WHERE r.name = 'Владелец'
+            LIMIT 1
+        ),
+        base_user AS (
+            SELECT u.role_id as user_role_id
+            FROM users u
+            WHERE u.id = $1
+            LIMIT 1
+        ),
+        effective_role AS (
+            SELECT COALESCE(
+                (SELECT role_id FROM preferred_role),
+                (SELECT role_id FROM assigned_role),
+                (SELECT user_role_id FROM base_user),
+                (
+                    CASE
+                        WHEN EXISTS (SELECT 1 FROM clubs c WHERE c.id = $2 AND c.owner_id = $1)
+                        THEN (SELECT role_id FROM owner_role)
+                        ELSE NULL
+                    END
+                )
+            ) as role_id
+        )
         SELECT
-            u.role_id,
+            (SELECT role_id FROM effective_role) as role_id,
             r.name as role_name,
             r.employee_access_settings
-        FROM users u
-        LEFT JOIN roles r ON r.id = u.role_id
-        WHERE u.id = $1
-          AND (
-              EXISTS (
-                  SELECT 1
-                  FROM club_employees ce
-                  WHERE ce.club_id = $2
-                    AND ce.user_id = $1
-                    AND ce.dismissed_at IS NULL
-              )
-              OR EXISTS (
-                  SELECT 1
-                  FROM clubs c
-                  WHERE c.id = $2
-                    AND c.owner_id = $1
-              )
-          )
+        FROM membership m
+        LEFT JOIN roles r ON r.id = (SELECT role_id FROM effective_role)
         LIMIT 1
         `,
         [userId, clubId]

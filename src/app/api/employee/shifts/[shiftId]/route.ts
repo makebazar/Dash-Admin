@@ -3,6 +3,7 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateSalary } from '@/lib/salary-calculator';
 import { getEmployeeRoleAccess } from '@/lib/employee-role-access';
+import { hasColumn } from '@/lib/db-compat';
 
 export async function PATCH(
     request: Request,
@@ -28,8 +29,35 @@ export async function PATCH(
         }
 
         // Verify shift belongs to user
+        const hasShiftRoleIdSnapshot = await hasColumn('shifts', 'shift_role_id_snapshot')
+        if (!hasShiftRoleIdSnapshot) {
+            await query(`
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='shifts' AND column_name='shift_role_id_snapshot') THEN
+                        ALTER TABLE shifts ADD COLUMN shift_role_id_snapshot INTEGER NULL;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='shifts' AND column_name='shift_role_name_snapshot') THEN
+                        ALTER TABLE shifts ADD COLUMN shift_role_name_snapshot VARCHAR(64) NULL;
+                    END IF;
+                END $$;
+            `);
+        }
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS employee_role_salary_assignments (
+                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+                scheme_id INTEGER NULL REFERENCES salary_schemes(id) ON DELETE SET NULL,
+                assigned_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(club_id, user_id, role_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_employee_role_salary_assignments_club_user ON employee_role_salary_assignments(club_id, user_id);
+        `);
+
         const shiftCheck = await query(
-            `SELECT id, club_id, check_in, user_id, shift_type FROM shifts WHERE id = $1 AND user_id = $2 AND check_out IS NULL`,
+            `SELECT id, club_id, check_in, user_id, shift_type, shift_role_id_snapshot FROM shifts WHERE id = $1 AND user_id = $2 AND check_out IS NULL`,
             [shiftId, userId]
         );
 
@@ -41,6 +69,7 @@ export async function PATCH(
         const checkIn = new Date(shiftCheck.rows[0].check_in);
         const shiftUserId = shiftCheck.rows[0].user_id;
         const shiftType = shiftCheck.rows[0].shift_type || 'DAY'
+        const shiftRoleId = shiftCheck.rows[0].shift_role_id_snapshot ? Number(shiftCheck.rows[0].shift_role_id_snapshot) : null
         const jsDow = checkIn.getDay()
         const dayOfWeek =
             jsDow === 0
@@ -82,14 +111,29 @@ export async function PATCH(
 
         // Get assigned scheme and its latest formula
         const schemeRes = await query(
-            `SELECT ss.id, ss.name, ss.standard_monthly_shifts, sv.formula
-             FROM employee_salary_assignments esa
-             JOIN salary_schemes ss ON esa.scheme_id = ss.id
-             JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
-             WHERE esa.user_id = $1 AND esa.club_id = $2
-             ORDER BY sv.version DESC
-             LIMIT 1`,
-            [shiftUserId, clubId]
+            `
+            SELECT ss.id, ss.name, ss.standard_monthly_shifts, sv.formula
+            FROM salary_schemes ss
+            JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
+            WHERE ss.id = (
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1 FROM employee_role_salary_assignments
+                        WHERE club_id = $2 AND user_id = $1 AND role_id = $3
+                    )
+                    THEN (
+                        SELECT scheme_id FROM employee_role_salary_assignments
+                        WHERE club_id = $2 AND user_id = $1 AND role_id = $3
+                        LIMIT 1
+                    )
+                    ELSE (SELECT scheme_id FROM employee_salary_assignments WHERE user_id = $1 AND club_id = $2)
+                END
+            )
+              AND ss.club_id = $2
+            ORDER BY sv.version DESC
+            LIMIT 1
+            `,
+            [shiftUserId, clubId, shiftRoleId]
         );
 
         // Fetch evaluations for this shift

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { Building2, Loader2, ChevronRight, User, Shield, CheckCircle2 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -147,8 +146,16 @@ export default function EmployeeDashboard() {
                     ) : (
                         <div className="grid gap-3 sm:grid-cols-2">
                             {clubs.map((club) => (
-                                <Link key={club.id} href={`/employee/clubs/${club.id}`}>
-                                    <div className="group flex items-center justify-between rounded-xl border bg-card p-5 transition-colors hover:bg-accent/50 hover:border-border">
+                                <div
+                                    key={club.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => router.push(`/employee/clubs/${club.id}`)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') router.push(`/employee/clubs/${club.id}`)
+                                    }}
+                                    className="group flex items-center justify-between rounded-xl border bg-card p-5 transition-colors hover:bg-accent/50 hover:border-border cursor-pointer"
+                                >
                                         <div className="flex items-center gap-4">
                                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-foreground group-hover:bg-background">
                                                 <Building2 className="h-5 w-5" />
@@ -168,8 +175,7 @@ export default function EmployeeDashboard() {
                                             </div>
                                         </div>
                                         <ChevronRight className="h-5 w-5 text-muted-foreground/50 transition-transform group-hover:translate-x-1 group-hover:text-foreground" />
-                                    </div>
-                                </Link>
+                                </div>
                             ))}
                         </div>
                     )}

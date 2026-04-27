@@ -76,12 +76,112 @@ export async function GET(
         const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id=$1 AND owner_id=$2`, [clubId, userId]);
         if (ownerCheck.rowCount === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
+        await query(`
+            CREATE TABLE IF NOT EXISTS club_employee_roles (
+                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+                priority INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(club_id, user_id, role_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_club_employee_roles_club_user ON club_employee_roles(club_id, user_id);
+        `);
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS employee_role_salary_assignments (
+                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+                scheme_id INTEGER NULL REFERENCES salary_schemes(id) ON DELETE SET NULL,
+                assigned_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(club_id, user_id, role_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_employee_role_salary_assignments_club_user ON employee_role_salary_assignments(club_id, user_id);
+        `);
+
+        await query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='shifts' AND column_name='shift_role_id_snapshot') THEN
+                    ALTER TABLE shifts ADD COLUMN shift_role_id_snapshot INTEGER NULL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='shifts' AND column_name='shift_role_name_snapshot') THEN
+                    ALTER TABLE shifts ADD COLUMN shift_role_name_snapshot VARCHAR(64) NULL;
+                END IF;
+            END $$;
+        `);
+
+        const employeeRolesRes = await query(
+            `
+            SELECT cer.user_id, cer.role_id, cer.priority, r.name as role_name
+            FROM club_employee_roles cer
+            JOIN roles r ON r.id = cer.role_id
+            WHERE cer.club_id = $1
+            ORDER BY cer.user_id ASC, cer.priority ASC
+            `,
+            [clubId]
+        );
+        const employeeRolesMap = new Map<string, { role_id: number, role_name: string, priority: number }[]>();
+        for (const row of (employeeRolesRes.rows || [])) {
+            const uid = String(row.user_id);
+            const arr = employeeRolesMap.get(uid) || [];
+            arr.push({ role_id: Number(row.role_id), role_name: String(row.role_name), priority: Number(row.priority) });
+            employeeRolesMap.set(uid, arr);
+        }
+
+        const employeeRoleSchemesRes = await query(
+            `
+            SELECT 
+                a.user_id,
+                a.role_id,
+                a.scheme_id,
+                s.name as scheme_name,
+                s.period_bonuses as scheme_period_bonuses,
+                s.standard_monthly_shifts as scheme_standard_monthly_shifts,
+                v.formula as scheme_formula,
+                v.version as scheme_version
+            FROM employee_role_salary_assignments a
+            LEFT JOIN salary_schemes s ON s.id = a.scheme_id
+            LEFT JOIN LATERAL (
+                SELECT formula, version
+                FROM salary_scheme_versions
+                WHERE scheme_id = s.id
+                ORDER BY version DESC
+                LIMIT 1
+            ) v ON true
+            WHERE a.club_id = $1
+            `,
+            [clubId]
+        );
+        const employeeRoleSchemeMap = new Map<string, any>();
+        for (const row of (employeeRoleSchemesRes.rows || [])) {
+            const schemeId = row.scheme_id === null || row.scheme_id === undefined ? null : Number(row.scheme_id);
+            const formula = row.scheme_formula || {};
+            const periodBonuses = (Array.isArray(row.scheme_period_bonuses) && row.scheme_period_bonuses.length > 0)
+                ? row.scheme_period_bonuses
+                : (formula.period_bonuses || []);
+            const bonuses = formula.bonuses || [];
+
+            employeeRoleSchemeMap.set(`${String(row.user_id)}||${String(row.role_id)}`, {
+                scheme_id: schemeId,
+                scheme_name: row.scheme_name || null,
+                scheme_version: row.scheme_version || null,
+                ...formula,
+                period_bonuses: periodBonuses,
+                bonuses,
+                standard_monthly_shifts: row.scheme_standard_monthly_shifts || formula.standard_monthly_shifts
+            });
+        }
+
         // Get employees with their schemes
         const employeesRes = await query(
             `SELECT 
                 u.id, 
                 u.full_name, 
                 r.name as role,
+                r.id as role_id,
                 s.period_bonuses,
                 s.standard_monthly_shifts,
                 v.formula as scheme_formula,
@@ -134,6 +234,9 @@ export async function GET(
                 salary_breakdown,
                 status,
                 check_in,
+                check_out,
+                shift_role_id_snapshot,
+                shift_role_name_snapshot,
                 shift_type
              FROM shifts
              WHERE club_id = $1 
@@ -475,8 +578,29 @@ export async function GET(
                 // But for schemeWithRewards we might need to be careful. 
                 // For simplicity, if frozen, we trust the snapshot's breakdown which is used later.
             } else {
+                const configuredRoles = employeeRolesMap.get(String(emp.id)) || [];
+                const fallbackRoles = emp.role_id
+                    ? [{ role_id: Number(emp.role_id), role_name: String(emp.role || 'Сотрудник'), priority: 0 }]
+                    : [];
+                const roleContexts = configuredRoles.length > 0 ? configuredRoles : fallbackRoles;
+
+                const getSchemeForRole = (roleMeta: { role_id: number, role_name: string }) => {
+                    const key = `${String(emp.id)}||${String(roleMeta.role_id)}`;
+                    const mapped = employeeRoleSchemeMap.get(key);
+                    if (!mapped) return activeScheme;
+                    if (mapped.scheme_id === null) {
+                        return {
+                            base: { type: 'hourly', amount: 0, percent: 0, full_shift_hours: 12 },
+                            bonuses: [],
+                            period_bonuses: [],
+                            standard_monthly_shifts: mapped.standard_monthly_shifts || 15
+                        };
+                    }
+                    return mapped;
+                };
+
                 // Helper to calculate bonus status
-                const calculateBonusStatus = (bonus: any) => {
+                const calculateBonusStatus = (bonus: any, schemeCtx: any, roleMeta: { role_id: number, role_name: string }) => {
                     const metricKey = bonus.metric_key || bonus.source || 'total_revenue';
                     const current_value = monthlyMetrics[metricKey] ||
                         (metricKey === 'total_revenue' ? monthlyMetrics.total_revenue :
@@ -493,7 +617,7 @@ export async function GET(
                     let current_reward_value = bonus.reward_value;
                     let current_reward_type = bonus.reward_type;
 
-                    const standard_shifts = activeScheme?.standard_monthly_shifts || 15;
+                    const standard_shifts = schemeCtx?.standard_monthly_shifts || 15;
                     const mode = bonus.bonus_mode || bonus.mode || 'MONTH';
 
                     let resultThresholds = bonus.thresholds;
@@ -558,34 +682,74 @@ export async function GET(
                         is_met,
                         is_accrued: !!existingAccrual,
                         current_reward_value,
-                        current_reward_type
+                        current_reward_type,
+                        role_id: roleMeta.role_id,
+                        role_name: roleMeta.role_name
                     };
                 };
 
-                // 1. Process legacy period_bonuses
-                const period_bonuses = activeScheme?.period_bonuses || [];
-                if (Array.isArray(period_bonuses)) {
-                    enriched_legacy_period_bonuses = period_bonuses.map(calculateBonusStatus);
-                    bonuses_status = [...bonuses_status, ...enriched_legacy_period_bonuses];
-                }
+                const roleRewardsMap = new Map<number, { schemeWithRewards: any, bonusStatuses: any[] }>();
 
-                // 2. Process new bonuses with mode='MONTH'
-                if (Array.isArray(enriched_scheme_bonuses)) {
-                    enriched_scheme_bonuses = enriched_scheme_bonuses.map((bonus: any) => {
-                        if ((bonus.type === 'progressive_percent' || bonus.type === 'PROGRESSIVE') && bonus.mode === 'MONTH') {
-                            const status = calculateBonusStatus(bonus);
-                            bonuses_status.push(status);
-                            return status;
-                        }
-                        return bonus;
+                for (const roleMeta of roleContexts) {
+                    const schemeCtx = getSchemeForRole(roleMeta);
+                    const roleBonusStatuses: any[] = [];
+
+                    const period_bonuses = schemeCtx?.period_bonuses || [];
+                    if (Array.isArray(period_bonuses)) {
+                        const legacy = period_bonuses.map((b: any) => calculateBonusStatus(b, schemeCtx, roleMeta));
+                        roleBonusStatuses.push(...legacy);
+                        bonuses_status.push(...legacy);
+                    }
+
+                    let enrichedBonuses = schemeCtx?.bonuses ? [...schemeCtx.bonuses] : [];
+                    if (Array.isArray(enrichedBonuses)) {
+                        enrichedBonuses = enrichedBonuses.map((bonus: any) => {
+                            if ((bonus.type === 'progressive_percent' || bonus.type === 'PROGRESSIVE') && bonus.mode === 'MONTH') {
+                                const status = calculateBonusStatus(bonus, schemeCtx, roleMeta);
+                                roleBonusStatuses.push(status);
+                                bonuses_status.push(status);
+                                return status;
+                            }
+                            return bonus;
+                        });
+                    }
+
+                    roleRewardsMap.set(roleMeta.role_id, {
+                        schemeWithRewards: {
+                            ...schemeCtx,
+                            bonuses: enrichedBonuses,
+                            period_bonuses: Array.isArray(schemeCtx?.period_bonuses)
+                                ? schemeCtx.period_bonuses.map((b: any) => calculateBonusStatus(b, schemeCtx, roleMeta))
+                                : []
+                        },
+                        bonusStatuses: roleBonusStatuses
                     });
                 }
+
+                enriched_legacy_period_bonuses = bonuses_status;
+                enriched_scheme_bonuses = activeScheme?.bonuses ? [...activeScheme.bonuses] : [];
+
+                (emp as any).__roleRewardsMap = roleRewardsMap;
             }
 
             // 2. Process shifts with calculated rewards
             const processedShifts = await Promise.all(empShifts.map(async (s: any) => {
+                const roleIdSnapshot = s.shift_role_id_snapshot === null || s.shift_role_id_snapshot === undefined
+                    ? null
+                    : Number(s.shift_role_id_snapshot);
+                const configuredRoles = employeeRolesMap.get(String(emp.id)) || [];
+                const fallbackRoles = emp.role_id
+                    ? [{ role_id: Number(emp.role_id), role_name: String(emp.role || 'Сотрудник'), priority: 0 }]
+                    : [];
+                const roleContexts = configuredRoles.length > 0 ? configuredRoles : fallbackRoles;
+                const fallbackRole = roleContexts[0] || null;
+                const roleMeta = roleIdSnapshot
+                    ? (roleContexts.find(r => Number(r.role_id) === roleIdSnapshot) || fallbackRole)
+                    : fallbackRole;
+                const roleName = String(s.shift_role_name_snapshot || roleMeta?.role_name || emp.role || 'Сотрудник');
+
                 if (s.salary_snapshot?.paid_at || s.status === 'PAID') {
-                    return { ...s, calculated_salary: parseFloat(s.calculated_salary || '0'), breakdown: s.salary_breakdown || {} };
+                    return { ...s, calculated_salary: parseFloat(s.calculated_salary || '0'), breakdown: s.salary_breakdown || {}, role_name: roleName };
                 }
 
                 const reportMetricsForShift: Record<string, number> = {
@@ -628,7 +792,9 @@ export async function GET(
 
                 // Pass the scheme WITH calculated bonuses reward levels
                 // IMPORTANT: Use activeScheme (frozen if paid) instead of emp
-                const schemeWithRewards = { 
+                const rewardsMap = (emp as any).__roleRewardsMap as Map<number, any> | undefined;
+                const roleReward = (roleIdSnapshot && rewardsMap) ? rewardsMap.get(roleIdSnapshot) : null;
+                const schemeWithRewards = roleReward?.schemeWithRewards || { 
                     ...activeScheme, 
                     period_bonuses: enriched_legacy_period_bonuses,
                     bonuses: enriched_scheme_bonuses 
@@ -664,7 +830,7 @@ export async function GET(
                     reportMetricsForShift
                 );
 
-                return { ...s, calculated_salary: result.total, breakdown: result.breakdown };
+                return { ...s, calculated_salary: result.total, breakdown: result.breakdown, role_name: roleName };
             }));
 
             // Update feature flags based on processed shifts
@@ -1038,6 +1204,7 @@ export async function GET(
                             id: s.id,
                             date: s.check_in,
                             shift_type: s.shift_type,
+                            role_name: s.role_name || s.shift_role_name_snapshot || null,
                             total_hours: parseFloat(s.total_hours || '0'),
                             total_revenue: calculateShiftIncome(s),
                             revenue_cash: parseFloat(s.cash_income || '0'),

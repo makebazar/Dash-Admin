@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Loader2, UserPlus, Pencil, Search, Users, UserCheck, UserMinus, MoreHorizontal, FileText } from "lucide-react"
+import { Plus, Loader2, UserPlus, Pencil, Search, Users, UserCheck, UserMinus, MoreHorizontal, FileText, ArrowUp, ArrowDown, X } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -24,6 +24,8 @@ interface Employee {
     phone_number: string
     role: string
     role_id: number | null
+    shift_roles?: { role_id: number, role_name: string, priority: number }[]
+    role_salary_overrides?: { role_id: number, scheme_id: number | null, scheme_name: string | null }[]
     hired_at: string
     is_active: boolean
     dismissed_at?: string | null
@@ -69,6 +71,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
     const [editRoleId, setEditRoleId] = useState<number | null>(null)
     const [editPassword, setEditPassword] = useState('')
     const [editShowInSchedule, setEditShowInSchedule] = useState(true)
+    const [editShiftRoleIds, setEditShiftRoleIds] = useState<number[]>([])
+    const [editShiftRolesLoading, setEditShiftRolesLoading] = useState(false)
+    const [editAddShiftRoleId, setEditAddShiftRoleId] = useState<number | null>(null)
 
     // Dismissal State
     const [isDismissModalOpen, setIsDismissModalOpen] = useState(false)
@@ -113,27 +118,28 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
         }
     }
 
-    const handleAssignScheme = async (employeeId: string, schemeId: number | null) => {
+    const handleAssignRoleScheme = async (employeeId: string, roleId: number, value: string) => {
         try {
-            const res = await fetch(`/api/clubs/${clubId}/employees/${employeeId}/salary`, {
+            const schemeId = value === 'none' ? null : parseInt(value)
+            const res = await fetch(`/api/clubs/${clubId}/employees/${employeeId}/role-salary`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scheme_id: schemeId })
+                body: JSON.stringify({ role_id: roleId, scheme_id: schemeId })
             })
+            if (!res.ok) return
 
-            if (res.ok) {
-                setEmployees(prev => prev.map(emp =>
-                    emp.id === employeeId
-                        ? {
-                            ...emp,
-                            salary_scheme_id: schemeId || undefined,
-                            salary_scheme_name: salarySchemes.find(s => s.id === schemeId)?.name || undefined
-                        }
-                        : emp
-                ))
-            }
+            const schemeName = schemeId ? (salarySchemes.find(s => s.id === schemeId)?.name || null) : null
+            setEmployees(prev => prev.map(emp => {
+                if (emp.id !== employeeId) return emp
+                const prevArr = emp.role_salary_overrides || []
+                const filtered = prevArr.filter(x => x.role_id !== roleId)
+                return {
+                    ...emp,
+                    role_salary_overrides: [...filtered, { role_id: roleId, scheme_id: schemeId, scheme_name: schemeName }]
+                }
+            }))
         } catch (error) {
-            console.error('Error assigning scheme:', error)
+            console.error('Error assigning role scheme:', error)
         }
     }
 
@@ -209,13 +215,35 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
         }
     }
 
-    const handleEditEmployee = (employee: Employee) => {
+    const handleEditEmployee = async (employee: Employee) => {
         setSelectedEmployee(employee)
         setEditFullName(employee.full_name)
         setEditPhoneNumber(employee.phone_number)
         setEditRoleId(employee.role_id)
         setEditPassword('')
         setEditShowInSchedule(employee.show_in_schedule)
+        setEditShiftRoleIds([])
+        setEditAddShiftRoleId(null)
+        setEditShiftRolesLoading(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/employees/${employee.id}/roles`, { cache: 'no-store' })
+            const data = await res.json()
+            if (res.ok && Array.isArray(data.roles)) {
+                const ids = data.roles
+                    .sort((a: any, b: any) => Number(a.priority ?? 0) - Number(b.priority ?? 0))
+                    .map((r: any) => Number(r.role_id))
+                    .filter((v: any) => Number.isFinite(v))
+                setEditShiftRoleIds(ids)
+            }
+        } catch (e) {
+            console.error(e)
+        } finally {
+            setEditShiftRolesLoading(false)
+        }
+        setEditShiftRoleIds(prev => {
+            if (prev.length > 0) return prev
+            return employee.role_id ? [employee.role_id] : []
+        })
         setIsEditModalOpen(true)
     }
 
@@ -243,6 +271,11 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
             })
 
             if (res.ok) {
+                await fetch(`/api/clubs/${clubId}/employees/${selectedEmployee.id}/roles`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role_ids: editShiftRoleIds })
+                })
                 setIsEditModalOpen(false)
                 setSelectedEmployee(null)
                 setEditPassword('')
@@ -430,28 +463,51 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
-                                                        {employee.role}
-                                                    </Badge>
+                                                    <div className="flex flex-col gap-1.5">
+                                                        {(employee.shift_roles && employee.shift_roles.length > 0
+                                                            ? employee.shift_roles
+                                                            : [{ role_id: employee.role_id || 0, role_name: employee.role, priority: 0 }]
+                                                        ).map((r, idx) => {
+                                                            return (
+                                                                <div key={`${employee.id}-${r.role_id}-${idx}`} className="flex items-center gap-2">
+                                                                    <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
+                                                                        {r.role_name}
+                                                                    </Badge>
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="flex flex-col gap-1.5 max-w-[180px]">
-                                                        <Select
-                                                            value={employee.salary_scheme_id?.toString() || "none"}
-                                                            onValueChange={(v) => handleAssignScheme(employee.id, v === "none" ? null : parseInt(v))}
-                                                        >
-                                                            <SelectTrigger className="h-8 text-xs font-medium border-slate-200 hover:border-slate-300 transition-colors bg-white">
-                                                                <SelectValue placeholder="Схема не выбрана" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="none" className="text-xs">Без схемы</SelectItem>
-                                                                {salarySchemes.map(scheme => (
-                                                                    <SelectItem key={scheme.id} value={scheme.id.toString()} className="text-xs">
-                                                                        {scheme.name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                    <div className="flex flex-col gap-2 max-w-[220px]">
+                                                        {(employee.shift_roles && employee.shift_roles.length > 0
+                                                            ? employee.shift_roles
+                                                            : [{ role_id: employee.role_id || 0, role_name: employee.role, priority: 0 }]
+                                                        ).filter(r => r.role_id > 0).map((r, idx) => {
+                                                            const override = (employee.role_salary_overrides || []).find(x => x.role_id === r.role_id)
+                                                            const currentValue = override
+                                                                ? (override.scheme_id === null ? 'none' : String(override.scheme_id))
+                                                                : (employee.salary_scheme_id ? String(employee.salary_scheme_id) : 'none')
+                                                            return (
+                                                                <Select
+                                                                    key={`${employee.id}-scheme-${r.role_id}-${idx}`}
+                                                                    value={currentValue}
+                                                                    onValueChange={(v) => handleAssignRoleScheme(employee.id, r.role_id, v)}
+                                                                >
+                                                                    <SelectTrigger className="h-8 text-xs font-medium border-slate-200 hover:border-slate-300 transition-colors bg-white">
+                                                                        <SelectValue placeholder="Схема" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="none" className="text-xs">Без схемы</SelectItem>
+                                                                        {salarySchemes.map(scheme => (
+                                                                            <SelectItem key={scheme.id} value={scheme.id.toString()} className="text-xs">
+                                                                                {scheme.name}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            )
+                                                        })}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
@@ -528,9 +584,18 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                         </div>
                                         
                                         <div className="flex flex-wrap gap-2">
-                                            <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
-                                                {employee.role}
-                                            </Badge>
+                                            {(employee.shift_roles && employee.shift_roles.length > 0
+                                                ? employee.shift_roles
+                                                : [{ role_id: employee.role_id || 0, role_name: employee.role, priority: 0 }]
+                                            ).map((r, idx) => {
+                                                return (
+                                                    <div key={`${employee.id}-m-${r.role_id}-${idx}`} className="flex items-center gap-2">
+                                                        <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
+                                                            {r.role_name}
+                                                        </Badge>
+                                                    </div>
+                                                )
+                                            })}
                                             {employee.dismissed_at ? (
                                                 <Badge variant="outline" className="bg-rose-50 text-rose-600 border-rose-200 font-bold text-[10px] uppercase tracking-wider px-2 py-0.5">
                                                     Уволен: {new Date(employee.dismissed_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
@@ -542,24 +607,38 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                             )}
                                         </div>
 
-                                        <div className="pt-3 border-t border-slate-100">
-                                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Зарплатная схема</div>
-                                            <Select
-                                                value={employee.salary_scheme_id?.toString() || "none"}
-                                                onValueChange={(v) => handleAssignScheme(employee.id, v === "none" ? null : parseInt(v))}
-                                            >
-                                                <SelectTrigger className="h-9 text-xs font-medium border-slate-200 hover:border-slate-300 transition-colors bg-slate-50/50">
-                                                    <SelectValue placeholder="Схема не выбрана" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="none" className="text-xs">Без схемы</SelectItem>
-                                                    {salarySchemes.map(scheme => (
-                                                        <SelectItem key={scheme.id} value={scheme.id.toString()} className="text-xs">
-                                                            {scheme.name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                        <div className="pt-3 border-t border-slate-100 space-y-2">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Схемы оплаты по ролям</div>
+                                            {(employee.shift_roles && employee.shift_roles.length > 0
+                                                ? employee.shift_roles
+                                                : [{ role_id: employee.role_id || 0, role_name: employee.role, priority: 0 }]
+                                            ).filter(r => r.role_id > 0).map((r, idx) => {
+                                                const override = (employee.role_salary_overrides || []).find(x => x.role_id === r.role_id)
+                                                const currentValue = override
+                                                    ? (override.scheme_id === null ? 'none' : String(override.scheme_id))
+                                                    : (employee.salary_scheme_id ? String(employee.salary_scheme_id) : 'none')
+                                                return (
+                                                    <div key={`${employee.id}-m-scheme-${r.role_id}-${idx}`} className="space-y-1">
+                                                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{r.role_name}</div>
+                                                        <Select
+                                                            value={currentValue}
+                                                            onValueChange={(v) => handleAssignRoleScheme(employee.id, r.role_id, v)}
+                                                        >
+                                                            <SelectTrigger className="h-9 text-xs font-medium border-slate-200 hover:border-slate-300 transition-colors bg-slate-50/50">
+                                                                <SelectValue placeholder="Схема" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="none" className="text-xs">Без схемы</SelectItem>
+                                                                {salarySchemes.map(scheme => (
+                                                                    <SelectItem key={scheme.id} value={scheme.id.toString()} className="text-xs">
+                                                                        {scheme.name}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                )
+                                            })}
                                         </div>
                                     </div>
                                 ))}
@@ -735,6 +814,109 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                     onChange={(e) => setEditPassword(e.target.value)}
                                     className="bg-slate-50/50 border-slate-200 focus:border-slate-400 h-10 rounded-xl"
                                 />
+                            </div>
+
+                            <div className="space-y-2 p-4 rounded-2xl bg-slate-50/50 border border-slate-200">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="space-y-0.5">
+                                        <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-900">Роли для смены</Label>
+                                        <p className="text-[10px] text-slate-500">Порядок сверху вниз = приоритет по умолчанию</p>
+                                    </div>
+                                    {editShiftRolesLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                                </div>
+
+                                <div className="space-y-2">
+                                    {editShiftRoleIds.length === 0 ? (
+                                        <div className="text-[11px] text-slate-500 font-medium">Не задано</div>
+                                    ) : (
+                                        editShiftRoleIds.map((rid, idx) => {
+                                            const roleName = roles.find(r => r.id === rid)?.name || `#${rid}`
+                                            return (
+                                                <div key={`${rid}-${idx}`} className="flex items-center justify-between rounded-xl bg-white border border-slate-200 px-3 py-2">
+                                                    <div className="min-w-0">
+                                                        <div className="text-sm font-bold text-slate-900 truncate">{roleName}</div>
+                                                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Приоритет {idx + 1}</div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-lg"
+                                                            disabled={idx === 0}
+                                                            onClick={() => setEditShiftRoleIds(prev => {
+                                                                const next = [...prev]
+                                                                const tmp = next[idx - 1]
+                                                                next[idx - 1] = next[idx]
+                                                                next[idx] = tmp
+                                                                return next
+                                                            })}
+                                                        >
+                                                            <ArrowUp className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-lg"
+                                                            disabled={idx === editShiftRoleIds.length - 1}
+                                                            onClick={() => setEditShiftRoleIds(prev => {
+                                                                const next = [...prev]
+                                                                const tmp = next[idx + 1]
+                                                                next[idx + 1] = next[idx]
+                                                                next[idx] = tmp
+                                                                return next
+                                                            })}
+                                                        >
+                                                            <ArrowDown className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 rounded-lg text-rose-600 hover:text-rose-700"
+                                                            onClick={() => setEditShiftRoleIds(prev => prev.filter((_, i) => i !== idx))}
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })
+                                    )}
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <Select
+                                        value={editAddShiftRoleId ? String(editAddShiftRoleId) : ""}
+                                        onValueChange={(v) => setEditAddShiftRoleId(parseInt(v))}
+                                    >
+                                        <SelectTrigger className="bg-white border-slate-200 focus:border-slate-400 h-10 rounded-xl">
+                                            <SelectValue placeholder="Добавить роль" />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl">
+                                            {roles
+                                                .filter(r => !editShiftRoleIds.includes(r.id))
+                                                .map((role) => (
+                                                    <SelectItem key={role.id} value={role.id.toString()}>
+                                                        {role.name}
+                                                    </SelectItem>
+                                                ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        type="button"
+                                        className="h-10 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+                                        disabled={!editAddShiftRoleId}
+                                        onClick={() => {
+                                            if (!editAddShiftRoleId) return
+                                            setEditShiftRoleIds(prev => [...prev, editAddShiftRoleId])
+                                            setEditAddShiftRoleId(null)
+                                        }}
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
 
                             <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50/50 border border-slate-200">

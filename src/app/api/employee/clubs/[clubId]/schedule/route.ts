@@ -45,21 +45,80 @@ export async function GET(
         }
 
         const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
+        const startDate = formatLocalDate(new Date(year, month - 1, -2));
         const endOfMonth = formatLocalDate(new Date(year, month, 0));
 
         // Get employees - Filtered for shift staff
         let employees = [];
         try {
             const employeesRes = await query(
-                `SELECT u.id, u.full_name, r.name as role, ce.dismissed_at, ce.display_order
-                 FROM club_employees ce
-                 JOIN users u ON u.id = ce.user_id
-                 LEFT JOIN roles r ON u.role_id = r.id
-                 WHERE ce.club_id = $1 
-                 AND (ce.dismissed_at IS NULL OR ce.dismissed_at >= $2::date)
-                 AND (LOWER(r.name) LIKE '%админ%' OR LOWER(r.name) LIKE '%admin%' OR r.name = 'Хостес')
-                 ORDER BY ce.dismissed_at ASC NULLS FIRST, ce.display_order ASC, u.full_name ASC`,
-                [clubId, startOfMonth]
+                `WITH member_rows AS (
+                    SELECT
+                        ce.user_id,
+                        ce.dismissed_at,
+                        ce.display_order,
+                        ce.is_active,
+                        ce.show_in_schedule,
+                        ce.role as club_role,
+                        1 as priority
+                    FROM club_employees ce
+                    WHERE ce.club_id = $1
+                    UNION ALL
+                    SELECT
+                        c.owner_id as user_id,
+                        NULL::timestamp as dismissed_at,
+                        0::int as display_order,
+                        TRUE as is_active,
+                        TRUE as show_in_schedule,
+                        'Владелец'::varchar as club_role,
+                        0 as priority
+                    FROM clubs c
+                    WHERE c.id = $1
+                ),
+                dedup_members AS (
+                    SELECT DISTINCT ON (user_id)
+                        user_id,
+                        dismissed_at,
+                        display_order,
+                        COALESCE(is_active, TRUE) as is_active,
+                        COALESCE(show_in_schedule, TRUE) as show_in_schedule,
+                        club_role
+                    FROM member_rows
+                    ORDER BY user_id, priority DESC
+                )
+                SELECT
+                    u.id,
+                    u.full_name,
+                    CASE
+                        WHEN LOWER(COALESCE(dm.club_role, '')) IN ('employee', 'emp', 'сотрудник') THEN COALESCE(r.name, 'Сотрудник')
+                        WHEN COALESCE(NULLIF(dm.club_role, ''), '') <> '' THEN INITCAP(LOWER(dm.club_role))
+                        ELSE COALESCE(r.name, 'Сотрудник')
+                    END as role,
+                    dm.dismissed_at,
+                    dm.display_order
+                FROM dedup_members dm
+                JOIN users u ON u.id = dm.user_id
+                LEFT JOIN roles r ON u.role_id = r.id
+                WHERE (
+                    (dm.dismissed_at IS NULL AND dm.is_active = TRUE AND dm.show_in_schedule = TRUE)
+                    OR
+                    (dm.dismissed_at IS NOT NULL AND dm.dismissed_at >= $2::date)
+                  )
+                  AND (
+                    LOWER(COALESCE(dm.club_role, '')) LIKE '%админ%'
+                    OR LOWER(COALESCE(r.name, '')) LIKE '%админ%'
+                    OR LOWER(COALESCE(dm.club_role, '')) LIKE '%admin%'
+                    OR LOWER(COALESCE(r.name, '')) LIKE '%admin%'
+                    OR LOWER(COALESCE(dm.club_role, '')) LIKE '%управля%'
+                    OR LOWER(COALESCE(r.name, '')) LIKE '%управля%'
+                    OR LOWER(COALESCE(dm.club_role, '')) LIKE '%manager%'
+                    OR LOWER(COALESCE(r.name, '')) LIKE '%manager%'
+                    OR COALESCE(dm.club_role, '') = 'Хостес'
+                    OR COALESCE(r.name, '') = 'Хостес'
+                    OR COALESCE(dm.club_role, '') = 'Владелец'
+                  )
+                ORDER BY dm.dismissed_at ASC NULLS FIRST, dm.display_order ASC, u.full_name ASC`,
+                [clubId, startDate]
             );
             employees = employeesRes.rows;
         } catch (err: any) {
@@ -78,7 +137,7 @@ export async function GET(
                      WHERE club_id = $1 
                      AND date >= $2 AND date <= $3
                      AND user_id = ANY($4::uuid[])`,
-                    [clubId, startOfMonth, endOfMonth, employeeIds]
+                    [clubId, startDate, endOfMonth, employeeIds]
                 );
 
                 const scheduleMap: Record<string, Record<string, string>> = {};

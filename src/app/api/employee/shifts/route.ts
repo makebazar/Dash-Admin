@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { hasColumn } from '@/lib/db-compat';
 
 // POST - Start a new shift
 export async function POST(request: Request) {
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
 
         const body = await request.json();
         console.log('Start Shift Request:', { userId, body });
-        const { club_id } = body;
+        const { club_id, role_id } = body;
 
         if (!club_id) {
             return NextResponse.json({ error: 'Club ID required' }, { status: 400 });
@@ -44,6 +45,95 @@ export async function POST(request: Request) {
         if ((activeCheck.rowCount || 0) > 0) {
             console.log('Active Shift Found:', activeCheck.rows[0]);
             return NextResponse.json({ error: 'You already have an active shift in this club' }, { status: 400 });
+        }
+
+        const hasShiftRoleIdSnapshot = await hasColumn('shifts', 'shift_role_id_snapshot')
+        const hasShiftRoleNameSnapshot = await hasColumn('shifts', 'shift_role_name_snapshot')
+        if (!hasShiftRoleIdSnapshot || !hasShiftRoleNameSnapshot) {
+            await query(`
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='shifts' AND column_name='shift_role_id_snapshot') THEN
+                        ALTER TABLE shifts ADD COLUMN shift_role_id_snapshot INTEGER NULL;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='shifts' AND column_name='shift_role_name_snapshot') THEN
+                        ALTER TABLE shifts ADD COLUMN shift_role_name_snapshot VARCHAR(64) NULL;
+                    END IF;
+                END $$;
+            `);
+        }
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS club_employee_roles (
+                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+                priority INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(club_id, user_id, role_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_club_employee_roles_club_user ON club_employee_roles(club_id, user_id);
+        `);
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS club_employee_role_preferences (
+                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                active_role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL,
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(club_id, user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_club_employee_role_preferences_club_user ON club_employee_role_preferences(club_id, user_id);
+        `);
+
+        const assignedRolesRes = await query(
+            `SELECT role_id FROM club_employee_roles WHERE club_id = $1 AND user_id = $2 ORDER BY priority ASC`,
+            [club_id, userId]
+        );
+        const assignedRoleIds = assignedRolesRes.rows.map(r => Number(r.role_id)).filter(v => Number.isFinite(v));
+
+        const prefRes = await query(
+            `SELECT active_role_id FROM club_employee_role_preferences WHERE club_id = $1 AND user_id = $2 LIMIT 1`,
+            [club_id, userId]
+        );
+        const preferredRoleId = prefRes.rows[0]?.active_role_id ? Number(prefRes.rows[0].active_role_id) : null;
+
+        const requestedRoleId = role_id === null || role_id === undefined ? null : Number(role_id);
+        if (requestedRoleId !== null && !Number.isFinite(requestedRoleId)) {
+            return NextResponse.json({ error: 'Invalid role_id' }, { status: 400 });
+        }
+
+        let effectiveRoleId: number | null = null;
+        if (requestedRoleId !== null) effectiveRoleId = requestedRoleId;
+        else if (preferredRoleId !== null) effectiveRoleId = preferredRoleId;
+        else if (assignedRoleIds.length > 0) effectiveRoleId = assignedRoleIds[0];
+        else {
+            const fallbackRoleRes = await query(`SELECT role_id FROM users WHERE id = $1`, [userId]);
+            const fallback = fallbackRoleRes.rows[0]?.role_id ? Number(fallbackRoleRes.rows[0].role_id) : null;
+            effectiveRoleId = fallback;
+        }
+
+        if (effectiveRoleId === null) {
+            try {
+                const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`, [club_id, userId])
+                if ((ownerCheck.rowCount || 0) > 0) {
+                    await query(`INSERT INTO roles (name, default_kpi_settings) VALUES ('Владелец', '{}'::jsonb) ON CONFLICT (name) DO NOTHING`)
+                    const ownerRoleRes = await query(`SELECT id FROM roles WHERE name = 'Владелец' LIMIT 1`)
+                    const ownerRoleId = ownerRoleRes.rows[0]?.id ? Number(ownerRoleRes.rows[0].id) : null
+                    if (ownerRoleId) effectiveRoleId = ownerRoleId
+                }
+            } catch {}
+        }
+
+        if (effectiveRoleId !== null && assignedRoleIds.length > 0 && !assignedRoleIds.includes(effectiveRoleId)) {
+            return NextResponse.json({ error: 'Role not allowed' }, { status: 403 });
+        }
+
+        let effectiveRoleName: string | null = null;
+        if (effectiveRoleId !== null) {
+            const roleNameRes = await query(`SELECT name FROM roles WHERE id = $1`, [effectiveRoleId]);
+            effectiveRoleName = roleNameRes.rows[0]?.name ? String(roleNameRes.rows[0].name) : null;
         }
 
         // Get club settings for shift type
@@ -100,15 +190,17 @@ export async function POST(request: Request) {
 
         // Create new shift
         const result = await query(
-            `INSERT INTO shifts (user_id, club_id, check_in, shift_type)
-       VALUES ($1, $2, $3, $4)
+            `INSERT INTO shifts (user_id, club_id, check_in, shift_type, shift_role_id_snapshot, shift_role_name_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-            [userId, club_id, checkIn, shiftType]
+            [userId, club_id, checkIn, shiftType, effectiveRoleId, effectiveRoleName]
         );
 
         return NextResponse.json({
             success: true,
-            shift_id: result.rows[0].id
+            shift_id: result.rows[0].id,
+            role_id: effectiveRoleId,
+            role_name: effectiveRoleName
         });
 
     } catch (error: any) {

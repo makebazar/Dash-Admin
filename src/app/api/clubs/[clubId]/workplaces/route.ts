@@ -27,6 +27,15 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
+        await query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_zones' AND column_name='display_order') THEN
+                    ALTER TABLE club_zones ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0;
+                END IF;
+            END $$;
+        `);
+
         const hasIssuesClubIdColumn = await hasColumn('equipment_issues', 'club_id')
         const hasClubEquipmentTypes = await hasColumn('equipment_types', 'club_id')
         const hasEquipmentStatusColumn = await hasColumn('equipment', 'status')
@@ -184,6 +193,7 @@ export async function GET(
                 SELECT 
                     z.id,
                     z.name,
+                    z.display_order,
                     z.assigned_user_id,
                     u.full_name as assigned_user_name,
                     COALESCE(wc.workstation_count, 0)::int as workstation_count
@@ -191,7 +201,7 @@ export async function GET(
                  LEFT JOIN users u ON z.assigned_user_id = u.id
                  LEFT JOIN workstation_counts wc ON wc.zone = z.name
                  WHERE z.club_id = $1
-                 ORDER BY z.name`,
+                 ORDER BY z.display_order ASC, z.name ASC`,
                 [clubId]
             )
         ])

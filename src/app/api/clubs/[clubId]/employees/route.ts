@@ -65,14 +65,49 @@ export async function GET(
         const { clubId } = await params;
         await requireClubFullAccess(clubId)
 
+        let ownerRoleId: number | null = null
+        try {
+            await query(`INSERT INTO roles (name, default_kpi_settings) VALUES ('Владелец', '{}'::jsonb) ON CONFLICT (name) DO NOTHING`)
+            const ownerRoleRes = await query(`SELECT id FROM roles WHERE name = 'Владелец' LIMIT 1`)
+            ownerRoleId = ownerRoleRes.rows[0]?.id ? Number(ownerRoleRes.rows[0].id) : null
+        } catch {}
+
+        try {
+            await query(`
+                CREATE TABLE IF NOT EXISTS club_employee_roles (
+                    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+                    priority INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(club_id, user_id, role_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_club_employee_roles_club_user ON club_employee_roles(club_id, user_id);
+            `);
+        } catch {}
+        try {
+            await query(`
+                CREATE TABLE IF NOT EXISTS employee_role_salary_assignments (
+                    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
+                    scheme_id INTEGER NULL REFERENCES salary_schemes(id) ON DELETE SET NULL,
+                    assigned_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(club_id, user_id, role_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_employee_role_salary_assignments_club_user ON employee_role_salary_assignments(club_id, user_id);
+            `);
+        } catch {}
+
         // Get employees with salary scheme assignments
         const result = await query(
             `WITH member_rows AS (
-                SELECT ce.user_id, ce.role, ce.hired_at, ce.is_active, ce.dismissed_at, ce.show_in_schedule, 0 as priority
+                SELECT ce.user_id, ce.role, ce.hired_at, ce.is_active, ce.dismissed_at, ce.show_in_schedule, 1 as priority
                 FROM club_employees ce
                 WHERE ce.club_id = $1
                 UNION ALL
-                SELECT c.owner_id as user_id, 'Владелец'::varchar as role, c.created_at as hired_at, TRUE as is_active, NULL::timestamp as dismissed_at, TRUE as show_in_schedule, 1 as priority
+                SELECT c.owner_id as user_id, 'Владелец'::varchar as role, c.created_at as hired_at, TRUE as is_active, NULL::timestamp as dismissed_at, TRUE as show_in_schedule, 0 as priority
                 FROM clubs c
                 WHERE c.id = $1
             ),
@@ -89,6 +124,7 @@ export async function GET(
         dm.role as club_role,
         r.name as role_name,
         r.id as role_id,
+        c.owner_id as club_owner_id,
         dm.hired_at,
         dm.is_active,
         dm.dismissed_at,
@@ -97,6 +133,7 @@ export async function GET(
         ss.name as salary_scheme_name
        FROM dedup_members dm
        JOIN users u ON dm.user_id = u.id
+       JOIN clubs c ON c.id = $1
        LEFT JOIN roles r ON u.role_id = r.id
        LEFT JOIN employee_salary_assignments esa ON esa.user_id = u.id AND esa.club_id = $1
        LEFT JOIN salary_schemes ss ON ss.id = esa.scheme_id
@@ -104,23 +141,87 @@ export async function GET(
             [clubId]
         );
 
+        let shiftRolesMap = new Map<string, { role_id: number, role_name: string, priority: number }[]>()
+        try {
+            const shiftRolesRes = await query(
+                `
+                SELECT cer.user_id, cer.role_id, cer.priority, r.name as role_name
+                FROM club_employee_roles cer
+                JOIN roles r ON r.id = cer.role_id
+                WHERE cer.club_id = $1
+                ORDER BY cer.user_id ASC, cer.priority ASC
+                `,
+                [clubId]
+            )
+            for (const row of (shiftRolesRes.rows || [])) {
+                const uid = String(row.user_id)
+                const arr = shiftRolesMap.get(uid) || []
+                arr.push({ role_id: Number(row.role_id), role_name: String(row.role_name), priority: Number(row.priority) })
+                shiftRolesMap.set(uid, arr)
+            }
+        } catch {}
+
+        const roleSalaryMap = new Map<string, { role_id: number, scheme_id: number | null, scheme_name: string | null }[]>()
+        try {
+            const roleSalaryRes = await query(
+                `
+                SELECT a.user_id, a.role_id, a.scheme_id, s.name as scheme_name
+                FROM employee_role_salary_assignments a
+                LEFT JOIN salary_schemes s ON s.id = a.scheme_id
+                WHERE a.club_id = $1
+                ORDER BY a.user_id ASC, a.role_id ASC
+                `,
+                [clubId]
+            )
+            for (const row of (roleSalaryRes.rows || [])) {
+                const uid = String(row.user_id)
+                const arr = roleSalaryMap.get(uid) || []
+                arr.push({
+                    role_id: Number(row.role_id),
+                    scheme_id: row.scheme_id === null || row.scheme_id === undefined ? null : Number(row.scheme_id),
+                    scheme_name: row.scheme_name ? String(row.scheme_name) : null
+                })
+                roleSalaryMap.set(uid, arr)
+            }
+        } catch {}
+
         const employees = (result.rows || [])
             .filter(row => !String(row.phone_number || '').startsWith('__system_'))
-            .map(row => ({
-            id: row.id,
-            full_name: row.full_name,
-            phone_number: row.phone_number,
-            role: (row.club_role === 'EMPLOYEE' || row.club_role === 'Сотрудник' || row.club_role === 'EMP')
-                ? (row.role_name || 'Сотрудник')
-                : (row.club_role || row.role_name || 'Сотрудник'),
-            role_id: row.role_id,
-            hired_at: row.hired_at,
-            is_active: row.is_active,
-            dismissed_at: row.dismissed_at,
-            show_in_schedule: row.show_in_schedule !== false,
-            salary_scheme_id: row.salary_scheme_id,
-            salary_scheme_name: row.salary_scheme_name
-        }));
+            .map(row => {
+                const isOwner = row.club_owner_id && String(row.club_owner_id) === String(row.user_id)
+                const isOwnerLike = isOwner || String(row.club_role) === 'Владелец'
+                const baseRoleName = (row.club_role === 'EMPLOYEE' || row.club_role === 'Сотрудник' || row.club_role === 'EMP')
+                    ? (row.role_name || 'Сотрудник')
+                    : (row.club_role || row.role_name || 'Сотрудник')
+
+                const configuredShiftRoles = shiftRolesMap.get(String(row.user_id)) || []
+                const fallbackShiftRoles: { role_id: number, role_name: string, priority: number }[] = []
+                if (isOwnerLike && ownerRoleId) {
+                    fallbackShiftRoles.push({ role_id: ownerRoleId, role_name: 'Владелец', priority: 0 })
+                }
+                if (row.role_id) {
+                    const rid = Number(row.role_id)
+                    if (Number.isFinite(rid) && (!ownerRoleId || rid !== ownerRoleId)) {
+                        fallbackShiftRoles.push({ role_id: rid, role_name: String(row.role_name || baseRoleName || 'Сотрудник'), priority: fallbackShiftRoles.length })
+                    }
+                }
+
+                return {
+                    id: row.id,
+                    full_name: row.full_name,
+                    phone_number: row.phone_number,
+                    role: isOwnerLike ? 'Владелец' : baseRoleName,
+                    role_id: row.role_id,
+                    hired_at: row.hired_at,
+                    is_active: row.is_active,
+                    dismissed_at: row.dismissed_at,
+                    show_in_schedule: row.show_in_schedule !== false,
+                    shift_roles: configuredShiftRoles.length > 0 ? configuredShiftRoles : fallbackShiftRoles,
+                    role_salary_overrides: roleSalaryMap.get(String(row.user_id)) || [],
+                    salary_scheme_id: row.salary_scheme_id,
+                    salary_scheme_name: row.salary_scheme_name
+                }
+            });
 
         return NextResponse.json({ employees });
 

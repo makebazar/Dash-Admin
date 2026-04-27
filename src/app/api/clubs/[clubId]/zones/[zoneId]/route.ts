@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { formatDateKeyInTimezone } from '@/lib/utils';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 export async function PATCH(
     request: Request,
@@ -11,20 +12,58 @@ export async function PATCH(
         const userId = (await cookies()).get('session_user_id')?.value;
         const { clubId, zoneId } = await params;
         const body = await request.json();
-        const { name, assigned_user_id } = body;
+        const { name, assigned_user_id, move } = body;
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify access (owner)
-        const accessCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
+        await requireClubFullAccess(clubId)
 
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        await query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_zones' AND column_name='display_order') THEN
+                    ALTER TABLE club_zones ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0;
+                END IF;
+            END $$;
+        `);
+
+        if (move === 'UP' || move === 'DOWN') {
+            const dir = move === 'UP' ? 'UP' : 'DOWN'
+            const row = await query(
+                `SELECT id, display_order FROM club_zones WHERE id = $1 AND club_id = $2 LIMIT 1`,
+                [zoneId, clubId]
+            )
+            if ((row.rowCount || 0) === 0) return NextResponse.json({ error: 'Zone not found' }, { status: 404 })
+
+            const curOrder = Number(row.rows[0].display_order || 0)
+
+            const neighbor = await query(
+                dir === 'UP'
+                    ? `SELECT id, display_order FROM club_zones WHERE club_id = $1 AND display_order < $2 ORDER BY display_order DESC, name DESC LIMIT 1`
+                    : `SELECT id, display_order FROM club_zones WHERE club_id = $1 AND display_order > $2 ORDER BY display_order ASC, name ASC LIMIT 1`,
+                [clubId, curOrder]
+            )
+            if ((neighbor.rowCount || 0) === 0) return NextResponse.json({ ok: true, moved: false })
+
+            const neighborId = String(neighbor.rows[0].id)
+            const neighborOrder = Number(neighbor.rows[0].display_order || 0)
+
+            await query(
+                `
+                UPDATE club_zones
+                SET display_order = CASE
+                    WHEN id = $1 THEN $2
+                    WHEN id = $3 THEN $4
+                    ELSE display_order
+                END
+                WHERE club_id = $5 AND id IN ($1, $3)
+                `,
+                [zoneId, neighborOrder, neighborId, curOrder, clubId]
+            )
+
+            return NextResponse.json({ ok: true, moved: true })
         }
 
         // Get current zone state
@@ -45,8 +84,8 @@ export async function PATCH(
             `UPDATE club_zones 
              SET name = COALESCE($1, name), 
                  assigned_user_id = $2
-             WHERE id = $3`,
-            [name, assigned_user_id, zoneId]
+             WHERE id = $3 AND club_id = $4`,
+            [name, assigned_user_id, zoneId, clubId]
         );
 
         // If name changed, update workstations
@@ -132,6 +171,10 @@ export async function PATCH(
 
         return NextResponse.json({ message: 'Zone updated successfully' });
     } catch (error) {
+        const status = (error as any)?.status
+        if (status === 401 || status === 403) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Update Zone Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
@@ -149,15 +192,7 @@ export async function DELETE(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify access (owner)
-        const accessCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(clubId)
 
         // Check if zone has workstations
         const zone = await query(
@@ -190,6 +225,10 @@ export async function DELETE(
 
         return NextResponse.json({ message: 'Zone deleted successfully' });
     } catch (error) {
+        const status = (error as any)?.status
+        if (status === 401 || status === 403) {
+            return NextResponse.json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, { status })
+        }
         console.error('Delete Zone Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
