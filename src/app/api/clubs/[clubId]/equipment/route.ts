@@ -305,3 +305,64 @@ export async function POST(
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
+
+export async function DELETE(
+    request: Request,
+    { params }: { params: Promise<{ clubId: string }> }
+) {
+    try {
+        const userId = (await cookies()).get('session_user_id')?.value;
+        const { clubId } = await params;
+
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const ownerCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
+            [clubId, userId]
+        );
+
+        if ((ownerCheck.rowCount || 0) === 0) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
+        let body: any = null
+        try {
+            body = await request.json()
+        } catch {
+            body = null
+        }
+
+        const idsRaw = Array.isArray(body?.ids) ? body.ids : []
+        const ids = Array.from(new Set(idsRaw.filter((id: any) => typeof id === 'string').map((id: string) => id.trim()).filter(Boolean)))
+
+        if (ids.length === 0) {
+            return NextResponse.json({ error: 'ids is required' }, { status: 400 });
+        }
+
+        if (ids.length > 50) {
+            return NextResponse.json({ error: 'Too many ids (max 50)' }, { status: 400 });
+        }
+
+        const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        if (ids.some((id) => !uuidRe.test(id))) {
+            return NextResponse.json({ error: 'Invalid id format' }, { status: 400 });
+        }
+
+        const result = await query(
+            `DELETE FROM equipment WHERE club_id = $1 AND id = ANY($2::uuid[]) RETURNING id`,
+            [clubId, ids]
+        );
+
+        return NextResponse.json({
+            success: true,
+            requested_count: ids.length,
+            deleted_count: result.rowCount || 0,
+            deleted_ids: result.rows.map((row: any) => row.id),
+        });
+    } catch (error) {
+        console.error('Bulk Delete Equipment Error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}

@@ -14,6 +14,7 @@ import {
     Info,
     Wrench,
     Archive,
+    Trash2,
     Download,
     Upload,
     RefreshCw,
@@ -154,6 +155,8 @@ const INVENTORY_STATUS_IMPORT_MAP: Record<string, EquipmentStatus> = {
     writtenoff: "WRITTEN_OFF",
     "списано": "WRITTEN_OFF",
 }
+
+const SELECTION_LIMIT = 50
 
 export default function EquipmentInventory() {
     const { clubId } = useParams()
@@ -382,12 +385,18 @@ export default function EquipmentInventory() {
     }
 
     const toggleGroupSelection = (_groupId: string, items: Equipment[]) => {
-        const allSelected = items.every(item => selectedIds.has(item.id))
         const newSet = new Set(selectedIds)
-        if (allSelected) {
+        const selectedInGroup = items.reduce((sum, item) => sum + (newSet.has(item.id) ? 1 : 0), 0)
+        if (selectedInGroup > 0) {
             items.forEach(item => newSet.delete(item.id))
         } else {
-            items.forEach(item => newSet.add(item.id))
+            for (const item of items) {
+                if (newSet.size >= SELECTION_LIMIT) break
+                newSet.add(item.id)
+            }
+            if (newSet.size >= SELECTION_LIMIT && items.length > selectedInGroup) {
+                alert(`Можно выбрать максимум ${SELECTION_LIMIT} позиций за раз`)
+            }
         }
         setSelectedIds(newSet)
     }
@@ -544,17 +553,28 @@ export default function EquipmentInventory() {
     }
 
     const handleSelectAll = () => {
-        if (selectedIds.size === filteredEquipment.length) {
+        const ids = filteredEquipment.slice(0, SELECTION_LIMIT).map(e => e.id)
+        const allSelected = ids.length > 0 && ids.every(id => selectedIds.has(id)) && selectedIds.size === ids.length
+        if (allSelected) {
             setSelectedIds(new Set())
         } else {
-            setSelectedIds(new Set(filteredEquipment.map(e => e.id)))
+            if (filteredEquipment.length > SELECTION_LIMIT) {
+                alert(`Можно выбрать максимум ${SELECTION_LIMIT} позиций за раз`)
+            }
+            setSelectedIds(new Set(ids))
         }
     }
 
     const toggleSelection = (id: string) => {
         const newSet = new Set(selectedIds)
         if (newSet.has(id)) newSet.delete(id)
-        else newSet.add(id)
+        else {
+            if (newSet.size >= SELECTION_LIMIT) {
+                alert(`Можно выбрать максимум ${SELECTION_LIMIT} позиций за раз`)
+                return
+            }
+            newSet.add(id)
+        }
         setSelectedIds(newSet)
     }
 
@@ -824,6 +844,33 @@ export default function EquipmentInventory() {
         }
     }
 
+    const handleBulkDelete = async () => {
+        if (selectedIds.size === 0) return
+        if (!confirm(`Удалить ${selectedIds.size} поз.?`)) return
+
+        setIsSaving(true)
+        try {
+            const ids = Array.from(selectedIds)
+            const res = await fetch(`/api/clubs/${clubId}/equipment`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ids })
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                alert(data?.error || "Не удалось удалить оборудование")
+                return
+            }
+            setSelectedIds(new Set())
+            fetchData()
+        } catch (error) {
+            console.error("Bulk delete error:", error)
+            alert("Не удалось удалить оборудование")
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
     // --- Render Helpers ---
 
     const getStatusBadge = (item: Equipment) => {
@@ -1059,13 +1106,16 @@ export default function EquipmentInventory() {
                 {selectedIds.size > 0 && (
                     <div className="animate-in fade-in slide-in-from-top-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
                         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                        <span className="font-medium">Выбрано: {selectedIds.size}</span>
+                        <span className="font-medium">Выбрано: {selectedIds.size} / {SELECTION_LIMIT}</span>
                         <div className="hidden h-4 w-px bg-blue-200 sm:block" />
                         <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={handleBulkRepair}>
                             <Wrench className="h-3.5 w-3.5 mr-2" /> Отправить в ремонт
                         </Button>
                         <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={handleBulkArchive}>
                             <Archive className="h-3.5 w-3.5 mr-2" /> Списать
+                        </Button>
+                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-rose-100 hover:text-rose-800 sm:justify-center" onClick={handleBulkDelete}>
+                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Удалить
                         </Button>
                         <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:ml-auto sm:justify-center" onClick={() => setSelectedIds(new Set())}>
                             Снять выделение
@@ -1086,8 +1136,9 @@ export default function EquipmentInventory() {
                     ) : (isGrouped && pagedGroupedEquipment.length > 0) ? (
                         pagedGroupedEquipment.map(([groupId, group]) => {
                             const isExpanded = expandedGroups.has(groupId)
-                            const allGroupSelected = group.items.every(item => selectedIds.has(item.id))
-                            const someGroupSelected = group.items.some(item => selectedIds.has(item.id)) && !allGroupSelected
+                            const groupSelectedCount = group.items.reduce((sum, item) => sum + (selectedIds.has(item.id) ? 1 : 0), 0)
+                            const allGroupSelected = group.items.length > 0 && groupSelectedCount === group.items.length
+                            const someGroupSelected = groupSelectedCount > 0 && !allGroupSelected
                             const issuesCount = group.items.reduce((sum, item) => sum + (item.open_issues_count || 0), 0)
                             const maintenanceOffCount = group.items.filter(i => i.maintenance_enabled === false).length
                             const overdueCount = group.items.filter(i => isCleaningOverdue(i)).length
@@ -1099,7 +1150,7 @@ export default function EquipmentInventory() {
                                             <input
                                                 type="checkbox"
                                                 className={cn("rounded border-gray-300", someGroupSelected && "opacity-50")}
-                                                checked={allGroupSelected}
+                                                checked={groupSelectedCount > 0}
                                                 onChange={() => toggleGroupSelection(groupId, group.items)}
                                             />
                                         </div>
@@ -1227,7 +1278,7 @@ export default function EquipmentInventory() {
                                         <input 
                                             type="checkbox" 
                                             className="rounded border-gray-300"
-                                            checked={selectedIds.size === filteredEquipment.length && filteredEquipment.length > 0}
+                                            checked={filteredEquipment.length > 0 && selectedIds.size === Math.min(filteredEquipment.length, SELECTION_LIMIT)}
                                             onChange={handleSelectAll}
                                         />
                                     </TableHead>
@@ -1250,8 +1301,9 @@ export default function EquipmentInventory() {
                             ) : (isGrouped && groupedEquipment.length > 0) ? (
                                 pagedGroupedEquipment.map(([groupId, group]) => {
                                     const isExpanded = expandedGroups.has(groupId)
-                                    const allGroupSelected = group.items.every(item => selectedIds.has(item.id))
-                                    const someGroupSelected = group.items.some(item => selectedIds.has(item.id)) && !allGroupSelected
+                                    const groupSelectedCount = group.items.reduce((sum, item) => sum + (selectedIds.has(item.id) ? 1 : 0), 0)
+                                    const allGroupSelected = group.items.length > 0 && groupSelectedCount === group.items.length
+                                    const someGroupSelected = groupSelectedCount > 0 && !allGroupSelected
                                     const issuesCount = group.items.reduce((sum, item) => sum + (item.open_issues_count || 0), 0)
                                     const maintenanceOffCount = group.items.filter(i => i.maintenance_enabled === false).length
                                     const overdueCount = group.items.filter(i => isCleaningOverdue(i)).length
@@ -1270,7 +1322,7 @@ export default function EquipmentInventory() {
                                                             "rounded border-gray-300",
                                                             someGroupSelected && "opacity-50"
                                                         )}
-                                                        checked={allGroupSelected}
+                                                        checked={groupSelectedCount > 0}
                                                         onChange={() => toggleGroupSelection(groupId, group.items)}
                                                     />
                                                 </TableCell>
