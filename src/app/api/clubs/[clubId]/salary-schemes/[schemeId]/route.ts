@@ -86,6 +86,10 @@ export async function PATCH(
 
         const { name, description, formula, is_active, period_bonuses, standard_monthly_shifts } = body;
 
+        if (formula?.base?.rate_tiers?.period === 'MONTH' && formula?.base?.payout_timing === 'SHIFT') {
+            return NextResponse.json({ error: 'Base payout_timing SHIFT is not allowed when base rate tiers are MONTH-based' }, { status: 400 });
+        }
+
         // Update scheme metadata if provided
         if (name !== undefined || description !== undefined || is_active !== undefined || period_bonuses !== undefined || standard_monthly_shifts !== undefined || formula !== undefined) {
             const updates: string[] = [];

@@ -864,6 +864,49 @@ export async function PATCH(
 
         if ((schemeRes.rowCount || 0) > 0) {
             const scheme = schemeRes.rows[0];
+            const templateRes = await query(
+                `SELECT schema FROM club_report_templates
+                 WHERE club_id = $1 AND is_active = TRUE
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [clubId]
+            );
+            const templateSchema = templateRes.rows[0]?.schema;
+            const fields = Array.isArray(templateSchema) ? templateSchema : (templateSchema?.fields || []);
+            const metricCategories: Record<string, string> = {};
+            fields.forEach((f: any) => {
+                const key = f.metric_key || f.key;
+                if (!key) return;
+                let category = f.field_type || f.calculation_category;
+                if (!category) {
+                    if (key.includes('income') || key.includes('revenue') || key === 'cash' || key === 'card') {
+                        category = 'INCOME';
+                    } else if (key.includes('expense') || key === 'expenses') {
+                        category = 'EXPENSE';
+                    } else {
+                        category = 'OTHER';
+                    }
+                }
+                metricCategories[key] = category;
+            });
+
+            let totalRevenue = 0;
+            if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) {
+                totalRevenue += sumMetric(mergedData.cash_income);
+            }
+            if (metricCategories['card_income'] === 'INCOME' || !metricCategories['card_income']) {
+                totalRevenue += sumMetric(mergedData.card_income);
+            }
+            if (mergedData.report_data) {
+                const data = typeof mergedData.report_data === 'string' ? JSON.parse(mergedData.report_data) : mergedData.report_data;
+                Object.keys(data).forEach((key) => {
+                    if (key === 'cash_income' || key === 'card_income') return;
+                    if (metricCategories[key] === 'INCOME') {
+                        totalRevenue += sumMetric(data[key]);
+                    }
+                });
+            }
+
             const jsDow = new Date(mergedData.check_in).getDay()
             const dayOfWeek =
                 jsDow === 0
@@ -886,13 +929,21 @@ export async function PATCH(
                 evaluations: evaluations,
                 shift_type: mergedData.shift_type || 'DAY',
                 day_of_week: dayOfWeek
-            }, { ...(scheme.formula || {}), standard_monthly_shifts: scheme.standard_monthly_shifts }, {
-                total_revenue: (Number(mergedData.cash_income) || 0) + (Number(mergedData.card_income) || 0),
-                revenue_cash: Number(mergedData.cash_income) || 0,
-                revenue_card: Number(mergedData.card_income) || 0,
-                expenses: Number(mergedData.expenses) || 0,
-                ...mergedData.report_data
-            });
+            }, { ...(scheme.formula || {}), standard_monthly_shifts: scheme.standard_monthly_shifts }, (() => {
+                const metrics: Record<string, number> = {
+                    total_revenue: totalRevenue,
+                    revenue_cash: sumMetric(mergedData.cash_income),
+                    revenue_card: sumMetric(mergedData.card_income),
+                    expenses: Number(mergedData.expenses) || 0
+                };
+                if (mergedData.report_data) {
+                    const data = typeof mergedData.report_data === 'string' ? JSON.parse(mergedData.report_data) : mergedData.report_data;
+                    for (const key in data) {
+                        metrics[key] = sumMetric(data[key]);
+                    }
+                }
+                return metrics;
+            })());
 
             calculatedSalary = calculation.total;
             salaryBreakdown = calculation.breakdown;

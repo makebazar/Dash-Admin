@@ -157,9 +157,48 @@ export async function PATCH(
         const expenses = sumMetric(safeReportData['expenses_cash']);
         const comment = safeReportData['shift_comment'] || '';
 
+        const templateRes = await query(
+            `SELECT schema FROM club_report_templates 
+             WHERE club_id = $1 AND is_active = TRUE 
+             ORDER BY created_at DESC LIMIT 1`,
+            [clubId]
+        );
+        const templateSchema = templateRes.rows[0]?.schema;
+        const fields = Array.isArray(templateSchema) ? templateSchema : (templateSchema?.fields || []);
+        const metricCategories: Record<string, string> = {};
+        fields.forEach((f: any) => {
+            const key = f.metric_key || f.key;
+            if (!key) return;
+            let category = f.field_type || f.calculation_category;
+            if (!category) {
+                if (key.includes('income') || key.includes('revenue') || key === 'cash' || key === 'card') {
+                    category = 'INCOME';
+                } else if (key.includes('expense') || key === 'expenses') {
+                    category = 'EXPENSE';
+                } else {
+                    category = 'OTHER';
+                }
+            }
+            metricCategories[key] = category;
+        });
+
+        let totalRevenue = 0;
+        if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) {
+            totalRevenue += cashIncome;
+        }
+        if (metricCategories['card_income'] === 'INCOME' || !metricCategories['card_income']) {
+            totalRevenue += cardIncome;
+        }
+        for (const key in safeReportData) {
+            if (key === 'cash_income' || key === 'card_income') continue;
+            if (metricCategories[key] === 'INCOME') {
+                totalRevenue += sumMetric(safeReportData[key]);
+            }
+        }
+
         // Prepare metrics for salary calculator (must be flat Record<string, number>)
         const metrics: Record<string, number> = {
-            'total_revenue': cashIncome + cardIncome,
+            'total_revenue': totalRevenue,
             'revenue_cash': cashIncome,
             'revenue_card': cardIncome,
             'expenses': expenses

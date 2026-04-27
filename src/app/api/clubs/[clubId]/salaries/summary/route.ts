@@ -351,6 +351,21 @@ export async function GET(
         });
 
         // Process each employee
+        const clubFinishedShifts = shiftsRes.rows.filter((s: any) => s.status !== 'ACTIVE' && (!s.salary_snapshot || s.salary_snapshot.type !== 'PERIOD_BONUS'));
+        const clubMonthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0, revenue_cash: 0, revenue_card: 0 };
+        clubFinishedShifts.forEach((s: any) => {
+            clubMonthlyMetrics.total_revenue += calculateShiftIncome(s);
+            clubMonthlyMetrics.total_hours += parseFloat(s.total_hours || 0);
+            clubMonthlyMetrics.revenue_cash += parseFloat(s.cash_income || 0);
+            clubMonthlyMetrics.revenue_card += parseFloat(s.card_income || 0);
+            if (s.report_data) {
+                const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
+                Object.keys(data).forEach(key => {
+                    clubMonthlyMetrics[key] = (clubMonthlyMetrics[key] || 0) + parseFloat(data[key] || 0);
+                });
+            }
+        });
+
         const summary = await Promise.all(employees.map(async (emp: any) => {
             // Fetch detailed bar purchases for this employee and month
             const barPurchasesRes = await query(`
@@ -380,7 +395,7 @@ export async function GET(
 
             // 0. Pre-calculate monthly totals for KPI metrics
             const finishedShifts = empShifts.filter((s: any) => s.status !== 'ACTIVE' && (!s.salary_snapshot || s.salary_snapshot.type !== 'PERIOD_BONUS'));
-            const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
+            const monthlyMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0, revenue_cash: 0, revenue_card: 0 };
             
             // bar_purchases - сумма покупок из бара за месяц (включая активную смену)
             const total_bar_purchases = empShifts.reduce((sum: number, s: any) => sum + (parseFloat(s.bar_purchases || 0)), 0);
@@ -388,6 +403,8 @@ export async function GET(
             finishedShifts.forEach(s => {
                 monthlyMetrics.total_revenue += calculateShiftIncome(s);
                 monthlyMetrics.total_hours += parseFloat(s.total_hours || 0);
+                monthlyMetrics.revenue_cash += parseFloat(s.cash_income || 0);
+                monthlyMetrics.revenue_card += parseFloat(s.card_income || 0);
                 if (s.report_data) {
                     const data = typeof s.report_data === 'string' ? JSON.parse(s.report_data) : s.report_data;
                     Object.keys(data).forEach(key => {
@@ -799,6 +816,29 @@ export async function GET(
                     period_bonuses: enriched_legacy_period_bonuses,
                     bonuses: enriched_scheme_bonuses 
                 };
+
+                const baseRateTiers = (schemeWithRewards as any)?.base?.rate_tiers;
+                if (baseRateTiers && ((baseRateTiers as any).period || 'SHIFT') === 'MONTH') {
+                    const metricKey = String(baseRateTiers.metric_key || 'total_revenue');
+                    const employeeMonthValue =
+                        metricKey === 'total_revenue'
+                            ? monthlyMetrics.total_revenue
+                            : metricKey === 'revenue_cash'
+                                ? monthlyMetrics.revenue_cash
+                                : metricKey === 'revenue_card'
+                                    ? monthlyMetrics.revenue_card
+                                    : Number(monthlyMetrics[metricKey] || 0);
+                    const clubMonthValue =
+                        metricKey === 'total_revenue'
+                            ? clubMonthlyMetrics.total_revenue
+                            : metricKey === 'revenue_cash'
+                                ? clubMonthlyMetrics.revenue_cash
+                                : metricKey === 'revenue_card'
+                                    ? clubMonthlyMetrics.revenue_card
+                                    : Number(clubMonthlyMetrics[metricKey] || 0);
+                    reportMetricsForShift[`month_employee_${metricKey}`] = employeeMonthValue;
+                    reportMetricsForShift[`month_club_${metricKey}`] = clubMonthValue;
+                }
 
                 const jsDow = new Date(s.check_in).getDay()
                 const dayOfWeek =

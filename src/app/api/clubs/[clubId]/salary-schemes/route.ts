@@ -81,6 +81,10 @@ export async function POST(
             return NextResponse.json({ error: 'Name and formula are required' }, { status: 400 });
         }
 
+        if (formula?.base?.rate_tiers?.period === 'MONTH' && formula?.base?.payout_timing === 'SHIFT') {
+            return NextResponse.json({ error: 'Base payout_timing SHIFT is not allowed when base rate tiers are MONTH-based' }, { status: 400 });
+        }
+
         // Create scheme
         const schemeResult = await query(
             `INSERT INTO salary_schemes (club_id, name, description, period_bonuses, standard_monthly_shifts)

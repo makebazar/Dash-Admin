@@ -662,6 +662,8 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                     <div className="w-4 h-4 rounded bg-slate-900/10 border border-slate-200" />
                     <span className="font-bold text-foreground">Сутки</span>
                     <span className="text-muted-foreground font-medium">(день + ночь)</span>
+                    <span className="ml-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">= 2 смены</span>
+                    <Switch checked={countFullAsTwo} onCheckedChange={updateCountFullAsTwo} />
                 </div>
                 {!readOnly && (
                     <div className="flex items-center gap-2.5">
@@ -669,10 +671,6 @@ export function WorkScheduleGrid({ clubId, month, year, initialData, refreshData
                         <span className="font-medium text-muted-foreground">Выходной (Кликните для выбора)</span>
                     </div>
                 )}
-                <div className="flex items-center gap-3 sm:ml-auto">
-                    <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Сутки = 2 смены</div>
-                    <Switch checked={countFullAsTwo} onCheckedChange={updateCountFullAsTwo} />
-                </div>
             </div>
         </div>
     )

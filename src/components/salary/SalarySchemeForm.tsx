@@ -327,7 +327,15 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                     bonuses = [...bonuses, ...convertedPeriodBonuses];
                 }
 
-                setFormula({ ...loadedFormula, bonuses })
+                const normalizedBase = (() => {
+                    const base = (loadedFormula as any)?.base || {}
+                    if (!base?.rate_tiers) return base
+                    const tiersRaw = Array.isArray(base.rate_tiers?.tiers) ? base.rate_tiers.tiers : []
+                    const tiers = tiersRaw.map((t: any) => ({ ...t, id: t.id || generateId() }))
+                    return { ...base, rate_tiers: { ...base.rate_tiers, tiers } }
+                })()
+
+                setFormula({ ...loadedFormula, base: normalizedBase, bonuses })
                 setStandardMonthlyShifts(scheme.standard_monthly_shifts || 15)
             }
         } catch (error) { console.error(error) } finally { setIsLoading(false) }
@@ -443,12 +451,25 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         return formula.bonuses.some(b => b.type === type)
     }
 
+    const normalizeBaseRateTiers = (input: any, fallbackRate: number) => {
+        const period = (input as any)?.period || 'SHIFT'
+        const scope = (input as any)?.scope || 'EMPLOYEE'
+        const metric_key = (input as any)?.metric_key || 'total_revenue'
+        const tiersRaw = Array.isArray((input as any)?.tiers) ? (input as any).tiers : []
+        const tiers = tiersRaw
+            .map((t: any) => ({ id: t.id || generateId(), from: Number(t.from || 0), rate: Number(t.rate || 0) }))
+            .sort((a: any, b: any) => (Number(a.from) || 0) - (Number(b.from) || 0))
+        if (tiers.length === 0) tiers.push({ id: generateId(), from: 0, rate: Number.isFinite(fallbackRate) ? fallbackRate : 0 })
+        if ((Number(tiers[0].from) || 0) !== 0) tiers[0] = { ...tiers[0], from: 0 }
+        return { metric_key, period, scope, tiers }
+    }
+
     const toggleBaseRateTiers = (enabled: boolean) => {
         setFormula(prev => {
             if (!enabled) return { ...prev, base: { ...prev.base, rate_tiers: undefined } }
-            const existing = prev.base.rate_tiers
-            const tiers = existing?.tiers?.length ? existing.tiers : [{ from: 20000, rate: 140 }, { from: 25000, rate: 170 }]
-            return { ...prev, base: { ...prev.base, rate_tiers: { metric_key: existing?.metric_key || 'total_revenue', tiers } } }
+            const baseRate = Number(prev.base.amount || 0)
+            const normalized = normalizeBaseRateTiers(prev.base.rate_tiers, baseRate)
+            return { ...prev, base: { ...prev.base, rate_tiers: normalized } }
         })
     }
 
@@ -463,29 +484,34 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                     ...prev.base,
                     rate_tiers: {
                         metric_key: existing?.metric_key || 'total_revenue',
-                        tiers: [...tiers, { from: maxFrom ? maxFrom + 5000 : 20000, rate: prev.base.amount || 0 }]
+                        period: (existing as any)?.period || 'SHIFT',
+                        scope: (existing as any)?.scope || 'EMPLOYEE',
+                        tiers: [...tiers, { id: generateId(), from: maxFrom ? maxFrom + 5000 : 20000, rate: prev.base.amount || 0 }]
                     }
                 }
             }
         })
     }
 
-    const updateBaseRateTier = (index: number, patch: Partial<{ from: number; rate: number }>) => {
+    const updateBaseRateTier = (id: string, patch: Partial<{ from: number; rate: number }>) => {
         setFormula(prev => {
             const existing = prev.base.rate_tiers
             if (!existing) return prev
-            const tiers = [...existing.tiers]
-            tiers[index] = { ...tiers[index], ...patch }
-            tiers.sort((a, b) => (Number(a.from) || 0) - (Number(b.from) || 0))
+            const tiers = [...existing.tiers].map((t: any) => ({ ...t, id: t.id || generateId() }))
+            const idx = tiers.findIndex((t: any) => String(t.id) === String(id))
+            if (idx < 0) return prev
+            tiers[idx] = { ...tiers[idx], ...patch }
+            tiers.sort((a: any, b: any) => (Number(a.from) || 0) - (Number(b.from) || 0))
+            if (tiers.length && (Number(tiers[0].from) || 0) !== 0) tiers[0] = { ...tiers[0], from: 0 }
             return { ...prev, base: { ...prev.base, rate_tiers: { ...existing, tiers } } }
         })
     }
 
-    const removeBaseRateTier = (index: number) => {
+    const removeBaseRateTier = (id: string) => {
         setFormula(prev => {
             const existing = prev.base.rate_tiers
             if (!existing) return prev
-            const tiers = existing.tiers.filter((_, i) => i !== index)
+            const tiers = existing.tiers.filter((t: any) => String(t.id || '') !== String(id))
             return { ...prev, base: { ...prev.base, rate_tiers: tiers.length ? { ...existing, tiers } : undefined } }
         })
     }
@@ -1181,6 +1207,20 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                 revenue_cash: revenueCash,
                 revenue_card: revenueCard
             }
+            const baseRateTiers = (formula.base as any)?.rate_tiers
+            if (baseRateTiers && ((baseRateTiers as any).period || 'SHIFT') === 'MONTH') {
+                const metricKey = String(baseRateTiers.metric_key || 'total_revenue')
+                const monthValue =
+                    metricKey === 'total_revenue'
+                        ? Number(exampleMonthMetrics.total_revenue || 0)
+                        : metricKey === 'revenue_cash'
+                            ? Number(exampleMonthMetrics.revenue_cash || 0)
+                            : metricKey === 'revenue_card'
+                                ? Number(exampleMonthMetrics.revenue_card || 0)
+                                : Number((exampleMonthMetrics as any)[metricKey] || 0)
+                reportMetricsPayload[`month_employee_${metricKey}`] = monthValue
+                reportMetricsPayload[`month_club_${metricKey}`] = monthValue
+            }
 
             const checklistTemplateIds = Array.from(
                 new Set(
@@ -1281,6 +1321,42 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
 
             const templateCount = Math.max(0, Number(exampleMonthShiftsWorked || 0) - monthSpecialShifts.length)
 
+            const baseRateTiers = (formula.base as any)?.rate_tiers
+            const tierMetricKey = baseRateTiers && ((baseRateTiers as any).period || 'SHIFT') === 'MONTH'
+                ? String(baseRateTiers.metric_key || 'total_revenue')
+                : null
+
+            const computeMonthMetricFromShifts = (key: string) => {
+                const typicalRevenueCash = needsCashCardSplit ? Number(exampleRevenueCash || 0) : Number(exampleShiftRevenue || 0)
+                const typicalRevenueCard = needsCashCardSplit ? Number(exampleRevenueCard || 0) : 0
+                const typicalTotal = typicalRevenueCash + typicalRevenueCard
+
+                const sumTypical = key === 'revenue_cash'
+                    ? typicalRevenueCash * templateCount
+                    : key === 'revenue_card'
+                        ? typicalRevenueCard * templateCount
+                        : typicalTotal * templateCount
+
+                const sumSpecial = monthSpecialShifts.reduce((acc, s) => {
+                    const rc = needsCashCardSplit ? Number(s.revenue_cash || 0) : Number(s.revenue || 0)
+                    const rcard = needsCashCardSplit ? Number(s.revenue_card || 0) : 0
+                    if (key === 'revenue_cash') return acc + rc
+                    if (key === 'revenue_card') return acc + rcard
+                    return acc + (rc + rcard)
+                }, 0)
+
+                return Number((sumTypical + sumSpecial).toFixed(2))
+            }
+
+            const monthTierValue =
+                tierMetricKey === 'total_revenue'
+                    ? computeMonthMetricFromShifts('total_revenue')
+                    : tierMetricKey === 'revenue_cash'
+                        ? computeMonthMetricFromShifts('revenue_cash')
+                        : tierMetricKey === 'revenue_card'
+                            ? computeMonthMetricFromShifts('revenue_card')
+                            : (tierMetricKey ? Number((exampleMonthMetrics as any)[tierMetricKey] || 0) : 0)
+
             const buildShiftRequest = (shiftInput: {
                 shift_type?: 'DAY' | 'NIGHT'
                 day_of_week?: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN'
@@ -1300,6 +1376,12 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                     total_revenue: totalRevenue,
                     revenue_cash: revenueCash,
                     revenue_card: revenueCard
+                }
+                const baseRateTiers = (formula.base as any)?.rate_tiers
+                if (baseRateTiers && ((baseRateTiers as any).period || 'SHIFT') === 'MONTH') {
+                    const metricKey = String(baseRateTiers.metric_key || 'total_revenue')
+                    reportMetricsPayload[`month_employee_${metricKey}`] = monthTierValue
+                    reportMetricsPayload[`month_club_${metricKey}`] = monthTierValue
                 }
 
                 const evaluations = shiftChecklistTemplateIds.map(templateId => ({
@@ -1468,7 +1550,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                     <Label className="text-sm font-medium">Размер ставки</Label>
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-xs font-medium text-muted-foreground">Ночной тариф</span>
-                                                        <Switch checked={!!(formula.base.day_rate || formula.base.night_rate)} onCheckedChange={checked => { if (checked) { updateBaseAmount('day_rate', formula.base.amount || 500); updateBaseAmount('night_rate', (formula.base.amount || 500) * 1.2) } else { setFormula(prev => ({ ...prev, base: { type: prev.base.type, amount: prev.base.day_rate || prev.base.amount || 500 } })) } }} className="data-[state=checked]:bg-emerald-600" />
+                                                        <Switch checked={!!(formula.base.day_rate || formula.base.night_rate)} disabled={!!formula.base.rate_tiers} onCheckedChange={checked => { if (checked) { updateBaseAmount('day_rate', formula.base.amount || 500); updateBaseAmount('night_rate', (formula.base.amount || 500) * 1.2) } else { setFormula(prev => ({ ...prev, base: { type: prev.base.type, amount: prev.base.day_rate || prev.base.amount || 500 } })) } }} className="data-[state=checked]:bg-emerald-600" />
                                                     </div>
                                                 </div>
                                                 
@@ -1492,34 +1574,85 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-2">
-                                                        <div className="relative group max-w-[160px]">
-                                                            <NumericInput value={Number(formula.base.amount || 0)} onValueChange={(v) => updateBaseAmount('amount', v)} className="h-11 rounded-xl border-slate-200 bg-white pl-4 pr-8 text-sm font-medium" />
-                                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">₽</span>
-                                                        </div>
-                                                        <p className="text-xs text-muted-foreground leading-snug">
-                                                            {formula.base.type === 'hourly' 
-                                                                ? "Оплата за один час работы. Умножается на количество отработанных часов."
-                                                                : "Фиксированная сумма за одну смену. Выплачивается при выполнении нормы часов."}
-                                                        </p>
+                                                        {!formula.base.rate_tiers && (
+                                                            <>
+                                                                <div className="relative group max-w-[160px]">
+                                                                    <NumericInput value={Number(formula.base.amount || 0)} onValueChange={(v) => updateBaseAmount('amount', v)} className="h-11 rounded-xl border-slate-200 bg-white pl-4 pr-8 text-sm font-medium" />
+                                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">₽</span>
+                                                                </div>
+                                                                <p className="text-xs text-muted-foreground leading-snug">
+                                                                    {formula.base.type === 'hourly'
+                                                                        ? "Оплата за один час работы. Умножается на количество отработанных часов."
+                                                                        : "Фиксированная сумма за одну смену. Выплачивается при выполнении нормы часов."}
+                                                                </p>
+                                                            </>
+                                                        )}
 
-                                                        {formula.base.type === 'hourly' && (
+                                                        {(formula.base.type === 'hourly' || formula.base.type === 'per_shift') && (
                                                             <div className="pt-4 mt-4 border-t border-slate-100 space-y-4">
                                                                 <div className="flex items-center justify-between">
                                                                     <div>
-                                                                        <p className="text-sm font-medium">Ставка по выручке смены</p>
-                                                                        <p className="text-xs text-muted-foreground">Автоматически выбирает ₽/ч по порогам метрики</p>
+                                                                        <p className="text-sm font-medium">Ставка по порогам</p>
+                                                                        <p className="text-xs text-muted-foreground">Автоматически выбирает ставку по метрике</p>
                                                                     </div>
                                                                     <Switch checked={!!formula.base.rate_tiers} onCheckedChange={toggleBaseRateTiers} className="data-[state=checked]:bg-slate-900" />
                                                                 </div>
 
                                                                 {formula.base.rate_tiers && (
                                                                     <div className="space-y-4">
+                                                                        <div className="grid md:grid-cols-2 gap-4">
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-xs font-medium text-muted-foreground">Период</Label>
+                                                                                <Select
+                                                                                    value={(formula.base.rate_tiers as any).period || 'SHIFT'}
+                                                                                    onValueChange={(v) => setFormula(prev => {
+                                                                                        const current = prev.base.rate_tiers
+                                                                                        if (!current) return prev
+                                                                                        const next = { ...current, period: v }
+                                                                                        const nextBase = { ...prev.base, rate_tiers: next }
+                                                                                        if (v === 'MONTH' && nextBase.payout_timing === 'SHIFT') {
+                                                                                            nextBase.payout_timing = 'MONTH'
+                                                                                        }
+                                                                                        return { ...prev, base: nextBase }
+                                                                                    })}
+                                                                                >
+                                                                                    <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200">
+                                                                                        <SelectValue />
+                                                                                    </SelectTrigger>
+                                                                                    <SelectContent>
+                                                                                        <SelectItem value="SHIFT">За смену</SelectItem>
+                                                                                        <SelectItem value="MONTH">За месяц</SelectItem>
+                                                                                    </SelectContent>
+                                                                                </Select>
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                <Label className="text-xs font-medium text-muted-foreground">Считать по</Label>
+                                                                                <Select
+                                                                                    value={(formula.base.rate_tiers as any).scope || 'EMPLOYEE'}
+                                                                                    onValueChange={(v) => setFormula(prev => {
+                                                                                        const current = prev.base.rate_tiers
+                                                                                        if (!current) return prev
+                                                                                        return { ...prev, base: { ...prev.base, rate_tiers: { ...current, scope: v } } }
+                                                                                    })}
+                                                                                    disabled={((formula.base.rate_tiers as any).period || 'SHIFT') !== 'MONTH'}
+                                                                                >
+                                                                                    <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200">
+                                                                                        <SelectValue />
+                                                                                    </SelectTrigger>
+                                                                                    <SelectContent>
+                                                                                        <SelectItem value="EMPLOYEE">Сотруднику</SelectItem>
+                                                                                        <SelectItem value="CLUB">Клубу</SelectItem>
+                                                                                    </SelectContent>
+                                                                                </Select>
+                                                                            </div>
+                                                                        </div>
+
                                                                         <div className="flex flex-col md:flex-row gap-3 md:items-end md:justify-between">
                                                                             <div className="space-y-2">
                                                                                 <Label className="text-xs font-medium text-muted-foreground">Метрика для порогов</Label>
                                                                                 <Select
                                                                                     value={formula.base.rate_tiers.metric_key || 'total_revenue'}
-                                                                                    onValueChange={(v) => setFormula(prev => ({ ...prev, base: { ...prev.base, rate_tiers: prev.base.rate_tiers ? { ...prev.base.rate_tiers, metric_key: v } : { metric_key: v, tiers: [] } } }))}
+                                                                                    onValueChange={(v) => setFormula(prev => ({ ...prev, base: { ...prev.base, rate_tiers: prev.base.rate_tiers ? { ...prev.base.rate_tiers, metric_key: v } : { metric_key: v, period: 'SHIFT', scope: 'EMPLOYEE', tiers: [] } } }))}
                                                                                 >
                                                                                     <SelectTrigger className="h-11 rounded-xl bg-white border-slate-200 w-full md:w-[320px]">
                                                                                         <SelectValue placeholder="Выберите метрику" />
@@ -1538,19 +1671,19 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                                         </div>
 
                                                                         <div className="space-y-2">
-                                                                            {formula.base.rate_tiers.tiers.map((t, idx) => (
-                                                                                <div key={idx} className="flex flex-col md:flex-row md:items-center gap-3 bg-white border border-slate-200 rounded-2xl p-4">
+                                                                            {formula.base.rate_tiers.tiers.map((t: any, idx: number) => (
+                                                                                <div key={String(t.id)} className="flex flex-col md:flex-row md:items-center gap-3 bg-white border border-slate-200 rounded-2xl p-4">
                                                                                     <div className="flex items-center gap-3 w-full">
                                                                                         <div className="flex-1">
                                                                                             <Label className="text-xs font-medium text-muted-foreground">От (₽)</Label>
-                                                                                            <NumericInput value={Number(t.from || 0)} onValueChange={(v) => updateBaseRateTier(idx, { from: v })} className="h-11 rounded-xl border-slate-200" />
+                                                                                            <NumericInput value={Number(t.from || 0)} onValueChange={(v) => updateBaseRateTier(String(t.id), { from: v })} disabled={idx === 0} className="h-11 rounded-xl border-slate-200" />
                                                                                         </div>
                                                                                         <div className="flex-1">
-                                                                                            <Label className="text-xs font-medium text-muted-foreground">Ставка (₽/ч)</Label>
-                                                                                            <NumericInput value={Number(t.rate || 0)} onValueChange={(v) => updateBaseRateTier(idx, { rate: v })} className="h-11 rounded-xl border-slate-200" />
+                                                                                            <Label className="text-xs font-medium text-muted-foreground">{formula.base.type === 'hourly' ? 'Ставка (₽/ч)' : 'Ставка (₽/смена)'}</Label>
+                                                                                            <NumericInput value={Number(t.rate || 0)} onValueChange={(v) => updateBaseRateTier(String(t.id), { rate: v })} className="h-11 rounded-xl border-slate-200" />
                                                                                         </div>
                                                                                     </div>
-                                                                                    <Button type="button" variant="outline" size="icon" className="h-11 w-11 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => removeBaseRateTier(idx)}>
+                                                                                    <Button type="button" variant="outline" size="icon" disabled={idx === 0} className={`h-11 w-11 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 ${idx === 0 ? 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-rose-600' : ''}`} onClick={() => removeBaseRateTier(String(t.id))}>
                                                                                         <Trash2 className="h-4 w-4" />
                                                                                     </Button>
                                                                                 </div>
@@ -1585,7 +1718,8 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                             <button 
                                                                 type="button" 
                                                                 onClick={() => setFormula(prev => ({ ...prev, base: { ...prev.base, payout_timing: 'SHIFT' } }))}
-                                                                className={`px-3 h-9 rounded-lg text-xs font-medium transition-all ${formula.base.payout_timing === 'SHIFT' ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                                                disabled={!!formula.base.rate_tiers && ((formula.base.rate_tiers as any).period || 'SHIFT') === 'MONTH'}
+                                                                className={`px-3 h-9 rounded-lg text-xs font-medium transition-all ${formula.base.payout_timing === 'SHIFT' ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'} ${!!formula.base.rate_tiers && ((formula.base.rate_tiers as any).period || 'SHIFT') === 'MONTH' ? 'opacity-50 cursor-not-allowed hover:text-muted-foreground' : ''}`}
                                                             >
                                                                 В конце смены
                                                             </button>
