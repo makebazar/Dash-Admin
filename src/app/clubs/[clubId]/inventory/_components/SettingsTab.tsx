@@ -34,6 +34,7 @@ interface SettingsTabProps {
         cashbox_warehouse_id?: number | null,
         cashbox_warehouse_ids?: number[],
         handover_warehouse_id?: number | null,
+        handover_warehouse_ids?: number[],
         sales_capture_mode?: 'SHIFT',
         inventory_timing?: 'END_SHIFT',
         shift_accountability_mode?: 'DISABLED' | 'WAREHOUSE',
@@ -166,6 +167,7 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
             nextSettings.cashbox_warehouse_ids = []
             nextSettings.shift_accountability_mode = 'DISABLED'
             nextSettings.handover_warehouse_id = null
+            nextSettings.handover_warehouse_ids = []
         }
 
         if (key === 'cashbox_enabled') {
@@ -183,6 +185,7 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
                 nextSettings.cashbox_warehouse_ids = []
                 nextSettings.shift_accountability_mode = 'DISABLED'
                 nextSettings.handover_warehouse_id = null
+                nextSettings.handover_warehouse_ids = []
             }
         }
 
@@ -210,25 +213,18 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
                     : (defaultWarehouseId ? [defaultWarehouseId] : [])
                 nextSettings.cashbox_warehouse_ids = nextCashboxWarehouseIds
                 nextSettings.cashbox_warehouse_id = nextCashboxWarehouseIds[0] ?? null
-                nextSettings.handover_warehouse_id = nextSettings.handover_warehouse_id ?? (
-                    nextCashboxWarehouseIds.length === 1
-                        ? (nextCashboxWarehouseIds[0] ?? null)
-                        : null
-                )
+                const nextHandoverWarehouseIds = (nextSettings.handover_warehouse_ids || []).length > 0
+                    ? (nextSettings.handover_warehouse_ids || [])
+                    : nextCashboxWarehouseIds
+                nextSettings.handover_warehouse_ids = nextHandoverWarehouseIds
+                nextSettings.handover_warehouse_id = nextHandoverWarehouseIds.length === 1
+                    ? (nextHandoverWarehouseIds[0] ?? null)
+                    : null
             } else {
                 nextSettings.handover_warehouse_id = null
+                nextSettings.handover_warehouse_ids = []
             }
         }
-        saveSettings(nextSettings)
-    }
-
-    const handleWarehouseBindingChange = (key: 'handover_warehouse_id', value: string) => {
-        const parsedWarehouseId = value === "none" ? null : Number(value)
-        const nextSettings = {
-            ...normalizedSettings,
-            [key]: parsedWarehouseId,
-        }
-
         saveSettings(nextSettings)
     }
 
@@ -246,11 +242,27 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
             cashbox_warehouse_id: nextPrimary,
         }
         if (normalizedSettings.shift_accountability_mode === 'WAREHOUSE') {
-            if (nextIds.length === 1) {
-                nextSettings.handover_warehouse_id = nextIds[0] ?? null
-            } else if (nextSettings.handover_warehouse_id && !nextIds.includes(Number(nextSettings.handover_warehouse_id))) {
-                nextSettings.handover_warehouse_id = null
-            }
+            const currentHandoverIds = Array.isArray(normalizedSettings.handover_warehouse_ids)
+                ? normalizedSettings.handover_warehouse_ids
+                : []
+            const nextHandoverIds = currentHandoverIds.filter((id) => nextIds.includes(Number(id)))
+            nextSettings.handover_warehouse_ids = nextHandoverIds
+            nextSettings.handover_warehouse_id = nextHandoverIds.length === 1 ? (nextHandoverIds[0] ?? null) : null
+        }
+        saveSettings(nextSettings)
+    }
+
+    const handleHandoverWarehouseToggle = (warehouseId: number, checked: boolean) => {
+        const currentIds = Array.isArray(normalizedSettings.handover_warehouse_ids)
+            ? normalizedSettings.handover_warehouse_ids
+            : []
+        const nextIds = checked
+            ? Array.from(new Set([...currentIds, warehouseId]))
+            : currentIds.filter((id) => Number(id) !== Number(warehouseId))
+        const nextSettings = {
+            ...normalizedSettings,
+            handover_warehouse_ids: nextIds,
+            handover_warehouse_id: nextIds.length === 1 ? (nextIds[0] ?? null) : null,
         }
         saveSettings(nextSettings)
     }
@@ -589,26 +601,29 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
 
                                         {isShiftAccountabilityEnabled && (
                                             <div className="rounded-xl border border-border p-4 space-y-2">
-                                                <Label className="text-sm font-semibold text-foreground">Склад передачи</Label>
-                                                <Select
-                                                    value={normalizedSettings.handover_warehouse_id ? String(normalizedSettings.handover_warehouse_id) : "none"}
-                                                    onValueChange={(value) => handleWarehouseBindingChange('handover_warehouse_id', value)}
-                                                    disabled={isPending}
-                                                >
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Выберите склад для передачи" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">Не выбран</SelectItem>
-                                                        {warehouses.filter((warehouse) => warehouse.is_active).map((warehouse) => (
-                                                            <SelectItem key={warehouse.id} value={String(warehouse.id)}>
-                                                                {warehouse.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
+                                                <Label className="text-sm font-semibold text-foreground">Склады передачи</Label>
+                                                <div className="rounded-lg border border-border bg-card divide-y divide-border overflow-hidden">
+                                                    {warehouses.filter((warehouse) => warehouse.is_active).map((warehouse) => {
+                                                        const selected = (normalizedSettings.handover_warehouse_ids || []).includes(Number(warehouse.id))
+                                                        return (
+                                                            <label key={warehouse.id} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none">
+                                                                <Checkbox
+                                                                    checked={selected}
+                                                                    onCheckedChange={(val) => handleHandoverWarehouseToggle(Number(warehouse.id), Boolean(val))}
+                                                                    disabled={isPending}
+                                                                />
+                                                                <span className="text-sm font-semibold text-foreground">{warehouse.name}</span>
+                                                            </label>
+                                                        )
+                                                    })}
+                                                    {warehouses.filter((warehouse) => warehouse.is_active).length === 0 && (
+                                                        <div className="px-3 py-2.5 text-sm text-muted-foreground">
+                                                            Нет активных складов.
+                                                        </div>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-muted-foreground">
-                                                    Этот склад используется для режима передачи. Если включена передача по нескольким складам, оставь поле пустым и настрой зоны на самих складах.
+                                                    Передача будет делаться по выбранным складам по очереди.
                                                 </p>
                                             </div>
                                         )}
@@ -656,7 +671,7 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
                         warehouses={warehouses}
                         currentUserId={currentUserId}
                         cashboxWarehouseIds={normalizedSettings.cashbox_warehouse_ids}
-                        handoverWarehouseId={normalizedSettings.handover_warehouse_id}
+                        handoverWarehouseIds={normalizedSettings.handover_warehouse_ids}
                     />
                 </TabsContent>
                 

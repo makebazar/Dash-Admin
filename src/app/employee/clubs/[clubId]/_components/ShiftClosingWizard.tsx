@@ -46,7 +46,9 @@ interface ShiftClosingWizardProps {
         blind_inventory_enabled?: boolean
         report_reconciliation_enabled?: boolean
         cashbox_warehouse_id?: number | null
+        cashbox_warehouse_ids?: number[]
         handover_warehouse_id?: number | null
+        handover_warehouse_ids?: number[]
         sales_capture_mode?: 'SHIFT'
         inventory_timing?: 'END_SHIFT'
     }
@@ -890,7 +892,9 @@ export function ShiftClosingWizard({
                 }
 
                 const allowedWarehouseId =
+                    (inventorySettings?.handover_warehouse_ids || [])[0] ||
                     inventorySettings?.handover_warehouse_id ||
+                    (inventorySettings?.cashbox_warehouse_ids || [])[0] ||
                     inventorySettings?.cashbox_warehouse_id ||
                     null
 

@@ -15,10 +15,10 @@ interface WarehousesTabProps {
     warehouses: Warehouse[]
     currentUserId: string
     cashboxWarehouseIds?: number[]
-    handoverWarehouseId?: number | null
+    handoverWarehouseIds?: number[]
 }
 
-export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseIds, handoverWarehouseId }: WarehousesTabProps) {
+export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseIds, handoverWarehouseIds }: WarehousesTabProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
@@ -131,14 +131,14 @@ export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseIds, 
                             </div>
                         </div>
                         
-                        {((cashboxWarehouseIds || []).includes(Number(wh.id)) || Number(handoverWarehouseId) === Number(wh.id)) && (
+                        {((cashboxWarehouseIds || []).includes(Number(wh.id)) || (handoverWarehouseIds || []).includes(Number(wh.id))) && (
                             <div className="flex flex-wrap gap-2">
                                 {(cashboxWarehouseIds || []).includes(Number(wh.id)) && (
                                     <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
                                         Для кассы
                                     </Badge>
                                 )}
-                                {Number(handoverWarehouseId) === Number(wh.id) && (
+                                {(handoverWarehouseIds || []).includes(Number(wh.id)) && (
                                     <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
                                         Для сверок
                                     </Badge>

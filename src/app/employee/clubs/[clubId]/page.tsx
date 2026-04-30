@@ -1543,7 +1543,9 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                             blind_inventory_enabled: normalizedInventorySettings.blind_inventory_enabled,
                             report_reconciliation_enabled: normalizedInventorySettings.report_reconciliation_enabled,
                             cashbox_warehouse_id: normalizedInventorySettings.cashbox_warehouse_id,
+                            cashbox_warehouse_ids: normalizedInventorySettings.cashbox_warehouse_ids,
                             handover_warehouse_id: normalizedInventorySettings.handover_warehouse_id,
+                            handover_warehouse_ids: normalizedInventorySettings.handover_warehouse_ids,
                             sales_capture_mode: normalizedInventorySettings.sales_capture_mode,
                             inventory_timing: normalizedInventorySettings.inventory_timing,
                         }}

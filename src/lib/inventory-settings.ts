@@ -12,6 +12,7 @@ export type RawInventorySettings = {
     cashbox_warehouse_id?: number | null
     cashbox_warehouse_ids?: number[]
     handover_warehouse_id?: number | null
+    handover_warehouse_ids?: number[]
     sales_capture_mode?: 'INVENTORY' | 'SHIFT' | null
     inventory_timing?: 'END_SHIFT' | 'START_SHIFT' | null
     shift_accountability_mode?: 'DISABLED' | 'WAREHOUSE' | null
@@ -33,6 +34,7 @@ export type InventorySettings = Omit<RawInventorySettings, 'sales_capture_mode' 
     cashbox_warehouse_id: number | null
     cashbox_warehouse_ids: number[]
     handover_warehouse_id: number | null
+    handover_warehouse_ids: number[]
     sales_capture_mode: 'SHIFT'
     inventory_timing: 'END_SHIFT'
     shift_accountability_mode: 'DISABLED' | 'WAREHOUSE'
@@ -84,15 +86,26 @@ export function normalizeInventorySettings(raw: RawInventorySettings | null | un
     const handoverWarehouseId = Number.isInteger(Number(source.handover_warehouse_id))
         ? Number(source.handover_warehouse_id)
         : null
+    const rawHandoverWarehouseIds = Array.isArray(source.handover_warehouse_ids)
+        ? source.handover_warehouse_ids
+        : []
+    const handoverWarehouseIdsBase = rawHandoverWarehouseIds
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    const handoverWarehouseIdsUnique = Array.from(new Set(handoverWarehouseIdsBase))
     const shiftAccountabilityMode =
         stockEnabled && cashboxEnabled && source.shift_accountability_mode === "WAREHOUSE"
             ? "WAREHOUSE"
             : "DISABLED"
-    const handoverWarehouseIdEffective = shiftAccountabilityMode === "WAREHOUSE"
+    const handoverWarehouseIdsEffective = shiftAccountabilityMode === "WAREHOUSE"
         ? (
-            handoverWarehouseId ??
-            (cashboxWarehouseIds.length === 1 ? cashboxWarehouseId : null)
+            handoverWarehouseIdsUnique.length > 0
+                ? handoverWarehouseIdsUnique
+                : (handoverWarehouseId ? [handoverWarehouseId] : [])
         )
+        : []
+    const handoverWarehouseIdEffective = handoverWarehouseIdsEffective.length === 1
+        ? handoverWarehouseIdsEffective[0]
         : null
 
     return {
@@ -110,6 +123,7 @@ export function normalizeInventorySettings(raw: RawInventorySettings | null | un
         report_reconciliation_enabled: reportReconciliationEnabled,
         cashbox_warehouse_id: cashboxEnabled ? cashboxWarehouseId : null,
         cashbox_warehouse_ids: cashboxEnabled ? cashboxWarehouseIds : [],
+        handover_warehouse_ids: shiftAccountabilityMode === "WAREHOUSE" ? handoverWarehouseIdsEffective : [],
         handover_warehouse_id: handoverWarehouseIdEffective,
         sales_capture_mode: "SHIFT",
         inventory_timing: "END_SHIFT",

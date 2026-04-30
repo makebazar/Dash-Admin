@@ -271,7 +271,11 @@ async function resolveEffectiveEmployeeWarehouseIds(client: any, clubId: string,
     const explicitIds = normalizeAllowedWarehouseIds(settings.employee_allowed_warehouse_ids)
     if (explicitIds.length > 0) return explicitIds
 
+    const handoverIds = normalizeAllowedWarehouseIds(settings.handover_warehouse_ids)
+    const cashboxIds = normalizeAllowedWarehouseIds(settings.cashbox_warehouse_ids)
     const autoIds = [
+        ...handoverIds,
+        ...cashboxIds,
         settings.handover_warehouse_id,
         settings.cashbox_warehouse_id,
     ]
@@ -613,10 +617,20 @@ async function getShiftAccountabilityWarehousesInternal(client: any, clubId: str
         return []
     }
 
-    if (inventorySettings.handover_warehouse_id) {
-        const warehouseId = Number(inventorySettings.handover_warehouse_id)
-        if (!scope.canManageInventory && !scope.allowedWarehouseIds.includes(warehouseId)) {
-            return []
+    const configuredWarehouseIds = Array.isArray(inventorySettings.handover_warehouse_ids)
+        ? inventorySettings.handover_warehouse_ids.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0)
+        : []
+    if (configuredWarehouseIds.length > 0) {
+        if (!scope.canManageInventory) {
+            const allowed = configuredWarehouseIds.filter((id) => scope.allowedWarehouseIds.includes(Number(id)))
+            if (allowed.length === 0) return []
+        }
+
+        const params: any[] = [clubId, configuredWarehouseIds]
+        let warehouseFilter = ""
+        if (!scope.canManageInventory) {
+            params.push(scope.allowedWarehouseIds)
+            warehouseFilter = " AND w.id = ANY($3::int[])"
         }
 
         const configuredRes = await client.query(
@@ -624,17 +638,18 @@ async function getShiftAccountabilityWarehousesInternal(client: any, clubId: str
             SELECT w.*
             FROM warehouses w
             WHERE w.club_id = $1
-              AND w.id = $2
               AND w.is_active = true
-            LIMIT 1
+              AND w.id = ANY($2::int[])
+              ${warehouseFilter}
+            ORDER BY w.name
             `,
-            [clubId, warehouseId]
+            params
         )
 
         return configuredRes.rows.map((row: any) => ({
             ...row,
             shift_accountability_enabled: true,
-            shift_zone_key: 'BAR',
+            shift_zone_key: row.shift_zone_key || 'BAR',
         })) as Array<Warehouse & { shift_zone_key: 'BAR' | 'FRIDGE' | 'SHOWCASE' | 'BACKROOM' }>
     }
 
@@ -734,15 +749,19 @@ export async function getShiftAccountabilitySetupStatus(clubId: string): Promise
 
         if (mode === 'WAREHOUSE') {
             if (warehouses.length === 0) {
-                issues.push("Выбери склад передачи в настройках inventory.")
+                issues.push("Выбери склады передачи в настройках inventory.")
             }
-            if (settings.handover_warehouse_id && (settings.cashbox_warehouse_ids || []).length > 0) {
-                const cashboxIds = (settings.cashbox_warehouse_ids || []).map((v) => Number(v))
-                const handoverId = Number(settings.handover_warehouse_id)
-                if (cashboxIds.length === 1 && Number(settings.cashbox_warehouse_id) !== handoverId) {
-                    issues.push("Для корректной передачи при одном складе кассы склад кассы и склад передачи должны совпадать.")
-                } else if (cashboxIds.length > 1 && !cashboxIds.includes(handoverId)) {
-                    issues.push("Склад передачи должен входить в выбранные склады кассы.")
+            const cashboxIds = Array.isArray(settings.cashbox_warehouse_ids)
+                ? settings.cashbox_warehouse_ids.map((v) => Number(v)).filter((v) => Number.isInteger(v) && v > 0)
+                : []
+            const handoverIds = Array.isArray(settings.handover_warehouse_ids)
+                ? settings.handover_warehouse_ids.map((v) => Number(v)).filter((v) => Number.isInteger(v) && v > 0)
+                : []
+            if (cashboxIds.length > 0 && handoverIds.length > 0) {
+                const cashboxSet = new Set<number>(cashboxIds)
+                const outside = handoverIds.filter((id) => !cashboxSet.has(id))
+                if (outside.length > 0) {
+                    issues.push("Склады передачи должны входить в выбранные склады кассы.")
                 }
             }
 
@@ -750,7 +769,7 @@ export async function getShiftAccountabilitySetupStatus(clubId: string): Promise
             const allowedWarehouseIds = await resolveEffectiveEmployeeWarehouseIds(client, clubId, settings)
             const inaccessible = warehouses.filter((warehouse) => !allowedWarehouseIds.includes(Number(warehouse.id)))
             if (inaccessible.length > 0) {
-                issues.push("Склад передачи должен входить в доступные сотрудникам склады.")
+                issues.push("Склады передачи должны входить в доступные сотрудникам склады.")
             }
 
             // Extra safety: configuration should not be empty after access filtering.
