@@ -3734,6 +3734,8 @@ export type ShiftReceiptItem = {
     receipt_id: number
     product_id: number
     product_name: string
+    warehouse_id?: number | null
+    warehouse_name?: string | null
     quantity: number
     returned_qty?: number
     available_qty?: number
@@ -3746,7 +3748,7 @@ export type ShiftReceipt = {
     club_id: number
     shift_id: string
     created_by: string
-    warehouse_id: number
+    warehouse_id: number | null
     warehouse_name: string
     payment_type: ShiftReceiptPaymentType
     counts_in_revenue?: boolean
@@ -3946,6 +3948,113 @@ async function resolvePosWarehouseIdForItems(
     throw new Error(`Недостаточно товара на выбранном складе кассы. ${details}`)
 }
 
+async function resolvePosWarehousesForItems(
+    client: any,
+    clubId: string,
+    userId: string,
+    items: { product_id: number; quantity: number }[],
+    forcedWarehouseId: number | null,
+    allowedCashboxWarehouseIds?: number[]
+) {
+    const warehouseId = forcedWarehouseId ? Number(forcedWarehouseId) : null
+    if (warehouseId) {
+        const resolved = await resolvePosWarehouseIdForItems(client, clubId, userId, items, warehouseId, allowedCashboxWarehouseIds)
+        const map = new Map<number, number>()
+        for (const item of items) map.set(Number(item.product_id), Number(resolved))
+        return { receiptWarehouseId: Number(resolved), itemWarehouseMap: map }
+    }
+
+    const scope = await getInventoryAccessScope(client, clubId, userId)
+    const cashboxWarehouseIds = Array.isArray(allowedCashboxWarehouseIds)
+        ? allowedCashboxWarehouseIds
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value > 0)
+        : []
+    const effectiveEmployeeAllowedWarehouseIds = !scope.canManageInventory
+        ? (cashboxWarehouseIds.length > 0 ? cashboxWarehouseIds : scope.allowedWarehouseIds)
+        : scope.allowedWarehouseIds
+
+    if (effectiveEmployeeAllowedWarehouseIds.length === 0) {
+        throw new Error("Для кассы не найден доступный активный склад")
+    }
+
+    const warehouseRes = await client.query(
+        `
+        SELECT id, name, is_default
+        FROM warehouses
+        WHERE club_id = $1
+          AND is_active = true
+          AND id = ANY($2::int[])
+        ORDER BY is_default DESC, created_at ASC
+        `,
+        [clubId, effectiveEmployeeAllowedWarehouseIds]
+    )
+    if (warehouseRes.rowCount === 0) {
+        throw new Error("Для кассы не найден доступный активный склад")
+    }
+
+    const warehouseIds = warehouseRes.rows.map((row: any) => Number(row.id))
+    const productIds = Array.from(new Set(items.map(item => Number(item.product_id))))
+    const stockRes = await client.query(
+        `
+        SELECT warehouse_id, product_id, quantity
+        FROM warehouse_stock
+        WHERE warehouse_id = ANY($1::int[])
+          AND product_id = ANY($2::int[])
+        `,
+        [warehouseIds, productIds]
+    )
+
+    const stockMap = new Map<string, number>()
+    for (const row of stockRes.rows) {
+        stockMap.set(`${row.warehouse_id}:${row.product_id}`, Number(row.quantity || 0))
+    }
+
+    const itemSummaries = await client.query(
+        `
+        SELECT id, name
+        FROM warehouse_products
+        WHERE club_id = $1
+          AND id = ANY($2::int[])
+        `,
+        [clubId, productIds]
+    )
+    const productNames = new Map<number, string>()
+    for (const row of itemSummaries.rows) {
+        productNames.set(Number(row.id), String(row.name))
+    }
+
+    const itemWarehouseMap = new Map<number, number>()
+    const usedWarehouseIds = new Set<number>()
+
+    for (const item of items) {
+        const pid = Number(item.product_id)
+        const qty = Number(item.quantity)
+        const candidates = warehouseRes.rows
+            .map((warehouse: any) => ({
+                id: Number(warehouse.id),
+                name: String(warehouse.name),
+                available: stockMap.get(`${warehouse.id}:${pid}`) || 0,
+            }))
+            .filter((w) => w.available >= qty)
+            .sort((a, b) => b.available - a.available)
+
+        if (candidates.length === 0) {
+            const perWarehouse = warehouseRes.rows
+                .map((warehouse: any) => `${warehouse.name}: ${stockMap.get(`${warehouse.id}:${pid}`) || 0}`)
+                .join(", ")
+            throw new Error(`Недостаточно товара для продажи. ${productNames.get(pid) || `Товар #${pid}`} — ${perWarehouse}`)
+        }
+
+        const picked = candidates[0]
+        itemWarehouseMap.set(pid, picked.id)
+        usedWarehouseIds.add(picked.id)
+    }
+
+    const receiptWarehouseId = usedWarehouseIds.size === 1 ? Array.from(usedWarehouseIds)[0] : null
+    return { receiptWarehouseId, itemWarehouseMap }
+}
+
 export async function createShiftReceipt(
     clubId: string,
     userId: string,
@@ -4006,8 +4115,8 @@ export async function createShiftReceipt(
             }
         }
 
-        const preferredWarehouseId = data.warehouse_id ?? null
-        const warehouseId = await resolvePosWarehouseIdForItems(client, clubId, userId, normalizedItems, preferredWarehouseId, cashboxWarehouseIds)
+        const forcedWarehouseId = data.warehouse_id ?? null
+        const { receiptWarehouseId, itemWarehouseMap } = await resolvePosWarehousesForItems(client, clubId, userId, normalizedItems, forcedWarehouseId, cashboxWarehouseIds)
 
         const productIds = Array.from(new Set(normalizedItems.map(i => i.product_id)))
         const pricesRes = await client.query(
@@ -4095,9 +4204,13 @@ export async function createShiftReceipt(
 
         // FIX: Check stock availability BEFORE creating receipt
         for (const item of normalizedItems) {
+            const itemWarehouseId = itemWarehouseMap.get(item.product_id)
+            if (!itemWarehouseId) {
+                throw new Error("Не удалось определить склад для товара в чеке")
+            }
             const stockRes = await client.query(
                 `SELECT quantity FROM warehouse_stock WHERE warehouse_id = $1 AND product_id = $2 FOR UPDATE`,
-                [warehouseId, item.product_id]
+                [itemWarehouseId, item.product_id]
             )
             const prevStock = Number(stockRes.rows[0]?.quantity ?? 0)
             if (prevStock < item.quantity) {
@@ -4125,7 +4238,7 @@ export async function createShiftReceipt(
                 clubId,
                 data.shift_id,
                 userId,
-                warehouseId,
+                receiptWarehouseId,
                 data.payment_type,
                 cashAmount,
                 cardAmount,
@@ -4144,20 +4257,28 @@ export async function createShiftReceipt(
             if (!p) continue
             const unitPrice = unitPriceMap.get(item.product_id)
             if (unitPrice === undefined) continue
+            const itemWarehouseId = itemWarehouseMap.get(item.product_id)
+            if (!itemWarehouseId) {
+                throw new Error("Не удалось определить склад для товара в чеке")
+            }
             await client.query(
                 `
-                INSERT INTO shift_receipt_items (receipt_id, product_id, quantity, selling_price_snapshot, cost_price_snapshot)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO shift_receipt_items (receipt_id, product_id, quantity, selling_price_snapshot, cost_price_snapshot, warehouse_id)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 `,
-                [receiptId, item.product_id, item.quantity, unitPrice, p.cost_price]
+                [receiptId, item.product_id, item.quantity, unitPrice, p.cost_price, itemWarehouseId]
             )
         }
 
         // FIX: Immediate stock write-off
         for (const item of normalizedItems) {
+            const itemWarehouseId = itemWarehouseMap.get(item.product_id)
+            if (!itemWarehouseId) {
+                throw new Error("Не удалось определить склад для товара в чеке")
+            }
             const { previousStock, newStock } = await applyWarehouseStockDelta(
                 client,
-                warehouseId,
+                itemWarehouseId,
                 item.product_id,
                 -item.quantity
             )
@@ -4179,7 +4300,7 @@ export async function createShiftReceipt(
                 'SHIFT_RECEIPT',
                 receiptId,
                 data.shift_id,
-                warehouseId,
+                itemWarehouseId,
                 unitPrice
             )
         }
@@ -4507,9 +4628,11 @@ async function buildShiftReceiptsFromRows(receiptRows: any[]) {
             `
             SELECT
                 i.*,
-                p.name as product_name
+                p.name as product_name,
+                w.name as warehouse_name
             FROM shift_receipt_items i
             JOIN warehouse_products p ON i.product_id = p.id
+            LEFT JOIN warehouses w ON i.warehouse_id = w.id
             WHERE i.receipt_id = ANY($1)
             ORDER BY i.id ASC
             `,
@@ -4530,6 +4653,8 @@ async function buildShiftReceiptsFromRows(receiptRows: any[]) {
             receipt_id: rid,
             product_id: Number(r.product_id),
             product_name: String(r.product_name),
+            warehouse_id: r.warehouse_id ? Number(r.warehouse_id) : null,
+            warehouse_name: r.warehouse_name ? String(r.warehouse_name) : null,
             quantity: Number(r.quantity),
             returned_qty: returnedQty,
             available_qty: Number(r.quantity) - returnedQty,
@@ -4544,8 +4669,8 @@ async function buildShiftReceiptsFromRows(receiptRows: any[]) {
         club_id: Number(r.club_id),
         shift_id: String(r.shift_id),
         created_by: String(r.created_by),
-        warehouse_id: Number(r.warehouse_id),
-        warehouse_name: String(r.warehouse_name),
+        warehouse_id: r.warehouse_id ? Number(r.warehouse_id) : null,
+        warehouse_name: r.warehouse_name ? String(r.warehouse_name) : "Несколько складов",
         payment_type: r.payment_type as ShiftReceiptPaymentType,
         counts_in_revenue: typeof r.counts_in_revenue === 'boolean' ? r.counts_in_revenue : true,
         salary_target_user_id: r.salary_target_user_id ? String(r.salary_target_user_id) : null,
@@ -4572,7 +4697,7 @@ export async function getShiftReceipts(clubId: string, userId: string, shiftId: 
             r.*,
             w.name as warehouse_name
         FROM shift_receipts r
-        JOIN warehouses w ON r.warehouse_id = w.id
+        LEFT JOIN warehouses w ON r.warehouse_id = w.id
         WHERE r.club_id = $1
           AND r.shift_id = $2
           AND r.created_by = $3
@@ -4611,7 +4736,7 @@ export async function getInventoryShiftReceipts(clubId: string, inventoryId: num
             r.*,
             w.name as warehouse_name
         FROM shift_receipts r
-        JOIN warehouses w ON r.warehouse_id = w.id
+        LEFT JOIN warehouses w ON r.warehouse_id = w.id
         WHERE r.club_id = $1
           AND r.shift_id = $2
           AND r.created_by = $3
@@ -4649,7 +4774,7 @@ export async function voidShiftReceipt(clubId: string, userId: string, receiptId
 
         for (const item of itemsRes.rows) {
             const productId = Number(item.product_id)
-            const warehouseId = Number(receipt.warehouse_id)
+            const warehouseId = item.warehouse_id ? Number(item.warehouse_id) : Number(receipt.warehouse_id)
             const qty = Number(item.quantity)
 
             // Return stock back
@@ -4759,7 +4884,7 @@ export async function returnReceiptItem(
         const item = itemRes.rows[0]
 
         const productId = Number(item.product_id)
-        const warehouseId = Number(receipt.warehouse_id)
+        const warehouseId = item.warehouse_id ? Number(item.warehouse_id) : Number(receipt.warehouse_id)
         const originalQty = Number(item.quantity)
         const price = Number(item.selling_price_snapshot || 0)
 
