@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { query } from '@/db'
 import { cookies } from 'next/headers'
+import { requireClubFullAccess } from '@/lib/club-api-access'
 
 export async function GET(
     request: Request,
@@ -73,15 +74,7 @@ export async function PATCH(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Check ownership/manager access
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        )
-
-        if (ownerCheck.rowCount === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-        }
+        await requireClubFullAccess(String(clubId))
 
         await query('BEGIN')
 
@@ -140,10 +133,11 @@ export async function PATCH(
 
         return NextResponse.json({ success: true })
 
-    } catch (error) {
+    } catch (error: any) {
         await query('ROLLBACK')
         console.error('Update Template Error:', error)
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status })
     }
 }
 
@@ -159,15 +153,7 @@ export async function DELETE(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        // Check ownership/manager access (only owners can delete templates for now)
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        )
-
-        if (ownerCheck.rowCount === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-        }
+        await requireClubFullAccess(String(clubId))
 
         // Delete template (cascade will handle items)
         await query(
@@ -176,8 +162,9 @@ export async function DELETE(
         )
 
         return NextResponse.json({ success: true })
-    } catch (error) {
+    } catch (error: any) {
         console.error('Delete Template Error:', error)
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status })
     }
 }

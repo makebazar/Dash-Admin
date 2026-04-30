@@ -747,7 +747,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
             {/* Edit Employee Modal */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent className="sm:max-w-[425px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
+                <DialogContent className="w-screen h-[100dvh] max-w-none rounded-none border border-slate-200 shadow-2xl bg-white p-6 overflow-y-auto sm:w-full sm:h-auto sm:max-w-[425px] sm:rounded-3xl">
                     <DialogHeader className="space-y-3">
                         <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center">
                             <Pencil className="h-6 w-6 text-slate-700" />
@@ -760,7 +760,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                         </div>
                     </DialogHeader>
 
-                    <form onSubmit={handleUpdateEmployee} className="space-y-5 pt-4">
+                    <form onSubmit={handleUpdateEmployee} className="space-y-5 pt-4 pb-24 sm:pb-0">
                         <div className="space-y-4">
                             <div className="space-y-1.5">
                                 <Label htmlFor="editFullName" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Полное имя</Label>
@@ -914,22 +914,45 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                             </div>
                         </div>
 
-                        <DialogFooter className="pt-2">
-                            <Button
-                                type="submit"
-                                className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-11 font-medium"
-                                disabled={isSubmitting}
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Сохранение...
-                                    </>
-                                ) : (
-                                    'Обновить профиль'
-                                )}
-                            </Button>
-                        </DialogFooter>
+                        <div className="hidden sm:block">
+                            <DialogFooter className="pt-2">
+                                <Button
+                                    type="submit"
+                                    className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-11 font-medium"
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Сохранение...
+                                        </>
+                                    ) : (
+                                        'Обновить профиль'
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </div>
+
+                        <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-white/95 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:hidden">
+                            <div className="mx-auto flex max-w-[425px] gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-12 flex-1 rounded-xl border-slate-200"
+                                    onClick={() => setIsEditModalOpen(false)}
+                                    disabled={isSubmitting}
+                                >
+                                    Назад
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    className="h-12 flex-1 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-medium"
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? 'Сохранение...' : 'Обновить'}
+                                </Button>
+                            </div>
+                        </div>
                     </form>
                 </DialogContent>
             </Dialog>
