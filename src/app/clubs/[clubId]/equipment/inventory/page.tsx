@@ -24,7 +24,8 @@ import {
     ChevronRight,
     Copy,
     Check,
-    ChevronsUpDown
+    ChevronsUpDown,
+    ArrowLeftRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -98,6 +99,56 @@ interface Workstation {
     id: string
     name: string
     zone: string
+}
+
+interface InterclubTargetClub {
+    id: number
+    name: string
+    workstations: Array<{
+        id: string
+        name: string
+        zone: string
+        assigned_user_id?: string | null
+        assigned_user_name?: string | null
+    }>
+}
+
+interface InterclubTransferItem {
+    equipment_id: string
+    equipment_name: string
+    equipment_type: string
+    target_workstation_id: string | null
+    target_workstation_name: string | null
+    target_workstation_zone: string | null
+}
+
+interface InterclubTransfer {
+    id: string
+    source_club_id: number
+    target_club_id: number
+    status: string
+    comment: string | null
+    created_by: string | null
+    created_at: string
+    completed_by: string | null
+    completed_at: string | null
+    direction: "IN" | "OUT"
+    source_club_name: string
+    target_club_name: string
+    created_by_name: string | null
+    completed_by_name: string | null
+    item_count: number
+    items: InterclubTransferItem[]
+}
+
+interface PendingInterclubTransfer {
+    target_club_id: number
+    target_club_name: string
+    comment: string
+    items: Array<{
+        equipment_id: string
+        target_workstation_id: string | null
+    }>
 }
 
 interface Employee {
@@ -211,6 +262,31 @@ export default function EquipmentInventory() {
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingEquipment, setEditingEquipment] = useState<Partial<Equipment> | null>(null)
 
+    const activeTab = searchParams.get('tab') === 'transfers' ? 'transfers' : 'inventory'
+
+    const setTab = useCallback((tab: 'inventory' | 'transfers') => {
+        const nextParams = new URLSearchParams(searchParams.toString())
+        if (tab === 'transfers') {
+            nextParams.set('tab', 'transfers')
+        } else {
+            nextParams.delete('tab')
+        }
+        router.push(`/clubs/${clubId}/equipment/inventory?${nextParams.toString()}`)
+    }, [clubId, router, searchParams])
+
+    const [interclubTargets, setInterclubTargets] = useState<InterclubTargetClub[]>([])
+    const [isTargetsLoading, setIsTargetsLoading] = useState(false)
+    const [isInterclubDialogOpen, setIsInterclubDialogOpen] = useState(false)
+    const [interclubTargetClubId, setInterclubTargetClubId] = useState<string>("")
+    const [interclubComment, setInterclubComment] = useState("")
+    const [interclubItemTargets, setInterclubItemTargets] = useState<Record<string, string>>({})
+    const [isInterclubConfirmOpen, setIsInterclubConfirmOpen] = useState(false)
+    const [pendingInterclubTransfer, setPendingInterclubTransfer] = useState<PendingInterclubTransfer | null>(null)
+
+    const [interclubTransfers, setInterclubTransfers] = useState<InterclubTransfer[]>([])
+    const [isTransfersLoading, setIsTransfersLoading] = useState(false)
+    const [expandedTransfers, setExpandedTransfers] = useState<Set<string>>(new Set())
+
     const maintenanceResponsibleEmployees = useMemo(
         () => employees.filter(emp =>
             (emp.role === "Админ" || emp.role === "Управляющий") &&
@@ -288,11 +364,143 @@ export default function EquipmentInventory() {
         fetchData()
     }, [fetchData])
 
+    const fetchInterclubTransfers = useCallback(async () => {
+        setIsTransfersLoading(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/interclub-transfers`, { cache: 'no-store' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data?.error || 'Ошибка загрузки')
+            setInterclubTransfers(Array.isArray(data?.transfers) ? data.transfers : [])
+        } catch (e) {
+            console.error(e)
+            setInterclubTransfers([])
+        } finally {
+            setIsTransfersLoading(false)
+        }
+    }, [clubId])
+
+    useEffect(() => {
+        if (activeTab !== 'transfers') return
+        fetchInterclubTransfers()
+    }, [activeTab, fetchInterclubTransfers])
+
     useEffect(() => {
         if (searchParams.get('action') === 'new') {
             handleCreate()
         }
     }, [searchParams])
+
+    const selectedEquipment = useMemo(() => {
+        return equipment.filter((e) => selectedIds.has(e.id))
+    }, [equipment, selectedIds])
+
+    const fetchInterclubTargets = useCallback(async () => {
+        setIsTargetsLoading(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/interclub-targets`, { cache: 'no-store' })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data?.error || 'Ошибка загрузки')
+            setInterclubTargets(Array.isArray(data?.clubs) ? data.clubs : [])
+        } catch (e) {
+            console.error(e)
+            setInterclubTargets([])
+        } finally {
+            setIsTargetsLoading(false)
+        }
+    }, [clubId])
+
+    const openInterclubDialog = useCallback(async () => {
+        if (selectedIds.size === 0) return
+        setInterclubTargetClubId("")
+        setInterclubComment("")
+        setPendingInterclubTransfer(null)
+        setIsInterclubConfirmOpen(false)
+        const nextTargets: Record<string, string> = {}
+        for (const eq of selectedEquipment) {
+            nextTargets[eq.id] = "storage"
+        }
+        setInterclubItemTargets(nextTargets)
+        setIsInterclubDialogOpen(true)
+        if (interclubTargets.length === 0 && !isTargetsLoading) {
+            await fetchInterclubTargets()
+        }
+    }, [fetchInterclubTargets, interclubTargets.length, isTargetsLoading, selectedEquipment, selectedIds.size])
+
+    const executePendingInterclubTransfer = useCallback(async (payload: PendingInterclubTransfer) => {
+        setIsSaving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment/interclub-transfers`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    target_club_id: payload.target_club_id,
+                    comment: payload.comment,
+                    items: payload.items,
+                }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data?.error || 'Ошибка создания перемещения')
+
+            setIsInterclubConfirmOpen(false)
+            setPendingInterclubTransfer(null)
+            setIsInterclubDialogOpen(false)
+            setSelectedIds(new Set())
+            await fetchData()
+            if (activeTab === 'transfers') await fetchInterclubTransfers()
+        } catch (e: any) {
+            console.error(e)
+            alert(e?.message || 'Ошибка сети')
+        } finally {
+            setIsSaving(false)
+        }
+    }, [activeTab, clubId, fetchData, fetchInterclubTransfers])
+
+    const submitInterclubTransfer = useCallback(async () => {
+        if (!interclubTargetClubId) {
+            alert('Выберите клуб назначения')
+            return
+        }
+
+        const targetClub = interclubTargets.find((c) => String(c.id) === interclubTargetClubId)
+        if (!targetClub) {
+            alert('Некорректный клуб назначения')
+            return
+        }
+
+        const items = selectedEquipment.map((eq) => {
+            const ws = interclubItemTargets[eq.id]
+            return {
+                equipment_id: eq.id,
+                target_workstation_id: ws && ws !== "storage" ? ws : null,
+            }
+        })
+
+        const payload: PendingInterclubTransfer = {
+            target_club_id: Number(targetClub.id),
+            target_club_name: String(targetClub.name || ""),
+            comment: interclubComment,
+            items,
+        }
+
+        setPendingInterclubTransfer(payload)
+        setIsInterclubDialogOpen(false)
+        setIsInterclubConfirmOpen(true)
+    }, [
+        interclubComment,
+        interclubItemTargets,
+        interclubTargetClubId,
+        interclubTargets,
+        selectedEquipment,
+    ])
+
+    const toggleTransfer = useCallback((transferId: string) => {
+        setExpandedTransfers((prev) => {
+            const next = new Set(prev)
+            if (next.has(transferId)) next.delete(transferId)
+            else next.add(transferId)
+            return next
+        })
+    }, [])
 
     // Reset page when filters change
     const handleFilterChange = (setter: (val: string) => void) => (val: string) => {
@@ -977,6 +1185,136 @@ export default function EquipmentInventory() {
 
             <div className="space-y-6">
 
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-2">
+                    <Button
+                        variant={activeTab === 'inventory' ? 'default' : 'outline'}
+                        className={cn("h-10 rounded-xl px-4", activeTab === 'inventory' ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-white")}
+                        onClick={() => setTab('inventory')}
+                    >
+                        Реестр
+                    </Button>
+                    <Button
+                        variant={activeTab === 'transfers' ? 'default' : 'outline'}
+                        className={cn("h-10 rounded-xl px-4", activeTab === 'transfers' ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-white")}
+                        onClick={() => setTab('transfers')}
+                    >
+                        Межклубные перемещения
+                    </Button>
+                </div>
+                {activeTab === 'transfers' ? (
+                    <Button
+                        variant="outline"
+                        className="h-10 rounded-xl bg-white"
+                        onClick={fetchInterclubTransfers}
+                        disabled={isTransfersLoading}
+                    >
+                        {isTransfersLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                        Обновить
+                    </Button>
+                ) : null}
+            </div>
+
+            {activeTab === 'transfers' ? (
+                <div className="space-y-4">
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[48px]" />
+                                    <TableHead>Дата</TableHead>
+                                    <TableHead>Направление</TableHead>
+                                    <TableHead>Клуб</TableHead>
+                                    <TableHead>Позиции</TableHead>
+                                    <TableHead>Статус</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {isTransfersLoading ? (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="h-40 text-center">
+                                            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                                            <p className="text-muted-foreground mt-2">Загрузка...</p>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : interclubTransfers.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
+                                            Перемещений пока нет
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    interclubTransfers.map((t) => {
+                                        const isExpanded = expandedTransfers.has(t.id)
+                                        const otherClubName = t.direction === "OUT" ? t.target_club_name : t.source_club_name
+                                        return (
+                                            <Fragment key={t.id}>
+                                                <TableRow className="cursor-pointer hover:bg-slate-50" onClick={() => toggleTransfer(t.id)}>
+                                                    <TableCell>
+                                                        {isExpanded ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm font-medium">
+                                                        {formatLocalDate(new Date(t.created_at))}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge className={cn("border-none", t.direction === "OUT" ? "bg-blue-600 text-white" : "bg-emerald-600 text-white")}>
+                                                            {t.direction === "OUT" ? "Исходящее" : "Входящее"}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-sm font-semibold text-slate-800">
+                                                        {otherClubName}
+                                                    </TableCell>
+                                                    <TableCell className="text-sm">
+                                                        {t.item_count}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge className={cn("border-none", t.status === "COMPLETED" ? "bg-slate-900 text-white" : "bg-amber-600 text-white")}>
+                                                            {t.status === "COMPLETED" ? "Принято" : "Создано"}
+                                                        </Badge>
+                                                    </TableCell>
+                                                </TableRow>
+                                                {isExpanded ? (
+                                                    <TableRow className="bg-slate-50">
+                                                        <TableCell colSpan={6} className="p-4">
+                                                            <div className="space-y-3">
+                                                                <div className="space-y-1 text-xs text-slate-600">
+                                                                    <div>
+                                                                        Создал: <span className="font-semibold text-slate-900">{t.created_by_name || "—"}</span>
+                                                                    </div>
+                                                                    <div>
+                                                                        Принял: <span className="font-semibold text-slate-900">{t.completed_by_name || "—"}</span>
+                                                                    </div>
+                                                                    {t.comment ? (
+                                                                        <div className="whitespace-pre-wrap">
+                                                                            <span className="font-semibold text-slate-900">Комментарий:</span> {t.comment}
+                                                                        </div>
+                                                                    ) : null}
+                                                                </div>
+                                                                <div className="space-y-2">
+                                                                    {t.items.map((item) => (
+                                                                        <div key={item.equipment_id} className="flex flex-col gap-0.5 rounded-xl border bg-white p-3">
+                                                                            <div className="text-sm font-semibold text-slate-900">{item.equipment_name}</div>
+                                                                            <div className="text-xs text-slate-500">
+                                                                                Поставить: {item.target_workstation_name ? `${item.target_workstation_name}${item.target_workstation_zone ? ` (${item.target_workstation_zone})` : ''}` : 'Склад'}
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : null}
+                                            </Fragment>
+                                        )
+                                    })
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </div>
+            ) : (
+            <>
+
             {/* Dashboard Stats (New) */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
@@ -1116,6 +1454,9 @@ export default function EquipmentInventory() {
                         </Button>
                         <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-rose-100 hover:text-rose-800 sm:justify-center" onClick={handleBulkDelete}>
                             <Trash2 className="h-3.5 w-3.5 mr-2" /> Удалить
+                        </Button>
+                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={openInterclubDialog}>
+                            <ArrowLeftRight className="h-3.5 w-3.5 mr-2" /> Переместить
                         </Button>
                         <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:ml-auto sm:justify-center" onClick={() => setSelectedIds(new Set())}>
                             Снять выделение
@@ -1590,6 +1931,9 @@ export default function EquipmentInventory() {
                 )}
             </div>
 
+            </>
+            )}
+
             </div>
 
             <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
@@ -1793,6 +2137,135 @@ export default function EquipmentInventory() {
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => setIsImportExportDialogOpen(false)}>
                             Закрыть
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isInterclubDialogOpen} onOpenChange={setIsInterclubDialogOpen}>
+                <DialogContent className="sm:max-w-[840px]">
+                    <DialogHeader>
+                        <DialogTitle>Межклубное перемещение</DialogTitle>
+                        <DialogDescription>
+                            Оборудование будет снято с мест и отправлено задачей на приёмку в клуб назначения.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-5 pt-2">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Клуб назначения</Label>
+                                <Select value={interclubTargetClubId} onValueChange={setInterclubTargetClubId}>
+                                    <SelectTrigger className="h-12 bg-slate-50 hover:bg-slate-100 border-slate-200 shadow-sm">
+                                        <SelectValue placeholder={isTargetsLoading ? "Загрузка..." : "Выберите клуб"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {interclubTargets
+                                            .filter((c) => String(c.id) !== String(clubId))
+                                            .map((c) => (
+                                                <SelectItem key={c.id} value={String(c.id)}>
+                                                    {c.name}
+                                                </SelectItem>
+                                            ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Комментарий</Label>
+                                <Textarea
+                                    value={interclubComment}
+                                    onChange={(e) => setInterclubComment(e.target.value)}
+                                    className="min-h-[48px] bg-slate-50 border-slate-200"
+                                    placeholder="Комментарий для принимающей стороны"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Куда поставить</Label>
+                            <div className="max-h-[420px] overflow-y-auto space-y-2 rounded-xl border bg-white p-3">
+                                {selectedEquipment.map((eq) => {
+                                    const targetClub = interclubTargets.find((c) => String(c.id) === interclubTargetClubId)
+                                    const wsOptions = targetClub?.workstations || []
+                                    const value = interclubItemTargets[eq.id] || "storage"
+                                    return (
+                                        <div key={eq.id} className="grid gap-2 rounded-xl border bg-slate-50/40 p-3 sm:grid-cols-[1fr_280px] sm:items-center">
+                                            <div className="min-w-0">
+                                                <div className="truncate text-sm font-semibold text-slate-900">{eq.name}</div>
+                                                <div className="text-xs text-slate-500">{eq.type_name || eq.type}</div>
+                                            </div>
+                                            <Select
+                                                value={value}
+                                                onValueChange={(v) => setInterclubItemTargets((prev) => ({ ...prev, [eq.id]: v }))}
+                                                disabled={!interclubTargetClubId}
+                                            >
+                                                <SelectTrigger className="h-11 bg-white border-slate-200">
+                                                    <SelectValue placeholder={interclubTargetClubId ? "Выберите место" : "Сначала выберите клуб"} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="storage">Склад</SelectItem>
+                                                    {wsOptions.map((ws) => (
+                                                        <SelectItem key={ws.id} value={ws.id}>
+                                                            {ws.name}{ws.zone ? ` (${ws.zone})` : ''}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button type="button" variant="ghost" onClick={() => setIsInterclubDialogOpen(false)} disabled={isSaving}>
+                            Отмена
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={submitInterclubTransfer}
+                            disabled={isSaving || selectedEquipment.length === 0}
+                            className="bg-slate-900 text-white hover:bg-slate-800"
+                        >
+                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowLeftRight className="mr-2 h-4 w-4" />}
+                            Создать перемещение
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isInterclubConfirmOpen} onOpenChange={setIsInterclubConfirmOpen}>
+                <DialogContent className="sm:max-w-[560px]">
+                    <DialogHeader>
+                        <DialogTitle>Подтвердите действие</DialogTitle>
+                        <DialogDescription>
+                            {pendingInterclubTransfer
+                                ? `Создать перемещение (${pendingInterclubTransfer.items.length} шт.) в клуб «${pendingInterclubTransfer.target_club_name}»? Оборудование будет снято с мест сразу.`
+                                : ''}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => {
+                                setIsInterclubConfirmOpen(false)
+                                setPendingInterclubTransfer(null)
+                                setIsInterclubDialogOpen(true)
+                            }}
+                            disabled={isSaving}
+                        >
+                            Отмена
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={() => pendingInterclubTransfer ? executePendingInterclubTransfer(pendingInterclubTransfer) : undefined}
+                            disabled={isSaving || !pendingInterclubTransfer}
+                            className="bg-slate-900 text-white hover:bg-slate-800"
+                        >
+                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            ОК
                         </Button>
                     </DialogFooter>
                 </DialogContent>

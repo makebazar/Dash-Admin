@@ -190,6 +190,8 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     const [reworkTasksCount, setReworkTasksCount] = useState(0)
     const [clubTasks, setClubTasks] = useState<any[]>([])
     const [isUpdatingTask, setIsUpdatingTask] = useState<string | null>(null)
+    const [isClubTaskConfirmOpen, setIsClubTaskConfirmOpen] = useState(false)
+    const [pendingClubTaskConfirm, setPendingClubTaskConfirm] = useState<any | null>(null)
 
     // Indicators Modal State
     const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false)
@@ -600,7 +602,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 fetch(`/api/employee/clubs/${id}/equipment-rating`).then(r => r.json()),
                 localCanUseInventoryActions
                     ? fetch(`/api/clubs/${id}/tasks`).then(r => r.json())
-                    : Promise.resolve({ tasks: [] }),
+                    : fetch(`/api/clubs/${id}/tasks?skip_replenishment=true`).then(r => r.json()),
             ])
 
             const [
@@ -653,10 +655,12 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 setKpiData((prev: any) => ({ ...prev, equipment_rating: ratingData }))
             }
 
-            // Club Tasks
-            if (localCanUseInventoryActions) {
-                if (tasksJson?.tasks) {
-                    setClubTasks(tasksJson.tasks || [])
+            if (tasksJson?.tasks) {
+                const tasks = Array.isArray(tasksJson.tasks) ? tasksJson.tasks : []
+                if (localCanUseInventoryActions) {
+                    setClubTasks(tasks)
+                } else {
+                    setClubTasks(tasks.filter((t: any) => t?.type === 'EQUIPMENT_TRANSFER'))
                 }
             } else {
                 setClubTasks([])
@@ -803,7 +807,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         await submitEndShift(data)
     }, [activeShift?.id, reportTemplate?.id, currentUserId, clubId])
 
-    const handleCompleteClubTask = async (taskId: string) => {
+    const executeCompleteClubTask = useCallback(async (taskId: string) => {
         setIsUpdatingTask(taskId)
         try {
             const res = await fetch(`/api/clubs/${clubId}/tasks`, {
@@ -813,7 +817,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
             })
 
             if (res.ok) {
-                setClubTasks(prev => prev.filter((t: any) => t.id !== taskId))
+                setClubTasks(prev => prev.filter((t: any) => String(t.id) !== taskId))
             } else {
                 const data = await res.json()
                 alert(data.error || "Ошибка при выполнении задачи")
@@ -824,6 +828,27 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
         } finally {
             setIsUpdatingTask(null)
         }
+    }, [clubId])
+
+    const handleCompleteClubTask = async (task: any) => {
+        const taskId = String(task?.id || "")
+        if (!taskId) return
+        if (task?.type === 'EQUIPMENT_TRANSFER') {
+            if (!activeShift?.id) {
+                alert('Для выполнения нужна активная смена')
+                return
+            }
+            const itemsCount = Number(task.transfer_item_count || 0) || 0
+            const sourceClubName = task.transfer_source_club_name || 'клуб-источник'
+            setPendingClubTaskConfirm({
+                taskId,
+                title: 'Подтвердите действие',
+                description: `Принять оборудование (${itemsCount} шт.) из клуба «${sourceClubName}» и разместить по местам?`,
+            })
+            setIsClubTaskConfirmOpen(true)
+            return
+        }
+        await executeCompleteClubTask(taskId)
     }
 
     const submitUpdateIndicators = async (data: any) => {
@@ -1154,16 +1179,71 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                         <EmployeeSignageControlCard clubId={clubId} enabled={Boolean(activeShift)} />
                     )}
 
-                    {/* Warehouse Tasks */}
-                    {clubTasks.length > 0 && (
+                    {activeShift && clubTasks.some((t: any) => t?.type === 'EQUIPMENT_TRANSFER') ? (
                         <section className="space-y-4">
-                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Пополнение склада</h2>
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Оборудование к приёмке</h2>
                             <div className="grid gap-3">
-                                {clubTasks.map((task: any) => (
+                                {clubTasks.filter((t: any) => t?.type === 'EQUIPMENT_TRANSFER').map((task: any) => (
                                     <div key={task.id} className="group flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
                                         <div className="space-y-1.5 min-w-0">
                                             <h3 className="truncate text-sm font-semibold text-slate-900">
-                                                {task.title.replace('Пополнить: ', '')}
+                                                {String(task.title || "").replace('Оборудование из клуба: ', '')}
+                                            </h3>
+                                            <div className="space-y-1 text-xs text-slate-600">
+                                                <div>
+                                                    Приедет из: <span className="font-semibold text-slate-900">{task.transfer_source_club_name || '—'}</span>
+                                                </div>
+                                                <div>
+                                                    Позиции: <span className="font-semibold text-slate-900">{Number(task.transfer_item_count || 0)} шт</span>
+                                                </div>
+                                                {task.transfer_created_by_name ? (
+                                                    <div>
+                                                        Создал: <span className="font-semibold text-slate-900">{task.transfer_created_by_name}</span>
+                                                    </div>
+                                                ) : null}
+                                                {task.transfer_comment || task.description ? (
+                                                    <div className="whitespace-pre-wrap">
+                                                        <span className="font-semibold text-slate-900">Комментарий:</span> {task.transfer_comment || task.description}
+                                                    </div>
+                                                ) : null}
+                                                {Array.isArray(task.transfer_items) && task.transfer_items.length > 0 ? (
+                                                    <div className="space-y-0.5 pt-1">
+                                                        {task.transfer_items.slice(0, 6).map((item: any) => (
+                                                            <div key={item.equipment_id} className="truncate">
+                                                                {item.equipment_name} → {item.target_workstation_name ? item.target_workstation_name : 'Склад'}
+                                                            </div>
+                                                        ))}
+                                                        {task.transfer_items.length > 6 ? (
+                                                            <div className="text-slate-500">и ещё {task.transfer_items.length - 6}...</div>
+                                                        ) : null}
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="h-8 shrink-0 bg-slate-900 text-xs text-white shadow-none hover:bg-slate-800"
+                                            onClick={() => handleCompleteClubTask(task)}
+                                            disabled={isUpdatingTask === String(task.id)}
+                                        >
+                                            {isUpdatingTask === String(task.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : "Выполнено"}
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
+
+                    {clubTasks.some((t: any) => t?.type === 'RESTOCK') ? (
+                        <section className="space-y-4">
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Пополнение склада</h2>
+                            <div className="grid gap-3">
+                                {clubTasks.filter((t: any) => t?.type === 'RESTOCK').map((task: any) => (
+                                    <div key={task.id} className="group flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+                                        <div className="space-y-1.5 min-w-0">
+                                            <h3 className="truncate text-sm font-semibold text-slate-900">
+                                                {String(task.title || "").replace('Пополнить: ', '')}
                                             </h3>
                                             <div className="space-y-1 text-xs text-slate-600">
                                                 {task.target_warehouse_name ? (
@@ -1193,16 +1273,16 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                             size="sm"
                                             variant="secondary"
                                             className="h-8 shrink-0 bg-slate-900 text-xs text-white shadow-none hover:bg-slate-800"
-                                            onClick={() => handleCompleteClubTask(task.id)}
-                                            disabled={isUpdatingTask === task.id}
+                                            onClick={() => handleCompleteClubTask(task)}
+                                            disabled={isUpdatingTask === String(task.id)}
                                         >
-                                            {isUpdatingTask === task.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Выполнено"}
+                                            {isUpdatingTask === String(task.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : "Выполнено"}
                                         </Button>
                                     </div>
                                 ))}
                             </div>
                         </section>
-                    )}
+                    ) : null}
 
                     {/* Maintenance Tasks Overview */}
                     <section className="space-y-4">
@@ -1530,6 +1610,43 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                 clubId={clubId}
                 userId={currentUserId}
             />
+
+            <Dialog open={isClubTaskConfirmOpen} onOpenChange={setIsClubTaskConfirmOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{pendingClubTaskConfirm?.title || 'Подтвердите действие'}</DialogTitle>
+                        <DialogDescription>{pendingClubTaskConfirm?.description || ''}</DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => {
+                                setIsClubTaskConfirmOpen(false)
+                                setPendingClubTaskConfirm(null)
+                            }}
+                            disabled={Boolean(isUpdatingTask)}
+                        >
+                            Отмена
+                        </Button>
+                        <Button
+                            type="button"
+                            onClick={async () => {
+                                const id = pendingClubTaskConfirm?.taskId ? String(pendingClubTaskConfirm.taskId) : ""
+                                if (!id) return
+                                setIsClubTaskConfirmOpen(false)
+                                setPendingClubTaskConfirm(null)
+                                await executeCompleteClubTask(id)
+                            }}
+                            disabled={Boolean(isUpdatingTask) || !pendingClubTaskConfirm?.taskId}
+                            className="bg-slate-900 text-white hover:bg-slate-800"
+                        >
+                            {isUpdatingTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            ОК
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {canUseShiftReport && (
                 <Dialog open={isIndicatorsModalOpen} onOpenChange={setIsIndicatorsModalOpen}>

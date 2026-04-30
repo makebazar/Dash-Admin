@@ -84,6 +84,54 @@ export async function GET(
             )
             UNION ALL
             (
+                SELECT
+                    uuid_generate_v4() as id,
+                    'MOVE' as action_type,
+                    'Межклубное перемещение' as action,
+                    t.created_at as date,
+                    (SELECT full_name FROM users WHERE id = t.created_by) as user_name,
+                    ('Отправлено: ' || sc.name || ' → ' || tc.name ||
+                        CASE
+                            WHEN i.target_workstation_id IS NULL THEN '. Поставить: склад'
+                            ELSE '. Поставить: ' || COALESCE(tw.name, 'место')
+                        END ||
+                        CASE
+                            WHEN t.comment IS NULL OR t.comment = '' THEN ''
+                            ELSE '. ' || t.comment
+                        END
+                    ) as details,
+                    ARRAY[]::text[] as photos
+                FROM equipment_transfer_items i
+                JOIN equipment_transfers t ON t.id = i.transfer_id
+                LEFT JOIN clubs sc ON sc.id = t.source_club_id
+                LEFT JOIN clubs tc ON tc.id = t.target_club_id
+                LEFT JOIN club_workstations tw ON tw.id = i.target_workstation_id
+                WHERE i.equipment_id = $1
+            )
+            UNION ALL
+            (
+                SELECT
+                    uuid_generate_v4() as id,
+                    'MOVE' as action_type,
+                    'Межклубное перемещение (принято)' as action,
+                    t.completed_at as date,
+                    (SELECT full_name FROM users WHERE id = t.completed_by) as user_name,
+                    ('Принято: ' || sc.name || ' → ' || tc.name ||
+                        CASE
+                            WHEN i.target_workstation_id IS NULL THEN '. Поставлено: склад'
+                            ELSE '. Поставлено: ' || COALESCE(tw.name, 'место')
+                        END
+                    ) as details,
+                    ARRAY[]::text[] as photos
+                FROM equipment_transfer_items i
+                JOIN equipment_transfers t ON t.id = i.transfer_id
+                LEFT JOIN clubs sc ON sc.id = t.source_club_id
+                LEFT JOIN clubs tc ON tc.id = t.target_club_id
+                LEFT JOIN club_workstations tw ON tw.id = i.target_workstation_id
+                WHERE i.equipment_id = $1 AND t.completed_at IS NOT NULL
+            )
+            UNION ALL
+            (
                 SELECT 
                     id, 
                     'ISSUE' as action_type, 

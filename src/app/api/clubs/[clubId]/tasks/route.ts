@@ -10,6 +10,8 @@ export async function GET(
     try {
         const { clubId } = await params;
         const userId = (await cookies()).get('session_user_id')?.value;
+        const { searchParams } = new URL(request.url);
+        const skipReplenishment = searchParams.get('skip_replenishment') === 'true';
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -27,11 +29,12 @@ export async function GET(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        // Trigger replenishment check to ensure tasks are fresh
-        try {
-            await manualTriggerReplenishment(clubId);
-        } catch (e) {
-            console.error('Failed to trigger replenishment check:', e);
+        if (!skipReplenishment) {
+            try {
+                await manualTriggerReplenishment(clubId);
+            } catch (e) {
+                console.error('Failed to trigger replenishment check:', e);
+            }
         }
 
         const tasks = await getClubTasks(clubId);

@@ -8,6 +8,8 @@ import { cookies } from "next/headers"
 import { notifyInventoryClub } from "@/lib/inventory-events"
 import { normalizeInventorySettings } from "@/lib/inventory-settings"
 import type { InventorySettings as NormalizedInventorySettings } from "@/lib/inventory-settings"
+import { hasColumn } from "@/lib/db-compat"
+import { resolveEquipmentStateForPersistence } from "@/lib/equipment-status"
 
 // ... existing code ...
 
@@ -2266,13 +2268,161 @@ export async function completeTask(taskId: number, userId: string, clubId: strin
                     }
                 }
             }
+        } else if (task.type === 'EQUIPMENT_TRANSFER' && task.related_entity_type === 'EQUIPMENT_TRANSFER') {
+            const transferId = task.related_entity_uuid
+            if (!transferId) throw new Error('Некорректная задача: нет transfer_id')
+
+            const shiftRes = await client.query(
+                `SELECT id
+                 FROM shifts
+                 WHERE user_id = $1 AND club_id = $2 AND check_out IS NULL
+                 ORDER BY check_in DESC NULLS LAST
+                 LIMIT 1`,
+                [userId, clubId]
+            )
+            const activeShiftId = shiftRes.rows[0]?.id
+            if (!activeShiftId) throw new Error('Для выполнения задачи нужна активная смена')
+
+            const transferRes = await client.query(
+                `SELECT *
+                 FROM equipment_transfers
+                 WHERE id = $1
+                 FOR UPDATE`,
+                [transferId]
+            )
+            const transfer = transferRes.rows[0]
+            if (!transfer) throw new Error('Перемещение не найдено')
+            if (String(transfer.target_club_id) !== String(clubId)) throw new Error('Перемещение относится к другому клубу')
+            if (transfer.status === 'COMPLETED') throw new Error('Перемещение уже выполнено')
+
+            const itemsRes = await client.query(
+                `SELECT equipment_id, target_workstation_id
+                 FROM equipment_transfer_items
+                 WHERE transfer_id = $1`,
+                [transferId]
+            )
+            const items = itemsRes.rows
+            if (items.length === 0) throw new Error('В перемещении нет позиций')
+
+            const workstationIds = Array.from(
+                new Set(items.map((i: any) => i.target_workstation_id).filter(Boolean).map((v: any) => String(v)))
+            )
+            const workstationMap = new Map<string, string | null>()
+            if (workstationIds.length > 0) {
+                const wsRes = await client.query(
+                    `SELECT id::text as id, assigned_user_id
+                     FROM club_workstations
+                     WHERE club_id = $1 AND id = ANY($2::uuid[])`,
+                    [clubId, workstationIds]
+                )
+                if (wsRes.rows.length !== workstationIds.length) throw new Error('Некорректные места назначения')
+                for (const ws of wsRes.rows) {
+                    workstationMap.set(String(ws.id), ws.assigned_user_id ? String(ws.assigned_user_id) : null)
+                }
+            }
+
+            const equipmentIds = items.map((i: any) => String(i.equipment_id))
+            const hasEquipmentStatusColumn = await hasColumn('equipment', 'status')
+            const eqRes = await client.query(
+                `SELECT id::text as id, club_id::text as club_id, workstation_id::text as workstation_id, is_active${hasEquipmentStatusColumn ? ', status' : ''}
+                 FROM equipment
+                 WHERE id = ANY($1::uuid[])
+                 FOR UPDATE`,
+                [equipmentIds]
+            )
+            if (eqRes.rows.length !== equipmentIds.length) throw new Error('Часть оборудования не найдена')
+
+            for (const eq of eqRes.rows) {
+                if (String(eq.club_id) !== String(transfer.source_club_id)) {
+                    throw new Error('Оборудование уже перемещено или принадлежит другому клубу')
+                }
+            }
+
+            for (const item of items) {
+                const equipmentId = String(item.equipment_id)
+                const targetWorkstationId = item.target_workstation_id ? String(item.target_workstation_id) : null
+                const eq = eqRes.rows.find((r: any) => String(r.id) === equipmentId)
+                if (!eq) throw new Error('Оборудование не найдено')
+
+                const nextAssignedUserId = targetWorkstationId ? (workstationMap.get(targetWorkstationId) ?? null) : null
+                const resolvedState = resolveEquipmentStateForPersistence({
+                    currentStatus: eq.status,
+                    currentIsActive: eq.is_active,
+                    currentWorkstationId: eq.workstation_id ? String(eq.workstation_id) : null,
+                    requestedWorkstationId: targetWorkstationId,
+                    hasRequestedWorkstation: true,
+                })
+
+                if (hasEquipmentStatusColumn) {
+                    await client.query(
+                        `UPDATE equipment
+                         SET club_id = $1,
+                             workstation_id = $2,
+                             assigned_user_id = $3,
+                             is_active = $4,
+                             status = $5
+                         WHERE id = $6`,
+                        [
+                            transfer.target_club_id,
+                            resolvedState.workstation_id,
+                            nextAssignedUserId,
+                            resolvedState.is_active,
+                            resolvedState.status,
+                            equipmentId,
+                        ]
+                    )
+                } else {
+                    await client.query(
+                        `UPDATE equipment
+                         SET club_id = $1,
+                             workstation_id = $2,
+                             assigned_user_id = $3,
+                             is_active = $4
+                         WHERE id = $5`,
+                        [
+                            transfer.target_club_id,
+                            resolvedState.workstation_id,
+                            nextAssignedUserId,
+                            resolvedState.is_active,
+                            equipmentId,
+                        ]
+                    )
+                }
+            }
+
+            await client.query(
+                `UPDATE equipment_transfers
+                 SET status = 'COMPLETED',
+                     completed_by = $1,
+                     completed_at = NOW(),
+                     completed_shift_id = $2
+                 WHERE id = $3`,
+                [userId, activeShiftId, transferId]
+            )
+
+            await client.query(
+                `UPDATE club_tasks
+                 SET status = 'COMPLETED',
+                     completed_by = $1,
+                     completed_at = NOW(),
+                     completed_shift_id = $2
+                 WHERE id = $3`,
+                [userId, activeShiftId, taskId]
+            )
+
+            await client.query('COMMIT')
+            revalidatePath(`/clubs/${clubId}`)
+            return
         }
 
-        await client.query(`
-            UPDATE club_tasks 
+        await client.query(
+            `
+            UPDATE club_tasks
             SET status = 'COMPLETED', completed_by = $1, completed_at = NOW()
             WHERE id = $2
-        `, [userId, taskId])
+            `,
+            [userId, taskId]
+        )
 
         await client.query('COMMIT')
     } catch (e) {
@@ -2941,20 +3091,38 @@ async function getLockedWarehouseStock(client: any, warehouseId: number, product
 // --- TASKS ---
 export async function getClubTasks(clubId: string) {
     await requireClubAccess(clubId)
-    const res = await query(`
-        SELECT t.*, u.full_name as assignee_name, p.name as product_name,
-               sw.name as source_warehouse_name,
-               tw.name as target_warehouse_name,
-               r.source_warehouse_id,
-               r.target_warehouse_id,
-               r.min_stock_level,
-               r.max_stock_level,
-               COALESCE(ws_source.quantity, 0) as current_source_stock,
-               COALESCE(ws_target.quantity, 0) as current_target_stock,
-               LEAST(
-                   GREATEST(COALESCE(r.max_stock_level, 0) - COALESCE(ws_target.quantity, 0), 0),
-                   COALESCE(ws_source.quantity, 0)
-               ) as suggested_restock_quantity
+    const res = await query(
+        `
+        SELECT
+            t.*,
+            u.full_name as assignee_name,
+            p.name as product_name,
+            sw.name as source_warehouse_name,
+            tw.name as target_warehouse_name,
+            r.source_warehouse_id,
+            r.target_warehouse_id,
+            r.min_stock_level,
+            r.max_stock_level,
+            COALESCE(ws_source.quantity, 0) as current_source_stock,
+            COALESCE(ws_target.quantity, 0) as current_target_stock,
+            LEAST(
+                GREATEST(COALESCE(r.max_stock_level, 0) - COALESCE(ws_target.quantity, 0), 0),
+                COALESCE(ws_source.quantity, 0)
+            ) as suggested_restock_quantity,
+            et.source_club_id as transfer_source_club_id,
+            et.target_club_id as transfer_target_club_id,
+            et.status as transfer_status,
+            et.comment as transfer_comment,
+            et.created_by as transfer_created_by,
+            et.created_at as transfer_created_at,
+            et.completed_by as transfer_completed_by,
+            et.completed_at as transfer_completed_at,
+            sc.name as transfer_source_club_name,
+            tc.name as transfer_target_club_name,
+            cu.full_name as transfer_created_by_name,
+            uu.full_name as transfer_completed_by_name,
+            COALESCE(ti.items, '[]'::jsonb) as transfer_items,
+            COALESCE(ti.item_count, 0)::int as transfer_item_count
         FROM club_tasks t
         LEFT JOIN users u ON t.assigned_to = u.id
         LEFT JOIN warehouse_products p ON t.related_entity_type = 'PRODUCT' AND t.related_entity_id = p.id
@@ -2963,9 +3131,35 @@ export async function getClubTasks(clubId: string) {
         LEFT JOIN warehouses tw ON r.target_warehouse_id = tw.id
         LEFT JOIN warehouse_stock ws_source ON r.source_warehouse_id = ws_source.warehouse_id AND r.product_id = ws_source.product_id
         LEFT JOIN warehouse_stock ws_target ON r.target_warehouse_id = ws_target.warehouse_id AND r.product_id = ws_target.product_id
+        LEFT JOIN equipment_transfers et ON t.type = 'EQUIPMENT_TRANSFER' AND t.related_entity_uuid = et.id
+        LEFT JOIN clubs sc ON et.source_club_id = sc.id
+        LEFT JOIN clubs tc ON et.target_club_id = tc.id
+        LEFT JOIN users cu ON et.created_by = cu.id
+        LEFT JOIN users uu ON et.completed_by = uu.id
+        LEFT JOIN LATERAL (
+            SELECT
+                jsonb_agg(
+                    jsonb_build_object(
+                        'equipment_id', i.equipment_id,
+                        'equipment_name', e.name,
+                        'equipment_type', e.type,
+                        'target_workstation_id', i.target_workstation_id,
+                        'target_workstation_name', w.name,
+                        'target_workstation_zone', w.zone
+                    )
+                    ORDER BY e.name
+                ) as items,
+                COUNT(*)::int as item_count
+            FROM equipment_transfer_items i
+            JOIN equipment e ON i.equipment_id = e.id
+            LEFT JOIN club_workstations w ON i.target_workstation_id = w.id
+            WHERE et.id IS NOT NULL AND i.transfer_id = et.id
+        ) ti ON TRUE
         WHERE t.club_id = $1 AND t.status != 'COMPLETED'
         ORDER BY t.priority DESC, t.created_at ASC
-    `, [clubId])
+        `,
+        [clubId]
+    )
     return res.rows
 }
 
