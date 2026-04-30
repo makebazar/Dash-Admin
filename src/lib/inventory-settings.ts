@@ -10,6 +10,7 @@ export type RawInventorySettings = {
     employee_transfer_enabled?: boolean
     report_reconciliation_enabled?: boolean
     cashbox_warehouse_id?: number | null
+    cashbox_warehouse_ids?: number[]
     handover_warehouse_id?: number | null
     sales_capture_mode?: 'INVENTORY' | 'SHIFT' | null
     inventory_timing?: 'END_SHIFT' | 'START_SHIFT' | null
@@ -30,6 +31,7 @@ export type InventorySettings = Omit<RawInventorySettings, 'sales_capture_mode' 
     employee_transfer_enabled: boolean
     report_reconciliation_enabled: boolean
     cashbox_warehouse_id: number | null
+    cashbox_warehouse_ids: number[]
     handover_warehouse_id: number | null
     sales_capture_mode: 'SHIFT'
     inventory_timing: 'END_SHIFT'
@@ -65,9 +67,20 @@ export function normalizeInventorySettings(raw: RawInventorySettings | null | un
     const employeeWriteoffEnabled = stockEnabled ? (source.employee_writeoff_enabled ?? employeeStockOperationsEnabled) : false
     const employeeTransferEnabled = stockEnabled ? (source.employee_transfer_enabled ?? employeeStockOperationsEnabled) : false
     const reportReconciliationEnabled = cashboxEnabled ? (source.report_reconciliation_enabled ?? true) : false
-    const cashboxWarehouseId = Number.isInteger(Number(source.cashbox_warehouse_id))
+    const legacyCashboxWarehouseId = Number.isInteger(Number(source.cashbox_warehouse_id))
         ? Number(source.cashbox_warehouse_id)
         : null
+    const rawCashboxWarehouseIds = Array.isArray(source.cashbox_warehouse_ids)
+        ? source.cashbox_warehouse_ids
+        : []
+    const cashboxWarehouseIdsBase = rawCashboxWarehouseIds
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    const cashboxWarehouseIdsUnique = Array.from(new Set(cashboxWarehouseIdsBase))
+    const cashboxWarehouseIds = cashboxWarehouseIdsUnique.length > 0
+        ? cashboxWarehouseIdsUnique
+        : (legacyCashboxWarehouseId ? [legacyCashboxWarehouseId] : [])
+    const cashboxWarehouseId = cashboxWarehouseIds[0] ?? legacyCashboxWarehouseId ?? null
     const handoverWarehouseId = Number.isInteger(Number(source.handover_warehouse_id))
         ? Number(source.handover_warehouse_id)
         : null
@@ -75,6 +88,12 @@ export function normalizeInventorySettings(raw: RawInventorySettings | null | un
         stockEnabled && cashboxEnabled && source.shift_accountability_mode === "WAREHOUSE"
             ? "WAREHOUSE"
             : "DISABLED"
+    const handoverWarehouseIdEffective = shiftAccountabilityMode === "WAREHOUSE"
+        ? (
+            handoverWarehouseId ??
+            (cashboxWarehouseIds.length === 1 ? cashboxWarehouseId : null)
+        )
+        : null
 
     return {
         ...source,
@@ -90,7 +109,8 @@ export function normalizeInventorySettings(raw: RawInventorySettings | null | un
         employee_transfer_enabled: employeeTransferEnabled,
         report_reconciliation_enabled: reportReconciliationEnabled,
         cashbox_warehouse_id: cashboxEnabled ? cashboxWarehouseId : null,
-        handover_warehouse_id: shiftAccountabilityMode === "WAREHOUSE" ? (handoverWarehouseId ?? cashboxWarehouseId) : null,
+        cashbox_warehouse_ids: cashboxEnabled ? cashboxWarehouseIds : [],
+        handover_warehouse_id: handoverWarehouseIdEffective,
         sales_capture_mode: "SHIFT",
         inventory_timing: "END_SHIFT",
         shift_accountability_mode: shiftAccountabilityMode,

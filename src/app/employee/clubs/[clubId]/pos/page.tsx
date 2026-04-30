@@ -30,7 +30,7 @@ export default function EmployeePosPage() {
                         : []
                 const currentClub = employeeClubs.find((club: any) => String(club.id) === String(clubId))
                 const inventorySettings = normalizeInventorySettings(currentClub?.inventory_settings)
-                setIsCashboxEnabled(Boolean(inventorySettings.stock_enabled && inventorySettings.cashbox_enabled && inventorySettings.cashbox_warehouse_id))
+                setIsCashboxEnabled(Boolean(inventorySettings.stock_enabled && inventorySettings.cashbox_enabled && (inventorySettings.cashbox_warehouse_ids || []).length > 0))
 
                 const shiftRes = await fetch(`/api/employee/clubs/${clubId}/active-shift`, { cache: "no-store" })
                 const shiftData = await shiftRes.json()

@@ -608,7 +608,7 @@ export async function POST(
         if (!Number.isInteger(warehouseId) || warehouseId <= 0 || !Number.isInteger(productId) || productId <= 0) {
             return NextResponse.json({ error: 'Некорректная строка расхождения' }, { status: 400 });
         }
-        if (resolutionType !== 'SALARY_DEDUCTION' && resolutionType !== 'LOSS') {
+        if (resolutionType !== 'SALARY_DEDUCTION' && resolutionType !== 'LOSS' && resolutionType !== 'NO_DEDUCTION') {
             return NextResponse.json({ error: 'Некорректный тип решения' }, { status: 400 });
         }
 
@@ -652,7 +652,7 @@ export async function POST(
         const discrepancyQuantity = Math.abs(rawDifferenceQuantity)
         const unitPrice = Number(row.selling_price || 0)
         const maxResolutionAmount = Math.max(0, Number((discrepancyQuantity * unitPrice).toFixed(2)))
-        if (maxResolutionAmount <= 0) {
+        if (resolutionType !== 'NO_DEDUCTION' && maxResolutionAmount <= 0) {
             return NextResponse.json({ error: 'Для этой строки нет денежной суммы для обработки' }, { status: 400 });
         }
 
@@ -666,6 +666,8 @@ export async function POST(
                 return NextResponse.json({ error: 'Сумма удержания не может быть больше полной суммы расхождения' }, { status: 400 });
             }
             resolutionAmount = Number(resolutionAmount.toFixed(2))
+        } else if (resolutionType === 'NO_DEDUCTION') {
+            resolutionAmount = 0
         }
 
         let salaryPaymentId: number | null = null
@@ -708,6 +710,9 @@ export async function POST(
                 ]
             )
             financeTransactionId = Number(financeTransactionRes.rows[0].id)
+        } else if (resolutionType === 'NO_DEDUCTION') {
+            salaryPaymentId = null
+            financeTransactionId = null
         }
 
         const resolutionRes = await query(

@@ -67,8 +67,8 @@ export default async function InventoryPage({ params, searchParams }: { params: 
     const inventorySettings = normalizeInventorySettings(clubSettings.inventory_settings)
     const isSuppliesEnabled = inventorySettings.supplies_enabled
     const isStockEnabled = inventorySettings.stock_enabled
-    const isCashboxEnabled = inventorySettings.cashbox_enabled && Boolean(inventorySettings.cashbox_warehouse_id)
-    const isShiftAccountabilityEnabled = inventorySettings.shift_accountability_mode === "WAREHOUSE" && Boolean(inventorySettings.handover_warehouse_id)
+    const isCashboxEnabled = inventorySettings.cashbox_enabled && (inventorySettings.cashbox_warehouse_ids || []).length > 0
+    const isShiftAccountabilityEnabled = inventorySettings.shift_accountability_mode === "WAREHOUSE"
     const settingsSubTabs = ["general", "categories", "warehouses", "pricetags"]
     const availableTabs = [
         "stock",

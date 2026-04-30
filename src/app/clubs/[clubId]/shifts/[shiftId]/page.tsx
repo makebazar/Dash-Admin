@@ -70,7 +70,7 @@ interface ShiftDetails {
 
 interface ShiftZoneResolution {
     id: number
-    resolution_type: "SALARY_DEDUCTION" | "LOSS"
+    resolution_type: "SALARY_DEDUCTION" | "LOSS" | "NO_DEDUCTION"
     resolution_amount: number
     discrepancy_quantity: number
     unit_price: number
@@ -293,7 +293,7 @@ export default function ShiftDetailsPage() {
     const [editShiftType, setEditShiftType] = useState<"DAY" | "NIGHT">("DAY")
     const [isZoneResolutionDialogOpen, setIsZoneResolutionDialogOpen] = useState(false)
     const [zoneResolutionTarget, setZoneResolutionTarget] = useState<ShiftZoneDiscrepancy | null>(null)
-    const [zoneResolutionType, setZoneResolutionType] = useState<"SALARY_DEDUCTION" | "LOSS">("SALARY_DEDUCTION")
+    const [zoneResolutionType, setZoneResolutionType] = useState<"SALARY_DEDUCTION" | "LOSS" | "NO_DEDUCTION">("SALARY_DEDUCTION")
     const [zoneResolutionMode, setZoneResolutionMode] = useState<"full" | "custom">("full")
     const [zoneResolutionAmount, setZoneResolutionAmount] = useState("")
     const [zoneResolutionNote, setZoneResolutionNote] = useState("")
@@ -449,7 +449,7 @@ export default function ShiftDetailsPage() {
         return Number((Math.abs(Number(row.difference_quantity || 0)) * Number(row.selling_price || 0)).toFixed(2))
     }, [])
 
-    const openZoneResolutionDialog = useCallback((row: ShiftZoneDiscrepancy, resolutionType: "SALARY_DEDUCTION" | "LOSS") => {
+    const openZoneResolutionDialog = useCallback((row: ShiftZoneDiscrepancy, resolutionType: "SALARY_DEDUCTION" | "LOSS" | "NO_DEDUCTION") => {
         const maxAmount = getZoneResolutionMaxAmount(row)
         setZoneResolutionTarget(row)
         setZoneResolutionType(resolutionType)
@@ -1387,12 +1387,16 @@ export default function ShiftDetailsPage() {
                                                                                 "inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest",
                                                                                 row.resolution.resolution_type === "SALARY_DEDUCTION"
                                                                                     ? "bg-rose-50 text-rose-700"
-                                                                                    : "bg-slate-100 text-slate-700"
+                                                                                    : row.resolution.resolution_type === "LOSS"
+                                                                                        ? "bg-slate-100 text-slate-700"
+                                                                                        : "bg-emerald-50 text-emerald-700"
                                                                             )}
                                                                         >
                                                                             {row.resolution.resolution_type === "SALARY_DEDUCTION"
                                                                                 ? `В счет ЗП · ${formatMoney(row.resolution.resolution_amount)}`
-                                                                                : `Потери · ${formatMoney(row.resolution.resolution_amount)}`}
+                                                                                : row.resolution.resolution_type === "LOSS"
+                                                                                    ? `Потери · ${formatMoney(row.resolution.resolution_amount)}`
+                                                                                    : "Без удержания"}
                                                                         </span>
                                                                         <div className="text-[10px] text-slate-500">
                                                                             {new Date(row.resolution.resolved_at).toLocaleString("ru-RU")}
@@ -1420,6 +1424,14 @@ export default function ShiftDetailsPage() {
                                                                             onClick={() => openZoneResolutionDialog(row, "SALARY_DEDUCTION")}
                                                                         >
                                                                             В счет ЗП
+                                                                        </Button>
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            size="sm"
+                                                                            className="h-8 rounded-lg w-24"
+                                                                            onClick={() => openZoneResolutionDialog(row, "NO_DEDUCTION")}
+                                                                        >
+                                                                            Без удержания
                                                                         </Button>
                                                                         <Button
                                                                             variant="outline"
@@ -1544,7 +1556,11 @@ export default function ShiftDetailsPage() {
                     <DialogContent className="sm:max-w-[560px] p-6 rounded-3xl border-slate-200 shadow-xl">
                         <DialogHeader>
                             <DialogTitle className="text-xl font-bold">
-                                {zoneResolutionType === "SALARY_DEDUCTION" ? "Решение: в счет ЗП" : "Решение: списать как потери"}
+                                {zoneResolutionType === "SALARY_DEDUCTION"
+                                    ? "Решение: в счет ЗП"
+                                    : zoneResolutionType === "LOSS"
+                                        ? "Решение: списать как потери"
+                                        : "Решение: без удержания"}
                             </DialogTitle>
                         </DialogHeader>
                         {zoneResolutionTarget && (
@@ -1607,9 +1623,13 @@ export default function ShiftDetailsPage() {
                                             </div>
                                         )}
                                     </div>
-                                ) : (
+                                ) : zoneResolutionType === "LOSS" ? (
                                     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 font-medium">
                                         Сумма будет списана на потери клуба. Сотруднику удержание по этой строке не создается.
+                                    </div>
+                                ) : (
+                                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900 font-medium">
+                                        Строка будет закрыта без удержаний и списаний.
                                     </div>
                                 )}
 
@@ -1620,7 +1640,9 @@ export default function ShiftDetailsPage() {
                                         onChange={(e) => setZoneResolutionNote(e.target.value)}
                                         placeholder={zoneResolutionType === "SALARY_DEDUCTION"
                                             ? "Например: удержать частично, остальное простить"
-                                            : "Например: списано как бой/усушка/операционная потеря"}
+                                            : zoneResolutionType === "LOSS"
+                                                ? "Например: списано как бой/усушка/операционная потеря"
+                                                : "Например: нашли чек, пересканировали, ошибка учета"}
                                         rows={3}
                                         className="rounded-xl border-slate-200 bg-slate-50 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all resize-none"
                                     />

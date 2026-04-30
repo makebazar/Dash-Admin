@@ -725,7 +725,7 @@ export async function getShiftAccountabilitySetupStatus(clubId: string): Promise
         const warehouses = await getShiftAccountabilityWarehousesInternal(client, clubId, sessionUserId)
         const issues: string[] = []
 
-        if (settings.cashbox_enabled && !settings.cashbox_warehouse_id) {
+        if (settings.cashbox_enabled && (!settings.cashbox_warehouse_ids || settings.cashbox_warehouse_ids.length === 0)) {
             issues.push("Выбери склад кассы в настройках inventory.")
         }
         if (settings.report_reconciliation_enabled && !settings.employee_default_metric_key) {
@@ -736,8 +736,14 @@ export async function getShiftAccountabilitySetupStatus(clubId: string): Promise
             if (warehouses.length === 0) {
                 issues.push("Выбери склад передачи в настройках inventory.")
             }
-            if (settings.cashbox_warehouse_id && settings.handover_warehouse_id && Number(settings.cashbox_warehouse_id) !== Number(settings.handover_warehouse_id)) {
-                issues.push("Для корректной передачи склад кассы и склад передачи должны совпадать.")
+            if (settings.handover_warehouse_id && (settings.cashbox_warehouse_ids || []).length > 0) {
+                const cashboxIds = (settings.cashbox_warehouse_ids || []).map((v) => Number(v))
+                const handoverId = Number(settings.handover_warehouse_id)
+                if (cashboxIds.length === 1 && Number(settings.cashbox_warehouse_id) !== handoverId) {
+                    issues.push("Для корректной передачи при одном складе кассы склад кассы и склад передачи должны совпадать.")
+                } else if (cashboxIds.length > 1 && !cashboxIds.includes(handoverId)) {
+                    issues.push("Склад передачи должен входить в выбранные склады кассы.")
+                }
             }
 
             const enabledIds = new Set(warehouses.map((warehouse) => Number(warehouse.id)))
@@ -3828,9 +3834,20 @@ async function resolvePosWarehouseIdForItems(
     clubId: string,
     userId: string,
     items: { product_id: number; quantity: number }[],
-    preferredWarehouseId?: number | null
+    preferredWarehouseId?: number | null,
+    allowedCashboxWarehouseIds?: number[]
 ) {
     const scope = await getInventoryAccessScope(client, clubId, userId)
+
+    const cashboxWarehouseIds = Array.isArray(allowedCashboxWarehouseIds)
+        ? allowedCashboxWarehouseIds
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value) && value > 0)
+        : []
+    const cashboxWarehouseIdSet = new Set<number>(cashboxWarehouseIds)
+    if (preferredWarehouseId && cashboxWarehouseIds.length > 0 && !cashboxWarehouseIdSet.has(Number(preferredWarehouseId))) {
+        throw new Error("Склад не входит в список складов кассы")
+    }
 
     if (scope.canManageInventory && preferredWarehouseId) {
         await assertWarehouseBelongsToClub(client, clubId, preferredWarehouseId)
@@ -3839,15 +3856,31 @@ async function resolvePosWarehouseIdForItems(
         await assertUserCanUseWarehouses(client, clubId, userId, [preferredWarehouseId])
     }
 
+    const effectiveEmployeeAllowedWarehouseIds = !scope.canManageInventory && cashboxWarehouseIds.length > 0
+        ? scope.allowedWarehouseIds.filter((id: number) => cashboxWarehouseIdSet.has(Number(id)))
+        : scope.allowedWarehouseIds
+
     const warehouseQuery = scope.canManageInventory
-        ? `
-            SELECT id, name, is_default
-            FROM warehouses
-            WHERE club_id = $1
-              AND is_active = true
-              AND ($2::int IS NULL OR id = $2)
-            ORDER BY CASE WHEN id = $2 THEN 0 ELSE 1 END, is_default DESC, created_at ASC
-        `
+        ? (
+            cashboxWarehouseIds.length > 0
+                ? `
+                    SELECT id, name, is_default
+                    FROM warehouses
+                    WHERE club_id = $1
+                      AND is_active = true
+                      AND id = ANY($2::int[])
+                      AND ($3::int IS NULL OR id = $3)
+                    ORDER BY CASE WHEN id = $3 THEN 0 ELSE 1 END, is_default DESC, created_at ASC
+                `
+                : `
+                    SELECT id, name, is_default
+                    FROM warehouses
+                    WHERE club_id = $1
+                      AND is_active = true
+                      AND ($2::int IS NULL OR id = $2)
+                    ORDER BY CASE WHEN id = $2 THEN 0 ELSE 1 END, is_default DESC, created_at ASC
+                `
+        )
         : `
             SELECT id, name, is_default
             FROM warehouses
@@ -3859,8 +3892,12 @@ async function resolvePosWarehouseIdForItems(
         `
 
     const warehouseParams = scope.canManageInventory
-        ? [clubId, preferredWarehouseId ?? null]
-        : [clubId, scope.allowedWarehouseIds, preferredWarehouseId ?? null]
+        ? (
+            cashboxWarehouseIds.length > 0
+                ? [clubId, cashboxWarehouseIds, preferredWarehouseId ?? null]
+                : [clubId, preferredWarehouseId ?? null]
+        )
+        : [clubId, effectiveEmployeeAllowedWarehouseIds, preferredWarehouseId ?? null]
 
     const warehouseRes = await client.query(warehouseQuery, warehouseParams)
     if (warehouseRes.rowCount === 0) {
@@ -3943,7 +3980,10 @@ export async function createShiftReceipt(
         if (!inventorySettings.stock_enabled || !inventorySettings.cashbox_enabled) {
             throw new Error("Касса DashAdmin отключена для этого клуба")
         }
-        if (!inventorySettings.cashbox_warehouse_id) {
+        const cashboxWarehouseIds = Array.isArray(inventorySettings.cashbox_warehouse_ids)
+            ? inventorySettings.cashbox_warehouse_ids
+            : []
+        if (cashboxWarehouseIds.length === 0) {
             throw new Error("Для кассы не выбран склад продаж")
         }
 
@@ -3976,8 +4016,8 @@ export async function createShiftReceipt(
             }
         }
 
-        const preferredWarehouseId = data.warehouse_id ?? inventorySettings.cashbox_warehouse_id
-        const warehouseId = await resolvePosWarehouseIdForItems(client, clubId, userId, normalizedItems, preferredWarehouseId)
+        const preferredWarehouseId = data.warehouse_id ?? null
+        const warehouseId = await resolvePosWarehouseIdForItems(client, clubId, userId, normalizedItems, preferredWarehouseId, cashboxWarehouseIds)
 
         const productIds = Array.from(new Set(normalizedItems.map(i => i.product_id)))
         const pricesRes = await client.query(

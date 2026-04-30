@@ -239,7 +239,7 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
 
     const isSuppliesEnabled = normalizedInventorySettings.supplies_enabled && canUseInventoryActions
     const isStockEnabled = normalizedInventorySettings.stock_enabled && canUseInventoryActions
-    const isCashboxEnabled = normalizedInventorySettings.cashbox_enabled && Boolean(normalizedInventorySettings.cashbox_warehouse_id) && canUseInventoryActions
+    const isCashboxEnabled = normalizedInventorySettings.cashbox_enabled && (normalizedInventorySettings.cashbox_warehouse_ids || []).length > 0 && canUseInventoryActions
     const canUseEmployeeWriteOff = isStockEnabled && normalizedInventorySettings.employee_writeoff_enabled
     const canUseEmployeeTransfer = isStockEnabled && normalizedInventorySettings.employee_transfer_enabled
 

@@ -14,11 +14,11 @@ import { useUiDialogs } from "./useUiDialogs"
 interface WarehousesTabProps {
     warehouses: Warehouse[]
     currentUserId: string
-    cashboxWarehouseId?: number | null
+    cashboxWarehouseIds?: number[]
     handoverWarehouseId?: number | null
 }
 
-export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseId, handoverWarehouseId }: WarehousesTabProps) {
+export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseIds, handoverWarehouseId }: WarehousesTabProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
@@ -131,9 +131,9 @@ export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseId, h
                             </div>
                         </div>
                         
-                        {(Number(cashboxWarehouseId) === Number(wh.id) || Number(handoverWarehouseId) === Number(wh.id)) && (
+                        {((cashboxWarehouseIds || []).includes(Number(wh.id)) || Number(handoverWarehouseId) === Number(wh.id)) && (
                             <div className="flex flex-wrap gap-2">
-                                {Number(cashboxWarehouseId) === Number(wh.id) && (
+                                {(cashboxWarehouseIds || []).includes(Number(wh.id)) && (
                                     <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
                                         Для кассы
                                     </Badge>

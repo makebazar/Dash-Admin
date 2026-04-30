@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ArrowLeft, Loader2, Wallet, PackageX, Info, PackageCheck, X } from "lucide-react"
@@ -31,7 +31,7 @@ interface HandoverSourceInfo {
 
 interface ShiftZoneResolution {
     id: number
-    resolution_type: "SALARY_DEDUCTION" | "LOSS"
+    resolution_type: "SALARY_DEDUCTION" | "LOSS" | "NO_DEDUCTION"
     resolution_amount: number
     discrepancy_quantity: number
     unit_price: number
@@ -185,13 +185,12 @@ export default function InventoryHandoverDetailsPage() {
     const [error, setError] = useState<string | null>(null)
     const [isResolutionDialogOpen, setIsResolutionDialogOpen] = useState(false)
     const [resolutionTarget, setResolutionTarget] = useState<ShiftZoneDiscrepancy | null>(null)
-    const [resolutionType, setResolutionType] = useState<"SALARY_DEDUCTION" | "LOSS">("SALARY_DEDUCTION")
+    const [resolutionType, setResolutionType] = useState<"SALARY_DEDUCTION" | "LOSS" | "NO_DEDUCTION">("SALARY_DEDUCTION")
     const [resolutionMode, setResolutionMode] = useState<"full" | "custom">("full")
     const [resolutionAmount, setResolutionAmount] = useState("")
     const [resolutionNote, setResolutionNote] = useState("")
     const [isResolutionSaving, setIsResolutionSaving] = useState(false)
     const [activeTab, setActiveTab] = useState<"open" | "close" | "full">("close")
-    const [showOnlyUnresolved, setShowOnlyUnresolved] = useState(true)
     const [page, setPage] = useState(1)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [detailsTarget, setDetailsTarget] = useState<ShiftZoneDiscrepancy | null>(null)
@@ -267,9 +266,30 @@ export default function InventoryHandoverDetailsPage() {
     }, [activeTab, openingDiscrepancyRows, closingDiscrepancyRows, fullCycleRows])
 
     const filteredRows = useMemo(() => {
-        if (!showOnlyUnresolved) return currentRows
-        return currentRows.filter((row) => isShortage(row) && !row.resolution)
-    }, [currentRows, showOnlyUnresolved])
+        return currentRows
+    }, [currentRows])
+
+    const groupedRows = useMemo(() => {
+        const byWarehouse = new Map<number, { warehouse_id: number; warehouse_name: string; shift_zone_label: string; rows: ShiftZoneDiscrepancy[]; risk: number }>()
+        for (const row of filteredRows) {
+            const warehouseId = Number(row.warehouse_id)
+            if (!byWarehouse.has(warehouseId)) {
+                byWarehouse.set(warehouseId, {
+                    warehouse_id: warehouseId,
+                    warehouse_name: row.warehouse_name,
+                    shift_zone_label: row.shift_zone_label,
+                    rows: [],
+                    risk: 0,
+                })
+            }
+            const group = byWarehouse.get(warehouseId)!
+            group.rows.push(row)
+            if (isShortage(row)) {
+                group.risk += Math.abs(getDiscrepancyValue(row)) * Number(row.selling_price || 0)
+            }
+        }
+        return Array.from(byWarehouse.values()).sort((a, b) => a.warehouse_name.localeCompare(b.warehouse_name, "ru-RU"))
+    }, [filteredRows])
 
     const getMaxResolutionAmount = useCallback((row: ShiftZoneDiscrepancy | null) => {
         if (!row) return 0
@@ -277,7 +297,7 @@ export default function InventoryHandoverDetailsPage() {
         return Number((Math.abs(getDiscrepancyValue(row)) * Number(row.selling_price || 0)).toFixed(2))
     }, [])
 
-    const openResolutionDialog = useCallback((row: ShiftZoneDiscrepancy, type: "SALARY_DEDUCTION" | "LOSS") => {
+    const openResolutionDialog = useCallback((row: ShiftZoneDiscrepancy, type: "SALARY_DEDUCTION" | "LOSS" | "NO_DEDUCTION") => {
         const maxAmount = getMaxResolutionAmount(row)
         setResolutionTarget(row)
         setResolutionType(type)
@@ -532,9 +552,6 @@ export default function InventoryHandoverDetailsPage() {
                                     Цикл <span className="ml-1 opacity-70">({fullCycleRows.length})</span>
                                 </Button>
                             </div>
-                            <Button type="button" variant={showOnlyUnresolved ? "default" : "outline"} size="sm" className="h-7 text-xs px-3 font-bold" onClick={() => setShowOnlyUnresolved(v => !v)}>
-                                {showOnlyUnresolved ? "Только без решения" : "Показать все"}
-                            </Button>
                         </div>
 
                         <div className="md:hidden space-y-2">
@@ -549,9 +566,6 @@ export default function InventoryHandoverDetailsPage() {
                                     Цикл <span className="ml-1 opacity-70">({fullCycleRows.length})</span>
                                 </Button>
                             </div>
-                            <Button type="button" variant={showOnlyUnresolved ? "default" : "outline"} size="sm" className="h-9 text-[11px] px-3 font-black w-full" onClick={() => setShowOnlyUnresolved(v => !v)}>
-                                {showOnlyUnresolved ? "Только без решения" : "Показать все"}
-                            </Button>
                         </div>
                     </div>
 
@@ -574,77 +588,96 @@ export default function InventoryHandoverDetailsPage() {
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredRows.map((row, index) => {
-                                            const delta = getDiscrepancyValue(row)
-                                            const deltaColor = delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-600" : "text-slate-500"
-                                            const canResolve = isShortage(row) && !row.resolution
-                                            const responsibilityText = row.responsibility_type === "SHIFT_RESPONSIBILITY" && details?.shift.employee_name
-                                                ? `Ответственность: ${details.shift.employee_name}`
-                                                : row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" && details?.handover_source?.accepted_from_employee_name
-                                                    ? `Тянется от: ${details.handover_source.accepted_from_employee_name}`
-                                                    : row.responsibility_label
-
-                                            return (
-                                                <tr key={`${activeTab}-${row.warehouse_id}-${row.product_id}-${index}`} className="hover:bg-slate-50/50 transition-colors">
-                                                    <td className="px-4 py-2 align-middle">
-                                                        <div className="font-bold text-slate-900 leading-tight">{row.product_name}</div>
-                                                        <div className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                                            {row.warehouse_name} · {row.shift_zone_label}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-2 align-middle text-right">
-                                                        <div className={cn("font-black tabular-nums text-base leading-tight", deltaColor)}>
-                                                            {delta > 0 ? "+" : ""}{delta}
-                                                        </div>
-                                                        <div className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                                            {formatMoney(row.selling_price)} / шт
-                                                        </div>
-                                                        {(row.inflow_quantity > 0 || row.outflow_quantity > 0) && (
-                                                            <div className="text-[9px] font-bold mt-1 flex justify-end gap-1.5">
-                                                                {row.inflow_quantity > 0 && <span className="text-emerald-500">+{row.inflow_quantity} прих</span>}
-                                                                {row.outflow_quantity > 0 && <span className="text-rose-500">-{row.outflow_quantity} расх</span>}
+                                        groupedRows.map((group) => (
+                                            <Fragment key={`${activeTab}-wh-${group.warehouse_id}`}>
+                                                <tr className="bg-slate-50/80">
+                                                    <td colSpan={4} className="px-4 py-2.5">
+                                                        <div className="flex items-center justify-between gap-4">
+                                                            <div className="text-xs font-black text-slate-900">
+                                                                {group.warehouse_name} · {group.shift_zone_label}
                                                             </div>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-2 align-middle">
-                                                        <div className={cn(
-                                                            "text-xs font-black leading-tight line-clamp-2",
-                                                            row.responsibility_type === "SHIFT_RESPONSIBILITY" ? "text-rose-700" :
-                                                            row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" ? "text-amber-700" :
-                                                            "text-slate-700"
-                                                        )} title={row.explanation}>
-                                                            {responsibilityText}
-                                                        </div>
-                                                        <div className="text-[10px] text-slate-500 leading-tight mt-0.5 line-clamp-1">
-                                                            {row.resolution ? (
-                                                                <span className="font-bold text-indigo-600">Решено: {row.resolution.resolution_type === "SALARY_DEDUCTION" ? "В счет ЗП" : "В потери"}</span>
-                                                            ) : isSurplus(row) ? (
-                                                                <span className="font-bold text-emerald-600">Излишек (без удержания)</span>
-                                                            ) : (
-                                                                <span className="font-bold text-amber-600">Ждет решения</span>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-2 align-middle text-right">
-                                                        <div className="flex justify-end items-center gap-2">
-                                                            {canResolve && (
-                                                                <>
-                                                                    <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px] font-bold" onClick={() => openResolutionDialog(row, "SALARY_DEDUCTION")}>
-                                                                        <Wallet className="mr-1 h-3 w-3" /> ЗП
-                                                                    </Button>
-                                                                    <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={() => openResolutionDialog(row, "LOSS")}>
-                                                                        <PackageX className="mr-1 h-3 w-3" /> Потери
-                                                                    </Button>
-                                                                </>
-                                                            )}
-                                                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-900" onClick={() => openDetailsDialog(row)}>
-                                                                <Info className="h-4 w-4" />
-                                                            </Button>
+                                                            <div className="text-[11px] font-black text-slate-500">
+                                                                Риск: {formatMoney(group.risk)}
+                                                            </div>
                                                         </div>
                                                     </td>
                                                 </tr>
-                                            )
-                                        })
+                                                {group.rows.map((row, index) => {
+                                                    const delta = getDiscrepancyValue(row)
+                                                    const deltaColor = delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-600" : "text-slate-500"
+                                                    const canResolve = isShortage(row) && !row.resolution
+                                                    const responsibilityText = row.responsibility_type === "SHIFT_RESPONSIBILITY" && details?.shift.employee_name
+                                                        ? `Ответственность: ${details.shift.employee_name}`
+                                                        : row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" && details?.handover_source?.accepted_from_employee_name
+                                                            ? `Тянется от: ${details.handover_source.accepted_from_employee_name}`
+                                                            : row.responsibility_label
+
+                                                    return (
+                                                        <tr key={`${activeTab}-${row.warehouse_id}-${row.product_id}-${index}`} className="hover:bg-slate-50/50 transition-colors">
+                                                            <td className="px-4 py-2 align-middle">
+                                                                <div className="font-bold text-slate-900 leading-tight">{row.product_name}</div>
+                                                                <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                                                    {row.warehouse_name} · {row.shift_zone_label}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-2 align-middle text-right">
+                                                                <div className={cn("font-black tabular-nums text-base leading-tight", deltaColor)}>
+                                                                    {delta > 0 ? "+" : ""}{delta}
+                                                                </div>
+                                                                <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                                                    {formatMoney(row.selling_price)} / шт
+                                                                </div>
+                                                                {(row.inflow_quantity > 0 || row.outflow_quantity > 0) && (
+                                                                    <div className="text-[9px] font-bold mt-1 flex justify-end gap-1.5">
+                                                                        {row.inflow_quantity > 0 && <span className="text-emerald-500">+{row.inflow_quantity} прих</span>}
+                                                                        {row.outflow_quantity > 0 && <span className="text-rose-500">-{row.outflow_quantity} расх</span>}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-2 align-middle">
+                                                                <div className={cn(
+                                                                    "text-xs font-black leading-tight line-clamp-2",
+                                                                    row.responsibility_type === "SHIFT_RESPONSIBILITY" ? "text-rose-700" :
+                                                                    row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" ? "text-amber-700" :
+                                                                    "text-slate-700"
+                                                                )} title={row.explanation}>
+                                                                    {responsibilityText}
+                                                                </div>
+                                                                <div className="text-[10px] text-slate-500 leading-tight mt-0.5 line-clamp-1">
+                                                                    {row.resolution ? (
+                                                                        <span className="font-bold text-indigo-600">Решено: {row.resolution.resolution_type === "SALARY_DEDUCTION" ? "В счет ЗП" : row.resolution.resolution_type === "LOSS" ? "В потери" : "Без удержания"}</span>
+                                                                    ) : isSurplus(row) ? (
+                                                                        <span className="font-bold text-emerald-600">Излишек (без удержания)</span>
+                                                                    ) : (
+                                                                        <span className="font-bold text-amber-600">Ждет решения</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-2 align-middle text-right">
+                                                                <div className="flex justify-end items-center gap-2">
+                                                                    {canResolve && (
+                                                                        <>
+                                                                            <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px] font-bold" onClick={() => openResolutionDialog(row, "SALARY_DEDUCTION")}>
+                                                                                <Wallet className="mr-1 h-3 w-3" /> ЗП
+                                                                            </Button>
+                                                                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px] font-bold" onClick={() => openResolutionDialog(row, "NO_DEDUCTION")}>
+                                                                            <PackageCheck className="mr-1 h-3 w-3" /> Без удержания
+                                                                        </Button>
+                                                                            <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={() => openResolutionDialog(row, "LOSS")}>
+                                                                                <PackageX className="mr-1 h-3 w-3" /> Потери
+                                                                            </Button>
+                                                                        </>
+                                                                    )}
+                                                                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-900" onClick={() => openDetailsDialog(row)}>
+                                                                        <Info className="h-4 w-4" />
+                                                                    </Button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )
+                                                })}
+                                            </Fragment>
+                                        ))
                                     )}
                                 </tbody>
                             </table>
@@ -656,80 +689,99 @@ export default function InventoryHandoverDetailsPage() {
                                     Ничего не найдено.
                                 </div>
                             ) : (
-                                filteredRows.map((row, index) => {
-                                    const delta = getDiscrepancyValue(row)
-                                    const deltaColor = delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-600" : "text-slate-500"
-                                    const canResolve = isShortage(row) && !row.resolution
-                                    const responsibilityText = row.responsibility_type === "SHIFT_RESPONSIBILITY" && details?.shift.employee_name
-                                        ? `Ответственность: ${details.shift.employee_name}`
-                                        : row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" && details?.handover_source?.accepted_from_employee_name
-                                            ? `Тянется от: ${details.handover_source.accepted_from_employee_name}`
-                                            : row.responsibility_label
-
-                                    return (
-                                        <div key={`m-${activeTab}-${row.warehouse_id}-${row.product_id}-${index}`} className="px-3 py-2.5">
-                                            <div className="flex items-start justify-between gap-3">
+                                groupedRows.map((group) => (
+                                    <Fragment key={`m-${activeTab}-wh-${group.warehouse_id}`}>
+                                        <div className="px-3 py-2.5 bg-slate-50/80">
+                                            <div className="flex items-center justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <div className="font-bold text-slate-900 leading-tight truncate">{row.product_name}</div>
-                                                    <div className="text-[11px] font-bold text-slate-400 mt-0.5 truncate">
-                                                        {row.warehouse_name} · {row.shift_zone_label}
+                                                    <div className="text-[11px] font-black text-slate-900 truncate">
+                                                        {group.warehouse_name} · {group.shift_zone_label}
                                                     </div>
                                                 </div>
-                                                <div className="text-right shrink-0">
-                                                    <div className={cn("text-xl font-black tabular-nums leading-none", deltaColor)}>
-                                                        {delta > 0 ? "+" : ""}{delta}
-                                                    </div>
-                                                    <div className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                                        {formatMoney(row.selling_price)} / шт
-                                                    </div>
+                                                <div className="text-[11px] font-black text-slate-500 shrink-0">
+                                                    Риск: {formatMoney(group.risk)}
                                                 </div>
-                                            </div>
-
-                                            {(row.inflow_quantity > 0 || row.outflow_quantity > 0) && (
-                                                <div className="mt-1.5 flex gap-2 text-[11px] font-bold">
-                                                    {row.inflow_quantity > 0 && <span className="text-emerald-600">+{row.inflow_quantity} приход</span>}
-                                                    {row.outflow_quantity > 0 && <span className="text-rose-600">-{row.outflow_quantity} расход</span>}
-                                                </div>
-                                            )}
-
-                                            <div className="mt-1.5">
-                                                <div className={cn(
-                                                    "text-xs font-black leading-tight",
-                                                    row.responsibility_type === "SHIFT_RESPONSIBILITY" ? "text-rose-700" :
-                                                    row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" ? "text-amber-700" :
-                                                    "text-slate-700"
-                                                )}>
-                                                    {responsibilityText}
-                                                </div>
-                                                <div className="text-[11px] text-slate-500 mt-0.5">
-                                                    {row.resolution ? (
-                                                        <span className="font-bold text-indigo-600">Решено: {row.resolution.resolution_type === "SALARY_DEDUCTION" ? "В счет ЗП" : "В потери"}</span>
-                                                    ) : isSurplus(row) ? (
-                                                        <span className="font-bold text-emerald-600">Излишек (без удержания)</span>
-                                                    ) : (
-                                                        <span className="font-bold text-amber-600">Ждет решения</span>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="mt-2 flex items-center justify-end gap-1.5">
-                                                {canResolve && (
-                                                    <>
-                                                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => openResolutionDialog(row, "SALARY_DEDUCTION")}>
-                                                            <Wallet className="mr-1.5 h-4 w-4" /> ЗП
-                                                        </Button>
-                                                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={() => openResolutionDialog(row, "LOSS")}>
-                                                            <PackageX className="mr-1.5 h-4 w-4" /> Потери
-                                                        </Button>
-                                                    </>
-                                                )}
-                                                <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => openDetailsDialog(row)}>
-                                                    <Info className="mr-1.5 h-4 w-4" /> Детали
-                                                </Button>
                                             </div>
                                         </div>
-                                    )
-                                })
+                                        {group.rows.map((row, index) => {
+                                            const delta = getDiscrepancyValue(row)
+                                            const deltaColor = delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-600" : "text-slate-500"
+                                            const canResolve = isShortage(row) && !row.resolution
+                                            const responsibilityText = row.responsibility_type === "SHIFT_RESPONSIBILITY" && details?.shift.employee_name
+                                                ? `Ответственность: ${details.shift.employee_name}`
+                                                : row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" && details?.handover_source?.accepted_from_employee_name
+                                                    ? `Тянется от: ${details.handover_source.accepted_from_employee_name}`
+                                                    : row.responsibility_label
+
+                                            return (
+                                                <div key={`m-${activeTab}-${row.warehouse_id}-${row.product_id}-${index}`} className="px-3 py-2.5">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <div className="font-bold text-slate-900 leading-tight truncate">{row.product_name}</div>
+                                                            <div className="text-[11px] font-bold text-slate-400 mt-0.5 truncate">
+                                                                {row.warehouse_name} · {row.shift_zone_label}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right shrink-0">
+                                                            <div className={cn("text-xl font-black tabular-nums leading-none", deltaColor)}>
+                                                                {delta > 0 ? "+" : ""}{delta}
+                                                            </div>
+                                                            <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                                                {formatMoney(row.selling_price)} / шт
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {(row.inflow_quantity > 0 || row.outflow_quantity > 0) && (
+                                                        <div className="mt-1.5 flex gap-2 text-[11px] font-bold">
+                                                            {row.inflow_quantity > 0 && <span className="text-emerald-600">+{row.inflow_quantity} приход</span>}
+                                                            {row.outflow_quantity > 0 && <span className="text-rose-600">-{row.outflow_quantity} расход</span>}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="mt-1.5">
+                                                        <div className={cn(
+                                                            "text-xs font-black leading-tight",
+                                                            row.responsibility_type === "SHIFT_RESPONSIBILITY" ? "text-rose-700" :
+                                                            row.responsibility_type === "INHERITED_FROM_PREVIOUS_SHIFT" ? "text-amber-700" :
+                                                            "text-slate-700"
+                                                        )}>
+                                                            {responsibilityText}
+                                                        </div>
+                                                        <div className="text-[11px] text-slate-500 mt-0.5">
+                                                            {row.resolution ? (
+                                                                <span className="font-bold text-indigo-600">Решено: {row.resolution.resolution_type === "SALARY_DEDUCTION" ? "В счет ЗП" : row.resolution.resolution_type === "LOSS" ? "В потери" : "Без удержания"}</span>
+                                                            ) : isSurplus(row) ? (
+                                                                <span className="font-bold text-emerald-600">Излишек (без удержания)</span>
+                                                            ) : (
+                                                                <span className="font-bold text-amber-600">Ждет решения</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-2 flex items-center justify-end gap-1.5">
+                                                        {canResolve && (
+                                                            <>
+                                                                <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => openResolutionDialog(row, "SALARY_DEDUCTION")}>
+                                                                    <Wallet className="mr-1.5 h-4 w-4" /> ЗП
+                                                                </Button>
+                                                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => openResolutionDialog(row, "NO_DEDUCTION")}>
+                                                            <PackageCheck className="mr-1.5 h-4 w-4" /> Без удержания
+                                                        </Button>
+                                                                <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={() => openResolutionDialog(row, "LOSS")}>
+                                                                    <PackageX className="mr-1.5 h-4 w-4" /> Потери
+                                                                </Button>
+                                                            </>
+                                                        )}
+                                                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => openDetailsDialog(row)}>
+                                                            <Info className="mr-1.5 h-4 w-4" /> Детали
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </Fragment>
+                                ))
                             )}
                         </div>
                     </div>
@@ -847,7 +899,7 @@ export default function InventoryHandoverDetailsPage() {
                     <div className="p-4 bg-white border-t sm:border-t-0 mt-auto">
                         <div className="max-w-lg mx-auto flex flex-col gap-2">
                             {detailsTarget && isShortage(detailsTarget) && !detailsTarget.resolution && (
-                                <div className="grid grid-cols-2 gap-2 w-full">
+                                <div className="grid grid-cols-3 gap-2 w-full">
                                     <Button
                                         variant="outline"
                                         className="h-12 font-bold"
@@ -855,6 +907,14 @@ export default function InventoryHandoverDetailsPage() {
                                     >
                                         <Wallet className="mr-2 h-4 w-4" />
                                         В счет ЗП
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="h-12 font-bold"
+                                        onClick={() => openResolutionDialog(detailsTarget, "NO_DEDUCTION")}
+                                    >
+                                        <PackageCheck className="mr-2 h-4 w-4" />
+                                        Без удержания
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -878,7 +938,11 @@ export default function InventoryHandoverDetailsPage() {
                 <DialogContent className="sm:max-w-[560px]">
                     <DialogHeader>
                         <DialogTitle>
-                            {resolutionType === "SALARY_DEDUCTION" ? "Решение: в счет ЗП" : "Решение: списать как потери"}
+                            {resolutionType === "SALARY_DEDUCTION"
+                                ? "Решение: в счет ЗП"
+                                : resolutionType === "LOSS"
+                                    ? "Решение: списать как потери"
+                                    : "Решение: без удержания"}
                         </DialogTitle>
                     </DialogHeader>
                     {resolutionTarget && (
@@ -938,9 +1002,13 @@ export default function InventoryHandoverDetailsPage() {
                                         </div>
                                     )}
                                 </div>
-                            ) : (
+                            ) : resolutionType === "LOSS" ? (
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                                     Сумма будет списана на потери клуба. Сотруднику удержание по этой строке не создается.
+                                </div>
+                            ) : (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                                    Строка будет закрыта без удержаний и списаний.
                                 </div>
                             )}
 
@@ -951,7 +1019,9 @@ export default function InventoryHandoverDetailsPage() {
                                     onChange={(e) => setResolutionNote(e.target.value)}
                                     placeholder={resolutionType === "SALARY_DEDUCTION"
                                         ? "Например: удержать частично, остальное оставить за клубом"
-                                        : "Например: списано как бой, усушка или операционная потеря"}
+                                        : resolutionType === "LOSS"
+                                            ? "Например: списано как бой, усушка или операционная потеря"
+                                            : "Например: нашли чек, пересканировали, ошибка учета"}
                                     rows={3}
                                 />
                             </div>

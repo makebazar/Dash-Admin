@@ -12,6 +12,7 @@ import { useTransition, useState, useEffect, useMemo } from "react"
 import { RefreshCw, Wallet, Percent, Tag, Package } from "lucide-react"
 import { PriceTagTemplateTab } from "./PriceTagTemplateTab"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { normalizeInventorySettings } from "@/lib/inventory-settings"
 
 interface SettingsTabProps {
@@ -31,6 +32,7 @@ interface SettingsTabProps {
         employee_transfer_enabled?: boolean,
         report_reconciliation_enabled?: boolean,
         cashbox_warehouse_id?: number | null,
+        cashbox_warehouse_ids?: number[],
         handover_warehouse_id?: number | null,
         sales_capture_mode?: 'SHIFT',
         inventory_timing?: 'END_SHIFT',
@@ -161,6 +163,7 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
             nextSettings.employee_transfer_enabled = false
             nextSettings.report_reconciliation_enabled = false
             nextSettings.cashbox_warehouse_id = null
+            nextSettings.cashbox_warehouse_ids = []
             nextSettings.shift_accountability_mode = 'DISABLED'
             nextSettings.handover_warehouse_id = null
         }
@@ -169,10 +172,15 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
             nextSettings.cashbox_enabled = checked
             if (checked) {
                 nextSettings.stock_enabled = true
-                nextSettings.cashbox_warehouse_id = nextSettings.cashbox_warehouse_id ?? defaultWarehouseId
+                const nextCashboxWarehouseIds = (nextSettings.cashbox_warehouse_ids || []).length > 0
+                    ? (nextSettings.cashbox_warehouse_ids || [])
+                    : (defaultWarehouseId ? [defaultWarehouseId] : [])
+                nextSettings.cashbox_warehouse_ids = nextCashboxWarehouseIds
+                nextSettings.cashbox_warehouse_id = nextCashboxWarehouseIds[0] ?? null
             } else {
                 nextSettings.report_reconciliation_enabled = false
                 nextSettings.cashbox_warehouse_id = null
+                nextSettings.cashbox_warehouse_ids = []
                 nextSettings.shift_accountability_mode = 'DISABLED'
                 nextSettings.handover_warehouse_id = null
             }
@@ -183,7 +191,11 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
             if (checked) {
                 nextSettings.stock_enabled = true
                 nextSettings.cashbox_enabled = true
-                nextSettings.cashbox_warehouse_id = nextSettings.cashbox_warehouse_id ?? defaultWarehouseId
+                const nextCashboxWarehouseIds = (nextSettings.cashbox_warehouse_ids || []).length > 0
+                    ? (nextSettings.cashbox_warehouse_ids || [])
+                    : (defaultWarehouseId ? [defaultWarehouseId] : [])
+                nextSettings.cashbox_warehouse_ids = nextCashboxWarehouseIds
+                nextSettings.cashbox_warehouse_id = nextCashboxWarehouseIds[0] ?? null
                 nextSettings.employee_default_metric_key = nextSettings.employee_default_metric_key ?? metrics[0]?.key
             }
         }
@@ -193,8 +205,16 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
             if (checked) {
                 nextSettings.stock_enabled = true
                 nextSettings.cashbox_enabled = true
-                nextSettings.cashbox_warehouse_id = nextSettings.cashbox_warehouse_id ?? defaultWarehouseId
-                nextSettings.handover_warehouse_id = nextSettings.handover_warehouse_id ?? nextSettings.cashbox_warehouse_id ?? defaultWarehouseId
+                const nextCashboxWarehouseIds = (nextSettings.cashbox_warehouse_ids || []).length > 0
+                    ? (nextSettings.cashbox_warehouse_ids || [])
+                    : (defaultWarehouseId ? [defaultWarehouseId] : [])
+                nextSettings.cashbox_warehouse_ids = nextCashboxWarehouseIds
+                nextSettings.cashbox_warehouse_id = nextCashboxWarehouseIds[0] ?? null
+                nextSettings.handover_warehouse_id = nextSettings.handover_warehouse_id ?? (
+                    nextCashboxWarehouseIds.length === 1
+                        ? (nextCashboxWarehouseIds[0] ?? null)
+                        : null
+                )
             } else {
                 nextSettings.handover_warehouse_id = null
             }
@@ -202,17 +222,36 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
         saveSettings(nextSettings)
     }
 
-    const handleWarehouseBindingChange = (key: 'cashbox_warehouse_id' | 'handover_warehouse_id', value: string) => {
+    const handleWarehouseBindingChange = (key: 'handover_warehouse_id', value: string) => {
         const parsedWarehouseId = value === "none" ? null : Number(value)
         const nextSettings = {
             ...normalizedSettings,
             [key]: parsedWarehouseId,
         }
 
-        if (key === 'cashbox_warehouse_id' && normalizedSettings.shift_accountability_mode === 'WAREHOUSE') {
-            nextSettings.handover_warehouse_id = parsedWarehouseId
-        }
+        saveSettings(nextSettings)
+    }
 
+    const handleCashboxWarehouseToggle = (warehouseId: number, checked: boolean) => {
+        const currentIds = Array.isArray(normalizedSettings.cashbox_warehouse_ids)
+            ? normalizedSettings.cashbox_warehouse_ids
+            : []
+        const nextIds = checked
+            ? Array.from(new Set([...currentIds, warehouseId]))
+            : currentIds.filter((id) => Number(id) !== Number(warehouseId))
+        const nextPrimary = nextIds[0] ?? null
+        const nextSettings = {
+            ...normalizedSettings,
+            cashbox_warehouse_ids: nextIds,
+            cashbox_warehouse_id: nextPrimary,
+        }
+        if (normalizedSettings.shift_accountability_mode === 'WAREHOUSE') {
+            if (nextIds.length === 1) {
+                nextSettings.handover_warehouse_id = nextIds[0] ?? null
+            } else if (nextSettings.handover_warehouse_id && !nextIds.includes(Number(nextSettings.handover_warehouse_id))) {
+                nextSettings.handover_warehouse_id = null
+            }
+        }
         saveSettings(nextSettings)
     }
 
@@ -355,26 +394,29 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
 
                                         {isCashboxEnabled && (
                                             <div className="rounded-xl border border-border p-4 space-y-2">
-                                                <Label className="text-sm font-semibold text-foreground">Склад кассы</Label>
-                                                <Select
-                                                    value={normalizedSettings.cashbox_warehouse_id ? String(normalizedSettings.cashbox_warehouse_id) : "none"}
-                                                    onValueChange={(value) => handleWarehouseBindingChange('cashbox_warehouse_id', value)}
-                                                    disabled={isPending}
-                                                >
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Выберите склад для кассы" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">Не выбран</SelectItem>
-                                                        {warehouses.filter((warehouse) => warehouse.is_active).map((warehouse) => (
-                                                            <SelectItem key={warehouse.id} value={String(warehouse.id)}>
-                                                                {warehouse.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
+                                                <Label className="text-sm font-semibold text-foreground">Склады кассы</Label>
+                                                <div className="rounded-lg border border-border bg-card divide-y divide-border overflow-hidden">
+                                                    {warehouses.filter((warehouse) => warehouse.is_active).map((warehouse) => {
+                                                        const selected = (normalizedSettings.cashbox_warehouse_ids || []).includes(Number(warehouse.id))
+                                                        return (
+                                                            <label key={warehouse.id} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none">
+                                                                <Checkbox
+                                                                    checked={selected}
+                                                                    onCheckedChange={(val) => handleCashboxWarehouseToggle(Number(warehouse.id), Boolean(val))}
+                                                                    disabled={isPending}
+                                                                />
+                                                                <span className="text-sm font-semibold text-foreground">{warehouse.name}</span>
+                                                            </label>
+                                                        )
+                                                    })}
+                                                    {warehouses.filter((warehouse) => warehouse.is_active).length === 0 && (
+                                                        <div className="px-3 py-2.5 text-sm text-muted-foreground">
+                                                            Нет активных складов.
+                                                        </div>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-muted-foreground">
-                                                    Все продажи из кассы будут списываться только с этого склада.
+                                                    Касса выберет склад из списка и спишет чек целиком с одного склада, где хватает остатков.
                                                 </p>
                                             </div>
                                         )}
@@ -566,7 +608,7 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
                                                     </SelectContent>
                                                 </Select>
                                                 <p className="text-xs text-muted-foreground">
-                                                    Этот же склад участвует в приемке и сдаче смены. Для безопасной работы держи его таким же, как склад кассы.
+                                                    Этот склад используется для режима передачи. Если включена передача по нескольким складам, оставь поле пустым и настрой зоны на самих складах.
                                                 </p>
                                             </div>
                                         )}
@@ -613,7 +655,7 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
                     <WarehousesTab
                         warehouses={warehouses}
                         currentUserId={currentUserId}
-                        cashboxWarehouseId={normalizedSettings.cashbox_warehouse_id}
+                        cashboxWarehouseIds={normalizedSettings.cashbox_warehouse_ids}
                         handoverWarehouseId={normalizedSettings.handover_warehouse_id}
                     />
                 </TabsContent>
