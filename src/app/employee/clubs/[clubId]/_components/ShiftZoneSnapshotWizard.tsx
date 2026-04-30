@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button"
 import { Loader2, Plus } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getHandoverSourceCandidates, getProducts, getShiftAccountabilityWarehouses, getShiftZoneSnapshotDraft, saveShiftZoneSnapshot, type HandoverSourceCandidate, type ShiftZoneSnapshotDraftItem, type ShiftZoneSnapshotType } from "@/app/clubs/[clubId]/inventory/actions"
+import { getHandoverSourceCandidatesSafe, getProductsSafe, getShiftAccountabilityWarehousesSafe, getShiftZoneSnapshotDraftSafe, saveShiftZoneSnapshotSafe, type HandoverSourceCandidate, type ShiftZoneSnapshotDraftItem, type ShiftZoneSnapshotType } from "@/app/clubs/[clubId]/inventory/actions"
 import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs"
 import { StockCountWorkspace, type StockCountWorkspaceItem } from "@/app/clubs/[clubId]/inventory/_components/StockCountWorkspace"
 
@@ -55,12 +55,20 @@ export function ShiftZoneSnapshotWizard({
         let disposed = false
         setIsLoading(true)
         Promise.all([
-            getShiftZoneSnapshotDraft(clubId, shiftId, snapshotType),
-            getShiftAccountabilityWarehouses(clubId),
-            snapshotType === "OPEN" ? getHandoverSourceCandidates(clubId, shiftId) : Promise.resolve([])
+            getShiftZoneSnapshotDraftSafe(clubId, shiftId, snapshotType),
+            getShiftAccountabilityWarehousesSafe(clubId),
+            snapshotType === "OPEN" ? getHandoverSourceCandidatesSafe(clubId, shiftId) : Promise.resolve({ ok: true as const, data: [] as HandoverSourceCandidate[] })
         ])
-            .then(([rows, availableWarehouses, sourceCandidates]) => {
+            .then(([rowsRes, warehousesRes, sourceCandidatesRes]) => {
                 if (!disposed) {
+                    if (!rowsRes.ok) throw new Error(rowsRes.error)
+                    if (!warehousesRes.ok) throw new Error(warehousesRes.error)
+                    if (!sourceCandidatesRes.ok) throw new Error(sourceCandidatesRes.error)
+
+                    const rows = rowsRes.data
+                    const availableWarehouses = warehousesRes.data
+                    const sourceCandidates = sourceCandidatesRes.data
+
                     let nextItems = rows
                     let nextSelectedSourceShiftId = sourceCandidates?.find((candidate) => !candidate.is_self_handover)?.shift_id
                         || sourceCandidates?.[0]?.shift_id
@@ -164,7 +172,7 @@ export function ShiftZoneSnapshotWizard({
     const handleSave = () => {
         startTransition(async () => {
             try {
-                await saveShiftZoneSnapshot(
+                const res = await saveShiftZoneSnapshotSafe(
                     clubId,
                     shiftId,
                     snapshotType,
@@ -179,6 +187,13 @@ export function ShiftZoneSnapshotWizard({
                     })),
                     snapshotType === "OPEN" ? { accepted_from_shift_id: selectedHandoverSourceShiftId || null } : undefined
                 )
+                if (!res.ok) {
+                    showMessage({
+                        title: "Ошибка",
+                        description: res.error
+                    })
+                    return
+                }
                 window.localStorage.removeItem(draftStorageKey)
                 await onComplete()
                 onClose()
@@ -203,8 +218,15 @@ export function ShiftZoneSnapshotWizard({
         setIsAddDialogOpen(true)
         if (allProducts.length > 0) return
         try {
-            const products = await getProducts(clubId)
-            setAllProducts(products.map((product) => ({
+            const productsRes = await getProductsSafe(clubId)
+            if (!productsRes.ok) {
+                showMessage({
+                    title: "Ошибка",
+                    description: productsRes.error
+                })
+                return
+            }
+            setAllProducts(productsRes.data.map((product) => ({
                 id: product.id,
                 name: product.name,
                 barcode: product.barcode,
@@ -372,9 +394,9 @@ export function ShiftZoneSnapshotWizard({
                                 <SelectTrigger className="bg-primary border-slate-800 h-12 rounded-xl">
                                     <SelectValue placeholder="Выберите склад..." />
                                 </SelectTrigger>
-                                <SelectContent className="bg-primary border-slate-800">
+                                <SelectContent className="bg-slate-950 text-slate-50 border-slate-800">
                                     {warehouses.map((warehouse) => (
-                                        <SelectItem key={warehouse.id} value={String(warehouse.id)}>
+                                        <SelectItem key={warehouse.id} value={String(warehouse.id)} className="text-slate-50 focus:bg-slate-800 focus:text-slate-50 data-[state=checked]:bg-slate-800 data-[state=checked]:text-slate-50">
                                             {warehouse.name} · {warehouse.shift_zone_label}
                                         </SelectItem>
                                     ))}
@@ -388,9 +410,9 @@ export function ShiftZoneSnapshotWizard({
                                 <SelectTrigger className="bg-primary border-slate-800 h-12 rounded-xl">
                                     <SelectValue placeholder="Выберите товар..." />
                                 </SelectTrigger>
-                                <SelectContent className="bg-primary border-slate-800 max-h-[320px]">
+                                <SelectContent className="bg-slate-950 text-slate-50 border-slate-800 max-h-[320px]">
                                     {allProducts.map((product) => (
-                                        <SelectItem key={product.id} value={String(product.id)}>
+                                        <SelectItem key={product.id} value={String(product.id)} className="text-slate-50 focus:bg-slate-800 focus:text-slate-50 data-[state=checked]:bg-slate-800 data-[state=checked]:text-slate-50">
                                             {product.name}
                                         </SelectItem>
                                     ))}
@@ -399,7 +421,11 @@ export function ShiftZoneSnapshotWizard({
                         </div>
                     </div>
                     <DialogFooter className="flex-row gap-3">
-                        <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} className="flex-1 border-slate-700 text-primary-foreground">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsAddDialogOpen(false)}
+                            className="flex-1 border-slate-700 bg-transparent text-slate-200 hover:bg-slate-900 hover:text-slate-50"
+                        >
                             Отмена
                         </Button>
                         <Button

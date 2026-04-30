@@ -4299,6 +4299,57 @@ export async function voidShiftReceiptSafe(clubId: string, userId: string, recei
     }
 }
 
+export async function getShiftAccountabilityWarehousesSafe(clubId: string) {
+    try {
+        const data = await getShiftAccountabilityWarehouses(clubId)
+        return { ok: true as const, data }
+    } catch (error) {
+        return { ok: false as const, error: getActionErrorMessage(error, "Не удалось загрузить склады передачи") }
+    }
+}
+
+export async function getShiftZoneSnapshotDraftSafe(clubId: string, shiftId: string, snapshotType: ShiftZoneSnapshotType) {
+    try {
+        const data = await getShiftZoneSnapshotDraft(clubId, shiftId, snapshotType)
+        return { ok: true as const, data }
+    } catch (error) {
+        return { ok: false as const, error: getActionErrorMessage(error, "Не удалось загрузить приемку/сдачу остатков") }
+    }
+}
+
+export async function getHandoverSourceCandidatesSafe(clubId: string, shiftId: string) {
+    try {
+        const data = await getHandoverSourceCandidates(clubId, shiftId)
+        return { ok: true as const, data }
+    } catch (error) {
+        return { ok: false as const, error: getActionErrorMessage(error, "Не удалось загрузить список смен для передачи") }
+    }
+}
+
+export async function saveShiftZoneSnapshotSafe(
+    clubId: string,
+    shiftId: string,
+    snapshotType: ShiftZoneSnapshotType,
+    payload: Array<{ warehouse_id: number, items: Array<{ product_id: number, counted_quantity: number }> }>,
+    options?: { accepted_from_shift_id?: string | null }
+) {
+    try {
+        const data = await saveShiftZoneSnapshot(clubId, shiftId, snapshotType, payload, options)
+        return { ok: true as const, data }
+    } catch (error) {
+        return { ok: false as const, error: getActionErrorMessage(error, "Не удалось сохранить приемку или сдачу остатков") }
+    }
+}
+
+export async function getProductsSafe(clubId: string, opts?: { includeArchived?: boolean, onlyArchived?: boolean }) {
+    try {
+        const data = await getProducts(clubId, opts)
+        return { ok: true as const, data }
+    } catch (error) {
+        return { ok: false as const, error: getActionErrorMessage(error, "Не удалось загрузить каталог товаров") }
+    }
+}
+
 export async function returnReceiptItemSafe(
     clubId: string,
     userId: string,
