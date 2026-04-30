@@ -3872,11 +3872,14 @@ async function resolvePosWarehouseIdForItems(
         await assertWarehouseBelongsToClub(client, clubId, preferredWarehouseId)
     }
     if (!scope.canManageInventory && preferredWarehouseId) {
-        await assertUserCanUseWarehouses(client, clubId, userId, [preferredWarehouseId])
+        await assertWarehouseBelongsToClub(client, clubId, preferredWarehouseId)
+        if (cashboxWarehouseIds.length === 0) {
+            await assertUserCanUseWarehouses(client, clubId, userId, [preferredWarehouseId])
+        }
     }
 
-    const effectiveEmployeeAllowedWarehouseIds = !scope.canManageInventory && cashboxWarehouseIds.length > 0
-        ? scope.allowedWarehouseIds.filter((id: number) => cashboxWarehouseIdSet.has(Number(id)))
+    const effectiveEmployeeAllowedWarehouseIds = !scope.canManageInventory
+        ? (cashboxWarehouseIds.length > 0 ? cashboxWarehouseIds : scope.allowedWarehouseIds)
         : scope.allowedWarehouseIds
 
     const warehouseQuery = scope.canManageInventory
