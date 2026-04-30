@@ -8,7 +8,13 @@ COPY package.json package-lock.json ./
 
 # Install ALL dependencies (including devDependencies needed for build)
 # IMPORTANT: Force development mode to install devDependencies like typescript
-RUN NODE_ENV=development npm ci
+ENV npm_config_audit=false \
+    npm_config_fund=false \
+    npm_config_update_notifier=false \
+    npm_config_progress=false \
+    npm_config_jobs=1
+
+RUN NODE_ENV=development npm ci --no-audit --no-fund || (sleep 2 && NODE_ENV=development npm ci --no-audit --no-fund)
 
 # Build stage
 FROM public.ecr.aws/docker/library/node:20-alpine AS builder
