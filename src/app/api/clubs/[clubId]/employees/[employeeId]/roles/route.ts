@@ -19,6 +19,16 @@ async function ensureSchema() {
         );
         CREATE INDEX IF NOT EXISTS idx_club_employee_roles_club_user ON club_employee_roles(club_id, user_id);
     `);
+    await query(`
+        CREATE TABLE IF NOT EXISTS club_employee_role_preferences (
+            club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            active_role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL,
+            updated_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE(club_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_club_employee_role_preferences_club_user ON club_employee_role_preferences(club_id, user_id);
+    `);
 }
 
 export async function GET(
@@ -85,6 +95,7 @@ export async function PUT(
 
         if (uniqueRoleIds.length === 0) {
             await query(`DELETE FROM club_employee_roles WHERE club_id = $1 AND user_id = $2`, [clubId, employeeId]);
+            await query(`DELETE FROM club_employee_role_preferences WHERE club_id = $1 AND user_id = $2`, [clubId, employeeId]);
             return NextResponse.json({ success: true });
         }
 
@@ -117,6 +128,25 @@ export async function PUT(
                     [clubId, employeeId, roleId, i]
                 );
             }
+
+            const prefRes = await client.query(
+                `SELECT active_role_id FROM club_employee_role_preferences WHERE club_id = $1 AND user_id = $2 LIMIT 1`,
+                [clubId, employeeId]
+            );
+            const currentActiveRoleId = prefRes.rows[0]?.active_role_id ? Number(prefRes.rows[0].active_role_id) : null;
+            const nextActiveRoleId = currentActiveRoleId !== null && uniqueRoleIds.includes(currentActiveRoleId)
+                ? currentActiveRoleId
+                : uniqueRoleIds[0];
+
+            await client.query(
+                `
+                INSERT INTO club_employee_role_preferences (club_id, user_id, active_role_id, updated_at)
+                VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (club_id, user_id)
+                DO UPDATE SET active_role_id = EXCLUDED.active_role_id, updated_at = NOW()
+                `,
+                [clubId, employeeId, nextActiveRoleId]
+            );
             await client.query('COMMIT');
         } catch (e) {
             await client.query('ROLLBACK');
@@ -135,4 +165,3 @@ export async function PUT(
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
-

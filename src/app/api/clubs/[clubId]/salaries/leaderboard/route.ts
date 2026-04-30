@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { query } from '@/db';
 import { freezeClubEmployeeLeaderboard, getClubEmployeeLeaderboardState } from '@/lib/employee-leaderboard';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 export async function GET(
     request: Request,
@@ -15,10 +15,7 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id=$1 AND owner_id=$2`, [clubId, userId]);
-        if (ownerCheck.rowCount === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(String(clubId));
 
         const { searchParams } = new URL(request.url);
         const now = new Date();
@@ -35,7 +32,8 @@ export async function GET(
         });
     } catch (error: any) {
         console.error('Get Leaderboard Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }
 
@@ -51,10 +49,7 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id=$1 AND owner_id=$2`, [clubId, userId]);
-        if (ownerCheck.rowCount === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(String(clubId));
 
         const body = await request.json().catch(() => ({}));
         const now = new Date();
@@ -72,6 +67,7 @@ export async function POST(
         });
     } catch (error: any) {
         console.error('Freeze Leaderboard Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }

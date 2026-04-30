@@ -180,7 +180,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const [periodCalcOpen, setPeriodCalcOpen] = useState(false)
     const [periodCalcStart, setPeriodCalcStart] = useState('')
     const [periodCalcEnd, setPeriodCalcEnd] = useState('')
-    const [periodCalcSummary, setPeriodCalcSummary] = useState<null | { shiftsCount: number, base: number, bonuses: number, bar: number, total: number }>(null)
+    const [periodCalcSummary, setPeriodCalcSummary] = useState<null | { shiftsCount: number, base: number, monthKpi: number, shiftBonuses: number, bonuses: number, bar: number, total: number }>(null)
 
     const toggleCard = (employeeId: number) => {
         setExpandedCards(prev => {
@@ -221,7 +221,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         setPeriodCalcEnd('')
         setPeriodCalcSummary(null)
         setPaymentForm({
-            amount: employee.balance.toString(),
+            amount: Math.round(Number(employee.balance) || 0).toString(),
             method: 'CASH',
             notes: '',
             paymentType: 'salary'
@@ -351,23 +351,98 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             return
         }
 
+        const toDateKey = (value: any) => {
+            const date = new Date(value)
+            if (Number.isNaN(date.getTime())) return ''
+            return date.toLocaleDateString('en-CA')
+        }
+
         const shifts = paymentModal.employee.shifts || []
         const filtered = shifts.filter((s) => {
-            const d = new Date(s.date).toISOString().slice(0, 10)
+            const d = toDateKey(s.date)
             return d >= periodCalcStart && d <= periodCalcEnd
         })
 
+        const sumBonusesByType = (shift: any, types: string[]) => {
+            const bonusesList = Array.isArray(shift?.bonuses) ? shift.bonuses : []
+            return bonusesList.reduce((acc: number, b: any) => {
+                if (String(b?.payout_type || '').toUpperCase() === 'VIRTUAL_BALANCE') return acc
+                if (!types.includes(String(b?.type || ''))) return acc
+                return acc + (Number(b?.amount) || 0)
+            }, 0)
+        }
+
+        const sumMetric = (metricKeyRaw: any) => {
+            const metricKey = String(metricKeyRaw || 'total_revenue')
+            return filtered.reduce((sum, s: any) => {
+                if (metricKey === 'total_revenue') return sum + (Number(s.total_revenue) || 0)
+                if (metricKey === 'revenue_cash') return sum + (Number(s.revenue_cash) || 0)
+                if (metricKey === 'revenue_card') return sum + (Number(s.revenue_card) || 0)
+                if (metricKey === 'total_hours') return sum + (Number(s.total_hours) || 0)
+                const metrics = (s as any).metrics || {}
+                return sum + (Number(metrics[metricKey]) || 0)
+            }, 0)
+        }
+
+        const calcKpiForPeriod = () => {
+            const kpis = Array.isArray((paymentModal.employee as any).period_bonuses)
+                ? (paymentModal.employee as any).period_bonuses
+                : []
+            const standardShifts = Number((paymentModal.employee as any).standard_monthly_shifts || 15) || 15
+            const shiftsCount = filtered.length
+
+            return kpis.reduce((sum: number, k: any) => {
+                const payoutType = String(k?.payout_type || 'REAL_MONEY').toUpperCase()
+                if (payoutType === 'VIRTUAL_BALANCE') return sum
+
+                const metricKey = k?.metric_key || k?.source || 'total_revenue'
+                const currentValue = sumMetric(metricKey)
+
+                const rewardType = String(k?.reward_type || k?.current_reward_type || 'PERCENT').toUpperCase()
+                const mode = String(k?.bonus_mode || k?.mode || 'MONTH').toUpperCase()
+                const thresholds = Array.isArray(k?.thresholds) ? k.thresholds : []
+
+                if (thresholds.length === 0) return sum
+
+                const baseThresholds = thresholds.map((t: any) => ({
+                    from: Number(t?.original_from ?? t?.from ?? 0),
+                    percent: Number(t?.percent || 0),
+                    amount: Number(t?.amount || t?.bonus || 0)
+                }))
+
+                const scaled = [...baseThresholds]
+                    .sort((a, b) => a.from - b.from)
+                    .map((t) => ({
+                        ...t,
+                        scaled_from: mode === 'SHIFT' ? t.from * shiftsCount : (t.from / standardShifts) * shiftsCount
+                    }))
+
+                let tier: any = null
+                for (let i = scaled.length - 1; i >= 0; i--) {
+                    if (currentValue >= scaled[i].scaled_from) {
+                        tier = scaled[i]
+                        break
+                    }
+                }
+                if (!tier) return sum
+
+                if (rewardType === 'FIXED') return sum + (Number(tier.amount) || 0)
+                return sum + currentValue * ((Number(tier.percent) || 0) / 100)
+            }, 0)
+        }
+
         const base = filtered.reduce((sum, s) => sum + (Number(s.base_salary) || 0), 0)
-        const bonuses = filtered.reduce((sum, s) => {
-            const list = Array.isArray(s.real_money_bonuses) ? s.real_money_bonuses : []
-            return sum + list.reduce((acc: number, b: any) => acc + (parseFloat(b.amount) || 0), 0)
-        }, 0)
+        const shiftBonuses = filtered.reduce((sum, s) => sum + sumBonusesByType(s, ['SHIFT_BONUS', 'CHECKLIST_BONUS', 'PERSONAL_OVERPLAN']), 0)
         const bar = filtered.reduce((sum, s) => sum + (Number(s.bar_deduction) || 0), 0)
-        const total = filtered.reduce((sum, s) => sum + (Number(s.calculated_salary) || 0), 0)
+        const monthKpi = calcKpiForPeriod()
+        const bonuses = monthKpi + shiftBonuses
+        const total = base + bonuses - bar
 
         setPeriodCalcSummary({
             shiftsCount: filtered.length,
             base,
+            monthKpi,
+            shiftBonuses,
             bonuses,
             bar,
             total
@@ -661,8 +736,14 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                 }, -1);
                                 const currentTier = metThresholdIndex >= 0 ? sortedThresholds[metThresholdIndex] : null;
                                 const currentTierLabel = currentTier?.label ? String(currentTier.label) : currentTier ? `≥ ${formatCurrency(Number(currentTier.from || 0))}` : '—';
+                                const rewardType = String(k?.current_reward_type || k?.reward_type || '').toUpperCase();
+                                const isPercentReward = rewardType !== 'FIXED';
                                 const currentTierReward = currentTier
-                                    ? (Number(currentTier?.amount || 0) > 0 ? formatCurrency(Number(currentTier.amount || 0)) : `${Number(currentTier?.percent || 0)}%`)
+                                    ? (
+                                        isPercentReward
+                                            ? `${Number(currentTier?.percent || 0)}%`
+                                            : formatCurrency(Number(currentTier?.amount || 0))
+                                    )
                                     : null;
                                 const tierPos = sortedThresholds.length > 0 ? `${Math.max(0, metThresholdIndex + 1)}/${sortedThresholds.length}` : null;
 
@@ -732,7 +813,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         const originalFrom = Number(t?.original_from || 0);
                                                         const amount = Number(t?.amount || 0);
                                                         const pct = Number(t?.percent || 0);
-                                                        const reward = amount > 0 ? formatCurrency(amount) : `${pct}%`;
+                                                        const reward = isPercentReward ? `${pct}%` : formatCurrency(amount);
                                                         const isActive = ti === metThresholdIndex;
                                                         const isMet = current >= from;
                                                         const rowClass = isActive
@@ -1989,10 +2070,10 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             )}
 
             {paymentModal.open && paymentModal.employee && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-8 max-w-md w-full mx-4">
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-stretch justify-stretch sm:items-center sm:justify-center sm:p-4">
+                    <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto sm:rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 sm:max-w-md">
                         <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-6">Выплата: {paymentModal.employee.full_name}</h2>
-                        <div className="space-y-4">
+                        <div className="space-y-4 pb-6 sm:pb-0">
                             <div>
                                 <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Сумма</label>
                                 <input type="number" step="0.01" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} className="w-full h-12 bg-slate-50/50 border border-slate-200 rounded-xl px-4 font-medium text-slate-900 focus:bg-white transition-colors" placeholder="0.00" />
@@ -2041,8 +2122,12 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     <span className="font-bold text-slate-900">{formatCurrency(periodCalcSummary.base)}</span>
                                                 </div>
                                                 <div className="flex justify-between gap-4">
-                                                    <span className="text-slate-500">KPI/бонусы</span>
-                                                    <span className="font-bold text-emerald-600">+{formatCurrency(periodCalcSummary.bonuses)}</span>
+                                                    <span className="text-slate-500">KPI (месяц)</span>
+                                                    <span className="font-bold text-emerald-600">+{formatCurrency(periodCalcSummary.monthKpi)}</span>
+                                                </div>
+                                                <div className="flex justify-between gap-4">
+                                                    <span className="text-slate-500">Бонусы за смены</span>
+                                                    <span className="font-bold text-emerald-600">+{formatCurrency(periodCalcSummary.shiftBonuses)}</span>
                                                 </div>
                                                 <div className="flex justify-between gap-4">
                                                     <span className="text-slate-500">Бар</span>
@@ -2057,7 +2142,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                         type="button"
                                                         variant="default"
                                                         className="w-full mt-2"
-                                                        onClick={() => setPaymentForm((prev) => ({ ...prev, amount: periodCalcSummary.total.toString() }))}
+                                                        onClick={() => setPaymentForm((prev) => ({ ...prev, amount: Math.round(Number(periodCalcSummary.total) || 0).toString() }))}
                                                     >
                                                         Подставить сумму
                                                     </Button>
@@ -2076,7 +2161,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                         className="flex-1"
                                         onClick={() => {
                                             const baseAmount = paymentModal.employee?.breakdown?.base_salary || 0;
-                                            setPaymentForm(prev => ({ ...prev, paymentType: 'advance', amount: baseAmount.toString() }));
+                                            setPaymentForm(prev => ({ ...prev, paymentType: 'advance', amount: Math.round(Number(baseAmount) || 0).toString() }));
                                         }}
                                     >
                                         Аванс

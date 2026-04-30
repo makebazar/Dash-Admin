@@ -117,8 +117,24 @@ export async function GET(
             `SELECT active_role_id FROM club_employee_role_preferences WHERE club_id = $1 AND user_id = $2 LIMIT 1`,
             [clubId, userId]
         );
-        const activeRoleId = prefRes.rows[0]?.active_role_id ? Number(prefRes.rows[0].active_role_id) : null;
+        const activeRoleIdRaw = prefRes.rows[0]?.active_role_id ? Number(prefRes.rows[0].active_role_id) : null;
         const defaultRoleId = roles[0]?.id ?? null;
+        const roleIdSet = new Set<number>(roles.map(r => r.id));
+        const isActiveAllowed = activeRoleIdRaw !== null && roleIdSet.has(activeRoleIdRaw);
+        const activeRoleId = isActiveAllowed ? activeRoleIdRaw : null;
+
+        if (activeRoleIdRaw !== null && !isActiveAllowed) {
+            const nextActiveRoleId = defaultRoleId;
+            await query(
+                `
+                INSERT INTO club_employee_role_preferences (club_id, user_id, active_role_id, updated_at)
+                VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (club_id, user_id)
+                DO UPDATE SET active_role_id = EXCLUDED.active_role_id, updated_at = NOW()
+                `,
+                [clubId, userId, nextActiveRoleId]
+            );
+        }
 
         return NextResponse.json({
             roles,

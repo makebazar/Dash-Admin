@@ -183,6 +183,17 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
                     {schemes.map(scheme => {
                         const formulaParts = formatFormulaSummary(scheme.formula)
+                        const base = scheme.formula?.base || {}
+                        const baseType = base.type
+                        const baseAmount = base.amount || base.day_rate
+                        let displayRate = baseAmount || 0
+                        const tiers = base.rate_tiers?.tiers
+                        if ((displayRate === 0 || displayRate === null || displayRate === undefined) && Array.isArray(tiers) && tiers.length > 0) {
+                            const sorted = [...tiers].sort((a, b) => (Number(a?.from) || 0) - (Number(b?.from) || 0))
+                            const tier = sorted[0]
+                            const r = Number(tier?.rate)
+                            if (Number.isFinite(r)) displayRate = r
+                        }
                         return (
                             <div key={scheme.id} className={`bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 flex flex-col justify-between transition-all hover:shadow-md ${view === 'archived' ? 'opacity-70' : ''}`}>
                                 <div>
@@ -210,9 +221,9 @@ export default function SalarySettingsPage({ params }: { params: Promise<{ clubI
                                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Ставка</p>
                                             <p className="text-sm font-bold flex items-center gap-1.5">
                                                 <Coins className="h-3.5 w-3.5 text-purple-400" />
-                                                {scheme.formula.base.type === 'hourly' 
-                                                    ? `${scheme.formula.base.amount || scheme.formula.base.day_rate || 0} ₽/ч`
-                                                    : `${scheme.formula.base.amount || scheme.formula.base.day_rate || 0} ₽/с`}
+                                                {baseType === 'hourly'
+                                                    ? `${displayRate || 0} ₽/ч`
+                                                    : `${displayRate || 0} ₽/с`}
                                             </p>
                                         </div>
                                         <div className="bg-muted/20 rounded-2xl p-3 border border-muted-foreground/5">

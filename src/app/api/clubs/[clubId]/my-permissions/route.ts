@@ -53,7 +53,9 @@ export async function GET(
              FROM club_employees ce
              LEFT JOIN users u ON u.id = ce.user_id
              LEFT JOIN roles r ON r.id = u.role_id
-             WHERE ce.club_id = $1 AND ce.user_id = $2`,
+             WHERE ce.club_id = $1 AND ce.user_id = $2
+               AND ce.is_active = true
+               AND ce.dismissed_at IS NULL`,
             [clubId, userId]
         );
 
@@ -64,8 +66,8 @@ export async function GET(
 
         const { role_id, role_name, club_role } = userRoleRes.rows[0];
 
-        // Owner, Admin и Manager имеют полный доступ
-        if (club_role === 'Владелец' || club_role === 'Админ' || role_name === 'Админ' || club_role === 'Управляющий' || role_name === 'Управляющий') {
+        // Owner и Управляющий имеют полный доступ
+        if (club_role === 'Владелец' || club_role === 'Управляющий' || role_name === 'Управляющий') {
             return NextResponse.json({ isFullAccess: true, user_role: club_role || role_name, ...subscriptionMeta });
         }
 

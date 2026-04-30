@@ -5,6 +5,7 @@ import { calculateSalary } from '@/lib/salary-calculator';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
 import { calculateMaintenanceQualityMetrics } from '@/lib/maintenance-kpi-quality';
 import { getClubEmployeeLeaderboardState, getLeaderboardBonusAmount } from '@/lib/employee-leaderboard';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 export async function GET(
     request: Request,
@@ -73,8 +74,7 @@ export async function GET(
 
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id=$1 AND owner_id=$2`, [clubId, userId]);
-        if (ownerCheck.rowCount === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        await requireClubFullAccess(String(clubId));
 
         await query(`
             CREATE TABLE IF NOT EXISTS club_employee_roles (
@@ -1271,6 +1271,28 @@ export async function GET(
             };
         }));
 
+        const hasAnyLeaderboardBonusConfig = summary.some((employee: any) =>
+            Array.isArray(employee?._leaderboard_bonus_configs) && employee._leaderboard_bonus_configs.length > 0
+        )
+
+        if (!hasAnyLeaderboardBonusConfig) {
+            const cleanedSummary = summary.map((employee: any) => {
+                const { _leaderboard_bonus_configs, ...cleanEmployee } = employee
+                return cleanEmployee
+            })
+
+            const filteredSummary = cleanedSummary.filter((emp: any) =>
+                emp.shifts_count > 0 ||
+                emp.total_accrued !== 0 ||
+                emp.total_paid !== 0
+            )
+
+            return NextResponse.json({
+                summary: filteredSummary,
+                leaderboard: null
+            })
+        }
+
         const leaderboardState = await getClubEmployeeLeaderboardState(clubId, year, month);
         const leaderboard = leaderboardState.leaderboard;
         const leaderboardMap = new Map(leaderboard.map(item => [item.user_id, item]));
@@ -1317,6 +1339,13 @@ export async function GET(
 
             const { _leaderboard_bonus_configs, ...cleanEmployee } = employee;
 
+            if (!board || leaderboardBonusConfigs.length === 0) {
+                return {
+                    ...cleanEmployee,
+                    leaderboard: null
+                }
+            }
+
             return {
                 ...cleanEmployee,
                 total_accrued: cleanEmployee.total_accrued + leaderboardBonusReal,
@@ -1344,7 +1373,7 @@ export async function GET(
                     leaderboard_schedule_score: board?.schedule_score || 0,
                     leaderboard_discipline_score: board?.discipline_score || 0
                 },
-                leaderboard: board ? {
+                leaderboard: {
                     rank: board.rank,
                     score: board.score,
                     total_participants: leaderboard.length,
@@ -1372,7 +1401,7 @@ export async function GET(
                         maintenance_overdue_completed_tasks: board.maintenance_overdue_completed_tasks,
                         maintenance_overdue_completed_days: board.maintenance_overdue_completed_days
                     }
-                } : null
+                }
             };
         });
 
@@ -1393,6 +1422,7 @@ export async function GET(
 
     } catch (error: any) {
         console.error('Salary Summary Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }

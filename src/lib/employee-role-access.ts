@@ -108,17 +108,10 @@ export async function getEmployeeRoleAccess(clubId: string): Promise<EmployeeRol
                 )
             )
         ),
-        preferred_role AS (
-            SELECT active_role_id as role_id
-            FROM club_employee_role_preferences
-            WHERE club_id = $2 AND user_id = $1
-            LIMIT 1
-        ),
-        assigned_role AS (
-            SELECT role_id
-            FROM club_employee_roles
-            WHERE club_id = $2 AND user_id = $1
-            ORDER BY priority ASC
+        is_owner AS (
+            SELECT 1 as ok
+            FROM clubs c
+            WHERE c.id = $2 AND c.owner_id = $1
             LIMIT 1
         ),
         owner_role AS (
@@ -131,6 +124,35 @@ export async function getEmployeeRoleAccess(clubId: string): Promise<EmployeeRol
             SELECT u.role_id as user_role_id
             FROM users u
             WHERE u.id = $1
+            LIMIT 1
+        ),
+        preferred_role AS (
+            SELECT pref.active_role_id as role_id
+            FROM club_employee_role_preferences pref
+            WHERE pref.club_id = $2
+              AND pref.user_id = $1
+              AND pref.active_role_id IS NOT NULL
+              AND (
+                EXISTS (
+                    SELECT 1
+                    FROM club_employee_roles cer
+                    WHERE cer.club_id = $2
+                      AND cer.user_id = $1
+                      AND cer.role_id = pref.active_role_id
+                )
+                OR pref.active_role_id = (SELECT user_role_id FROM base_user)
+                OR (
+                    EXISTS (SELECT 1 FROM is_owner)
+                    AND pref.active_role_id = (SELECT role_id FROM owner_role)
+                )
+              )
+            LIMIT 1
+        ),
+        assigned_role AS (
+            SELECT role_id
+            FROM club_employee_roles
+            WHERE club_id = $2 AND user_id = $1
+            ORDER BY priority ASC
             LIMIT 1
         ),
         effective_role AS (

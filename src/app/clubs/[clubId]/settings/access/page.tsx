@@ -22,6 +22,7 @@ export default function AccessSettingsPage({ params }: { params: Promise<{ clubI
     const [roles, setRoles] = useState<Role[]>([])
     const [availablePermissions, setAvailablePermissions] = useState<Permission[]>([])
     const [rolePermissions, setRolePermissions] = useState<Record<number, Record<string, boolean>>>({})
+    const [canEdit, setCanEdit] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
     const [activeRole, setActiveRole] = useState<number | null>(null)
 
@@ -40,6 +41,7 @@ export default function AccessSettingsPage({ params }: { params: Promise<{ clubI
                 setRoles(data.roles)
                 setAvailablePermissions(data.availablePermissions)
                 setRolePermissions(data.rolePermissions || {})
+                setCanEdit(!!data.canEdit)
                 if (data.roles.length > 0) {
                     setActiveRole(data.roles[0].id)
                 }
@@ -52,6 +54,7 @@ export default function AccessSettingsPage({ params }: { params: Promise<{ clubI
     }
 
     const togglePermission = async (roleId: number, permissionKey: string, isAllowed: boolean) => {
+        if (!canEdit) return
         try {
             // Optimistic update
             setRolePermissions(prev => ({
@@ -93,7 +96,7 @@ export default function AccessSettingsPage({ params }: { params: Promise<{ clubI
     }
 
     const selectedRoleName = roles.find(r => r.id === activeRole)?.name || ''
-    const isOwnerOrAdmin = selectedRoleName === 'Владелец' || selectedRoleName === 'Админ'
+    const isRoleLocked = selectedRoleName === 'Владелец'
 
     return (
         <PageShell maxWidth="4xl">
@@ -138,7 +141,9 @@ export default function AccessSettingsPage({ params }: { params: Promise<{ clubI
                             <h4 className="text-sm font-medium">Подсказка</h4>
                         </div>
                         <p className="text-xs text-slate-500 leading-relaxed">
-                            Права «Владельца» нельзя ограничить. Для остальных ролей изменения вступают в силу мгновенно.
+                            {!canEdit
+                                ? 'У вас доступ только для просмотра. Изменять права может только владелец или админ.'
+                                : 'Права «Владельца» нельзя ограничить. Для остальных ролей изменения вступают в силу мгновенно.'}
                         </p>
                     </div>
                 </div>
@@ -159,7 +164,7 @@ export default function AccessSettingsPage({ params }: { params: Promise<{ clubI
                                             .filter(p => p.category === category)
                                             .map(permission => {
                                                 const isAllowed = rolePermissions[activeRole]?.[permission.key] ?? false
-                                                const isLocked = selectedRoleName === 'Владелец'
+                                                const isLocked = isRoleLocked || !canEdit
 
                                                 return (
                                                     <div key={permission.key} className={`flex items-center justify-between p-5 rounded-3xl border transition-all duration-200 ${isAllowed ? 'bg-white border-slate-100 shadow-sm' : 'bg-slate-50/50 border-slate-100/50 opacity-70'}`}>
@@ -172,7 +177,7 @@ export default function AccessSettingsPage({ params }: { params: Promise<{ clubI
                                                                 {isAllowed ? <ShieldCheck className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
                                                             </div>
                                                             <Switch
-                                                                checked={isLocked || isAllowed}
+                                                                checked={isRoleLocked ? true : isAllowed}
                                                                 disabled={isLocked}
                                                                 onCheckedChange={(checked) => togglePermission(activeRole, permission.key, checked)}
                                                                 className="data-[state=checked]:bg-slate-900"

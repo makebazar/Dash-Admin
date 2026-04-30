@@ -104,30 +104,48 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid role_id' }, { status: 400 });
         }
 
+        const ownerCheck = await query(
+            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2 LIMIT 1`,
+            [club_id, userId]
+        );
+        const isOwner = (ownerCheck.rowCount || 0) > 0;
+
+        let ownerRoleId: number | null = null;
+        if (isOwner) {
+            await query(`INSERT INTO roles (name, default_kpi_settings) VALUES ('Владелец', '{}'::jsonb) ON CONFLICT (name) DO NOTHING`);
+            const ownerRoleRes = await query(`SELECT id FROM roles WHERE name = 'Владелец' LIMIT 1`);
+            ownerRoleId = ownerRoleRes.rows[0]?.id ? Number(ownerRoleRes.rows[0].id) : null;
+        }
+
+        let fallbackRoleId: number | null = null;
+        if (assignedRoleIds.length === 0) {
+            const fallbackRoleRes = await query(`SELECT role_id FROM users WHERE id = $1`, [userId]);
+            fallbackRoleId = fallbackRoleRes.rows[0]?.role_id ? Number(fallbackRoleRes.rows[0].role_id) : null;
+        }
+
         let effectiveRoleId: number | null = null;
         if (requestedRoleId !== null) effectiveRoleId = requestedRoleId;
         else if (preferredRoleId !== null) effectiveRoleId = preferredRoleId;
         else if (assignedRoleIds.length > 0) effectiveRoleId = assignedRoleIds[0];
-        else {
-            const fallbackRoleRes = await query(`SELECT role_id FROM users WHERE id = $1`, [userId]);
-            const fallback = fallbackRoleRes.rows[0]?.role_id ? Number(fallbackRoleRes.rows[0].role_id) : null;
-            effectiveRoleId = fallback;
+        else effectiveRoleId = fallbackRoleId;
+
+        if (effectiveRoleId === null && isOwner && ownerRoleId) {
+            effectiveRoleId = ownerRoleId;
         }
 
-        if (effectiveRoleId === null) {
-            try {
-                const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`, [club_id, userId])
-                if ((ownerCheck.rowCount || 0) > 0) {
-                    await query(`INSERT INTO roles (name, default_kpi_settings) VALUES ('Владелец', '{}'::jsonb) ON CONFLICT (name) DO NOTHING`)
-                    const ownerRoleRes = await query(`SELECT id FROM roles WHERE name = 'Владелец' LIMIT 1`)
-                    const ownerRoleId = ownerRoleRes.rows[0]?.id ? Number(ownerRoleRes.rows[0].id) : null
-                    if (ownerRoleId) effectiveRoleId = ownerRoleId
+        if (effectiveRoleId !== null) {
+            if (assignedRoleIds.length > 0) {
+                if (!assignedRoleIds.includes(effectiveRoleId)) {
+                    return NextResponse.json({ error: 'Role not allowed' }, { status: 403 });
                 }
-            } catch {}
-        }
-
-        if (effectiveRoleId !== null && assignedRoleIds.length > 0 && !assignedRoleIds.includes(effectiveRoleId)) {
-            return NextResponse.json({ error: 'Role not allowed' }, { status: 403 });
+            } else {
+                const allowed = new Set<number>();
+                if (fallbackRoleId !== null) allowed.add(fallbackRoleId);
+                if (isOwner && ownerRoleId !== null) allowed.add(ownerRoleId);
+                if (!allowed.has(effectiveRoleId)) {
+                    return NextResponse.json({ error: 'Role not allowed' }, { status: 403 });
+                }
+            }
         }
 
         let effectiveRoleName: string | null = null;

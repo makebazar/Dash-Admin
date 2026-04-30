@@ -289,7 +289,7 @@ async function getDashboardAccess(clubId: string, userId: string): Promise<Dashb
     )
     if ((userRoleRes.rowCount || 0) === 0) redirect("/dashboard")
     const { role_id, role_name, club_role } = userRoleRes.rows[0]
-    if (club_role === "Владелец" || club_role === "Админ" || role_name === "Админ" || club_role === "Управляющий" || role_name === "Управляющий") {
+    if (club_role === "Владелец" || club_role === "Управляющий" || role_name === "Управляющий") {
         return { clubName: club.name, isFullAccess: true, permissions: {}, roleName: club_role || role_name || null }
     }
     if (!role_id) return { clubName: club.name, isFullAccess: false, permissions: {}, roleName: club_role || role_name || null }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 // Generate random 6-char binding code
 function generateBindingCode(): string {
@@ -46,9 +47,10 @@ export async function GET(
         );
 
         return NextResponse.json(result.rows);
-    } catch (error) {
+    } catch (error: any) {
         console.error('Get Workstations Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }
 
@@ -66,15 +68,7 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify ownership (only owner can add PCs)
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(String(clubId));
 
         // Action: generate new binding code
         if (action === 'generate_binding_code') {
@@ -130,8 +124,9 @@ export async function POST(
         );
 
         return NextResponse.json(result.rows[0]);
-    } catch (error) {
+    } catch (error: any) {
         console.error('Add Workstation Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { getClubApiAccess, requireClubOwner } from '@/lib/club-api-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,10 @@ export async function GET(
 
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        const access = await getClubApiAccess(String(clubId));
+        if (!access.isFullAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        const canEdit = access.isOwner;
+
         // Get all roles
         const rolesRes = await query(`SELECT id, name FROM roles ORDER BY id ASC`);
         
@@ -49,10 +54,12 @@ export async function GET(
         return NextResponse.json({
             roles: rolesRes.rows,
             availablePermissions: AVAILABLE_PERMISSIONS,
-            rolePermissions
+            rolePermissions,
+            canEdit
         });
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }
 
@@ -67,6 +74,8 @@ export async function POST(
 
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+        await requireClubOwner(String(clubId));
+
         // Upsert permission
         await query(
             `INSERT INTO role_permissions (role_id, club_id, permission_key, is_allowed)
@@ -78,6 +87,7 @@ export async function POST(
 
         return NextResponse.json({ success: true });
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }

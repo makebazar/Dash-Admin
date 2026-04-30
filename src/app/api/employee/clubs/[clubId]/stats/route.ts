@@ -155,8 +155,6 @@ export async function GET(
         const scheme = rawScheme
             ? { ...rawScheme, ...formula, period_bonuses: period_bonuses_config }
             : { amount: 0, standard_monthly_shifts: 15, period_bonuses: [] as any[] };
-        
-        const hourlyRate = parseFloat(scheme?.amount || '0');
         const standard_monthly_shifts = scheme?.standard_monthly_shifts || 15;
         const leaderboardState = await getClubEmployeeLeaderboardState(clubId, year, month);
         const leaderboard = leaderboardState.leaderboard;
@@ -314,6 +312,8 @@ export async function GET(
             if (!isActive) completed_shifts_count++;
 
             totalHours += hours;
+            monthlyMetrics.total_hours = (monthlyMetrics.total_hours || 0) + hours;
+            if (isActive) activeShiftMetrics.total_hours = (activeShiftMetrics.total_hours || 0) + hours;
             
             // USE CALCULATED SALARY FROM SHIFT (WHICH USES THE TEMPLATE)
             totalCalculatedSalary += parseFloat(s.calculated_salary || 0);
@@ -346,6 +346,10 @@ export async function GET(
             let shiftIncome = 0;
             const cash = parseFloat(s.cash_revenue || 0);
             const card = parseFloat(s.card_revenue || 0);
+            monthlyMetrics.revenue_cash = (monthlyMetrics.revenue_cash || 0) + cash;
+            monthlyMetrics.revenue_card = (monthlyMetrics.revenue_card || 0) + card;
+            if (isActive) activeShiftMetrics.revenue_cash = (activeShiftMetrics.revenue_cash || 0) + cash;
+            if (isActive) activeShiftMetrics.revenue_card = (activeShiftMetrics.revenue_card || 0) + card;
 
             if (metricCategories['cash_income'] === 'INCOME' || !metricCategories['cash_income']) shiftIncome += cash;
             if (metricCategories['card_income'] === 'INCOME' || !metricCategories['card_income']) shiftIncome += card;
@@ -364,6 +368,55 @@ export async function GET(
             monthlyMetrics.total_revenue += shiftIncome;
             if (isActive) activeShiftMetrics.total_revenue += shiftIncome;
         });
+
+        const parseNumber = (value: any, fallback = 0) => {
+            const n = Number(value);
+            return Number.isFinite(n) ? n : fallback;
+        };
+
+        const normalizeRateMetricKey = (metricKeyRaw: any) => {
+            const metricKey = String(metricKeyRaw || 'total_revenue');
+            if (metricKey === 'cash_income') return 'revenue_cash';
+            if (metricKey === 'card_income') return 'revenue_card';
+            return metricKey;
+        };
+
+        const resolveTierRate = (rateTiers: any, metricValue: number) => {
+            const tiers = rateTiers?.tiers;
+            if (!Array.isArray(tiers) || tiers.length === 0) return null;
+            const sorted = [...tiers].sort((a, b) => (Number(b?.from) || 0) - (Number(a?.from) || 0));
+            const tier = sorted.find(t => metricValue >= (Number(t?.from) || 0));
+            if (!tier || tier.rate === undefined || tier.rate === null) return null;
+            const parsedRate = Number(tier.rate);
+            return Number.isFinite(parsedRate) ? parsedRate : null;
+        };
+
+        const getMetricValue = (metricKeyRaw: any, period: 'SHIFT' | 'MONTH') => {
+            const metricKey = normalizeRateMetricKey(metricKeyRaw);
+            const metrics = period === 'SHIFT' ? activeShiftMetrics : monthlyMetrics;
+            return parseNumber(metrics[metricKey] ?? metrics[String(metricKeyRaw)] ?? 0);
+        };
+
+        const baseType = scheme?.base?.type || scheme?.type || 'hourly';
+        const fullShiftHours = parseNumber(scheme?.base?.full_shift_hours ?? scheme?.full_shift_hours ?? 12, 12);
+        const baseAmount = parseNumber(scheme?.base?.amount ?? scheme?.amount ?? 0, 0);
+        const rateTiers = scheme?.base?.rate_tiers;
+        let effectiveBaseAmount = baseAmount;
+
+        if (rateTiers && Array.isArray(rateTiers.tiers) && rateTiers.tiers.length > 0) {
+            const period = (String(rateTiers.period || 'SHIFT').toUpperCase() === 'MONTH' ? 'MONTH' : 'SHIFT') as 'SHIFT' | 'MONTH';
+            const metricValue = getMetricValue(rateTiers.metric_key, period);
+            const tierRate = resolveTierRate(rateTiers, metricValue);
+            if (tierRate !== null) effectiveBaseAmount = tierRate;
+        }
+
+        let hourlyRate = 0;
+        if (baseType === 'hourly') {
+            hourlyRate = effectiveBaseAmount;
+        } else if (baseType === 'fixed' || baseType === 'per_shift') {
+            hourlyRate = fullShiftHours > 0 ? effectiveBaseAmount / fullShiftHours : 0;
+        }
+        hourlyRate = Number.isFinite(hourlyRate) ? hourlyRate : 0;
 
         // 4. Calculate All Bonuses Separately
         const revenueKpiBreakdown: any[] = [];

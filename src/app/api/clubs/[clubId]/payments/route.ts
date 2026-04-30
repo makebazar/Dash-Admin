@@ -3,6 +3,7 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { freezeClubEmployeeLeaderboard } from '@/lib/employee-leaderboard';
 import { calculateSalary } from '@/lib/salary-calculator';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ clubId: string }> }) {
     try {
@@ -11,8 +12,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id=$1 AND owner_id=$2`, [clubId, userId]);
-        if (ownerCheck.rowCount === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        await requireClubFullAccess(String(clubId));
 
         const body = await request.json();
         const { employee_id, amount, payment_method = 'CASH', month, year, notes, payment_type = 'salary' } = body;
@@ -317,9 +317,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 : 'Payment recorded and salary frozen'
         });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error recording payment:', error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal server error' }, { status });
     }
 }
 
@@ -334,8 +335,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const ownerCheck = await query(`SELECT 1 FROM clubs WHERE id=$1 AND owner_id=$2`, [clubId, userId]);
-        if (ownerCheck.rowCount === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        await requireClubFullAccess(String(clubId));
 
         const paymentsRes = await query(
             `SELECT 
@@ -351,8 +351,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
         return NextResponse.json({ payments: paymentsRes.rows });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error fetching payments:', error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal server error' }, { status });
     }
 }

@@ -3,6 +3,7 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
 import { hasColumn } from '@/lib/db-compat';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 import {
     DEFAULT_EQUIPMENT_STATUS,
     normalizeEquipmentRecord,
@@ -174,9 +175,10 @@ export async function GET(
             offset,
             duration_ms: duration
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Get Equipment Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }
 
@@ -300,9 +302,10 @@ export async function POST(
         }
 
         return NextResponse.json(normalizeEquipmentRecord(result.rows[0]), { status: 201 });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Create Equipment Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }
 
@@ -318,14 +321,7 @@ export async function DELETE(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(String(clubId));
 
         let body: any = null
         try {
@@ -361,8 +357,9 @@ export async function DELETE(
             deleted_count: result.rowCount || 0,
             deleted_ids: result.rows.map((row: any) => row.id),
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Bulk Delete Equipment Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }

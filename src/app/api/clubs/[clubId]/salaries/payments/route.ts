@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 export async function GET(
     request: Request,
@@ -14,13 +15,7 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const ownerCheck = await query(
-            `SELECT id FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-        if (ownerCheck.rowCount === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(String(clubId));
 
         const result = await query(
             `SELECT
@@ -41,7 +36,8 @@ export async function GET(
         return NextResponse.json({ payments: result.rows });
     } catch (error) {
         console.error('Payments API Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof (error as any)?.status === 'number' ? (error as any).status : 500
+        return NextResponse.json({ error: (error as any)?.message || 'Internal Server Error' }, { status });
     }
 }
 
@@ -55,8 +51,7 @@ export async function POST(
 
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const ownerCheck = await query(`SELECT id FROM clubs WHERE id=$1 AND owner_id=$2`, [clubId, userId]);
-        if (ownerCheck.rowCount === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        await requireClubFullAccess(String(clubId));
 
         const body = await request.json();
         const { employee_id, amount, payment_type, comment } = body;
@@ -77,6 +72,7 @@ export async function POST(
 
     } catch (error) {
         console.error('Create Payment Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof (error as any)?.status === 'number' ? (error as any).status : 500
+        return NextResponse.json({ error: (error as any)?.message || 'Internal Server Error' }, { status });
     }
 }

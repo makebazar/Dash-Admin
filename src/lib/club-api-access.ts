@@ -13,9 +13,7 @@ type ClubApiAccess = {
 
 function hasFullAccessRole(clubRole: string | null, roleName: string | null) {
     return clubRole === "Владелец" ||
-        clubRole === "Админ" ||
         clubRole === "Управляющий" ||
-        roleName === "Админ" ||
         roleName === "Управляющий"
 }
 
@@ -78,6 +76,16 @@ export async function requireClubApiAccess(clubId: string) {
 export async function requireClubFullAccess(clubId: string) {
     const access = await getClubApiAccess(clubId)
     if (!access.isFullAccess) {
+        const error = new Error("Forbidden") as AccessError
+        error.status = 403
+        throw error
+    }
+    return access
+}
+
+export async function requireClubOwner(clubId: string) {
+    const access = await getClubApiAccess(clubId)
+    if (!access.isOwner) {
         const error = new Error("Forbidden") as AccessError
         error.status = 403
         throw error

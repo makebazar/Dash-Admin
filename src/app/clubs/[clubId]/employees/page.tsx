@@ -68,7 +68,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
     // Form state for edit
     const [editFullName, setEditFullName] = useState('')
     const [editPhoneNumber, setEditPhoneNumber] = useState('')
-    const [editRoleId, setEditRoleId] = useState<number | null>(null)
     const [editPassword, setEditPassword] = useState('')
     const [editShowInSchedule, setEditShowInSchedule] = useState(true)
     const [editShiftRoleIds, setEditShiftRoleIds] = useState<number[]>([])
@@ -219,7 +218,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
         setSelectedEmployee(employee)
         setEditFullName(employee.full_name)
         setEditPhoneNumber(employee.phone_number)
-        setEditRoleId(employee.role_id)
         setEditPassword('')
         setEditShowInSchedule(employee.show_in_schedule)
         setEditShiftRoleIds([])
@@ -253,10 +251,11 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
 
         setIsSubmitting(true)
         try {
+            const primaryRoleId = editShiftRoleIds.length > 0 ? editShiftRoleIds[0] : null
             const body: any = {
                 full_name: editFullName,
                 phone_number: editPhoneNumber,
-                role_id: editRoleId,
+                role_id: primaryRoleId,
                 show_in_schedule: editShowInSchedule
             }
 
@@ -786,25 +785,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label htmlFor="editRole" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Должность</Label>
-                                <Select 
-                                    value={editRoleId?.toString() || ""} 
-                                    onValueChange={(v) => setEditRoleId(parseInt(v))}
-                                >
-                                    <SelectTrigger className="bg-slate-50/50 border-slate-200 focus:border-slate-400 h-10 rounded-xl">
-                                        <SelectValue placeholder="Выберите должность" />
-                                    </SelectTrigger>
-                                    <SelectContent className="rounded-xl">
-                                        {roles.map((role) => (
-                                            <SelectItem key={role.id} value={role.id.toString()}>
-                                                {role.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-1.5">
                                 <Label htmlFor="editPassword" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Новый пароль</Label>
                                 <Input
                                     id="editPassword"
@@ -875,6 +855,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ clubId: st
                                                             variant="ghost"
                                                             size="icon"
                                                             className="h-8 w-8 rounded-lg text-rose-600 hover:text-rose-700"
+                                                            disabled={editShiftRoleIds.length === 1}
                                                             onClick={() => setEditShiftRoleIds(prev => prev.filter((_, i) => i !== idx))}
                                                         >
                                                             <X className="h-4 w-4" />

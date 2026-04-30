@@ -347,9 +347,7 @@ async function getInventoryAccessScope(client: any, clubId: string, userId: stri
     const isFullAccess =
         String(clubRes.rows[0]?.owner_id) === String(userId) ||
         clubRole === "Владелец" ||
-        clubRole === "Админ" ||
         clubRole === "Управляющий" ||
-        roleName === "Админ" ||
         roleName === "Управляющий"
 
     let canManageInventory = isFullAccess
