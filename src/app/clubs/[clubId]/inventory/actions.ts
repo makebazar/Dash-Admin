@@ -608,9 +608,6 @@ export async function updateWarehouse(id: number, clubId: string, userId: string
 
 async function getShiftAccountabilityWarehousesInternal(client: any, clubId: string, userId: string) {
     const scope = await getInventoryAccessScope(client, clubId, userId)
-    if (!scope.canManageInventory && scope.allowedWarehouseIds.length === 0) {
-        return []
-    }
 
     const inventorySettings = await getClubInventorySettingsInternal(client, clubId)
     if (inventorySettings.shift_accountability_mode !== 'WAREHOUSE') {
@@ -621,18 +618,6 @@ async function getShiftAccountabilityWarehousesInternal(client: any, clubId: str
         ? inventorySettings.handover_warehouse_ids.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0)
         : []
     if (configuredWarehouseIds.length > 0) {
-        if (!scope.canManageInventory) {
-            const allowed = configuredWarehouseIds.filter((id) => scope.allowedWarehouseIds.includes(Number(id)))
-            if (allowed.length === 0) return []
-        }
-
-        const params: any[] = [clubId, configuredWarehouseIds]
-        let warehouseFilter = ""
-        if (!scope.canManageInventory) {
-            params.push(scope.allowedWarehouseIds)
-            warehouseFilter = " AND w.id = ANY($3::int[])"
-        }
-
         const configuredRes = await client.query(
             `
             SELECT w.*
@@ -640,10 +625,9 @@ async function getShiftAccountabilityWarehousesInternal(client: any, clubId: str
             WHERE w.club_id = $1
               AND w.is_active = true
               AND w.id = ANY($2::int[])
-              ${warehouseFilter}
             ORDER BY w.name
             `,
-            params
+            [clubId, configuredWarehouseIds]
         )
 
         return configuredRes.rows.map((row: any) => ({
@@ -654,11 +638,7 @@ async function getShiftAccountabilityWarehousesInternal(client: any, clubId: str
     }
 
     const params: any[] = [clubId]
-    let warehouseFilter = ""
-    if (!scope.canManageInventory) {
-        params.push(scope.allowedWarehouseIds)
-        warehouseFilter = " AND w.id = ANY($2::int[])"
-    }
+    const warehouseFilter = ""
 
     const res = await client.query(
         `
@@ -763,18 +743,6 @@ export async function getShiftAccountabilitySetupStatus(clubId: string): Promise
                 if (outside.length > 0) {
                     issues.push("Склады передачи должны входить в выбранные склады кассы.")
                 }
-            }
-
-            const enabledIds = new Set(warehouses.map((warehouse) => Number(warehouse.id)))
-            const allowedWarehouseIds = await resolveEffectiveEmployeeWarehouseIds(client, clubId, settings)
-            const inaccessible = warehouses.filter((warehouse) => !allowedWarehouseIds.includes(Number(warehouse.id)))
-            if (inaccessible.length > 0) {
-                issues.push("Склады передачи должны входить в доступные сотрудникам склады.")
-            }
-
-            // Extra safety: configuration should not be empty after access filtering.
-            if (enabledIds.size === 0) {
-                issues.push("Для текущего профиля не видно ни одной настроенной зоны ответственности.")
             }
         }
 
