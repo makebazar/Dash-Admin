@@ -40,15 +40,6 @@ async function checkReadAccess(clubId: string, userId: string) {
     );
 }
 
-async function checkWriteAccess(clubId: string, userId: string) {
-    return query(
-        `SELECT role FROM club_employees WHERE club_id = $1 AND user_id = $2
-         UNION
-         SELECT 'OWNER' as role FROM clubs WHERE id = $1 AND owner_id = $2`,
-        [clubId, userId]
-    );
-}
-
 async function generateUniqueCode(clubId: string, name: string) {
     const baseCode = buildBaseCode(clubId, name);
     const existing = await query(
@@ -125,12 +116,6 @@ export async function POST(
         const guard = await ensureOwnerSubscriptionActive(clubId, userId);
         if (!guard.ok) return guard.response;
 
-        const accessCheck = await checkWriteAccess(clubId, userId);
-        const role = accessCheck.rows[0]?.role;
-        if (!role || !['OWNER', 'ADMIN'].includes(role)) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-
         const body = await request.json();
         const nameRu = String(body.name_ru || '').trim();
         const icon = String(body.icon || 'wrench').trim() || 'wrench';
@@ -171,8 +156,9 @@ export async function POST(
         );
 
         return NextResponse.json(result.rows[0], { status: 201 });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Create Club Equipment Type Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }

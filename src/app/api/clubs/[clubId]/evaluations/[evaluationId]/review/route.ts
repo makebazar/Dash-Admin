@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
+import { requireClubFullAccess } from '@/lib/club-api-access';
 
 export async function POST(
     request: Request,
@@ -15,17 +16,7 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Check ownership/manager role
-        const accessCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-             UNION
-             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2 AND role IN ('admin', 'manager')`,
-            [clubId, userId]
-        );
-
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        await requireClubFullAccess(String(clubId));
 
         await query('BEGIN');
 
@@ -74,6 +65,7 @@ export async function POST(
     } catch (error: any) {
         await query('ROLLBACK');
         console.error('Review Evaluation Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }

@@ -17,15 +17,6 @@ async function ensureClubTypesSupport() {
     return null;
 }
 
-async function checkWriteAccess(clubId: string, userId: string) {
-    return query(
-        `SELECT role FROM club_employees WHERE club_id = $1 AND user_id = $2
-         UNION
-         SELECT 'OWNER' as role FROM clubs WHERE id = $1 AND owner_id = $2`,
-        [clubId, userId]
-    );
-}
-
 async function ensureEditableType(clubId: string, typeCode: string) {
     const typeResult = await query(
         `SELECT code, club_id, is_system, is_active
@@ -65,12 +56,6 @@ export async function PATCH(
 
         const guard = await ensureOwnerSubscriptionActive(clubId, userId);
         if (!guard.ok) return guard.response;
-
-        const accessCheck = await checkWriteAccess(clubId, userId);
-        const role = accessCheck.rows[0]?.role;
-        if (!role || !['OWNER', 'ADMIN'].includes(role)) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
 
         const editable = await ensureEditableType(clubId, typeCode);
         if (editable.error) return editable.error;
@@ -134,9 +119,10 @@ export async function PATCH(
         );
 
         return NextResponse.json(result.rows[0]);
-    } catch (error) {
+    } catch (error: any) {
         console.error('Update Club Equipment Type Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }
 
@@ -158,12 +144,6 @@ export async function DELETE(
 
         const guard = await ensureOwnerSubscriptionActive(clubId, userId);
         if (!guard.ok) return guard.response;
-
-        const accessCheck = await checkWriteAccess(clubId, userId);
-        const role = accessCheck.rows[0]?.role;
-        if (!role || !['OWNER', 'ADMIN'].includes(role)) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
 
         const editable = await ensureEditableType(clubId, typeCode);
         if (editable.error) return editable.error;
@@ -188,8 +168,9 @@ export async function DELETE(
         );
 
         return NextResponse.json({ ok: true });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Delete Club Equipment Type Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        const status = typeof error?.status === 'number' ? error.status : 500
+        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
     }
 }
