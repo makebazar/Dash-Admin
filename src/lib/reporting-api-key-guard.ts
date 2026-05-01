@@ -15,7 +15,7 @@ export function requireReportingApiKey() {
     }
 
     const apiKey = authHeader.substring(7); // Extract the key part
-    const serverApiKey = process.env.REPORTS_API_KEY;
+    const serverApiKey = process.env.DASHADMIN_REPORTING_API_KEY;
 
     // Check if the server-side key is configured
     if (!serverApiKey) {
