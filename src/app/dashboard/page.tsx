@@ -289,6 +289,88 @@ export default function DashboardPage() {
         }
     }
 
+    const handleSaveName = async () => {
+        setIsSavingName(true)
+        setNameSuccess(false)
+        try {
+            const res = await fetch('/api/profile', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ full_name: fullName }),
+            })
+            if (!res.ok) throw new Error('Не удалось сохранить имя')
+            setNameSuccess(true)
+            setTimeout(() => setNameSuccess(false), 3000)
+        } catch (error) {
+            console.error(error)
+        } finally {
+            setIsSavingName(false)
+        }
+    }
+
+    const handleSavePassword = async () => {
+        if (password !== confirmPassword) {
+            setPasswordError("Пароли не совпадают")
+            return
+        }
+        if (password.length < 6) {
+            setPasswordError("Пароль должен быть не менее 6 символов")
+            return
+        }
+        setPasswordError("")
+        setIsSavingPassword(true)
+        setPasswordSuccess(false)
+        try {
+            const res = await fetch('/api/profile', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password }),
+            })
+            if (!res.ok) throw new Error('Не удалось сохранить пароль')
+            setPasswordSuccess(true)
+            setPassword("")
+            setConfirmPassword("")
+            setTimeout(() => setPasswordSuccess(false), 3000)
+        } catch (error) {
+            console.error(error)
+        } finally {
+            setIsSavingPassword(false)
+        }
+    }
+
+    useEffect(() => {
+        if (!isProfileModalOpen) {
+            // Reset bot link state when modal is closed
+            setBotLinkCode(null)
+            setBotLinkCodeError(null)
+            setBotLinkCodeExpires(null)
+        }
+    }, [isProfileModalOpen])
+
+    useEffect(() => {
+        if (botLinkCodeExpires) {
+            const interval = setInterval(() => {
+                if (Date.now() >= botLinkCodeExpires) {
+                    setBotLinkCode(null)
+                    setBotLinkCodeError("Код истек. Сгенерируйте новый.")
+                    setBotLinkCodeExpires(null)
+                    clearInterval(interval)
+                }
+                // Force re-render to update countdown
+                setBotLinkCodeExpires(current => current ? current - 1000 : null)
+            }, 1000)
+            return () => clearInterval(interval)
+        }
+    }, [botLinkCodeExpires])
+
+    const getCountdown = () => {
+        if (!botLinkCodeExpires) return '00:00'
+        const remaining = Math.max(0, botLinkCodeExpires - Date.now())
+        const minutes = Math.floor(remaining / 60000)
+        const seconds = Math.floor((remaining % 60000) / 1000)
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    }
+
     return (
         <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
             {/* Minimal Header */}
@@ -624,6 +706,92 @@ export default function DashboardPage() {
                             Отмена
                         </Button>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isProfileModalOpen} onOpenChange={setIsProfileModalOpen}>
+                <DialogContent className="max-w-3xl p-8 border-slate-200 rounded-2xl">
+                    <DialogHeader className="mb-4">
+                        <DialogTitle className="text-2xl font-bold tracking-tight">Профиль и настройки</DialogTitle>
+                        <DialogDescription className="text-base text-slate-500">
+                            Управление вашими личными данными и интеграциями.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Tabs defaultValue="profile" className="w-full">
+                        <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="profile">Личные данные</TabsTrigger>
+                            <TabsTrigger value="security">Безопасность</TabsTrigger>
+                            <TabsTrigger value="integrations">Интеграции</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="profile" className="pt-6">
+                            <Card className="border-none shadow-none">
+                                <CardHeader className="p-0 mb-6">
+                                    <CardTitle>Личные данные</CardTitle>
+                                </CardHeader>
+                                <CardContent className="p-0 space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="fullName">Полное имя</Label>
+                                        <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} className="h-11"/>
+                                    </div>
+                                    <Button onClick={handleSaveName} disabled={isSavingName} className="h-11">
+                                        {isSavingName ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        {nameSuccess ? "Сохранено!" : "Сохранить имя"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                        <TabsContent value="security" className="pt-6">
+                             <Card className="border-none shadow-none">
+                                <CardHeader className="p-0 mb-6">
+                                    <CardTitle>Смена пароля</CardTitle>
+                                </CardHeader>
+                                <CardContent className="p-0 space-y-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="password">Новый пароль</Label>
+                                        <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-11" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="confirmPassword">Подтвердите пароль</Label>
+                                        <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="h-11"/>
+                                    </div>
+                                    {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
+                                    <Button onClick={handleSavePassword} disabled={isSavingPassword} className="h-11">
+                                        {isSavingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                        {passwordSuccess ? "Пароль изменен!" : "Сохранить пароль"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                        <TabsContent value="integrations" className="pt-6">
+                            <Card className="border-none shadow-none">
+                                <CardHeader className="p-0 mb-6">
+                                    <CardTitle>Подключение AI-ассистента</CardTitle>
+                                    <CardDescription>
+                                        Привяжите ваш аккаунт к боту в мессенджере, чтобы получать отчеты и аналитику прямо в чате.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="p-0 space-y-4">
+                                    {!botLinkCode && (
+                                        <Button onClick={handleGenerateBotCode} disabled={isGeneratingCode} className="h-11">
+                                            {isGeneratingCode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4"/>}
+                                            Получить код привязки
+                                        </Button>
+                                    )}
+
+                                    {isGeneratingCode && <p>Генерируем код...</p>}
+                                    {botLinkCodeError && <p className="text-sm text-red-500">{botLinkCodeError}</p>}
+
+                                    {botLinkCode && (
+                                        <div className="flex flex-col items-center justify-center p-6 bg-slate-100 rounded-lg">
+                                            <p className="text-sm text-slate-600">Отправьте этот код боту в мессенджере:</p>
+                                            <p className="text-4xl font-bold tracking-widest my-4">{botLinkCode}</p>
+                                            <p className="text-xs text-slate-500">Код истекает через: {getCountdown()}</p>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+                    </Tabs>
                 </DialogContent>
             </Dialog>
         </div>

@@ -1,4 +1,4 @@
-CREATE TABLE bot_user_links (
+CREATE TABLE IF NOT EXISTS bot_user_links (
     id SERIAL PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     messenger_type VARCHAR(50) NOT NULL, -- e.g., 'MAX', 'TELEGRAM'
@@ -13,7 +13,7 @@ CREATE TABLE bot_user_links (
     UNIQUE(messenger_type, messenger_user_id)
 );
 
--- Create a trigger to automatically update the 'updated_at' timestamp
+-- Create or replace the function to avoid errors on re-run
 CREATE OR REPLACE FUNCTION set_updated_at_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -22,7 +22,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_set_updated_at
-BEFORE UPDATE ON bot_user_links
-FOR EACH ROW
-EXECUTE FUNCTION set_updated_at_timestamp();
+-- Drop the trigger if it exists, then create it to ensure it's up-to-date
+DO $$
+BEGIN
+   IF NOT EXISTS (
+       SELECT 1 FROM pg_trigger
+       WHERE tgname = 'trigger_set_updated_at' AND tgrelid = 'bot_user_links'::regclass
+   ) THEN
+       CREATE TRIGGER trigger_set_updated_at
+       BEFORE UPDATE ON bot_user_links
+       FOR EACH ROW
+       EXECUTE FUNCTION set_updated_at_timestamp();
+   END IF;
+END;
+$$;
