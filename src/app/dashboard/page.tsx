@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Building2, Plus, Loader2, Trash2, AlertTriangle, LogOut, MoreVertical, Briefcase, Zap, ShieldAlert, ArrowRight, Check } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Building2, Plus, Loader2, Trash2, AlertTriangle, LogOut, MoreVertical, Briefcase, Zap, ShieldAlert, User, Bot } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 
 interface Club {
@@ -79,6 +80,23 @@ export default function DashboardPage() {
     const [selectedPlan, setSelectedPlan] = useState("")
     const [isPlansLoading, setIsPlansLoading] = useState(true)
     const [isChangingPlan, setIsChangingPlan] = useState(false)
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+
+    // Bot linking state
+    const [isGeneratingCode, setIsGeneratingCode] = useState(false)
+    const [botLinkCode, setBotLinkCode] = useState<string | null>(null)
+    const [botLinkCodeError, setBotLinkCodeError] = useState<string | null>(null)
+    const [botLinkCodeExpires, setBotLinkCodeExpires] = useState<number | null>(null)
+
+    // Profile settings states
+    const [fullName, setFullName] = useState("")
+    const [password, setPassword] = useState("")
+    const [confirmPassword, setConfirmPassword] = useState("")
+    const [isSavingName, setIsSavingName] = useState(false)
+    const [isSavingPassword, setIsSavingPassword] = useState(false)
+    const [nameSuccess, setNameSuccess] = useState(false)
+    const [passwordSuccess, setPasswordSuccess] = useState(false)
+    const [passwordError, setPasswordError] = useState("")
 
     // Form state
     const [clubName, setClubName] = useState('')
@@ -101,12 +119,13 @@ export default function DashboardPage() {
             const data = await res.json()
             if (res.ok) {
                 if (data.user?.legal_acceptance_required) {
-                    router.push('/legal-consent')
-                    return
-                }
-                setUserData(data.user)
-                setSelectedPlan(data.user?.subscription_plan || "")
-                if (data.employeeClubs && data.employeeClubs.length > 0) {
+                router.push('/legal-consent')
+                return
+            }
+            setUserData(data.user)
+            setFullName(data.user?.full_name || "") // Set user name for profile form
+            setSelectedPlan(data.user?.subscription_plan || "")
+            if (data.employeeClubs && data.employeeClubs.length > 0) {
                     setHasEmployeeClubs(true)
                 }
             }
@@ -176,6 +195,25 @@ export default function DashboardPage() {
             console.error('Error fetching clubs:', error)
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const handleGenerateBotCode = async () => {
+        setIsGeneratingCode(true);
+        setBotLinkCode(null);
+        setBotLinkCodeError(null);
+        try {
+            const res = await fetch('/api/bot/generate-link-code', { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'Не удалось сгенерировать код');
+            }
+            setBotLinkCode(data.code);
+            setBotLinkCodeExpires(Date.now() + 10 * 60 * 1000);
+        } catch (error: any) {
+            setBotLinkCodeError(error.message);
+        } finally {
+            setIsGeneratingCode(false);
         }
     }
 
@@ -276,6 +314,13 @@ export default function DashboardPage() {
                                 <span className="hidden sm:inline">Выйти на смену</span>
                             </Link>
                         )}
+                        <button 
+                            onClick={() => setIsProfileModalOpen(true)}
+                            className="text-slate-500 hover:text-black transition-colors flex items-center gap-2"
+                        >
+                            <User className="h-4 w-4" />
+                            <span className="hidden sm:inline">Профиль</span>
+                        </button>
                         <button 
                             onClick={handleLogout}
                             className="text-slate-500 hover:text-black transition-colors flex items-center gap-2 ml-2"
