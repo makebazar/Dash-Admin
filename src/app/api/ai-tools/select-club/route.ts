@@ -4,13 +4,17 @@ import { query } from '@/db';
 import { z } from 'zod';
 
 // Preprocess to handle arrays from LLM/n8n
-const preprocessValue = (v: unknown) => {
-  if (Array.isArray(v)) return v[0];
-  return v;
+const preprocessValue = (v: unknown): string | number => {
+  if (Array.isArray(v)) return v[0] as string | number;
+  return v as string | number;
 };
 
+// Custom schema that handles arrays properly
 const SelectClubSchema = z.object({
-  clubId: z.union([z.string(), z.number()]).transform(preprocessValue),
+  clubId: z.any().transform(v => {
+    if (Array.isArray(v)) return String(v[0]);
+    return String(v);
+  }).pipe(z.string()),
 });
 
 // GET /api/ai-tools/select-club
