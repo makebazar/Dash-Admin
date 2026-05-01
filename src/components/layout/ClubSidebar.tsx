@@ -9,7 +9,6 @@ import {
     Settings,
     Clock,
     DollarSign,
-    TrendingUp,
     Package,
     Wallet,
     ClipboardCheck,
@@ -19,7 +18,6 @@ import {
     Monitor,
     Tv,
     Shield,
-    Trophy,
     Loader2,
     MessageSquare,
     BookOpen,
@@ -84,7 +82,7 @@ export function ClubSidebarContent({ club, clubId, onLinkClick, isCollapsed = fa
     const mainLinks = [
         { href: `/clubs/${clubId}`, label: 'Дашборд', icon: <LayoutDashboard className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: hasPermission('view_dashboard') || isExpiredForOwnerUi },
         { href: `/clubs/${clubId}/shifts`, label: 'Смены', icon: <Clock className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_shifts') },
-        { href: `/clubs/${clubId}/sales-plan`, label: 'План продаж', icon: <TrendingUp className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_shifts') },
+        
         { href: `/clubs/${clubId}/schedule`, label: 'График работы', icon: <Calendar className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_schedule') },
         { href: `/clubs/${clubId}/employees`, label: 'Сотрудники', icon: <Users className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('manage_employees') },
         { href: `/clubs/${clubId}/salaries`, label: 'Зарплаты', icon: <Wallet className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_salaries') },
@@ -92,7 +90,6 @@ export function ClubSidebarContent({ club, clubId, onLinkClick, isCollapsed = fa
         { href: `/clubs/${clubId}/finance`, label: 'Финансы', icon: <DollarSign className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_finance') },
         { href: `/clubs/${clubId}/inventory`, label: 'Склад', icon: <Package className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('manage_inventory') },
         { href: `/clubs/${clubId}/equipment`, label: 'Оборудование', icon: <Monitor className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('manage_equipment') },
-        { href: `/clubs/${clubId}/tournaments`, label: 'Турниры', icon: <Trophy className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && isFullAccess },
         { href: `/clubs/${clubId}/signage`, label: 'Экраны', icon: <Tv className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && isFullAccess },
         { href: `/clubs/${clubId}/kb`, label: 'База знаний', icon: <BookOpen className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi },
         { href: `/clubs/${clubId}/reviews`, label: 'Центр проверок', icon: <ClipboardCheck className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />, visible: !isExpiredForOwnerUi && hasPermission('view_reviews') },

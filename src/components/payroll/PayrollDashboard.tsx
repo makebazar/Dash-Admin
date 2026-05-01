@@ -43,6 +43,7 @@ interface Employee {
     total_paid: number;
     total_paid_bonus?: number;
     total_bar_purchases?: number;
+    salary_deduction?: number;
     bar_details?: Array<{ id: number | string; date: string; amount: number; product_name?: string; quantity?: number; shift_id?: string }>;
     balance: number;
     virtual_balance?: number;
@@ -64,6 +65,7 @@ interface Employee {
         virtual_balance: number;
         kpi_bonuses: number;
         other_bonuses: number;
+        salary_deduction?: number;
         instant_payout?: number;
         accrued_payout?: number;
     };
@@ -1017,6 +1019,12 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                         <div className="text-sm font-bold text-slate-900">Бар (в счёт зарплаты)</div>
                         <div className="text-sm font-black text-rose-700 whitespace-nowrap">-{formatCurrency(deductions)}</div>
                     </div>
+                    {employee.salary_deduction > 0 && (
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="text-sm font-bold text-slate-900">Списание по недостаче</div>
+                            <div className="text-sm font-black text-rose-700 whitespace-nowrap">-{formatCurrency(employee.salary_deduction)}</div>
+                        </div>
+                    )}
                 </div>
             </div>
         );

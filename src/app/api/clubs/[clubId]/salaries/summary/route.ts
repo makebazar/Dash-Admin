@@ -306,6 +306,33 @@ export async function GET(
         const kpiConfigRes = await query(`SELECT * FROM maintenance_kpi_config WHERE club_id = $1`, [clubId]);
         const kpiConfig = kpiConfigRes.rows[0];
 
+        // Get penalty deductions from inventory handover resolutions (SALARY_DEDUCTION type)
+        const salaryPenaltiesRes = await query(
+            `SELECT
+                sp.user_id,
+                szdr.resolution_amount,
+                szdr.notes,
+                szdr.resolved_at,
+                szdr.resolution_type,
+                szdr.shift_id,
+                s.check_in
+             FROM shift_zone_discrepancy_resolutions szdr
+             JOIN salary_payments sp ON sp.id = szdr.salary_payment_id
+             LEFT JOIN shifts s ON s.id = szdr.shift_id
+             WHERE szdr.club_id = $1
+               AND szdr.resolution_type = 'SALARY_DEDUCTION'
+               AND (
+                   (s.check_in >= $2 AND s.check_in <= $3)
+                   OR (szdr.resolved_at >= $2 AND szdr.resolved_at <= $3)
+               )`,
+            [clubId, startOfMonth.toISOString(), endOfMonth.toISOString()]
+        );
+        const salaryPenaltiesMap: Record<string, number> = {};
+        salaryPenaltiesRes.rows.forEach((row: any) => {
+            const uid = String(row.user_id);
+            salaryPenaltiesMap[uid] = (salaryPenaltiesMap[uid] || 0) + Number(row.resolution_amount || 0);
+        });
+
         // Get evaluation averages for the period - Calculate percentage correctly
         const evaluationsRes = await query(
             `SELECT 
@@ -1161,11 +1188,12 @@ export async function GET(
                 shifts_count,
                 planned_shifts,
                 base_salary,
-                total_accrued: final_total_accrued - total_bar_purchases,
+                salary_deduction: salaryPenaltiesMap[emp.id] || 0,
+                total_accrued: final_total_accrued - total_bar_purchases - (salaryPenaltiesMap[emp.id] || 0),
                 kpi_bonus_amount: final_total_accrued - base_salary,
                 virtual_balance_accrued: final_virtual_balance_accrued,
                 total_paid,
-                balance: final_total_accrued - total_paid - total_bar_purchases,
+                balance: final_total_accrued - total_paid - total_bar_purchases - (salaryPenaltiesMap[emp.id] || 0),
                 total_bar_purchases,
                 virtual_balance: final_virtual_balance_accrued - total_paid_bonus,
                 total_paid_bonus,
@@ -1182,8 +1210,9 @@ export async function GET(
                     virtual_balance: final_virtual_balance_accrued,
                     kpi_bonuses: kpi_bonus_amount,
                     other_bonuses: shift_bonuses,
+                    salary_deduction: salaryPenaltiesMap[emp.id] || 0,
                     instant_payout: instant_payout_total,
-                    accrued_payout: final_total_accrued - instant_payout_total - total_bar_purchases
+                    accrued_payout: final_total_accrued - instant_payout_total - total_bar_purchases - (salaryPenaltiesMap[emp.id] || 0)
                 },
                 metrics: {
                     total_revenue,
