@@ -95,7 +95,7 @@
         "promptType": "define",
         "text": "=КОНТЕКСТ:\n{{ $('Get User Context').json | json }}\n\nЗАПРОС: \"{{ $('Prepare Data').item.json.prompt }}\"",
         "options": {
-          "systemMessage": "=Ты — AI-ассистент DashAdmin.\nКонтекст содержит: user, selected_club, available_clubs, employee_clubs.\n\nПРАВИЛА:\n1. Если selected_club = null и available_clubs содержит только один клуб — автоматически используй его\n2. Если selected_club = null и клуб не определён — спроси какой клуб выбрать\n3. Для ответа вызывай toolQuery с параметрами: tool, clubId (число), period, employeeId\n\nДоступные tool:\n- getRevenue: выручка\n- getShiftsSummary: смены\n- getEmployees: список сотрудников\n- getEmployeeHours: часы сотрудника\n- selectClub: выбор клуба по clubId"
+          "systemMessage": "=Ты — AI-ассистент DashAdmin.\nКонтекст содержит: user, selected_club, available_clubs, employee_clubs.\n\nПРАВИЛА:\n1. Если selected_club = null и clubs > 1 — верни buttons для выбора клуба\n2. Если selected_club = null и только 1 клуб — автоматически используй его\n3. Если selected_club = null и клуб не определён — спроси с кнопками выбора\n\nДля ответа используй toolQuery с параметрами:\n- tool: getRevenue|getShiftsSummary|getEmployees|getEmployeeHours|selectClub\n- clubId: число (id клуба)\n- period: today|yesterday|last7days|last30days|this_month\n- employeeId: uuid сотрудника\n\nЕсли нужны кнопки выбора клуба — верни JSON:\n{\"output\": \"текст\", \"buttons\": [{\"text\": \"Клуб 1\", \"data\": \"selectClub:1\"}, ...]}"
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -147,6 +147,7 @@
         "sendTo": "chat",
         "chatId": "={{ $('Max Trigger').item.json.message.recipient.chat_id }}",
         "text": "={{ $json.output }}",
+        "keyboard": "={{ $json.buttons ? JSON.stringify($json.buttons) : $json.keyboard }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-max.max",
@@ -155,6 +156,69 @@
       "id": "send-response",
       "name": "Send Response",
       "credentials": { "maxApi": { "id": "MAX_API_ID", "name": "Max account" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+          "conditions": [
+            { "id": "cond-multiclub", "leftValue": "={{ $('Get User Context').json.available_clubs.length + $('Get User Context').json.employee_clubs.length }}", "rightValue": 1, "operator": { "type": "number", "operation": ">", "name": "filter.operator.gt" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [0, 180],
+      "id": "check-multiple-clubs",
+      "name": "If Multiple Clubs"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "build-buttons", "name": "keyboard", "value": "=[\n  {{ $('Get User Context').json.available_clubs.concat($('Get User Context').json.employee_clubs).map(c => '{\"text\":\"' + c.name + '\",\"data\":\"selectClub:' + c.id + '\"}').join(',') }}\n]", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [200, 180],
+      "id": "build-club-buttons",
+      "name": "Build Club Buttons"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+          "conditions": [
+            { "id": "cond-need-select", "leftValue": "={{ $('Get User Context').json.selected_club }}", "rightValue": null, "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [400, 180],
+      "id": "check-no-club",
+      "name": "If No Club Selected"
+    },
+    {
+      "parameters": {
+        "userId": "={{ $('Max Trigger').item.json.message.recipient.user_id }}",
+        "text": "📍 У вас несколько клубов. Выберите клуб:",
+        "keyboard": "={{ $('Build Club Buttons').item.json.keyboard }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-max.max",
+      "typeVersion": 1,
+      "position": [600, 120],
+      "id": "send-club-select",
+      "name": "Send Club Selection",
+      "credentials": { "maxApi": { "id": "MAX_API_ID", "name": "Max account" } }
     }
   ],
   "connections": {
@@ -162,11 +226,25 @@
       "main": [[{ "node": "Get User Context", "type": "main", "index": 0 }]]
     },
     "Get User Context": {
-      "main": [[{ "node": "If User Not Linked", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "If User Not Linked", "type": "main", "index": 0 }], [{ "node": "If Multiple Clubs", "type": "main", "index": 0 }]]
     },
     "If User Not Linked": {
       "main": [
         [{ "node": "Send Link Request", "type": "main", "index": 0 }],
+        [{ "node": "Prepare Data", "type": "main", "index": 0 }]
+      ]
+    },
+    "If Multiple Clubs": {
+      "main": [
+        [{ "node": "Build Club Buttons", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Club Buttons": {
+      "main": [[{ "node": "If No Club Selected", "type": "main", "index": 0 }]]
+    },
+    "If No Club Selected": {
+      "main": [
+        [{ "node": "Send Club Selection", "type": "main", "index": 0 }],
         [{ "node": "Prepare Data", "type": "main", "index": 0 }]
       ]
     },
@@ -188,7 +266,7 @@
   },
   "active": false,
   "settings": { "executionOrder": "v1", "binaryMode": "separate", "availableInMCP": true },
-  "versionId": "dashadmin-v5",
+  "versionId": "dashadmin-v6",
   "meta": { "templateCredsSetupCompleted": true },
   "id": "dashadmin-ai-workflow",
   "tags": ["dashadmin", "ai", "assistant"]

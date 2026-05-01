@@ -4,10 +4,17 @@ import { query } from '@/db';
 import { z } from 'zod';
 
 const QuerySchema = z.object({
-  tool: z.enum(['getRevenue', 'getShiftsSummary', 'getEmployees', 'getEmployeeHours', 'selectClub']),
-  clubId: z.number().optional(),
-  employeeId: z.string().uuid().optional(),
+  tool: z.enum(['getRevenue', 'getShiftsSummary', 'getEmployees', 'getEmployeeHours', 'selectClub', 'parseCallback']),
+  clubId: z.union([z.number(), z.string()]).optional().transform(v => {
+    if (v === undefined || v === null || v === '') return undefined;
+    return Number(v);
+  }),
+  employeeId: z.string().optional().transform(v => {
+    if (!v || v === '') return undefined;
+    return v;
+  }),
   period: z.enum(['today', 'yesterday', 'last7days', 'last30days', 'this_month']).optional(),
+  data: z.string().optional(),
 });
 
 function getDateRange(period?: string) {
@@ -42,7 +49,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid request', details: validation.error.issues }, { status: 400 });
     }
 
-    const { tool, clubId, employeeId, period } = validation.data;
+    const { tool, clubId, employeeId, period, data } = validation.data;
     const { start, end } = getDateRange(period);
 
     switch (tool) {
@@ -56,9 +63,9 @@ export async function POST(request: Request) {
            FROM shifts WHERE club_id = $1 AND check_in::date BETWEEN $2 AND $3`,
           [club, start, end]
         );
-        const data = result.rows[0];
+        const row = result.rows[0];
         return NextResponse.json({
-          output: `📊 Выручка за ${period || 'вчера'}: ${parseFloat(data.total).toLocaleString('ru-RU')} ₽\nСмен: ${data.count}`
+          output: `📊 Выручка за ${period || 'вчера'}: ${parseFloat(row.total).toLocaleString('ru-RU')} ₽\nСмен: ${row.count}`
         });
       }
 
@@ -71,9 +78,9 @@ export async function POST(request: Request) {
            FROM shifts WHERE club_id = $1 AND check_in::date BETWEEN $2 AND $3`,
           [club, start, end]
         );
-        const data = result.rows[0];
+        const row = result.rows[0];
         return NextResponse.json({
-          output: `📅 Смены за ${period || 'вчера'}: ${data.total}\nВсего часов: ${parseFloat(data.hours).toFixed(1)}`
+          output: `📅 Смены за ${period || 'вчера'}: ${row.total}\nВсего часов: ${parseFloat(row.hours).toFixed(1)}`
         });
       }
 
@@ -99,9 +106,9 @@ export async function POST(request: Request) {
            FROM shifts WHERE user_id = $1 AND check_in::date BETWEEN $2 AND $3`,
           [employeeId, start, end]
         );
-        const data = result.rows[0];
+        const row = result.rows[0];
         return NextResponse.json({
-          output: `⏱️ Часы за ${period || 'неделю'}: ${parseFloat(data.hours).toFixed(1)}ч\nСмен: ${data.shifts}`
+          output: `⏱️ Часы за ${period || 'неделю'}: ${parseFloat(row.hours).toFixed(1)}ч\nСмен: ${row.shifts}`
         });
       }
 
@@ -114,6 +121,19 @@ export async function POST(request: Request) {
         const clubResult = await query('SELECT name FROM clubs WHERE id = $1', [clubId]);
         const name = clubResult.rows[0]?.name || 'клуб';
         return NextResponse.json({ output: `✅ Выбран клуб: ${name}` });
+      }
+
+      case 'parseCallback': {
+        if (data?.startsWith('selectClub:')) {
+          const newClubId = parseInt(data.split(':')[1]);
+          await query(
+            'UPDATE bot_user_links SET selected_club_id = $1 WHERE user_id = $2 AND messenger_type = $3',
+            [newClubId, context!.userId, 'N8N']
+          );
+          const clubResult = await query('SELECT name FROM clubs WHERE id = $1', [newClubId]);
+          return NextResponse.json({ output: `✅ Клуб выбран: ${clubResult.rows[0]?.name || ''}` });
+        }
+        return NextResponse.json({ output: 'Неизвестная команда.' });
       }
 
       default:
