@@ -28,7 +28,7 @@
       "position": [-260, 0],
       "id": "get-user-context",
       "name": "Get User Context",
-      "credentials": { "httpHeaderAuth": { "id": "HEADER_AUTH_ID", "name": "Header Auth" } }
+      "credentials": { "reportingApiKey": { "id": "REPORTING_API_KEY_ID", "name": "Reporting API Key" } }
     },
     {
       "parameters": {
@@ -290,7 +290,7 @@
   },
   "active": false,
   "settings": { "executionOrder": "v1", "binaryMode": "separate", "availableInMCP": true },
-  "versionId": "dashadmin-v3",
+  "versionId": "dashadmin-v4",
   "meta": { "templateCredsSetupCompleted": true },
   "id": "dashadmin-ai-workflow",
   "tags": ["dashadmin", "ai", "assistant"]
