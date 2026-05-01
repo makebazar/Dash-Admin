@@ -15,7 +15,7 @@ export async function requireReportingApiKey() {
     }
 
     const apiKey = authHeader.substring(7); // Extract the key part
-    const serverApiKey = "da-report-sk_eb00962874901b4cf40dc8b7ad0c96ddf3eaf96b7f29973465a40ef767efab72";
+    const serverApiKey = process.env.REPORTS_API_KEY;
 
     // Check if the server-side key is configured
     if (!serverApiKey) {

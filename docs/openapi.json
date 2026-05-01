@@ -7,11 +7,11 @@
   },
   "servers": [
     {
-      "url": "https://your-domain.com/api",
+      "url": "https://www.mydashadmin.ru/api",
       "description": "Production server"
     },
     {
-      "url": "http://localhost:3000/api",
+      "url": "http://localhost:8080/api",
       "description": "Local development server"
     }
   ],
@@ -31,7 +31,7 @@
             "name": "clubId",
             "in": "path",
             "required": true,
-            "description": "The ID of the club to get a report for.",
+            "description": "The ID of the club to get a report for. This ID should be taken from the user's context, specifically from the 'id' field of the 'selected_club' object, or from the 'id' of an object within the 'available_clubs' array.",
             "schema": { "type": "string" }
           },
           {
