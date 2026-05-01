@@ -6,10 +6,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Building2, Plus, Loader2, Trash2, AlertTriangle, LogOut, MoreVertical, Briefcase, Zap, ShieldAlert, User, Bot } from "lucide-react"
+import { Building2, Plus, Loader2, Trash2, AlertTriangle, LogOut, MoreVertical, Briefcase, Zap, ShieldAlert, User, Bot, Check } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
+
+interface BotLink {
+    id: string;
+    messenger_type: string;
+    messenger_user_id: string;
+    created_at: string;
+}
 
 interface Club {
     id: string
@@ -86,7 +94,9 @@ export default function DashboardPage() {
     const [isGeneratingCode, setIsGeneratingCode] = useState(false)
     const [botLinkCode, setBotLinkCode] = useState<string | null>(null)
     const [botLinkCodeError, setBotLinkCodeError] = useState<string | null>(null)
-    const [botLinkCodeExpires, setBotLinkCodeExpires] = useState<number | null>(null)
+    const [botLinkCodeExpires, setBotLinkCodeExpires] = useState<number | null>(null);
+    const [botLinks, setBotLinks] = useState<BotLink[]>([]);
+    const [isLinksLoading, setIsLinksLoading] = useState(false);
 
     // Profile settings states
     const [fullName, setFullName] = useState("")
@@ -217,6 +227,44 @@ export default function DashboardPage() {
         }
     }
 
+    const fetchBotLinks = async () => {
+        setIsLinksLoading(true);
+        try {
+            const res = await fetch('/api/bot/links');
+            const data = await res.json();
+            if (res.ok) {
+                setBotLinks(data);
+            } else {
+                console.error('Failed to fetch bot links:', data.error);
+                setBotLinks([]);
+            }
+        } catch (error) {
+            console.error('Error fetching bot links:', error);
+            setBotLinks([]);
+        } finally {
+            setIsLinksLoading(false);
+        }
+    }
+
+    const handleDeleteLink = async (linkId: string) => {
+        if (!confirm('Вы уверены, что хотите удалить эту привязку?')) return;
+
+        try {
+            const res = await fetch(`/api/bot/links?id=${linkId}`, {
+                method: 'DELETE',
+            });
+            if (res.ok) {
+                fetchBotLinks(); // Refresh the list
+            } else {
+                const data = await res.json();
+                alert(data.error || 'Не удалось удалить привязку');
+            }
+        } catch (error) {
+            console.error('Error deleting bot link:', error);
+            alert('Ошибка при удалении привязки');
+        }
+    };
+
     const handleLogout = async () => {
         try {
             await fetch('/api/auth/logout', { method: 'POST' })
@@ -339,11 +387,8 @@ export default function DashboardPage() {
     }
 
     useEffect(() => {
-        if (!isProfileModalOpen) {
-            // Reset bot link state when modal is closed
-            setBotLinkCode(null)
-            setBotLinkCodeError(null)
-            setBotLinkCodeExpires(null)
+        if (isProfileModalOpen) {
+            fetchBotLinks();
         }
     }, [isProfileModalOpen])
 
@@ -763,33 +808,79 @@ export default function DashboardPage() {
                             </Card>
                         </TabsContent>
                         <TabsContent value="integrations" className="pt-6">
-                            <Card className="border-none shadow-none">
-                                <CardHeader className="p-0 mb-6">
-                                    <CardTitle>Подключение AI-ассистента</CardTitle>
-                                    <CardDescription>
-                                        Привяжите ваш аккаунт к боту в мессенджере, чтобы получать отчеты и аналитику прямо в чате.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="p-0 space-y-4">
-                                    {!botLinkCode && (
-                                        <Button onClick={handleGenerateBotCode} disabled={isGeneratingCode} className="h-11">
-                                            {isGeneratingCode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4"/>}
-                                            Получить код привязки
-                                        </Button>
-                                    )}
+                            <div className="space-y-8">
+                                {/* --- Section: Create New Link --- */}
+                                <Card className="border-slate-200 shadow-sm">
+                                    <CardHeader>
+                                        <CardTitle>Подключение AI-ассистента</CardTitle>
+                                        <CardDescription>
+                                            Привяжите ваш аккаунт к боту в мессенджере, чтобы получать отчеты и аналитику прямо в чате.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        {!botLinkCode && (
+                                            <Button onClick={handleGenerateBotCode} disabled={isGeneratingCode} className="h-11">
+                                                {isGeneratingCode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4"/>}
+                                                Получить код привязки
+                                            </Button>
+                                        )}
 
-                                    {isGeneratingCode && <p>Генерируем код...</p>}
-                                    {botLinkCodeError && <p className="text-sm text-red-500">{botLinkCodeError}</p>}
+                                        {isGeneratingCode && <p className='text-sm text-slate-500'>Генерируем код...</p>}
+                                        {botLinkCodeError && <p className="text-sm text-red-500">{botLinkCodeError}</p>}
 
-                                    {botLinkCode && (
-                                        <div className="flex flex-col items-center justify-center p-6 bg-slate-100 rounded-lg">
-                                            <p className="text-sm text-slate-600">Отправьте этот код боту в мессенджере:</p>
-                                            <p className="text-4xl font-bold tracking-widest my-4">{botLinkCode}</p>
-                                            <p className="text-xs text-slate-500">Код истекает через: {getCountdown()}</p>
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
+                                        {botLinkCode && (
+                                            <div className="flex flex-col items-center justify-center p-6 bg-slate-100 rounded-lg">
+                                                <p className="text-sm text-slate-600">Отправьте этот код боту в мессенджере:</p>
+                                                <p className="text-4xl font-bold tracking-widest my-4">{botLinkCode}</p>
+                                                <p className="text-xs text-slate-500">Код истекает через: {getCountdown()}</p>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+
+                                {/* --- Section: Active Links --- */}
+                                <Card className="border-slate-200 shadow-sm">
+                                    <CardHeader>
+                                        <CardTitle>Активные привязки</CardTitle>
+                                        <CardDescription>
+                                            Список аккаунтов, привязанных к вашему профилю DashAdmin.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        {isLinksLoading ? (
+                                            <div className="flex items-center justify-center h-24">
+                                                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                                            </div>
+                                        ) : botLinks.length === 0 ? (
+                                            <p className="text-sm text-slate-500 italic">Нет активных привязок.</p>
+                                        ) : (
+                                            <ul className="space-y-3">
+                                                {botLinks.map(link => (
+                                                    <li key={link.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-600">
+                                                                <Bot className="h-4 w-4" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-mono text-sm font-medium">{link.messenger_type}</p>
+                                                                <p className="text-xs text-slate-500">ID: {link.messenger_user_id}</p>
+                                                            </div>
+                                                        </div>
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon"
+                                                            onClick={() => handleDeleteLink(link.id)}
+                                                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </div>
                         </TabsContent>
                     </Tabs>
                 </DialogContent>
