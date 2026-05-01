@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 const LinkAccountSchema = z.object({
     code: z.string().regex(/^\d{6}$/, "Code must be a 6-digit number"),
-    messenger_type: z.enum(['MAX', 'TELEGRAM']),
+    messenger_type: z.enum(['MAX', 'TELEGRAM', 'N8N']),
     messenger_user_id: z.string().min(1, "Messenger user ID cannot be empty"),
 });
 

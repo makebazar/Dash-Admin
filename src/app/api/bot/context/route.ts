@@ -1,89 +1,103 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
-import { requireReportingApiKey } from '@/lib/reporting-api-key-guard';
+import { z } from 'zod';
 
-// GET /api/bot/user-context?messenger_user_id=...
-// This is a protected endpoint for n8n to get information about a linked user.
+const GetContextSchema = z.object({
+    messenger_type: z.enum(['MAX', 'TELEGRAM', 'N8N']),
+    messenger_user_id: z.string().min(1, "Messenger user ID cannot be empty"),
+});
+
+// GET /api/bot/context?messenger_type=...&messenger_user_id=...
+// This endpoint is called by n8n to check if a user is already linked
+// and to retrieve their context (e.g., user_id, selected club).
 export async function GET(request: Request) {
-    try {
-        // This endpoint is for our bot, so it must be protected by our API key.
-        requireReportingApiKey();
+    const { searchParams } = new URL(request.url);
+    const validation = GetContextSchema.safeParse(Object.fromEntries(searchParams));
 
-        const url = new URL(request.url);
-        const messengerUserId = url.searchParams.get('messenger_user_id');
-        const messengerType = url.searchParams.get('messenger_type') || 'MAX'; // Default to MAX
-
-        if (!messengerUserId) {
-            return NextResponse.json({ error: 'messenger_user_id is required' }, { status: 400 });
-        }
-
-        // 1. Find the DashAdmin user linked to this messenger user
-        const link = await query(
-            'SELECT user_id, current_club_id FROM bot_user_links WHERE messenger_user_id = $1 AND messenger_type = $2',
-            [messengerUserId, messengerType]
-        );
-
-        if (link.rowCount === 0) {
-            return NextResponse.json({ error: 'User not linked' }, { status: 404 });
-        }
-
-        const { user_id, current_club_id } = link.rows[0];
-
-        // 2. Find all clubs this user has access to (both as owner and as employee)
-        const clubs = await query(
-            `
-            SELECT id, name, 'owner' as role FROM clubs WHERE owner_id = $1
-            UNION
-            SELECT c.id, c.name, ce.role FROM club_employees ce JOIN clubs c ON ce.club_id = c.id WHERE ce.user_id = $1 AND ce.is_active = true AND ce.dismissed_at IS NULL
-            `,
-            [user_id]
-        );
-
-        return NextResponse.json({
-            user_id: user_id,
-            current_club_id: current_club_id, // This may be null if not set
-            accessible_clubs: clubs.rows,
-        });
-
-    } catch (error: any) {
-        console.error('Get user context error:', error);
-        const status = error?.status || 500;
-        return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status });
+    if (!validation.success) {
+        return NextResponse.json({ error: 'Invalid input', details: validation.error.errors }, { status: 400 });
     }
-}
 
-// POST /api/bot/user-context
-// Protected endpoint for n8n to set the user's active club context.
-export async function POST(request: Request) {
+    const { messenger_type, messenger_user_id } = validation.data;
+
     try {
-        requireReportingApiKey();
-        
-        const body = await request.json();
-        const { messenger_user_id, club_id } = body;
-        const messenger_type = body.messenger_type || 'MAX';
-
-        if (!messenger_user_id || !club_id) {
-            return NextResponse.json({ error: 'messenger_user_id and club_id are required' }, { status: 400 });
-        }
-
-        // Here we can add a check to ensure the user actually has access to this club_id,
-        // but for now we trust our n8n workflow which should have gotten the list from the GET endpoint.
-
         const result = await query(
-            'UPDATE bot_user_links SET current_club_id = $1, updated_at = NOW() WHERE messenger_user_id = $2 AND messenger_type = $3',
-            [club_id, messenger_user_id, messenger_type]
+            `
+            SELECT 
+                bl.user_id,
+                u.full_name,
+                bl.selected_club_id,
+                c.name as selected_club_name,
+                (SELECT json_agg(json_build_object('id', cl.id, 'name', cl.name))
+                 FROM clubs cl
+                 JOIN user_clubs uc ON cl.id = uc.club_id
+                 WHERE uc.user_id = bl.user_id) as available_clubs
+            FROM 
+                bot_user_links bl
+            JOIN 
+                users u ON bl.user_id = u.id
+            LEFT JOIN
+                clubs c ON bl.selected_club_id = c.id
+            WHERE 
+                bl.messenger_type = $1 AND bl.messenger_user_id = $2
+            `,
+            [messenger_type, messenger_user_id]
         );
 
         if (result.rowCount === 0) {
-            return NextResponse.json({ error: 'User not linked' }, { status: 404 });
+            return NextResponse.json({ error: 'User not found or not linked' }, { status: 404 });
+        }
+        
+        // We also need to fetch the clubs where the user is an employee
+        const employeeClubsResult = await query(
+            `
+            SELECT 
+                c.id,
+                c.name
+            FROM 
+                clubs c
+            JOIN 
+                employees e ON c.id = e.club_id
+            WHERE 
+                e.user_id = $1
+            `,
+            [result.rows[0].user_id]
+        );
+
+        const response = {
+            user: {
+                id: result.rows[0].user_id,
+                full_name: result.rows[0].full_name,
+            },
+            selected_club: result.rows[0].selected_club_id ? {
+                id: result.rows[0].selected_club_id,
+                name: result.rows[0].selected_club_name,
+            } : null,
+            available_clubs: result.rows[0].available_clubs || [],
+            employee_clubs: employeeClubsResult.rows || []
+        };
+        
+        // If there's only one available club (owned or employee), set it as selected
+        const all_clubs = [...response.available_clubs, ...response.employee_clubs];
+        const unique_clubs = all_clubs.filter((club, index, self) =>
+            index === self.findIndex((c) => (
+                c.id === club.id
+            ))
+        );
+
+        if (unique_clubs.length === 1 && !response.selected_club) {
+             await query(
+                'UPDATE bot_user_links SET selected_club_id = $1 WHERE user_id = $2 AND messenger_type = $3',
+                [unique_clubs[0].id, response.user.id, messenger_type]
+            );
+            response.selected_club = unique_clubs[0];
         }
 
-        return NextResponse.json({ success: true });
+
+        return NextResponse.json(response);
 
     } catch (error: any) {
-        console.error('Set user context error:', error);
-        const status = error?.status || 500;
-        return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status });
+        console.error('Get context error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
-

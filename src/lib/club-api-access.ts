@@ -17,13 +17,18 @@ function hasFullAccessRole(clubRole: string | null, roleName: string | null) {
         roleName === "Управляющий"
 }
 
-export async function getClubApiAccess(clubId: string): Promise<ClubApiAccess> {
+export async function getApiAccess(): Promise<{ userId: string }> {
     const userId = (await cookies()).get("session_user_id")?.value
     if (!userId) {
         const error = new Error("Unauthorized") as AccessError
         error.status = 401
         throw error
     }
+    return { userId }
+}
+
+export async function getClubApiAccess(clubId: string): Promise<ClubApiAccess> {
+    const { userId } = await getApiAccess()
 
     const accessRes = await query(
         `

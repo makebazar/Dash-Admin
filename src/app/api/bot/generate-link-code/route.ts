@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
-import { getClubApiAccess } from '@/lib/club-api-access';
+import { getApiAccess } from '@/lib/club-api-access';
 import crypto from 'crypto';
 
 // POST /api/bot/generate-link-code
@@ -8,8 +8,7 @@ import crypto from 'crypto';
 export async function POST(request: Request) {
     try {
         // First, ensure the user is logged in by checking their session.
-        const access = await getClubApiAccess(); // We can call it without clubId to just get userId
-        const userId = access.userId;
+        const { userId } = await getApiAccess()
 
         // Generate a random 6-digit code
         const linkingCode = crypto.randomInt(100000, 999999).toString();
