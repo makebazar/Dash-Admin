@@ -4,16 +4,24 @@ import { query } from '@/db';
 import { z } from 'zod';
 
 const QuerySchema = z.object({
-  tool: z.enum(['getRevenue', 'getShiftsSummary', 'getEmployees', 'getEmployeeHours', 'selectClub', 'parseCallback']),
-  clubId: z.union([z.number(), z.string()]).optional().transform(v => {
+  tool: z.union([
+    z.enum(['getRevenue', 'getShiftsSummary', 'getEmployees', 'getEmployeeHours', 'selectClub', 'parseCallback']),
+    z.array(z.enum(['getRevenue', 'getShiftsSummary', 'getEmployees', 'getEmployeeHours', 'selectClub', 'parseCallback']))
+  ]).transform(v => Array.isArray(v) ? v[0] : v),
+  clubId: z.union([z.number(), z.string(), z.array(z.union([z.number(), z.string()]))]).optional().transform(v => {
     if (v === undefined || v === null || v === '') return undefined;
+    if (Array.isArray(v)) v = v[0];
     return Number(v);
   }),
-  employeeId: z.string().optional().transform(v => {
+  employeeId: z.union([z.string(), z.array(z.string())]).optional().transform(v => {
     if (!v || v === '') return undefined;
+    if (Array.isArray(v)) v = v[0];
     return v;
   }),
-  period: z.enum(['today', 'yesterday', 'last7days', 'last30days', 'this_month']).optional(),
+  period: z.union([
+    z.enum(['today', 'yesterday', 'last7days', 'last30days', 'this_month']),
+    z.array(z.enum(['today', 'yesterday', 'last7days', 'last30days', 'this_month']))
+  ]).optional().transform(v => Array.isArray(v) ? v[0] : v),
   data: z.string().optional(),
 });
 
