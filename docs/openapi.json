@@ -1,0 +1,151 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "DashAdmin Reporting API",
+    "version": "1.2.0",
+    "description": "API for fetching analytical data and reports from DashAdmin. Requires API Key authentication."
+  },
+  "servers": [
+    {
+      "url": "https://your-domain.com/api",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:3000/api",
+      "description": "Local development server"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "paths": {
+    "/clubs/{clubId}/reporting": {
+      "get": {
+        "summary": "Get Analytical Report (Revenue or Shifts)",
+        "description": "Fetches analytical data for a specific club. The response structure depends on the `query` parameter. Use `query=revenue` for financial data and `query=shifts` for operational shift data.",
+        "operationId": "getReport",
+        "parameters": [
+          {
+            "name": "clubId",
+            "in": "path",
+            "required": true,
+            "description": "The ID of the club to get a report for.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "description": "The type of data to fetch.",
+            "schema": {
+              "type": "string",
+              "enum": ["revenue", "shifts"]
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "description": "A predefined time period for the report. Overridden by startDate/endDate.",
+            "schema": {
+              "type": "string",
+              "enum": ["today", "yesterday", "last7days", "last30days", "this_month"],
+              "default": "yesterday"
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "description": "The start date for a custom period (YYYY-MM-DD). Requires endDate.",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "description": "The end date for a custom period (YYYY-MM-DD). Requires startDate.",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "employeeId",
+            "in": "query",
+            "required": false,
+            "description": "Filter report by a specific employee's UUID.",
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "shiftType",
+            "in": "query",
+            "required": false,
+            "description": "Filter revenue report by shift type. Only applicable when `query=revenue`.",
+            "schema": { "type": "string", "enum": ["DAY", "NIGHT"] }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Filter shifts report by status. Only applicable when `query=shifts`.",
+            "schema": { "type": "string", "enum": ["ACTIVE", "CLOSED"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response. The data structure depends on the `query` parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/RevenueReport" },
+                    { "$ref": "#/components/schemas/ShiftsReport" }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid query parameters." },
+          "401": { "description": "Unauthorized. Missing or invalid Authorization header." },
+          "403": { "description": "Forbidden. The provided API Key is invalid." },
+          "404": { "description": "Club not found." }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "API-KEY",
+        "description": "API Key authentication for external services like n8n. The key should be provided in the Authorization header as a Bearer token."
+      }
+    },
+    "schemas": {
+      "RevenueReport": {
+        "type": "object",
+        "description": "Financial summary for the requested period.",
+        "properties": {
+          "total_revenue": { "type": "number" },
+          "total_expenses": { "type": "number" },
+          "net_revenue": { "type": "number" },
+          "cash_revenue": { "type": "number" },
+          "card_revenue": { "type": "number" },
+          "shift_count": { "type": "integer" }
+        }
+      },
+      "ShiftsReport": {
+        "type": "object",
+        "description": "Operational summary of shifts for the requested period.",
+        "properties": {
+          "total_shifts": { "type": "integer" },
+          "total_hours": { "type": "number" },
+          "average_shift_duration": { "type": "number" },
+          "day_shifts_count": { "type": "integer" },
+          "night_shifts_count": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
