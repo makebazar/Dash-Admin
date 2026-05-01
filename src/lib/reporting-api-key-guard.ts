@@ -17,6 +17,12 @@ export async function requireReportingApiKey() {
     const apiKey = authHeader.substring(7); // Extract the key part
     const serverApiKey = process.env.REPORTS_API_KEY;
 
+    // --- DEBUG LOGGING ---
+    console.log("API Key Check:");
+    console.log(` - Client Key: '${apiKey}' (length: ${apiKey.length})`);
+    console.log(` - Server Key: '${serverApiKey}' (length: ${serverApiKey ? serverApiKey.length : 0})`);
+    // --- END DEBUG LOGGING ---
+
     // Check if the server-side key is configured
     if (!serverApiKey) {
         console.error('API Key guard is active, but REPORTS_API_KEY is not set in environment variables.');
