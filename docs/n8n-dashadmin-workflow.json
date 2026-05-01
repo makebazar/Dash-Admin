@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "url": "=https://www.mydashadmin.ru/api/bot/context",
+        "url": "https://www.mydashadmin.ru/api/bot/context",
         "queryParameters": {
           "parameters": [
             { "name": "messenger_user_id", "value": "={{ $('Max Trigger').item.json.message.recipient.user_id }}" },
@@ -65,7 +65,7 @@
         "assignments": {
           "assignments": [
             { "id": "set-prompt", "name": "prompt", "value": "={{ $('Max Trigger').item.json.message.body.text }}", "type": "string" },
-            { "id": "set-user-context", "name": "userContext", "value": "={{ $('Get User Context').json }}", "type": "string" },
+            { "id": "set-user-context", "name": "userContext", "value": "={{ JSON.stringify($('Get User Context').json) }}", "type": "string" },
             { "id": "set-session-id", "name": "sessionId", "value": "=session_{{ $('Max Trigger').item.json.message.recipient.user_id }}", "type": "string" }
           ]
         },
@@ -93,9 +93,9 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "=КОНТЕКСТ:\n{{ JSON.stringify($('Get User Context').json) }}\n\nЗАПРОС: \"{{ $('Prepare Data').item.json.prompt }}\"\n\nПроанализируй запрос и контекст. Определи нужный API endpoint и вызови соответствующий инструмент.",
+        "text": "=КОНТЕКСТ:\n{{ $('Get User Context').json | json }}\n\nЗАПРОС: \"{{ $('Prepare Data').item.json.prompt }}\"",
         "options": {
-          "systemMessage": "=Ты — AI-ассистент DashAdmin.\n\nКОНТЕКСТ:\n{{ JSON.stringify($('Get User Context').json) }}\n\nПРАВИЛА:\n1. Если selected_club = null и запрос не содержит названия клуба — попроси выбрать клуб из available_clubs\n2. Если выбран клуб или назван клуб из списка — вызывай соответствующий инструмент\n3. Доступные инструменты: getRevenue, getShiftsSummary, getEmployees, getEmployeeHours, selectClub"
+          "systemMessage": "=Ты — AI-ассистент DashAdmin.\nКонтекст содержит: user, selected_club, available_clubs, employee_clubs.\n\nПРАВИЛА:\n1. Если selected_club = null и available_clubs содержит только один клуб — автоматически используй его\n2. Если selected_club = null и клуб не определён — спроси какой клуб выбрать\n3. Для ответа вызывай toolQuery с параметрами: tool, clubId (число), period, employeeId\n\nДоступные tool:\n- getRevenue: выручка\n- getShiftsSummary: смены\n- getEmployees: список сотрудников\n- getEmployeeHours: часы сотрудника\n- selectClub: выбор клуба по clubId"
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -115,122 +115,32 @@
     },
     {
       "parameters": {
-        "url": "=https://www.mydashadmin.ru/api/ai-tools/revenue",
+        "url": "https://www.mydashadmin.ru/api/ai-tools/query",
+        "method": "POST",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
             { "name": "X-Messenger-Type", "value": "N8N" },
             { "name": "X-Messenger-User-Id", "value": "={{ $('Max Trigger').item.json.message.recipient.user_id }}" }
           ]
         },
-        "sendQuery": true,
-        "queryParameters": {
+        "sendBody": true,
+        "bodyParameters": {
           "parameters": [
-            { "name": "club_id", "value": "{{ $input.params.clubId }}" },
-            { "name": "period", "value": "{{ $input.params.period }}" }
+            { "name": "tool", "value": "{{ $json.tool }}" },
+            { "name": "clubId", "value": "{{ $json.clubId }}" },
+            { "name": "employeeId", "value": "{{ $json.employeeId }}" },
+            { "name": "period", "value": "{{ $json.period }}" }
           ]
         },
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.4,
-      "position": [380, 340],
-      "id": "tool-getRevenue",
-      "name": "getRevenue"
-    },
-    {
-      "parameters": {
-        "url": "=https://www.mydashadmin.ru/api/ai-tools/shifts-summary",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-Messenger-Type", "value": "N8N" },
-            { "name": "X-Messenger-User-Id", "value": "={{ $('Max Trigger').item.json.message.recipient.user_id }}" }
-          ]
-        },
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "club_id", "value": "{{ $input.params.clubId }}" },
-            { "name": "period", "value": "{{ $input.params.period }}" }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.4,
-      "position": [380, 480],
-      "id": "tool-getShifts",
-      "name": "getShiftsSummary"
-    },
-    {
-      "parameters": {
-        "url": "=https://www.mydashadmin.ru/api/ai-tools/employees-list",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-Messenger-Type", "value": "N8N" },
-            { "name": "X-Messenger-User-Id", "value": "={{ $('Max Trigger').item.json.message.recipient.user_id }}" }
-          ]
-        },
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [{ "name": "club_id", "value": "{{ $input.params.clubId }}" }]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.4,
-      "position": [380, 620],
-      "id": "tool-getEmployees",
-      "name": "getEmployees"
-    },
-    {
-      "parameters": {
-        "url": "=https://www.mydashadmin.ru/api/ai-tools/employee-hours",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-Messenger-Type", "value": "N8N" },
-            { "name": "X-Messenger-User-Id", "value": "={{ $('Max Trigger').item.json.message.recipient.user_id }}" }
-          ]
-        },
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "employee_id", "value": "{{ $input.params.employeeId }}" },
-            { "name": "period", "value": "{{ $input.params.period }}" }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.4,
-      "position": [380, 760],
-      "id": "tool-getHours",
-      "name": "getEmployeeHours"
-    },
-    {
-      "parameters": {
-        "url": "=https://www.mydashadmin.ru/api/ai-tools/select-club",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "X-Messenger-Type", "value": "N8N" },
-            { "name": "X-Messenger-User-Id", "value": "={{ $('Max Trigger').item.json.message.recipient.user_id }}" }
-          ]
-        },
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [{ "name": "club_id", "value": "{{ $input.params.clubId }}" }]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.4,
-      "position": [380, 900],
-      "id": "tool-selectClub",
-      "name": "selectClub"
+      "position": [380, 200],
+      "id": "tool-query",
+      "name": "toolQuery"
     },
     {
       "parameters": {
@@ -272,25 +182,13 @@
     "AI Agent": {
       "main": [[{ "node": "Send Response", "type": "main", "index": 0 }]]
     },
-    "getRevenue": {
-      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]]
-    },
-    "getShiftsSummary": {
-      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]]
-    },
-    "getEmployees": {
-      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]]
-    },
-    "getEmployeeHours": {
-      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]]
-    },
-    "selectClub": {
+    "toolQuery": {
       "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]]
     }
   },
   "active": false,
   "settings": { "executionOrder": "v1", "binaryMode": "separate", "availableInMCP": true },
-  "versionId": "dashadmin-v4",
+  "versionId": "dashadmin-v5",
   "meta": { "templateCredsSetupCompleted": true },
   "id": "dashadmin-ai-workflow",
   "tags": ["dashadmin", "ai", "assistant"]
