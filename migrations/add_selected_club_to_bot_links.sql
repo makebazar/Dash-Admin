@@ -1,0 +1,1 @@
+ALTER TABLE bot_user_links ADD COLUMN selected_club_id INTEGER REFERENCES clubs(id) ON DELETE SET NULL;

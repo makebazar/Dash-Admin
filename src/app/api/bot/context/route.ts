@@ -1,3 +1,4 @@
+import { requireReportingApiKey } from '@/lib/reporting-api-key-guard';
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { z } from 'zod';
@@ -15,12 +16,14 @@ export async function GET(request: Request) {
     const validation = GetContextSchema.safeParse(Object.fromEntries(searchParams));
 
     if (!validation.success) {
-        return NextResponse.json({ error: 'Invalid input', details: validation.error.errors }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid input', details: validation.error.issues }, { status: 400 });
     }
 
     const { messenger_type, messenger_user_id } = validation.data;
 
     try {
+        await requireReportingApiKey(); // Protect the endpoint with an API key
+
         const result = await query(
             `
             SELECT 
@@ -28,10 +31,7 @@ export async function GET(request: Request) {
                 u.full_name,
                 bl.selected_club_id,
                 c.name as selected_club_name,
-                (SELECT json_agg(json_build_object('id', cl.id, 'name', cl.name))
-                 FROM clubs cl
-                 JOIN user_clubs uc ON cl.id = uc.club_id
-                 WHERE uc.user_id = bl.user_id) as available_clubs
+                (SELECT json_agg(json_build_object('id', id, 'name', name)) FROM clubs WHERE owner_id = bl.user_id) as available_clubs
             FROM 
                 bot_user_links bl
             JOIN 
@@ -48,7 +48,8 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'User not found or not linked' }, { status: 404 });
         }
         
-        // We also need to fetch the clubs where the user is an employee
+        const userId = result.rows[0].user_id;
+
         const employeeClubsResult = await query(
             `
             SELECT 
@@ -61,12 +62,12 @@ export async function GET(request: Request) {
             WHERE 
                 e.user_id = $1
             `,
-            [result.rows[0].user_id]
+            [userId]
         );
 
         const response = {
             user: {
-                id: result.rows[0].user_id,
+                id: userId,
                 full_name: result.rows[0].full_name,
             },
             selected_club: result.rows[0].selected_club_id ? {
@@ -77,7 +78,6 @@ export async function GET(request: Request) {
             employee_clubs: employeeClubsResult.rows || []
         };
         
-        // If there's only one available club (owned or employee), set it as selected
         const all_clubs = [...response.available_clubs, ...response.employee_clubs];
         const unique_clubs = all_clubs.filter((club, index, self) =>
             index === self.findIndex((c) => (

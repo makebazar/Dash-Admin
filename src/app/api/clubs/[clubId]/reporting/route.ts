@@ -76,7 +76,7 @@ export async function GET(
   try {
     const { clubId } = params;
     await requireClubApiAccess(clubId); // Keep session-based access for the main app
-    requireReportingApiKey(); // Add API key check for external services
+    await requireReportingApiKey(); // Add API key check for external services
 
 
     const url = new URL(request.url);
@@ -87,7 +87,7 @@ export async function GET(
     if (rawQuery.query === 'revenue') {
       const validation = RevenueQuerySchema.safeParse(rawQuery);
       if (!validation.success) {
-        return NextResponse.json({ error: 'Invalid query parameters', details: validation.error.errors }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid query parameters', details: validation.error.issues }, { status: 400 });
       }
       
       const { period, startDate, endDate, employeeId, shiftType } = validation.data;
@@ -129,7 +129,7 @@ export async function GET(
     } else if (rawQuery.query === 'shifts') {
         const validation = ShiftsQuerySchema.safeParse(rawQuery);
         if (!validation.success) {
-          return NextResponse.json({ error: 'Invalid query parameters', details: validation.error.errors }, { status: 400 });
+          return NextResponse.json({ error: 'Invalid query parameters', details: validation.error.issues }, { status: 400 });
         }
         
         const { period, startDate, endDate, employeeId, status } = validation.data;

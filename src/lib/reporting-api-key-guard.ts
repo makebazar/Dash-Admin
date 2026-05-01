@@ -3,8 +3,8 @@ import { headers } from 'next/headers';
 
 // A simple guard to protect routes with a static API key.
 // The key should be stored in environment variables.
-export function requireReportingApiKey() {
-    const headersList = headers();
+export async function requireReportingApiKey() {
+    const headersList = await headers();
     const authHeader = headersList.get('Authorization');
 
     // Check if the header exists and has the correct format "Bearer <key>"
@@ -15,7 +15,7 @@ export function requireReportingApiKey() {
     }
 
     const apiKey = authHeader.substring(7); // Extract the key part
-    const serverApiKey = process.env.DASHADMIN_REPORTING_API_KEY;
+    const serverApiKey = process.env.REPORTS_API_KEY;
 
     // Check if the server-side key is configured
     if (!serverApiKey) {

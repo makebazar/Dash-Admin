@@ -16,7 +16,7 @@ export async function POST(request: Request) {
         const validation = LinkAccountSchema.safeParse(body);
 
         if (!validation.success) {
-            return NextResponse.json({ error: 'Invalid input', details: validation.error.errors }, { status: 400 });
+            return NextResponse.json({ error: 'Invalid input', details: validation.error.issues }, { status: 400 });
         }
 
         const { code, messenger_type, messenger_user_id } = validation.data;
