@@ -1,28 +1,19 @@
-import { requireReportingApiKey } from '@/lib/reporting-api-key-guard';
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
-import { z } from 'zod';
-
-const GetContextSchema = z.object({
-    messenger_type: z.enum(['MAX', 'TELEGRAM', 'N8N']),
-    messenger_user_id: z.string().min(1, "Messenger user ID cannot be empty"),
-});
 
 // GET /api/bot/context?messenger_type=...&messenger_user_id=...
 // This endpoint is called by n8n to check if a user is already linked
 // and to retrieve their context (e.g., user_id, selected club).
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
-    const validation = GetContextSchema.safeParse(Object.fromEntries(searchParams));
+    const messenger_type = searchParams.get('messenger_type');
+    const messenger_user_id = searchParams.get('messenger_user_id');
 
-    if (!validation.success) {
-        return NextResponse.json({ error: 'Invalid input', details: validation.error.issues }, { status: 400 });
+    if (!messenger_type || !messenger_user_id) {
+        return NextResponse.json({ error: 'Missing messenger_type or messenger_user_id' }, { status: 400 });
     }
 
-    const { messenger_type, messenger_user_id } = validation.data;
-
     try {
-        await requireReportingApiKey(); // Protect the endpoint with an API key
 
         const result = await query(
             `
