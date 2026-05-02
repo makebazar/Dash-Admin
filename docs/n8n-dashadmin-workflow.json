@@ -120,8 +120,8 @@
         "specifyBody": "json",
         "jsonOutput": "={{ JSON.stringify({ tool: $json.tool, clubId: $json.clubId, employeeId: $json.employeeId, period: $json.period }) }}"
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.tool",
+      "typeVersion": 1,
       "position": [380, 200],
       "id": "tool-query",
       "name": "toolQuery"
@@ -203,7 +203,7 @@
     "If Multiple Clubs": { "main": [[{ "node": "Build Club Buttons", "type": "main", "index": 0 }]] },
     "Build Club Buttons": { "main": [[{ "node": "If No Club Selected", "type": "main", "index": 0 }]] },
     "If No Club Selected": { "main": [[{ "node": "Send Club Selection", "type": "main", "index": 0 }], [{ "node": "Prepare Data", "type": "main", "index": 0 }]] },
-    "Prepare Data": { "main": [[{ "node": "Chat Memory", "type": "main", "index": 0 }]] },
+    "Prepare Data": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
     "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
     "OpenRouter Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
     "toolQuery": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
@@ -211,7 +211,7 @@
   },
   "active": false,
   "settings": { "executionOrder": "v1" },
-  "versionId": "dashadmin-v8",
+  "versionId": "dashadmin-v9",
   "id": "dashadmin-ai-workflow",
   "tags": ["dashadmin", "ai", "assistant"]
 }
