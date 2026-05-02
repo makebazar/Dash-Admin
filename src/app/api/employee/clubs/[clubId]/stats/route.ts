@@ -155,6 +155,9 @@ export async function GET(
         const scheme = rawScheme
             ? { ...rawScheme, ...formula, period_bonuses: period_bonuses_config }
             : { amount: 0, standard_monthly_shifts: 15, period_bonuses: [] as any[] };
+
+        console.log(`[STATS] User: ${userId}, Club: ${clubId}, Scheme: ${scheme?.name || 'Not Found'}`);
+
         const standard_monthly_shifts = scheme?.standard_monthly_shifts || 15;
         const leaderboardState = await getClubEmployeeLeaderboardState(clubId, year, month);
         const leaderboard = leaderboardState.leaderboard;
@@ -260,6 +263,9 @@ export async function GET(
         });
         const maintEfficiency = maintQualityMetrics.efficiency;
 
+        console.log(`[STATS] Maint tasks for ${userId}: Total=${maintTasksTotal}, Completed=${maintTasksCompleted}`);
+
+
         const overdueHistoryRes = await query(
             `SELECT overdue_days_at_completion, was_overdue, bonus_earned
              FROM equipment_maintenance_tasks
@@ -271,6 +277,8 @@ export async function GET(
         );
 
         const taskBonusSum = overdueHistoryRes.rows.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
+
+        console.log(`[STATS] Maint bonus for ${userId}: TaskBonusSum=${taskBonusSum}`);
 
         const barDeductionsRes = await query(
             `SELECT COALESCE(SUM(i.quantity * i.selling_price_snapshot), 0) as total

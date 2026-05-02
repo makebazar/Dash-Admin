@@ -547,56 +547,30 @@ export async function GET(
 
             // Calculate Maintenance Bonus based on Scheme Mode
             let finalMaintenanceBonus = 0;
-            let maintenanceOverduePenaltyRaw = 0;
-            let maintenanceOverduePenaltyApplied = 0;
-            let maintenanceOverdueIncidents = 0;
-            let maintenanceOverdueDays = 0;
-
             if (maintenanceBonusConfig) {
-                const penaltyMeta = calculateMaintenanceOverduePenalty(maintenanceBonusConfig, overdueTasks);
-                maintenanceOverduePenaltyRaw = penaltyMeta.total;
-                maintenanceOverdueIncidents = penaltyMeta.incidents;
-                maintenanceOverdueDays = penaltyMeta.overdue_days;
-
                 if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
-                    // Mode: Monthly Tiers
-                    // Штраф за просрочку применяется к tier-бонусу (если были просроченные задачи в месяце)
                     const efficiency = qualityMetrics.efficiency;
                     const thresholds = maintenanceBonusConfig.efficiency_thresholds || [];
-                    
                     const sortedTiers = [...thresholds].sort((a: any, b: any) => (b.from_percent || 0) - (a.from_percent || 0));
                     const achievedTier = sortedTiers.find((t: any) => efficiency >= (t.from_percent || 0));
-                    
                     if (achievedTier) {
                         finalMaintenanceBonus = parseFloat(achievedTier.amount || '0');
                     }
                 } else {
-                    // Mode: Per Task (default)
-                    // Бонус уже рассчитан с вычетом штрафа при завершении задачи
-                    // totalMaintenanceBonus = сумма всех bonus_earned (уже с вычетом)
                     finalMaintenanceBonus = totalMaintenanceBonus;
                 }
             } else {
-                finalMaintenanceBonus = 0;
+                finalMaintenanceBonus = totalMaintenanceBonus; // Fallback to sum if no config
             }
 
-            // Штраф за просрочку:
-            // - Для PER_TASK: уже учтён в bonus_earned, не применяем повторно
-            // - Для MONTHLY: применяем штраф к tier-бонусу если есть просроченные задачи
-            if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
-                const penaltyMeta = calculateMaintenanceOverduePenalty(maintenanceBonusConfig, overdueTasks);
-                maintenanceOverduePenaltyRaw = penaltyMeta.total;
-                maintenanceOverdueIncidents = penaltyMeta.incidents;
-                maintenanceOverdueDays = penaltyMeta.overdue_days;
-                maintenanceOverduePenaltyApplied = Math.min(finalMaintenanceBonus, maintenanceOverduePenaltyRaw);
-            } else {
-                // Для PER_TASK штраф уже применён при завершении задачи
-                // overdue_penalty из БД показывает сколько было вычтено
-                maintenanceOverduePenaltyRaw = overdueTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.overdue_penalty) || 0), 0);
-                maintenanceOverduePenaltyApplied = maintenanceOverduePenaltyRaw;
-                maintenanceOverdueIncidents = overdueTasks.filter((t: any) => t.overdue_days_at_completion > 0).length;
-                maintenanceOverdueDays = overdueTasks.reduce((sum: number, t: any) => sum + Math.max(0, parseInt(t.overdue_days_at_completion) || 0), 0);
-            }
+            const penaltyMeta = calculateMaintenanceOverduePenalty(maintenanceBonusConfig, overdueTasks);
+            const maintenanceOverduePenaltyRaw = penaltyMeta.total;
+            const maintenanceOverdueIncidents = penaltyMeta.incidents;
+            const maintenanceOverdueDays = penaltyMeta.overdue_days;
+            const maintenanceOverduePenaltyApplied = maintenanceBonusConfig?.calculation_mode === 'MONTHLY' 
+                ? Math.min(finalMaintenanceBonus, maintenanceOverduePenaltyRaw) 
+                : overdueTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.overdue_penalty) || 0), 0);
+
             
             const maintenanceBonusFinal = Math.max(0, finalMaintenanceBonus - maintenanceOverduePenaltyApplied);
 
