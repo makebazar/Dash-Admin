@@ -86,7 +86,7 @@
         "promptType": "define",
         "text": "=КОНТЕКСТ:\n{{ $('Get User Context').json | json }}\n\nЗАПРОС: \"{{ $('Prepare Data').item.json.prompt }}\"",
         "options": {
-          "systemMessage": "=Ты — дружелюбный AI-ассистент для владельцев киберклубов.\nКонтекст содержит: user, selected_club, available_clubs, employee_clubs.\n\nФОРМАТЫ ОТВЕТОВ:\n- Выручка: 📊 [сумма] ₽ | Смен: [число]\n- Смены: 📅 [число] смен, [часы] часов\n- Сотрудники: 👥 [список]\n\nПРАВИЛА:\n1. Если selected_club = null и клубов > 1 — верни buttons для выбора\n2. Если clubId не передан — используй selected_club\n3. Если данных нет — \"Нет данных за период\"\n\nВЫЗЫВАЙ toolQuery с параметрами:\n- tool: getRevenue, getShiftsSummary, getEmployees, getEmployeeHours, selectClub\n- clubId: число\n- period: today, yesterday, last7days, last30days, this_month\n- employeeId: uuid\n\nДля кнопок выбора клуба верни:\n{\"output\": \"текст\", \"buttons\": [{\"text\": \"Клуб\", \"data\": \"selectClub:ID\"}]}"
+          "systemMessage": "=Ты — дружелюбный AI-ассистент для владельцев киберклубов.\nКонтекст содержит: user, selected_club, available_clubs, employee_clubs.\n\nФОРМАТЫ ОТВЕТОВ:\n- Выручка: 📊 [сумма] ₽ | Смен: [число]\n- Смены: 📅 [число] смен, [часы] часов\n- Сотрудники: 👥 [список]\n\nПРАВИЛА:\n1. Если selected_club = null и клубов > 1 — верни buttons для выбора\n2. Если clubId не передан — используй selected_club\n3. Если данных нет — \"Нет данных за период\"\n\nВЫЗЫВАЙ callTool с параметрами:\n- tool: getRevenue, getShiftsSummary, getEmployees, getEmployeeHours, selectClub\n- clubId: число\n- period: today, yesterday, last7days, last30days, this_month\n- employeeId: uuid\n\nДля кнопок выбора клуба верни:\n{\"output\": \"текст\", \"buttons\": [{\"text\": \"Клуб\", \"data\": \"selectClub:ID\"}]}"
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -106,25 +106,22 @@
     },
     {
       "parameters": {
-        "url": "https://www.mydashadmin.ru/api/ai-tools/query",
-        "method": "POST",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "X-Messenger-Type", "value": "N8N" },
-            { "name": "X-Messenger-User-Id", "value": "={{ $('Max Trigger').item.json.message.recipient.user_id }}" }
+        "mode": "webhook",
+        "webhook": {
+          "body": [
+            { "name": "tool", "mappingMode": "reference", "value": "={{ $json.tool }}", "type": "string" },
+            { "name": "clubId", "mappingMode": "reference", "value": "={{ $json.clubId }}", "type": "number" },
+            { "name": "employeeId", "mappingMode": "reference", "value": "={{ $json.employeeId }}", "type": "string" },
+            { "name": "period", "mappingMode": "reference", "value": "={{ $json.period }}", "type": "string" }
           ]
         },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonOutput": "={{ JSON.stringify({ tool: $json.tool, clubId: $json.clubId, employeeId: $json.employeeId, period: $json.period }) }}"
+        "options": {}
       },
-      "type": "n8n-nodes-base.tool",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
       "position": [380, 200],
-      "id": "tool-query",
-      "name": "toolQuery"
+      "id": "call-tool",
+      "name": "callTool"
     },
     {
       "parameters": {
@@ -203,15 +200,15 @@
     "If Multiple Clubs": { "main": [[{ "node": "Build Club Buttons", "type": "main", "index": 0 }]] },
     "Build Club Buttons": { "main": [[{ "node": "If No Club Selected", "type": "main", "index": 0 }]] },
     "If No Club Selected": { "main": [[{ "node": "Send Club Selection", "type": "main", "index": 0 }], [{ "node": "Prepare Data", "type": "main", "index": 0 }]] },
-    "Prepare Data": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "Prepare Data": { "main": [[{ "node": "Chat Memory", "type": "main", "index": 0 }]] },
     "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
     "OpenRouter Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
-    "toolQuery": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
+    "callTool": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
     "AI Agent": { "main": [[{ "node": "Send Response", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },
-  "versionId": "dashadmin-v9",
+  "versionId": "dashadmin-v10",
   "id": "dashadmin-ai-workflow",
   "tags": ["dashadmin", "ai", "assistant"]
 }
