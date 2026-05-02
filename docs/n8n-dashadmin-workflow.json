@@ -126,18 +126,12 @@
           ]
         },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            { "name": "tool", "value": "{{ $json.tool }}" },
-            { "name": "clubId", "value": "{{ $json.clubId }}" },
-            { "name": "employeeId", "value": "{{ $json.employeeId }}" },
-            { "name": "period", "value": "{{ $json.period }}" }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonOutput": "={{ JSON.stringify({ tool: $json.tool, clubId: $json.clubId, employeeId: $json.employeeId, period: $json.period }) }}",
         "options": {}
       },
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.4,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [380, 200],
       "id": "tool-query",
       "name": "toolQuery"
