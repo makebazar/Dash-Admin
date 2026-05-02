@@ -155,9 +155,6 @@ export async function GET(
         const scheme = rawScheme
             ? { ...rawScheme, ...formula, period_bonuses: period_bonuses_config }
             : { amount: 0, standard_monthly_shifts: 15, period_bonuses: [] as any[] };
-
-        console.log(`[STATS] User: ${userId}, Club: ${clubId}, Scheme: ${scheme?.name || 'Not Found'}`);
-
         const standard_monthly_shifts = scheme?.standard_monthly_shifts || 15;
         const leaderboardState = await getClubEmployeeLeaderboardState(clubId, year, month);
         const leaderboard = leaderboardState.leaderboard;
@@ -263,9 +260,6 @@ export async function GET(
         });
         const maintEfficiency = maintQualityMetrics.efficiency;
 
-        console.log(`[STATS] Maint tasks for ${userId}: Total=${maintTasksTotal}, Completed=${maintTasksCompleted}`);
-
-
         const overdueHistoryRes = await query(
             `SELECT overdue_days_at_completion, was_overdue, bonus_earned
              FROM equipment_maintenance_tasks
@@ -277,8 +271,6 @@ export async function GET(
         );
 
         const taskBonusSum = overdueHistoryRes.rows.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
-
-        console.log(`[STATS] Maint bonus for ${userId}: TaskBonusSum=${taskBonusSum}`);
 
         const barDeductionsRes = await query(
             `SELECT COALESCE(SUM(i.quantity * i.selling_price_snapshot), 0) as total
@@ -527,57 +519,53 @@ export async function GET(
             }
         });
 
-        // 4.3. Maintenance Bonuses (Monthly)
-        const maintConfig = (scheme.bonuses || []).find((b: any) => b.type === 'maintenance_kpi');
-        if (maintConfig) {
+        // 4.3. Maintenance Bonus & Penalty
+        const maintKpiConfig = (scheme.bonuses || []).find((b: any) => b.type === 'maintenance_kpi');
+        if (maintKpiConfig) {
+            const mode = maintKpiConfig.mode || 'PER_TASK';
             let earned = 0;
-            if (maintConfig.calculation_mode === 'MONTHLY' && maintConfig.efficiency_thresholds?.length) {
-                const sorted = [...maintConfig.efficiency_thresholds].sort((x, y) => (Number(y.from_percent) || 0) - (Number(x.from_percent) || 0));
-                const achievedTier = sorted.find((t: any) => maintEfficiency >= (Number(t.from_percent) || 0));
-                if (achievedTier) {
-                    earned = Number(achievedTier.amount) || 0;
-                }
-            } else {
+
+            if (mode === 'PER_TASK') {
                 earned = taskBonusSum;
+            } else if (mode === 'MONTHLY_TIERS') {
+                const tiers = maintKpiConfig.efficiency_thresholds || [];
+                const sortedTiers = [...tiers].sort((a: any, b: any) => (b.min_percent || 0) - (a.min_percent || 0));
+                const applicableTier = sortedTiers.find(tier => maintEfficiency >= (tier.min_percent || 0));
+
+                if (applicableTier) {
+                    earned = applicableTier.bonus_amount || 0;
+                }
             }
 
-            const penaltyMeta = calculateMaintenanceOverduePenalty(maintConfig, overdueHistoryRes.rows);
-            const appliedPenalty = Math.min(earned, penaltyMeta.total);
-            const finalEarned = Math.max(0, earned - appliedPenalty);
-
-            if (earned > 0) {
-                if (maintConfig.payout_type === 'VIRTUAL_BALANCE') {
-                    maintenanceBonusVirtual += finalEarned;
-                    maintenancePenaltyVirtual += appliedPenalty;
-                } else {
-                    maintenanceBonusReal += finalEarned;
-                    maintenancePenaltyReal += appliedPenalty;
-                }
+            if (maintKpiConfig.payout_type === 'VIRTUAL_BALANCE') {
+                maintenanceBonusVirtual = earned;
+            } else {
+                maintenanceBonusReal = earned;
             }
         }
 
-        const leaderboardConfigs = (scheme.bonuses || []).filter((b: any) => b.type === 'leaderboard_rank');
-        leaderboardConfigs.forEach((bonus: any) => {
-            if (!leaderboardEntry) return;
-
-            const amount = getLeaderboardBonusAmount(bonus, leaderboardEntry.rank);
-            if (amount <= 0) return;
-
-            const isVirtual = bonus.payout_type === 'VIRTUAL_BALANCE';
-            if (isVirtual) {
-                leaderboardBonusVirtual += amount;
-            } else {
-                leaderboardBonusReal += amount;
+        // 4.4. Leaderboard Bonus
+        if (leaderboardEntry && leaderboardEntry.rank > 0) {
+            const bonusConfig = (scheme.bonuses || []).find((b: any) => b.type === 'leaderboard_bonus');
+            if (bonusConfig) {
+                const bonusAmount = getLeaderboardBonusAmount(bonusConfig, leaderboardEntry.rank);
+                if (bonusAmount > 0) {
+                    const isVirtual = bonusConfig.payout_type === 'VIRTUAL_BALANCE';
+                    if (isVirtual) {
+                        leaderboardBonusVirtual += bonusAmount;
+                    } else {
+                        leaderboardBonusReal += bonusAmount;
+                    }
+                    leaderboardBonusBreakdown.push({
+                        name: `Бонус за ${leaderboardEntry.rank} место`,
+                        amount: bonusAmount,
+                        rank: leaderboardEntry.rank,
+                        score: leaderboardEntry.score,
+                        is_virtual: isVirtual,
+                    });
+                }
             }
-
-            leaderboardBonusBreakdown.push({
-                name: bonus.name || 'Бонус за место в рейтинге',
-                amount,
-                rank: leaderboardEntry.rank,
-                score: leaderboardEntry.score,
-                is_virtual: isVirtual
-            });
-        });
+        }
 
         const revenueKpiBonusReal = revenueKpiBreakdown.filter(b => !b.is_virtual).reduce((sum, b) => sum + b.amount, 0);
         const revenueKpiBonusVirtual = revenueKpiBreakdown.filter(b => b.is_virtual).reduce((sum, b) => sum + b.amount, 0);
@@ -586,7 +574,7 @@ export async function GET(
         const totalKpiBonusVirtual = revenueKpiBonusVirtual + checklistMonthlyBonusVirtual + maintenanceBonusVirtual + leaderboardBonusVirtual;
         
         // Month earnings: Sum of calculated salary for closed shifts + ANY monthly bonuses reached so far
-        const monthEarnings = totalCalculatedSalary + totalKpiBonusReal - totalBarDeductions;
+        const monthEarnings = totalCalculatedSalary + totalKpiBonusReal - maintenancePenaltyReal - totalBarDeductions;
 
         // CRITICAL: Ensure we are sending ALL pieces of info needed for the breakdown
         const breakdown = {
@@ -633,7 +621,9 @@ export async function GET(
                     schedule: leaderboardEntry.schedule_score,
                     discipline: leaderboardEntry.discipline_score
                 }
-            } : null
+            } : null,
+            standard_monthly_shifts: standard_monthly_shifts,
+            completed_shifts_count: completed_shifts_count,
         });
 
     } catch (error) {

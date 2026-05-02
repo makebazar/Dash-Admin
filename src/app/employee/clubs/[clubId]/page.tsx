@@ -356,18 +356,16 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
     }, [activeShift?.id, canUseShiftZoneHandover, clubId, hasShiftAccountability, isOpenZoneSnapshotModalOpen])
 
     const maintenanceComponent = useMemo(() => {
-        if (kpiData?.hidden) return null
-        if (!kpiData?.maintenance) return null
+        if (kpiData?.hidden || !kpiData?.maintenance) return null
         return (
             <div className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
-                    
                     <h2 className="text-lg font-semibold tracking-tight text-foreground">Обслуживание</h2>
                 </div>
                 <MaintenanceKpiCard kpi={kpiData.maintenance} formatCurrency={formatCurrency} />
             </div>
         )
-    }, [kpiData?.maintenance?.current_value, kpiData?.maintenance?.target_value])
+    }, [kpiData?.maintenance])
 
     useEffect(() => {
         // Fetch current user ID

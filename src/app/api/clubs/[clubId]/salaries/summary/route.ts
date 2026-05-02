@@ -547,7 +547,13 @@ export async function GET(
 
             // Calculate Maintenance Bonus based on Scheme Mode
             let finalMaintenanceBonus = 0;
+            let maintenanceOverduePenaltyRaw = 0;
+            let maintenanceOverduePenaltyApplied = 0;
+            let maintenanceOverdueIncidents = 0;
+            let maintenanceOverdueDays = 0;
+
             if (maintenanceBonusConfig) {
+                // Calculate bonus
                 if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
                     const efficiency = qualityMetrics.efficiency;
                     const thresholds = maintenanceBonusConfig.efficiency_thresholds || [];
@@ -559,18 +565,21 @@ export async function GET(
                 } else {
                     finalMaintenanceBonus = totalMaintenanceBonus;
                 }
-            } else {
-                finalMaintenanceBonus = totalMaintenanceBonus; // Fallback to sum if no config
+
+                // Calculate penalty
+                if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
+                    const penaltyMeta = calculateMaintenanceOverduePenalty(maintenanceBonusConfig, overdueTasks);
+                    maintenanceOverduePenaltyRaw = penaltyMeta.total;
+                    maintenanceOverdueIncidents = penaltyMeta.incidents;
+                    maintenanceOverdueDays = penaltyMeta.overdue_days;
+                    maintenanceOverduePenaltyApplied = Math.min(finalMaintenanceBonus, maintenanceOverduePenaltyRaw);
+                } else {
+                    maintenanceOverduePenaltyRaw = overdueTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.overdue_penalty) || 0), 0);
+                    maintenanceOverduePenaltyApplied = maintenanceOverduePenaltyRaw;
+                    maintenanceOverdueIncidents = overdueTasks.filter((t: any) => t.overdue_days_at_completion > 0).length;
+                    maintenanceOverdueDays = overdueTasks.reduce((sum: number, t: any) => sum + Math.max(0, parseInt(t.overdue_days_at_completion) || 0), 0);
+                }
             }
-
-            const penaltyMeta = calculateMaintenanceOverduePenalty(maintenanceBonusConfig, overdueTasks);
-            const maintenanceOverduePenaltyRaw = penaltyMeta.total;
-            const maintenanceOverdueIncidents = penaltyMeta.incidents;
-            const maintenanceOverdueDays = penaltyMeta.overdue_days;
-            const maintenanceOverduePenaltyApplied = maintenanceBonusConfig?.calculation_mode === 'MONTHLY' 
-                ? Math.min(finalMaintenanceBonus, maintenanceOverduePenaltyRaw) 
-                : overdueTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.overdue_penalty) || 0), 0);
-
             
             const maintenanceBonusFinal = Math.max(0, finalMaintenanceBonus - maintenanceOverduePenaltyApplied);
 

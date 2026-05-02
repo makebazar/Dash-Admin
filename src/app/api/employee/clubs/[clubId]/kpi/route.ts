@@ -104,24 +104,13 @@ export async function GET(
             [clubId, userId]
         );
         const defaultRoleId = defaultRoleRes.rows[0]?.role_id ? Number(defaultRoleRes.rows[0].role_id) : null;
+
+        const fallbackUserRoleRes = await query(`SELECT role_id FROM users WHERE id = $1 LIMIT 1`, [userId]);
+        const fallbackUserRoleId = fallbackUserRoleRes.rows[0]?.role_id ? Number(fallbackUserRoleRes.rows[0].role_id) : null;
+
         const effectiveRoleId = (Number.isFinite(preferredRoleId as any) ? preferredRoleId : null)
-            ?? (Number.isFinite(defaultRoleId as any) ? defaultRoleId : null);
-
-        if (!effectiveRoleId) {
-            return NextResponse.json({ kpi: [], checklist: [], maintenance: null, hidden: true, message: 'Роль не выбрана' });
-        }
-
-        const roleSchemeIdRes = await query(
-            `SELECT scheme_id FROM employee_role_salary_assignments WHERE user_id = $1 AND club_id = $2 AND role_id = $3 LIMIT 1`,
-            [userId, clubId, effectiveRoleId]
-        );
-        const roleSchemeId = roleSchemeIdRes.rows[0]?.scheme_id === null || roleSchemeIdRes.rows[0]?.scheme_id === undefined
-            ? null
-            : Number(roleSchemeIdRes.rows[0].scheme_id);
-
-        if (!roleSchemeId) {
-            return NextResponse.json({ kpi: [], checklist: [], maintenance: null, hidden: true, message: 'Схема для выбранной роли не назначена' });
-        }
+            ?? (Number.isFinite(defaultRoleId as any) ? defaultRoleId : null)
+            ?? (Number.isFinite(fallbackUserRoleId as any) ? fallbackUserRoleId : null);
 
         const schemeRes = await query(
             `SELECT 
@@ -135,9 +124,13 @@ export async function GET(
                  ORDER BY version DESC 
                  LIMIT 1
              ) v ON true
-             WHERE ss.id = $1 AND ss.club_id = $2
+             WHERE ss.id = COALESCE(
+                 (SELECT scheme_id FROM employee_role_salary_assignments WHERE user_id = $1 AND club_id = $2 AND role_id = $3 LIMIT 1),
+                 (SELECT scheme_id FROM employee_salary_assignments WHERE user_id = $1 AND club_id = $2 LIMIT 1)
+             )
+               AND ss.club_id = $2
              LIMIT 1`,
-            [roleSchemeId, clubId]
+            [userId, clubId, effectiveRoleId]
         );
 
         if (schemeRes.rowCount === 0) {
@@ -290,6 +283,39 @@ export async function GET(
 
         const taskBonusSum = overdueHistoryRes.rows.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
 
+        const maintTasksTotal = parseInt(maintRes.rows[0]?.total_tasks || '0');
+        const maintTasksCompleted = parseInt(maintRes.rows[0]?.completed_tasks || '0');
+        const maintOverdueOpen = parseInt(maintRes.rows[0]?.overdue_open_tasks || '0');
+        const maintReworkOpen = parseInt(maintRes.rows[0]?.rework_open_tasks || '0');
+        const maintStaleRework = parseInt(maintRes.rows[0]?.stale_rework_tasks || '0');
+
+        const qualityMetrics = calculateMaintenanceQualityMetrics({
+            assigned: maintTasksTotal,
+            completed: maintTasksCompleted,
+            dueByNow: maintTasksTotal, // Assuming all assigned tasks were due by now for this context
+            completedDueByNow: maintTasksCompleted,
+            overdueOpenTasks: maintOverdueOpen,
+            reworkOpenTasks: maintReworkOpen,
+            staleReworkTasks: maintStaleRework,
+        });
+        const maintEfficiency = qualityMetrics.efficiency;
+
+        const maintKpiConfig = (scheme.bonuses || []).find((b: any) => b.type === 'maintenance_kpi');
+        let maintenanceBonus = 0;
+        if (maintKpiConfig) {
+            const mode = maintKpiConfig.mode || 'PER_TASK';
+            if (mode === 'PER_TASK') {
+                maintenanceBonus = taskBonusSum;
+            } else if (mode === 'MONTHLY_TIERS') {
+                const tiers = maintKpiConfig.efficiency_thresholds || [];
+                const sortedTiers = [...tiers].sort((a: any, b: any) => (b.min_percent || 0) - (a.min_percent || 0));
+                const applicableTier = sortedTiers.find(tier => maintEfficiency >= (tier.min_percent || 0));
+                if (applicableTier) {
+                    maintenanceBonus = applicableTier.bonus_amount || 0;
+                }
+            }
+        }
+
         // Calculate totals using the same logic as salary summary
         const monthlyMetrics: Record<string, number> = { 
             total_revenue: 0, 
@@ -298,7 +324,7 @@ export async function GET(
             evaluation_count: parseInt(evalRes.rows[0]?.count || '0'),
             maintenance_tasks_completed: parseInt(maintRes.rows[0]?.completed_tasks || '0'),
             maintenance_tasks_assigned: parseInt(maintRes.rows[0]?.total_tasks || '0'),
-            maintenance_bonus: taskBonusSum
+            maintenance_bonus: maintenanceBonus
         };
         const activeShiftMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
         const closedShiftsMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
@@ -599,125 +625,109 @@ export async function GET(
             };
         });
 
-        // 5. Fetch Maintenance KPI progress
         const maintConfig = (scheme.bonuses || []).find((b: any) => b.type === 'maintenance_kpi');
         let maintenance_progress = null;
+        try {
+            if (maintConfig) {
+                const completed = Number(monthlyMetrics['maintenance_tasks_completed']) || 0;
+                const assigned = Number(monthlyMetrics['maintenance_tasks_assigned']) || 0;
+                const dueByNow = Number(maintRes.rows[0]?.due_by_now_tasks || 0);
+                const completedDueByNow = Number(maintRes.rows[0]?.completed_due_by_now_tasks || 0);
+                const oldDebtClosed = Number(maintRes.rows[0]?.old_debt_closed_tasks || 0);
+                const overdueOpen = Number(maintRes.rows[0]?.overdue_open_tasks || 0);
+                const reworkOpen = Number(maintRes.rows[0]?.rework_open_tasks || 0);
+                const staleRework = Number(maintRes.rows[0]?.stale_rework_tasks || 0);
+                const overdueCompletedTasks = Number(maintRes.rows[0]?.overdue_completed_tasks || 0);
+                const overdueCompletedDays = Number(maintRes.rows[0]?.overdue_completed_days || 0);
+                const upcoming = Math.max(0, assigned - dueByNow);
+                const qualityMetrics = calculateMaintenanceQualityMetrics({
+                    assigned,
+                    completed,
+                    dueByNow,
+                    completedDueByNow,
+                    overdueOpenTasks: overdueOpen,
+                    reworkOpenTasks: reworkOpen,
+                    staleReworkTasks: staleRework
+                });
+                const efficiency = qualityMetrics.efficiency;
+                const liveEfficiency = qualityMetrics.live_efficiency;
+                const projectedCompleted = assigned > 0
+                    ? Math.min(assigned, qualityMetrics.adjusted_completed + (upcoming * (liveEfficiency / 100)))
+                    : qualityMetrics.adjusted_completed;
+                const projectedEfficiency = assigned > 0
+                    ? (projectedCompleted / assigned) * 100
+                    : (projectedCompleted > 0 ? 100 : 0);
 
-        if (maintConfig) {
-            const completed = Number(monthlyMetrics['maintenance_tasks_completed']) || 0;
-            const assigned = Number(monthlyMetrics['maintenance_tasks_assigned']) || 0;
-            const dueByNow = Number(maintRes.rows[0]?.due_by_now_tasks || 0);
-            const completedDueByNow = Number(maintRes.rows[0]?.completed_due_by_now_tasks || 0);
-            const oldDebtClosed = Number(maintRes.rows[0]?.old_debt_closed_tasks || 0);
-            const overdueOpen = Number(maintRes.rows[0]?.overdue_open_tasks || 0);
-            const reworkOpen = Number(maintRes.rows[0]?.rework_open_tasks || 0);
-            const staleRework = Number(maintRes.rows[0]?.stale_rework_tasks || 0);
-            const overdueCompletedTasks = Number(maintRes.rows[0]?.overdue_completed_tasks || 0);
-            const overdueCompletedDays = Number(maintRes.rows[0]?.overdue_completed_days || 0);
-            const upcoming = Math.max(0, assigned - dueByNow);
-            const qualityMetrics = calculateMaintenanceQualityMetrics({
-                assigned,
-                completed,
-                dueByNow,
-                completedDueByNow,
-                overdueOpenTasks: overdueOpen,
-                reworkOpenTasks: reworkOpen,
-                staleReworkTasks: staleRework
-            });
-            const efficiency = qualityMetrics.efficiency;
-            const liveEfficiency = qualityMetrics.live_efficiency;
-            const projectedCompleted = assigned > 0
-                ? Math.min(assigned, qualityMetrics.adjusted_completed + (upcoming * (liveEfficiency / 100)))
-                : qualityMetrics.adjusted_completed;
-            const projectedEfficiency = assigned > 0
-                ? (projectedCompleted / assigned) * 100
-                : (projectedCompleted > 0 ? 100 : 0);
-
-            let bonusAmount = 0;
-            let projectedBonusAmount = 0;
-            let projectedTierLabel: string | null = null;
-            const overduePenaltyMeta = calculateMaintenanceOverduePenalty(maintConfig, overdueHistoryRes.rows);
-            if (maintConfig.calculation_mode === 'MONTHLY') {
-                const thresholds = maintConfig.efficiency_thresholds || [];
-                const sortedTiers = [...thresholds].sort((a: any, b: any) => (Number(b.from_percent) || 0) - (Number(a.from_percent) || 0));
-                const achievedTier = sortedTiers.find((t: any) => efficiency >= (Number(t.from_percent) || 0));
-                if (achievedTier) {
-                    bonusAmount = Number(achievedTier.amount) || 0;
+                let bonusAmount = 0;
+                let projectedBonusAmount = 0;
+                let projectedTierLabel: string | null = null;
+                const overduePenaltyMeta = calculateMaintenanceOverduePenalty(maintConfig, overdueHistoryRes.rows);
+                if (maintConfig.calculation_mode === 'MONTHLY') {
+                    const thresholds = maintConfig.efficiency_thresholds || [];
+                    const sortedTiers = [...thresholds].sort((a: any, b: any) => (Number(b.from_percent) || 0) - (Number(a.from_percent) || 0));
+                    const achievedTier = sortedTiers.find((t: any) => efficiency >= (Number(t.from_percent) || 0));
+                    if (achievedTier) {
+                        bonusAmount = Number(achievedTier.amount) || 0;
+                    }
+                    const projectedTier = sortedTiers.find((t: any) => projectedEfficiency >= (Number(t.from_percent) || 0));
+                    if (projectedTier) {
+                        projectedBonusAmount = Number(projectedTier.amount) || 0;
+                        projectedTierLabel = projectedTier.label || null;
+                    }
+                } else {
+                    bonusAmount = Number(monthlyMetrics['maintenance_bonus']) || 0;
+                    projectedBonusAmount = bonusAmount;
                 }
-                const projectedTier = sortedTiers.find((t: any) => projectedEfficiency >= (Number(t.from_percent) || 0));
-                if (projectedTier) {
-                    projectedBonusAmount = Number(projectedTier.amount) || 0;
-                    projectedTierLabel = projectedTier.label || null;
+
+                const baseBonusAmount = bonusAmount;
+                const penaltyRawAmount = overduePenaltyMeta.total;
+                const penaltyAppliedAmount = Math.min(baseBonusAmount, penaltyRawAmount);
+                bonusAmount = Math.max(0, baseBonusAmount - penaltyAppliedAmount);
+                projectedBonusAmount = Math.max(0, projectedBonusAmount - penaltyAppliedAmount);
+
+                let current_thresholds: any[] = [];
+                if (maintConfig.efficiency_thresholds?.length) {
+                    current_thresholds = maintConfig.efficiency_thresholds
+                        .sort((a: any, b: any) => (Number(a.from_percent) || 0) - (Number(b.from_percent) || 0))
+                        .map((t: any, idx: number) => ({
+                            level: idx + 1,
+                            label: t.label || `Уровень ${idx + 1}`,
+                            from: Number(t.from_percent) || 0,
+                            amount: Number(t.amount) || 0,
+                            is_met: efficiency >= (Number(t.from_percent) || 0)
+                        }));
                 }
-            } else {
-                bonusAmount = Number(monthlyMetrics['maintenance_bonus']) || 0;
-                projectedBonusAmount = bonusAmount;
+
+                maintenance_progress = {
+                    id: maintConfig.id || 'maintenance',
+                    name: maintConfig.name || 'Обслуживание',
+                    efficiency,
+                    live_efficiency: liveEfficiency,
+                    bonus_amount: bonusAmount,
+                    base_bonus_amount: baseBonusAmount,
+                    overdue_penalty_amount: penaltyAppliedAmount,
+                    overdue_penalty_raw_amount: penaltyRawAmount,
+                    completed_month_value: completed,
+                    total_month_target: assigned,
+                    adjusted_completed_month_value: qualityMetrics.adjusted_completed,
+                    upcoming_tasks: upcoming,
+                    overdue_open_tasks: overdueOpen,
+                    rework_open_tasks: reworkOpen,
+                    stale_rework_tasks: staleRework,
+                    old_debt_closed_tasks: oldDebtClosed,
+                    overdue_completed_tasks: overdueCompletedTasks,
+                    overdue_completed_days: overdueCompletedDays,
+                    projected_completed_value: projectedCompleted,
+                    projected_efficiency: projectedEfficiency,
+                    projected_bonus_amount: projectedBonusAmount,
+                    projected_tier_label: projectedTierLabel,
+                    thresholds: current_thresholds,
+                    mode: maintConfig.calculation_mode || 'PER_TASK'
+                };
             }
-
-            const baseBonusAmount = bonusAmount;
-            const penaltyRawAmount = overduePenaltyMeta.total;
-            const penaltyAppliedAmount = Math.min(baseBonusAmount, penaltyRawAmount);
-            bonusAmount = Math.max(0, baseBonusAmount - penaltyAppliedAmount);
-            projectedBonusAmount = Math.max(0, projectedBonusAmount - penaltyAppliedAmount);
-
-            let current_thresholds: any[] = [];
-            if (maintConfig.efficiency_thresholds?.length) {
-                current_thresholds = maintConfig.efficiency_thresholds
-                    .sort((a: any, b: any) => (Number(a.from_percent) || 0) - (Number(b.from_percent) || 0))
-                    .map((t: any, idx: number) => ({
-                        level: idx + 1,
-                        label: t.label || `Уровень ${idx + 1}`,
-                        from: Number(t.from_percent) || 0,
-                        amount: Number(t.amount) || 0,
-                        is_met: efficiency >= (Number(t.from_percent) || 0)
-                    }));
-            } else {
-                // Fallback for simple maintenance KPI if any
-                const targetEff = Number(maintConfig.target_efficiency) || 90;
-                const amount = Number(maintConfig.amount) || 0;
-                
-                current_thresholds = [{
-                    level: 1,
-                    label: 'Цель',
-                    from: targetEff,
-                    amount: amount,
-                    is_met: efficiency >= targetEff
-                }];
-            }
-
-            maintenance_progress = {
-                id: 'maintenance',
-                type: 'maintenance',
-                name: maintConfig.name || 'Обслуживание',
-                current_value: completedDueByNow,
-                target_value: dueByNow,
-                completed_month_value: completed,
-                adjusted_completed_month_value: qualityMetrics.adjusted_completed,
-                old_debt_closed_tasks: oldDebtClosed,
-                total_month_target: assigned,
-                raw_efficiency: assigned > 0 ? (completed / assigned) * 100 : (completed > 0 ? 100 : 0),
-                efficiency,
-                live_efficiency: liveEfficiency,
-                live_current_value: qualityMetrics.adjusted_completed_due_by_now,
-                live_target_value: dueByNow,
-                overdue_open_tasks: overdueOpen,
-                rework_open_tasks: reworkOpen,
-                stale_rework_tasks: staleRework,
-                quality_penalty_units: qualityMetrics.penalty_units,
-                upcoming_tasks: upcoming,
-                projected_completed_value: projectedCompleted,
-                projected_efficiency: projectedEfficiency,
-                projected_bonus_amount: projectedBonusAmount,
-                projected_tier_label: projectedTierLabel,
-                bonus_amount: bonusAmount,
-                base_bonus_amount: baseBonusAmount,
-                overdue_penalty_raw_amount: penaltyRawAmount,
-                overdue_penalty_amount: penaltyAppliedAmount,
-                overdue_completed_tasks: overdueCompletedTasks,
-                overdue_completed_days: overdueCompletedDays,
-                thresholds: current_thresholds,
-                is_met: bonusAmount > 0
-            };
+        } catch (e) {
+            console.error('[KPI API] Failed to calculate maintenance progress:', e);
+            maintenance_progress = null;
         }
 
         const total_kpi_bonus = kpi_progress.reduce((sum: number, kpi: any) => sum + kpi.bonus_amount, 0) + 
