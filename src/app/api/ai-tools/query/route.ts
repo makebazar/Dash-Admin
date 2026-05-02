@@ -58,7 +58,29 @@ export async function POST(request: Request) {
   if (error) return error;
 
   try {
-    const body = await request.json();
+    let body = await request.json();
+    
+    // Debug logging (remove in production)
+    console.log('[AI-Tools Query] Raw body:', JSON.stringify(body));
+    
+    // Fix: if body itself is an array with one element, unwrap it
+    if (Array.isArray(body) && body.length === 1) {
+      body = body[0];
+    }
+    
+    // Fix: handle case where body has wrapped values
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const fixed: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(body)) {
+        if (Array.isArray(value) && value.length === 1) {
+          fixed[key] = value[0];
+        } else {
+          fixed[key] = value;
+        }
+      }
+      body = fixed;
+    }
+    
     const validation = QuerySchema.safeParse(body);
 
     if (!validation.success) {
