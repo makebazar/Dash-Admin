@@ -272,13 +272,13 @@
     "Prepare Data": { "main": [[{ "node": "Chat Memory", "type": "main", "index": 0 }]] },
     "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
     "OpenRouter Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
-    "AI Agent": { "ai_tool": [
-      [{ "node": "getRevenue", "type": "ai_tool", "index": 0 }],
-      [{ "node": "getShiftsSummary", "type": "ai_tool", "index": 0 }],
-      [{ "node": "getEmployees", "type": "ai_tool", "index": 0 }],
-      [{ "node": "getEmployeeHours", "type": "ai_tool", "index": 0 }],
-      [{ "node": "selectClub", "type": "ai_tool", "index": 0 }]
-    ]},
+    "AI Agent": { "ai_tool": {
+      "0": [{ "node": "getRevenue", "type": "main", "index": 0 }],
+      "1": [{ "node": "getShiftsSummary", "type": "main", "index": 0 }],
+      "2": [{ "node": "getEmployees", "type": "main", "index": 0 }],
+      "3": [{ "node": "getEmployeeHours", "type": "main", "index": 0 }],
+      "4": [{ "node": "selectClub", "type": "main", "index": 0 }]
+    }},
     "AI Agent": { "main": [[{ "node": "Send Response", "type": "main", "index": 0 }]] }
   },
   "active": false,
