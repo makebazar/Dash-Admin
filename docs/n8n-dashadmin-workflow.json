@@ -2,9 +2,7 @@
   "name": "DashAdmin AI Assistant",
   "nodes": [
     {
-      "parameters": {
-        "webhookId": "dashadmin-ai-trigger"
-      },
+      "parameters": { "webhookId": "dashadmin-ai-trigger" },
       "type": "n8n-nodes-max.maxTrigger",
       "typeVersion": 1,
       "position": [-480, 0],
@@ -21,10 +19,10 @@
             { "name": "messenger_type", "value": "N8N" }
           ]
         },
-        "options": { "response": { "response": { "neverError": true } } }
+        "options": { "response": { "neverError": true } }
       },
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
+      "typeVersion": 4.2,
       "position": [-260, 0],
       "id": "get-user-context",
       "name": "Get User Context",
@@ -33,13 +31,10 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
           "conditions": [
-            { "id": "cond-notlinked", "leftValue": "={{ $('Get User Context').item.json.error }}", "rightValue": "User not linked", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+            { "leftValue": "={{ $('Get User Context').item.json.error }}", "rightValue": "User not linked", "id": "cond-notlinked", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }
+          ]
+        }
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -50,8 +45,7 @@
     {
       "parameters": {
         "userId": "={{ $('Max Trigger').item.json.message.recipient.user_id }}",
-        "text": "Привет! Я DashAdmin AI.\n\nЧтобы начать:\n1. Зайдите в личный кабинет DashAdmin\n2. Нажмите Профиль → Интеграции\n3. Нажмите 'Получить код'\n\nОтправьте 6-значный код в чат.",
-        "additionalFields": {}
+        "text": "Привет! Я DashAdmin AI.\n\nЧтобы начать:\n1. Зайдите в личный кабинет DashAdmin\n2. Нажмите Профиль → Интеграции\n3. Нажмите 'Получить код'\n\nОтправьте 6-значный код в чат."
       },
       "type": "n8n-nodes-max.max",
       "typeVersion": 1,
@@ -65,24 +59,21 @@
         "assignments": {
           "assignments": [
             { "id": "set-prompt", "name": "prompt", "value": "={{ $('Max Trigger').item.json.message.body.text }}", "type": "string" },
-            { "id": "set-user-context", "name": "userContext", "value": "={{ JSON.stringify($('Get User Context').json) }}", "type": "string" },
             { "id": "set-session-id", "name": "sessionId", "value": "=session_{{ $('Max Trigger').item.json.message.recipient.user_id }}", "type": "string" }
           ]
-        },
-        "options": {}
+        }
       },
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [180, 40],
-      "id": "set-fields",
+      "id": "prepare-data",
       "name": "Prepare Data"
     },
     {
       "parameters": {
         "memoryType": "bufferWindow",
         "sessionsIdExpression": "={{ $('Prepare Data').item.json.sessionId }}",
-        "windowSize": 10,
-        "options": {}
+        "windowSize": 10
       },
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1,
@@ -95,7 +86,7 @@
         "promptType": "define",
         "text": "=КОНТЕКСТ:\n{{ $('Get User Context').json | json }}\n\nЗАПРОС: \"{{ $('Prepare Data').item.json.prompt }}\"",
         "options": {
-          "systemMessage": "=Ты — дружелюбный AI-ассистент для владельцев киберклубов.\nКонтекст содержит: user, selected_club, available_clubs, employee_clubs.\n\nТВОЙ СТИЛЬ:\n- Общайся тепло и по-человечески, как хороший друг\n- Отвечай структурированно и красиво, используй эмодзи для наглядности\n- Всегда форматируй числа: суммы с разделением тысяч (например: 15 000 руб)\n- Время в формате Ч ч ММ мин (например: 8 ч 30 мин)\n- Даты в человеческом формате (например: 30 апреля)\n\nФОРМАТ ОТВЕТА ПО ВЫРУЧКЕ:\n Выручка за [период] в [клуб]:\n━━━━━━━━━━━━━━━━━━━\n Общая: [сумма]\n Наличные: [сумма]\n Безнал: [сумма]\n Расходы: [сумма]\n━━━━━━━━━━━━━━━━━━━\n Чистая: [сумма]\n\n Смен: [число] | Часов: [число] | Сотрудников: [число]\n\nДОПОЛНИТЕЛЬНЫЕ МЕТРИКИ (если есть):\n Бар: [сумма]\n СБП: [сумма]\n\nФОРМАТ ОТВЕТА ПО СМЕНАМ:\n Смены за [период] в [клуб]:\n━━━━━━━━━━━━━━━━━━━\n Всего смен: [число]\n Общее время: [время]\n Сотрудников: [число]\n\nСТАТУСЫ:\n Проверенных: [число]\n На проверке: [число]\n Активных: [число]\n\nФОРМАТ ОТВЕТА ПО СОТРУДНИКАМ:\n Сотрудники [клуб]:\n━━━━━━━━━━━━━━━━━━━\n[Имя]: [часы] ч\n━━━━━━━━━━━━━━━━━━━\n Всего: [число] сотрудников\n\nФОРМАТ ОТВЕТА ПО ЧАСАМ:\n Часы [имя] за [период]:\n━━━━━━━━━━━━━━━━━━━\n Отработано: [часы] ч\n Смен: [число]\n━━━━━━━━━━━━━━━━━━━\n\nПРАВИЛА:\n1. Если selected_club = null и clubs > 1 — верни buttons для выбора клуба\n2. Если selected_club = null и только 1 клуб — автоматически используй его\n3. Если selected_club = null и клуб не определён — спроси с кнопками выбора\n4. Если данных нет — напиши \"Нет данных за этот период\"\n\nДля ответа используй toolQuery с параметрами:\n- tool: getRevenue|getShiftsSummary|getEmployees|getEmployeeHours|selectClub\n- clubId: число (id клуба)\n- period: today|yesterday|last7days|last30days|this_month\n- employeeId: uuid сотрудника\n\nЕсли нужны кнопки выбора клуба — верни JSON:\n{\"output\": \"текст\", \"buttons\": [{\"text\": \"Клуб 1\", \"data\": \"selectClub:1\"}, ...]}"
+          "systemMessage": "=Ты — дружелюбный AI-ассистент для владельцев киберклубов.\nКонтекст содержит: user, selected_club, available_clubs, employee_clubs.\n\nФОРМАТЫ ОТВЕТОВ:\n- Выручка: 📊 [сумма] ₽ | Смен: [число]\n- Смены: 📅 [число] смен, [часы] часов\n- Сотрудники: 👥 [список]\n\nПРАВИЛА:\n1. Если selected_club = null и клубов > 1 — верни buttons для выбора\n2. Если clubId не передан — используй selected_club\n3. Если данных нет — \"Нет данных за период\"\n\nВЫЗЫВАЙ toolQuery с параметрами:\n- tool: getRevenue, getShiftsSummary, getEmployees, getEmployeeHours, selectClub\n- clubId: число\n- period: today, yesterday, last7days, last30days, this_month\n- employeeId: uuid\n\nДля кнопок выбора клуба верни:\n{\"output\": \"текст\", \"buttons\": [{\"text\": \"Клуб\", \"data\": \"selectClub:ID\"}]}"
         }
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
@@ -105,7 +96,7 @@
       "name": "AI Agent"
     },
     {
-      "parameters": { "model": "qwen/qwen3.5-flash-02-23", "options": {} },
+      "parameters": { "model": "qwen/qwen3.5-flash-02-23" },
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "typeVersion": 1,
       "position": [140, 280],
@@ -127,8 +118,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonOutput": "={{ JSON.stringify({ tool: $json.tool, clubId: $json.clubId, employeeId: $json.employeeId, period: $json.period }) }}",
-        "options": {}
+        "jsonOutput": "={{ JSON.stringify({ tool: $json.tool, clubId: $json.clubId, employeeId: $json.employeeId, period: $json.period }) }}"
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -141,8 +131,7 @@
         "sendTo": "chat",
         "chatId": "={{ $('Max Trigger').item.json.message.recipient.chat_id }}",
         "text": "={{ $json.output }}",
-        "keyboard": "={{ $json.buttons ? JSON.stringify($json.buttons) : $json.keyboard }}",
-        "additionalFields": {}
+        "keyboard": "={{ $json.buttons ? JSON.stringify($json.buttons) : $json.keyboard }}"
       },
       "type": "n8n-nodes-max.max",
       "typeVersion": 1,
@@ -154,13 +143,10 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
           "conditions": [
-            { "id": "cond-multiclub", "leftValue": "={{ $('Get User Context').json.available_clubs.length + $('Get User Context').json.employee_clubs.length }}", "rightValue": 1, "operator": { "type": "number", "operation": ">", "name": "filter.operator.gt" } }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+            { "leftValue": "={{ $('Get User Context').json.available_clubs.length + $('Get User Context').json.employee_clubs.length }}", "rightValue": 1, "id": "cond-multiclub", "operator": { "type": "number", "operation": ">", "name": "filter.operator.gt" } }
+          ]
+        }
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -174,8 +160,7 @@
           "assignments": [
             { "id": "build-buttons", "name": "keyboard", "value": "=[\n  {{ $('Get User Context').json.available_clubs.concat($('Get User Context').json.employee_clubs).map(c => '{\"text\":\"' + c.name + '\",\"data\":\"selectClub:' + c.id + '\"}').join(',') }}\n]", "type": "string" }
           ]
-        },
-        "options": {}
+        }
       },
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
@@ -186,13 +171,10 @@
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
           "conditions": [
-            { "id": "cond-need-select", "leftValue": "={{ $('Get User Context').json.selected_club }}", "rightValue": null, "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+            { "leftValue": "={{ $('Get User Context').json.selected_club }}", "rightValue": null, "id": "cond-need-select", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }
+          ]
+        }
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
@@ -204,8 +186,7 @@
       "parameters": {
         "userId": "={{ $('Max Trigger').item.json.message.recipient.user_id }}",
         "text": " У вас несколько клубов. Выберите клуб:",
-        "keyboard": "={{ $('Build Club Buttons').item.json.keyboard }}",
-        "additionalFields": {}
+        "keyboard": "={{ $('Build Club Buttons').item.json.keyboard }}"
       },
       "type": "n8n-nodes-max.max",
       "typeVersion": 1,
@@ -216,52 +197,21 @@
     }
   ],
   "connections": {
-    "Max Trigger": {
-      "main": [[{ "node": "Get User Context", "type": "main", "index": 0 }]]
-    },
-    "Get User Context": {
-      "main": [[{ "node": "If User Not Linked", "type": "main", "index": 0 }], [{ "node": "If Multiple Clubs", "type": "main", "index": 0 }]]
-    },
-    "If User Not Linked": {
-      "main": [
-        [{ "node": "Send Link Request", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Data", "type": "main", "index": 0 }]
-      ]
-    },
-    "If Multiple Clubs": {
-      "main": [
-        [{ "node": "Build Club Buttons", "type": "main", "index": 0 }]
-      ]
-    },
-    "Build Club Buttons": {
-      "main": [[{ "node": "If No Club Selected", "type": "main", "index": 0 }]]
-    },
-    "If No Club Selected": {
-      "main": [
-        [{ "node": "Send Club Selection", "type": "main", "index": 0 }],
-        [{ "node": "Prepare Data", "type": "main", "index": 0 }]
-      ]
-    },
-    "Prepare Data": {
-      "main": [[{ "node": "Chat Memory", "type": "main", "index": 0 }]]
-    },
-    "Chat Memory": {
-      "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]]
-    },
-    "OpenRouter Model": {
-      "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]]
-    },
-    "AI Agent": {
-      "main": [[{ "node": "Send Response", "type": "main", "index": 0 }]]
-    },
-    "toolQuery": {
-      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]]
-    }
+    "Max Trigger": { "main": [[{ "node": "Get User Context", "type": "main", "index": 0 }]] },
+    "Get User Context": { "main": [[{ "node": "If User Not Linked", "type": "main", "index": 0 }], [{ "node": "If Multiple Clubs", "type": "main", "index": 0 }]] },
+    "If User Not Linked": { "main": [[{ "node": "Send Link Request", "type": "main", "index": 0 }], [{ "node": "Prepare Data", "type": "main", "index": 0 }]] },
+    "If Multiple Clubs": { "main": [[{ "node": "Build Club Buttons", "type": "main", "index": 0 }]] },
+    "Build Club Buttons": { "main": [[{ "node": "If No Club Selected", "type": "main", "index": 0 }]] },
+    "If No Club Selected": { "main": [[{ "node": "Send Club Selection", "type": "main", "index": 0 }], [{ "node": "Prepare Data", "type": "main", "index": 0 }]] },
+    "Prepare Data": { "main": [[{ "node": "Chat Memory", "type": "main", "index": 0 }]] },
+    "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
+    "OpenRouter Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "toolQuery": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
+    "AI Agent": { "main": [[{ "node": "Send Response", "type": "main", "index": 0 }]] }
   },
   "active": false,
-  "settings": { "executionOrder": "v1", "binaryMode": "separate", "availableInMCP": true },
-  "versionId": "dashadmin-v7",
-  "meta": { "templateCredsSetupCompleted": true },
+  "settings": { "executionOrder": "v1" },
+  "versionId": "dashadmin-v8",
   "id": "dashadmin-ai-workflow",
   "tags": ["dashadmin", "ai", "assistant"]
 }
