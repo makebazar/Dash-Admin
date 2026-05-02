@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2, Plus, Wallet, Sun, Moon, Percent, Clock, DollarSign, Edit, Trash2, Save, ArrowLeft, HelpCircle, Calculator, Calendar, Info, TrendingUp, Wrench, ClipboardCheck, Coins, ShieldAlert, ArrowRight, Trophy } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -134,6 +135,12 @@ export interface Bonus {
     payout_timing?: 'SHIFT' | 'MONTH'
     rank_from?: number
     rank_to?: number
+    per_equipment_type_rewards?: {
+        equipment_type_code: string
+        equipment_type_name: string
+        amount: number
+    }[]
+    auto_create_next_task?: boolean
 }
 
 export interface PeriodBonus {
@@ -244,6 +251,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
     const [isSaving, setIsSaving] = useState(false)
     const [reportMetrics, setReportMetrics] = useState<ReportMetric[]>([])
     const [checklistTemplates, setChecklistTemplates] = useState<any[]>([])
+    const [equipmentTypes, setEquipmentTypes] = useState<any[]>([])
 
     const [schemeName, setSchemeName] = useState('')
     const [schemeDescription, setSchemeDescription] = useState('')
@@ -260,6 +268,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
     const [exampleMaintenanceTasksCompleted, setExampleMaintenanceTasksCompleted] = useState(0)
     const [exampleMaintenanceTasksAssigned, setExampleMaintenanceTasksAssigned] = useState(0)
     const [exampleMaintenancePenalty, setExampleMaintenancePenalty] = useState(0)
+    const [exampleMaintenanceTasksByType, setExampleMaintenanceTasksByType] = useState<Record<string, number>>({})
     const [exampleMonthShiftsWorked, setExampleMonthShiftsWorked] = useState(15)
     const [exampleMonthRank, setExampleMonthRank] = useState(1)
     const [exampleMonthMetricOverrides, setExampleMonthMetricOverrides] = useState<Record<string, number>>({})
@@ -285,6 +294,7 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
     useEffect(() => {
         fetchReportMetrics()
         fetchChecklistTemplates()
+        fetchEquipmentTypes()
         if (!isNew && schemeId) fetchScheme(schemeId)
     }, [clubId, schemeId])
 
@@ -364,6 +374,14 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
             const res = await fetch(`/api/clubs/${clubId}/evaluations/templates`)
             const data = await res.json()
             if (res.ok && Array.isArray(data)) setChecklistTemplates(data)
+        } catch (error) { console.error(error) }
+    }
+
+    const fetchEquipmentTypes = async () => {
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/equipment-types`)
+            const data = await res.json()
+            if (res.ok && Array.isArray(data)) setEquipmentTypes(data)
         } catch (error) { console.error(error) }
     }
 
@@ -782,8 +800,31 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         }
 
         if (hasMaintenanceKpi) {
-            metrics.maintenance_raw_sum = Number(exampleMaintenanceRawSum || 0)
-            metrics.maintenance_tasks_completed = Number(exampleMaintenanceTasksCompleted || 0)
+            const tasksByType = exampleMaintenanceTasksByType || {}
+            const maintenanceKpiBonus = formula.bonuses.find(b => b.type === 'maintenance_kpi')
+            const perTypeRewards = maintenanceKpiBonus?.per_equipment_type_rewards || []
+            const defaultAmount = Number(maintenanceKpiBonus?.amount) || 0
+            
+            let calculatedRawSum = 0
+            const usedTypes = new Set(Object.keys(tasksByType))
+            
+            for (const [typeCode, taskCount] of Object.entries(tasksByType)) {
+                if (taskCount > 0) {
+                    const reward = perTypeRewards.find((r: any) => r.equipment_type_code === typeCode)
+                    const amount = reward ? Number(reward.amount) : defaultAmount
+                    calculatedRawSum += taskCount * amount
+                    usedTypes.add(typeCode)
+                }
+            }
+            
+            const totalTasks = Number(exampleMaintenanceTasksCompleted || 0)
+            const unaccountedTasks = totalTasks - Object.values(tasksByType).reduce((a, b) => a + b, 0)
+            if (unaccountedTasks > 0) {
+                calculatedRawSum += unaccountedTasks * defaultAmount
+            }
+            
+            metrics.maintenance_raw_sum = calculatedRawSum
+            metrics.maintenance_tasks_completed = totalTasks
             metrics.maintenance_tasks_assigned = Number(exampleMaintenanceTasksAssigned || 0)
             metrics.maintenance_overdue_penalty_applied = Number(exampleMaintenancePenalty || 0)
         }
@@ -799,7 +840,9 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         exampleMaintenanceRawSum,
         exampleMaintenanceTasksCompleted,
         exampleMaintenanceTasksAssigned,
-        exampleMaintenancePenalty
+        exampleMaintenancePenalty,
+        exampleMaintenanceTasksByType,
+        formula
     ])
 
     const describeMetric = (key?: string, value?: number) => {
@@ -842,12 +885,36 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
         if (monthlyMetricKeys.includes('revenue_cash') && metrics.revenue_cash === undefined) metrics.revenue_cash = 0
         if (monthlyMetricKeys.includes('revenue_card') && metrics.revenue_card === undefined) metrics.revenue_card = 0
 
-        if (monthlyMetricKeys.includes('maintenance_raw_sum') && metrics.maintenance_raw_sum === undefined) metrics.maintenance_raw_sum = Number(exampleMaintenanceRawSum || 0)
-        if (monthlyMetricKeys.includes('maintenance_tasks_completed') && metrics.maintenance_tasks_completed === undefined) metrics.maintenance_tasks_completed = Number(exampleMaintenanceTasksCompleted || 0)
-        if (monthlyMetricKeys.includes('maintenance_tasks_assigned') && metrics.maintenance_tasks_assigned === undefined) metrics.maintenance_tasks_assigned = Number(exampleMaintenanceTasksAssigned || 0)
+        if (monthlyMetricKeys.includes('maintenance_tasks_completed')) metrics.maintenance_tasks_completed = Number(exampleMaintenanceTasksCompleted || 0)
+        if (monthlyMetricKeys.includes('maintenance_tasks_assigned')) metrics.maintenance_tasks_assigned = Number(exampleMaintenanceTasksAssigned || 0)
+        
+        if (monthlyMetricKeys.includes('maintenance_raw_sum')) {
+            const tasksByType = exampleMaintenanceTasksByType || {}
+            const maintenanceKpiBonus = monthlyBonuses.find(b => b.type === 'maintenance_kpi')
+            const perTypeRewards = maintenanceKpiBonus?.per_equipment_type_rewards || []
+            const defaultAmount = Number(maintenanceKpiBonus?.amount) || 0
+            
+            let calculatedRawSum = 0
+            for (const [typeCode, taskCount] of Object.entries(tasksByType)) {
+                if (taskCount > 0) {
+                    const reward = perTypeRewards.find((r: any) => r.equipment_type_code === typeCode)
+                    const amount = reward ? Number(reward.amount) : defaultAmount
+                    calculatedRawSum += taskCount * amount
+                }
+            }
+            
+            const totalTasks = Number(exampleMaintenanceTasksCompleted || 0)
+            const accountedTasks = Object.values(tasksByType).reduce((a, b) => a + b, 0)
+            const unaccountedTasks = Math.max(0, totalTasks - accountedTasks)
+            if (unaccountedTasks > 0) {
+                calculatedRawSum += unaccountedTasks * defaultAmount
+            }
+            
+            metrics.maintenance_raw_sum = calculatedRawSum
+        }
 
         return metrics
-    }, [exampleMonthMetricOverrides, monthlyMetricKeys, exampleMaintenanceRawSum, exampleMaintenanceTasksCompleted, exampleMaintenanceTasksAssigned])
+    }, [exampleMonthMetricOverrides, monthlyMetricKeys, exampleMaintenanceTasksCompleted, exampleMaintenanceTasksAssigned, exampleMaintenanceTasksByType, monthlyBonuses])
 
     const monthlyKpiPreview = useMemo(() => {
         if (!monthlyBonuses.length) return { totalReal: 0, totalVirtual: 0, items: [] as any[] }
@@ -2242,14 +2309,125 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
 
                                                                 {bonus.calculation_mode === 'PER_TASK' ? (
                                                                     <div className="space-y-3 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 animate-in slide-in-from-top-2 duration-300">
-                                                                        <Label className="text-[10px] font-black uppercase text-indigo-600">Настройка оплаты</Label>
-                                                                        <div className="flex items-center gap-3">
-                                                                            <span className="text-xs font-bold">Выплачивать</span>
-                                                                            <div className="relative w-32">
-                                                                                <NumericInput value={Number(bonus.amount ?? 0)} onValueChange={(v) => updateBonus(index, 'amount', v)} className="h-10 rounded-xl pl-4 pr-10 font-black text-indigo-700 border-indigo-200 bg-white" />
-                                                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-black text-indigo-400">₽</span>
+                                                                        <div className="space-y-2">
+                                                                            <Label className="text-[10px] font-black uppercase text-indigo-600">Тип оплаты за задачу</Label>
+                                                                            <div className="flex p-1 bg-white/50 rounded-xl w-fit">
+                                                                                <button 
+                                                                                    type="button" 
+                                                                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${!bonus.per_equipment_type_rewards?.length ? 'bg-white shadow-sm text-indigo-600' : 'text-muted-foreground hover:bg-white/50'}`} 
+                                                                                    onClick={() => updateBonus(index, 'per_equipment_type_rewards', undefined)}
+                                                                                >
+                                                                                    Единая сумма
+                                                                                </button>
+                                                                                <button 
+                                                                                    type="button" 
+                                                                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${bonus.per_equipment_type_rewards?.length ? 'bg-white shadow-sm text-indigo-600' : 'text-muted-foreground hover:bg-white/50'}`} 
+                                                                                    onClick={() => {
+                                                                                        if (!bonus.per_equipment_type_rewards?.length && equipmentTypes.length > 0) {
+                                                                                            const defaultRewards = equipmentTypes.slice(0, 3).map(et => ({
+                                                                                                equipment_type_code: et.code,
+                                                                                                equipment_type_name: et.name_ru || et.name || et.code,
+                                                                                                amount: Number(bonus.amount) || 50
+                                                                                            }))
+                                                                                            updateBonus(index, 'per_equipment_type_rewards', defaultRewards)
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    По типу оборудования
+                                                                                </button>
                                                                             </div>
-                                                                            <span className="text-xs font-bold">за каждую задачу</span>
+                                                                        </div>
+
+                                                                        {!bonus.per_equipment_type_rewards?.length ? (
+                                                                            <div className="flex items-center gap-3">
+                                                                                <span className="text-xs font-bold">Выплачивать</span>
+                                                                                <div className="relative w-32">
+                                                                                    <NumericInput value={Number(bonus.amount ?? 0)} onValueChange={(v) => updateBonus(index, 'amount', v)} className="h-10 rounded-xl pl-4 pr-10 font-black text-indigo-700 border-indigo-200 bg-white" />
+                                                                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-black text-indigo-400">₽</span>
+                                                                                </div>
+                                                                                <span className="text-xs font-bold">за каждую задачу</span>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="space-y-3">
+                                                                                <Label className="text-[10px] font-black uppercase text-indigo-600">Вознаграждение по типам оборудования</Label>
+                                                                                {bonus.per_equipment_type_rewards?.map((reward, rewardIdx) => (
+                                                                                    <div key={rewardIdx} className="flex items-center gap-2 bg-white/50 p-2 rounded-xl">
+                                                                                        <div className="flex-1 min-w-0">
+                                                                                            <Select
+                                                                                                value={reward.equipment_type_code}
+                                                                                                onValueChange={(code) => {
+                                                                                                    const type = equipmentTypes.find(et => et.code === code)
+                                                                                                    const newRewards = [...(bonus.per_equipment_type_rewards || [])]
+                                                                                                    newRewards[rewardIdx] = {
+                                                                                                        ...reward,
+                                                                                                        equipment_type_code: code,
+                                                                                                        equipment_type_name: type?.name_ru || type?.name || code
+                                                                                                    }
+                                                                                                    updateBonus(index, 'per_equipment_type_rewards', newRewards)
+                                                                                                }}
+                                                                                            >
+                                                                                                <SelectTrigger className="h-9 rounded-lg bg-white text-xs font-medium">
+                                                                                                    <SelectValue />
+                                                                                                </SelectTrigger>
+                                                                                                <SelectContent>
+                                                                                                    {equipmentTypes.filter(et => 
+                                                                                                        !bonus.per_equipment_type_rewards?.some((r, i) => i !== rewardIdx && r.equipment_type_code === et.code)
+                                                                                                    ).map(et => (
+                                                                                                        <SelectItem key={et.code} value={et.code}>
+                                                                                                            {et.name_ru || et.name || et.code}
+                                                                                                        </SelectItem>
+                                                                                                    ))}
+                                                                                                </SelectContent>
+                                                                                            </Select>
+                                                                                        </div>
+                                                                                        <div className="relative w-24">
+                                                                                            <NumericInput value={reward.amount} onValueChange={(v) => {
+                                                                                                const newRewards = [...(bonus.per_equipment_type_rewards || [])]
+                                                                                                newRewards[rewardIdx] = { ...reward, amount: v }
+                                                                                                updateBonus(index, 'per_equipment_type_rewards', newRewards)
+                                                                                            }} className="h-9 rounded-lg pl-3 pr-8 font-bold text-xs text-indigo-700 border-indigo-200 bg-white" />
+                                                                                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-400">₽</span>
+                                                                                        </div>
+                                                                                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-400 shrink-0" onClick={() => {
+                                                                                            const newRewards = (bonus.per_equipment_type_rewards || []).filter((_, i) => i !== rewardIdx)
+                                                                                            updateBonus(index, 'per_equipment_type_rewards', newRewards.length > 0 ? newRewards : undefined)
+                                                                                        }}>
+                                                                                            <Trash2 className="h-3 w-3" />
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                ))}
+                                                                                <Button type="button" variant="ghost" size="sm" className="w-full h-9 border-dashed border-indigo-200 text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:bg-indigo-100/50" onClick={() => {
+                                                                                    const availableTypes = equipmentTypes.filter(et => 
+                                                                                        !bonus.per_equipment_type_rewards?.some(r => r.equipment_type_code === et.code)
+                                                                                    )
+                                                                                    if (availableTypes.length > 0) {
+                                                                                        const newType = availableTypes[0]
+                                                                                        const newRewards = [...(bonus.per_equipment_type_rewards || []), {
+                                                                                            equipment_type_code: newType.code,
+                                                                                            equipment_type_name: newType.name_ru || newType.name || newType.code,
+                                                                                            amount: Number(bonus.amount) || 50
+                                                                                        }]
+                                                                                        updateBonus(index, 'per_equipment_type_rewards', newRewards)
+                                                                                    }
+                                                                                }}>
+                                                                                    + Добавить тип оборудования
+                                                                                </Button>
+                                                                                <div className="text-[10px] text-indigo-500 bg-indigo-100/30 rounded-lg p-2">
+                                                                                    Типы без настройки получат базовую сумму: <span className="font-bold">{Number(bonus.amount) || 0} ₽</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                        
+                                                                        <div className="flex items-center gap-2 pt-2 border-t border-indigo-100/50">
+                                                                            <Checkbox 
+                                                                                id={`auto-create-${index}`}
+                                                                                checked={bonus.auto_create_next_task !== false}
+                                                                                onCheckedChange={(checked: boolean | 'indeterminate') => updateBonus(index, 'auto_create_next_task', checked === true ? undefined : false)}
+                                                                                className="data-[state=checked]:bg-indigo-600 data-[state=checked]:border-indigo-600"
+                                                                            />
+                                                                            <Label htmlFor={`auto-create-${index}`} className="text-xs font-medium text-indigo-600 cursor-pointer">
+                                                                                Автоматически создавать следующую задачу после завершения
+                                                                            </Label>
                                                                         </div>
                                                                     </div>
                                                                 ) : (
@@ -2640,16 +2818,45 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                         <Label className="text-sm font-medium">Обслуживание за месяц</Label>
                                                         <div className="grid sm:grid-cols-2 gap-4">
                                                             <div className="space-y-2">
-                                                                <Label className="text-sm font-medium">Сумма по задачам</Label>
-                                                                <NumericInput value={Number(exampleMaintenanceRawSum || 0)} onValueChange={setExampleMaintenanceRawSum} className="h-11 rounded-xl" />
-                                                            </div>
-                                                            <div className="space-y-2">
                                                                 <Label className="text-sm font-medium">Задач выполнено</Label>
                                                                 <NumericInput value={Number(exampleMaintenanceTasksCompleted || 0)} onValueChange={setExampleMaintenanceTasksCompleted} className="h-11 rounded-xl" />
                                                             </div>
                                                             <div className="space-y-2">
                                                                 <Label className="text-sm font-medium">Задач назначено</Label>
                                                                 <NumericInput value={Number(exampleMaintenanceTasksAssigned || 0)} onValueChange={setExampleMaintenanceTasksAssigned} className="h-11 rounded-xl" />
+                                                            </div>
+                                                        </div>
+                                                        {(() => {
+                                                            const maintenanceKpi = monthlyBonuses.find(b => b.type === 'maintenance_kpi')
+                                                            if (!maintenanceKpi?.per_equipment_type_rewards?.length) return null
+                                                            return (
+                                                                <div className="space-y-2 pt-2">
+                                                                    <Label className="text-sm font-medium">Задачи по типам оборудования</Label>
+                                                                    <div className="grid sm:grid-cols-3 gap-3">
+                                                                        {maintenanceKpi.per_equipment_type_rewards.map((reward: any) => (
+                                                                            <div key={reward.equipment_type_code} className="space-y-1">
+                                                                                <Label className="text-xs font-medium text-muted-foreground">
+                                                                                    {reward.equipment_type_name}
+                                                                                </Label>
+                                                                                <NumericInput
+                                                                                    value={exampleMaintenanceTasksByType[reward.equipment_type_code] || 0}
+                                                                                    onValueChange={(v) => setExampleMaintenanceTasksByType(prev => ({
+                                                                                        ...prev,
+                                                                                        [reward.equipment_type_code]: v
+                                                                                    }))}
+                                                                                    className="h-9 rounded-lg"
+                                                                                    placeholder="0"
+                                                                                />
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )
+                                                        })()}
+                                                        <div className="space-y-2 pt-2">
+                                                            <Label className="text-xs font-medium text-muted-foreground">Сумма вознаграждения (рассчитывается)</Label>
+                                                            <div className="flex items-center h-11 px-4 rounded-xl bg-muted/50 border text-sm font-medium">
+                                                                {Number(exampleReportMetricsForPreview.maintenance_raw_sum || 0).toLocaleString('ru-RU')} ₽
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2688,10 +2895,6 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                 <Label className="text-sm font-medium">Обслуживание (KPI)</Label>
                                                 <div className="grid sm:grid-cols-2 gap-4">
                                                     <div className="space-y-2">
-                                                        <Label className="text-sm font-medium">Сумма по задачам</Label>
-                                                        <NumericInput value={Number(exampleMaintenanceRawSum || 0)} onValueChange={setExampleMaintenanceRawSum} className="h-11 rounded-xl" />
-                                                    </div>
-                                                    <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Задач выполнено</Label>
                                                         <NumericInput value={Number(exampleMaintenanceTasksCompleted || 0)} onValueChange={setExampleMaintenanceTasksCompleted} className="h-11 rounded-xl" />
                                                     </div>
@@ -2702,6 +2905,39 @@ export default function SalarySchemeForm({ clubId, schemeId }: SalarySchemeFormP
                                                     <div className="space-y-2">
                                                         <Label className="text-sm font-medium">Штраф за просрочку</Label>
                                                         <NumericInput value={Number(exampleMaintenancePenalty || 0)} onValueChange={setExampleMaintenancePenalty} className="h-11 rounded-xl" />
+                                                    </div>
+                                                </div>
+                                                {(() => {
+                                                    const maintenanceKpi = formula.bonuses.find(b => b.type === 'maintenance_kpi')
+                                                    if (!maintenanceKpi?.per_equipment_type_rewards?.length) return null
+                                                    return (
+                                                        <div className="space-y-2 pt-2">
+                                                            <Label className="text-sm font-medium">Задачи по типам оборудования</Label>
+                                                            <div className="grid sm:grid-cols-3 gap-3">
+                                                                {maintenanceKpi.per_equipment_type_rewards.map((reward: any) => (
+                                                                    <div key={reward.equipment_type_code} className="space-y-1">
+                                                                        <Label className="text-xs font-medium text-muted-foreground">
+                                                                            {reward.equipment_type_name}
+                                                                        </Label>
+                                                                        <NumericInput
+                                                                            value={exampleMaintenanceTasksByType[reward.equipment_type_code] || 0}
+                                                                            onValueChange={(v) => setExampleMaintenanceTasksByType(prev => ({
+                                                                                ...prev,
+                                                                                [reward.equipment_type_code]: v
+                                                                            }))}
+                                                                            className="h-9 rounded-lg"
+                                                                            placeholder="0"
+                                                                        />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })()}
+                                                <div className="space-y-2 pt-2">
+                                                    <Label className="text-xs font-medium text-muted-foreground">Сумма вознаграждения (рассчитывается)</Label>
+                                                    <div className="flex items-center h-11 px-4 rounded-xl bg-muted/50 border text-sm font-medium">
+                                                        {Number(exampleReportMetricsForPreview.maintenance_raw_sum || 0).toLocaleString('ru-RU')} ₽
                                                     </div>
                                                 </div>
                                             </div>

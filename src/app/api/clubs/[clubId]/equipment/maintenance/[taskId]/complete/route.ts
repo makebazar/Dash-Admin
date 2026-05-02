@@ -117,7 +117,12 @@ export async function POST(
                  LIMIT 1`,
                 [userId, clubId]
             ),
-            query(`SELECT due_date, task_type FROM equipment_maintenance_tasks WHERE id = $1`, [taskId])
+            query(`
+                SELECT mt.due_date, mt.task_type, e.type as equipment_type
+                FROM equipment_maintenance_tasks mt
+                JOIN equipment e ON mt.equipment_id = e.id
+                WHERE mt.id = $1
+            `, [taskId])
         ]);
         
         const schemeFormula = schemeRes.rows[0]?.formula || {};
@@ -130,19 +135,20 @@ export async function POST(
             return NextResponse.json({ error: 'Task not found' }, { status: 404 });
         }
 
-        // 1. Calculate Bonus & Check Smart Deadline
+        // 1. Calculate Bonus
+        // Штраф за просрочку применяется сразу при завершении задачи
         let bonusEarned = 0;
-        let kpiPoints = 1; // Default to 1 point per task (internal counter)
-        let appliedMultiplier = 1.0;
 
         if (kpiBonus) {
-            // Price per task is defined in the bonus amount
-            const baseValue = Number(kpiBonus.amount) || 0;
+            const perTypeRewards = kpiBonus.per_equipment_type_rewards || [];
+            const equipmentTypeCode = task.equipment_type;
+            
+            const typeReward = perTypeRewards.find((r: any) => r.equipment_type_code === equipmentTypeCode);
+            const baseValue = typeReward 
+                ? Number(typeReward.amount) 
+                : Number(kpiBonus.amount) || 0;
 
-            // Penalties removed as per request
-            appliedMultiplier = 1.0;
-
-            bonusEarned = baseValue * appliedMultiplier;
+            bonusEarned = baseValue;
         }
 
         const overdueDaysAtCompletion = Math.max(0, Math.floor(
@@ -150,6 +156,7 @@ export async function POST(
         ));
         const wasOverdue = overdueDaysAtCompletion > 0;
         const responsibleUserIdAtCompletion = userId;
+
         const overduePenaltyPreview = calculateMaintenanceOverduePenalty(
             {
                 overdue_tolerance_days: kpiBonus?.overdue_tolerance_days,
@@ -159,6 +166,9 @@ export async function POST(
             },
             [{ overdue_days_at_completion: overdueDaysAtCompletion, bonus_earned: bonusEarned, was_overdue: wasOverdue }]
         );
+
+        const overduePenalty = overduePenaltyPreview.total;
+        const finalBonusEarned = Math.max(0, bonusEarned - overduePenalty);
 
         const completeTask = await query(
             `UPDATE equipment_maintenance_tasks
@@ -173,14 +183,13 @@ export async function POST(
                  verification_note = NULL,
                  rejection_reason = NULL,
                  bonus_earned = $5,
-                 kpi_points = $6,
-                 applied_kpi_multiplier = $7,
-                 overdue_days_at_completion = $8,
-                 was_overdue = $9,
-                 responsible_user_id_at_completion = $10
+                 overdue_penalty = $6,
+                 overdue_days_at_completion = $7,
+                 was_overdue = $8,
+                 responsible_user_id_at_completion = $9
              WHERE id = $1
              RETURNING equipment_id`,
-            [taskId, userId, photos, notes, bonusEarned, kpiPoints, appliedMultiplier, overdueDaysAtCompletion, wasOverdue, responsibleUserIdAtCompletion]
+            [taskId, userId, photos, notes, finalBonusEarned, overduePenalty, overdueDaysAtCompletion, wasOverdue, responsibleUserIdAtCompletion]
         );
 
         if ((completeTask.rowCount || 0) === 0) {
@@ -206,12 +215,51 @@ export async function POST(
             [equipmentId]
         );
 
-        // 3. Get equipment details for next task scheduling
-        const hasCleaningIntervalOverrideColumn = await hasColumn('equipment', 'cleaning_interval_override_days');
-        const effectiveCleaningIntervalSql = hasCleaningIntervalOverrideColumn
-            ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
-            : `e.cleaning_interval_days`;
+        // 3. Auto-create next cleaning task if interval-based scheduling is enabled
+        if (kpiBonus?.auto_create_next_task !== false) {
+            const hasCleaningIntervalOverrideColumn = await hasColumn('equipment', 'cleaning_interval_override_days');
+            const effectiveCleaningIntervalSql = hasCleaningIntervalOverrideColumn
+                ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
+                : `e.cleaning_interval_days`;
 
+            const equipmentInfo = await query(
+                `SELECT e.id, e.assigned_user_id, e.cleaning_interval_days, e.cleaning_interval_override_days, et.code as type_code
+                 FROM equipment e
+                 JOIN equipment_types et ON e.type = et.code
+                 WHERE e.id = $1`,
+                [equipmentId]
+            );
+
+            if (equipmentInfo.rows.length > 0) {
+                const eq = equipmentInfo.rows[0];
+                const intervalDays = Math.max(1, Number(eq.cleaning_interval_override_days || eq.cleaning_interval_days) || 30);
+
+                const nextDueDate = new Date();
+                nextDueDate.setHours(0, 0, 0, 0);
+                nextDueDate.setDate(nextDueDate.getDate() + intervalDays);
+
+                const nextDueDateStr = nextDueDate.toISOString().split('T')[0];
+
+                const existingTask = await query(
+                    `SELECT id FROM equipment_maintenance_tasks
+                     WHERE equipment_id = $1 AND task_type = 'CLEANING'
+                     AND status IN ('PENDING', 'IN_PROGRESS')
+                     LIMIT 1`,
+                    [equipmentId]
+                );
+
+                if (existingTask.rows.length === 0) {
+                    await query(
+                        `INSERT INTO equipment_maintenance_tasks
+                         (club_id, equipment_id, task_type, due_date, assigned_user_id, status, created_by, cycle_no)
+                         VALUES ($1, $2, 'CLEANING', $3, $4, 'PENDING', $5, 1)`,
+                        [clubId, equipmentId, nextDueDateStr, eq.assigned_user_id, userId]
+                    );
+                }
+            }
+        }
+
+        // 4. Update assignment mode
         await query(
             `UPDATE equipment e
              SET assigned_user_id = w.assigned_user_id,
@@ -234,115 +282,6 @@ export async function POST(
                AND workstation_id IS NULL`,
             [equipmentId]
         );
-
-        const equipmentRes = await query(
-            `SELECT 
-                ${effectiveCleaningIntervalSql} as cleaning_interval_days,
-                e.maintenance_enabled,
-                CASE
-                    WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
-                    ELSE NULL
-                END as effective_assigned_user_id
-             FROM equipment e
-             WHERE e.id = $1`,
-            [equipmentId]
-        );
-        
-        const equipment = equipmentRes.rows[0];
-        
-        const clubRes = await query(
-            `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
-             FROM clubs
-             WHERE id = $1`,
-            [clubId]
-        );
-        const clubTimezone = clubRes.rows[0]?.timezone || 'Europe/Moscow';
-
-        // 4. Create next task if interval is set
-        if (equipment && equipment.maintenance_enabled !== false) {
-             const rawInterval = equipment.cleaning_interval_days;
-             const intervalDays = Math.max(1, rawInterval || 30);
-             
-             const nextDueDate = parseDateKey(formatDateKeyInTimezone(new Date(), clubTimezone));
-             nextDueDate.setDate(nextDueDate.getDate() + intervalDays);
-             const nextDueDateStr = formatDateKeyInTimezone(nextDueDate, clubTimezone);
-             
-             // Find shift for assigned user if any AND user is active
-             let finalDate = nextDueDateStr;
-             let finalAssignedUserId = equipment.effective_assigned_user_id;
-             
-             if (finalAssignedUserId) {
-                 // Keep next task only on users that are valid for maintenance assignment.
-                 const userActiveRes = await query(
-                     `WITH member_rows AS (
-                         SELECT ce.user_id, ce.role, ce.is_active, ce.dismissed_at, ce.show_in_schedule, 0 as priority
-                         FROM club_employees ce
-                         WHERE ce.club_id = $1
-                         UNION ALL
-                         SELECT c.owner_id as user_id, 'Владелец'::varchar as role, TRUE as is_active, NULL::timestamp as dismissed_at, TRUE as show_in_schedule, 1 as priority
-                         FROM clubs c
-                         WHERE c.id = $1
-                      ),
-                      dedup_members AS (
-                         SELECT DISTINCT ON (user_id) user_id, role, is_active, dismissed_at, show_in_schedule
-                         FROM member_rows
-                         ORDER BY user_id, priority DESC
-                      )
-                      SELECT 1
-                      FROM dedup_members
-                      WHERE user_id = $2
-                        AND is_active = TRUE
-                        AND dismissed_at IS NULL
-                        AND (
-                            show_in_schedule = TRUE
-                            OR LOWER(COALESCE(role, '')) LIKE '%управ%'
-                            OR LOWER(COALESCE(role, '')) LIKE '%manager%'
-                        )
-                      LIMIT 1`,
-                     [clubId, finalAssignedUserId]
-                 );
-                 const isActive = (userActiveRes.rowCount || 0) > 0;
-
-                 if (isActive) {
-                     // Simple shift lookup - get next working day >= nextDueDateStr
-                     const shiftRes = await query(
-                         `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
-                          FROM work_schedules 
-                          WHERE club_id = $1 AND user_id = $2 AND date >= $3
-                          ORDER BY date ASC LIMIT 1`,
-                         [clubId, finalAssignedUserId, nextDueDateStr]
-                     );
-                     if (shiftRes.rowCount && shiftRes.rowCount > 0) {
-                         finalDate = String(shiftRes.rows[0].date);
-                     }
-                 } else {
-                     finalAssignedUserId = null;
-                 }
-             }
-
-             // CLEANUP: Delete any other PENDING tasks for this equipment to ensure "Smart Horizon"
-             // This removes "ghost" tasks that might have incorrect dates (like 31.01)
-             await query(
-                 `DELETE FROM equipment_maintenance_tasks 
-                  WHERE equipment_id = $1 
-                    AND task_type = 'CLEANING'
-                    AND status IN ('PENDING', 'IN_PROGRESS')
-                    AND id != $2`,
-                 [equipmentId, taskId]
-             );
-
-             await query(
-                 `INSERT INTO equipment_maintenance_tasks (
-                     equipment_id, 
-                     status, 
-                     due_date,
-                     task_type,
-                     assigned_user_id
-                 ) VALUES ($1, 'PENDING', $2, 'CLEANING', $3)
-                 ON CONFLICT (equipment_id, due_date, task_type) DO NOTHING`,
-                 [equipmentId, finalDate, finalAssignedUserId]
-             );
-        }
 
         return NextResponse.json({
             success: true,

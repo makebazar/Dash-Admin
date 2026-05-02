@@ -288,13 +288,7 @@ export async function GET(
             [userId, startOfMonthIso, endOfMonthIso]
         );
 
-        // Fetch monthly bonuses from maintenance_monthly_bonuses (legacy/manual)
-        const monthlyBonusRes = await query(
-            `SELECT COALESCE(SUM(bonus_amount), 0) as total_monthly_bonus
-             FROM maintenance_monthly_bonuses
-             WHERE club_id = $1 AND user_id = $2 AND year = $3 AND month = $4`,
-            [clubId, userId, year, month]
-        );
+        const taskBonusSum = overdueHistoryRes.rows.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
 
         // Calculate totals using the same logic as salary summary
         const monthlyMetrics: Record<string, number> = { 
@@ -304,7 +298,7 @@ export async function GET(
             evaluation_count: parseInt(evalRes.rows[0]?.count || '0'),
             maintenance_tasks_completed: parseInt(maintRes.rows[0]?.completed_tasks || '0'),
             maintenance_tasks_assigned: parseInt(maintRes.rows[0]?.total_tasks || '0'),
-            maintenance_bonus: parseFloat(maintRes.rows[0]?.bonus || '0') + parseFloat(monthlyBonusRes.rows[0]?.total_monthly_bonus || '0')
+            maintenance_bonus: taskBonusSum
         };
         const activeShiftMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };
         const closedShiftsMetrics: Record<string, number> = { total_revenue: 0, total_hours: 0 };

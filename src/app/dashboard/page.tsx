@@ -5,19 +5,11 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Building2, Plus, Loader2, Trash2, AlertTriangle, LogOut, MoreVertical, Briefcase, Zap, ShieldAlert, User, Bot, Check } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Building2, Plus, Loader2, Trash2, AlertTriangle, LogOut, MoreVertical, Briefcase, Zap, ShieldAlert, User, Check } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-
-interface BotLink {
-    id: string;
-    messenger_type: string;
-    messenger_user_id: string;
-    created_at: string;
-}
 
 interface Club {
     id: string
@@ -89,14 +81,6 @@ export default function DashboardPage() {
     const [isPlansLoading, setIsPlansLoading] = useState(true)
     const [isChangingPlan, setIsChangingPlan] = useState(false)
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
-
-    // Bot linking state
-    const [isGeneratingCode, setIsGeneratingCode] = useState(false)
-    const [botLinkCode, setBotLinkCode] = useState<string | null>(null)
-    const [botLinkCodeError, setBotLinkCodeError] = useState<string | null>(null)
-    const [botLinkCodeExpires, setBotLinkCodeExpires] = useState<number | null>(null);
-    const [botLinks, setBotLinks] = useState<BotLink[]>([]);
-    const [isLinksLoading, setIsLinksLoading] = useState(false);
 
     // Profile settings states
     const [fullName, setFullName] = useState("")
@@ -207,63 +191,6 @@ export default function DashboardPage() {
             setIsLoading(false)
         }
     }
-
-    const handleGenerateBotCode = async () => {
-        setIsGeneratingCode(true);
-        setBotLinkCode(null);
-        setBotLinkCodeError(null);
-        try {
-            const res = await fetch('/api/bot/generate-link-code', { method: 'POST' });
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || 'Не удалось сгенерировать код');
-            }
-            setBotLinkCode(data.code);
-            setBotLinkCodeExpires(Date.now() + 10 * 60 * 1000);
-        } catch (error: any) {
-            setBotLinkCodeError(error.message);
-        } finally {
-            setIsGeneratingCode(false);
-        }
-    }
-
-    const fetchBotLinks = async () => {
-        setIsLinksLoading(true);
-        try {
-            const res = await fetch('/api/bot/links');
-            const data = await res.json();
-            if (res.ok) {
-                setBotLinks(data);
-            } else {
-                console.error('Failed to fetch bot links:', data.error);
-                setBotLinks([]);
-            }
-        } catch (error) {
-            console.error('Error fetching bot links:', error);
-            setBotLinks([]);
-        } finally {
-            setIsLinksLoading(false);
-        }
-    }
-
-    const handleDeleteLink = async (linkId: string) => {
-        if (!confirm('Вы уверены, что хотите удалить эту привязку?')) return;
-
-        try {
-            const res = await fetch(`/api/bot/links?id=${linkId}`, {
-                method: 'DELETE',
-            });
-            if (res.ok) {
-                fetchBotLinks(); // Refresh the list
-            } else {
-                const data = await res.json();
-                alert(data.error || 'Не удалось удалить привязку');
-            }
-        } catch (error) {
-            console.error('Error deleting bot link:', error);
-            alert('Ошибка при удалении привязки');
-        }
-    };
 
     const handleLogout = async () => {
         try {
@@ -388,33 +315,8 @@ export default function DashboardPage() {
 
     useEffect(() => {
         if (isProfileModalOpen) {
-            fetchBotLinks();
         }
     }, [isProfileModalOpen])
-
-    useEffect(() => {
-        if (botLinkCodeExpires) {
-            const interval = setInterval(() => {
-                if (Date.now() >= botLinkCodeExpires) {
-                    setBotLinkCode(null)
-                    setBotLinkCodeError("Код истек. Сгенерируйте новый.")
-                    setBotLinkCodeExpires(null)
-                    clearInterval(interval)
-                }
-                // Force re-render to update countdown
-                setBotLinkCodeExpires(current => current ? current - 1000 : null)
-            }, 1000)
-            return () => clearInterval(interval)
-        }
-    }, [botLinkCodeExpires])
-
-    const getCountdown = () => {
-        if (!botLinkCodeExpires) return '00:00'
-        const remaining = Math.max(0, botLinkCodeExpires - Date.now())
-        const minutes = Math.floor(remaining / 60000)
-        const seconds = Math.floor((remaining % 60000) / 1000)
-        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-    }
 
     return (
         <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
@@ -755,134 +657,112 @@ export default function DashboardPage() {
             </Dialog>
 
             <Dialog open={isProfileModalOpen} onOpenChange={setIsProfileModalOpen}>
-                <DialogContent className="max-w-3xl p-8 border-slate-200 rounded-2xl">
-                    <DialogHeader className="mb-4">
-                        <DialogTitle className="text-2xl font-bold tracking-tight">Профиль и настройки</DialogTitle>
-                        <DialogDescription className="text-base text-slate-500">
-                            Управление вашими личными данными и интеграциями.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Tabs defaultValue="profile" className="w-full">
-                        <TabsList className="grid w-full grid-cols-3">
-                            <TabsTrigger value="profile">Личные данные</TabsTrigger>
-                            <TabsTrigger value="security">Безопасность</TabsTrigger>
-                            <TabsTrigger value="integrations">Интеграции</TabsTrigger>
-                        </TabsList>
-                        <TabsContent value="profile" className="pt-6">
-                            <Card className="border-none shadow-none">
-                                <CardHeader className="p-0 mb-6">
-                                    <CardTitle>Личные данные</CardTitle>
-                                </CardHeader>
-                                <CardContent className="p-0 space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="fullName">Полное имя</Label>
-                                        <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} className="h-11"/>
-                                    </div>
-                                    <Button onClick={handleSaveName} disabled={isSavingName} className="h-11">
-                                        {isSavingName ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                        {nameSuccess ? "Сохранено!" : "Сохранить имя"}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        </TabsContent>
-                        <TabsContent value="security" className="pt-6">
-                             <Card className="border-none shadow-none">
-                                <CardHeader className="p-0 mb-6">
-                                    <CardTitle>Смена пароля</CardTitle>
-                                </CardHeader>
-                                <CardContent className="p-0 space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="password">Новый пароль</Label>
-                                        <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-11" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="confirmPassword">Подтвердите пароль</Label>
-                                        <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="h-11"/>
-                                    </div>
-                                    {passwordError && <p className="text-sm text-red-500">{passwordError}</p>}
-                                    <Button onClick={handleSavePassword} disabled={isSavingPassword} className="h-11">
-                                        {isSavingPassword ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                        {passwordSuccess ? "Пароль изменен!" : "Сохранить пароль"}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        </TabsContent>
-                        <TabsContent value="integrations" className="pt-6">
-                            <div className="space-y-8">
-                                {/* --- Section: Create New Link --- */}
-                                <Card className="border-slate-200 shadow-sm">
-                                    <CardHeader>
-                                        <CardTitle>Подключение AI-ассистента</CardTitle>
-                                        <CardDescription>
-                                            Привяжите ваш аккаунт к боту в мессенджере, чтобы получать отчеты и аналитику прямо в чате.
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        {!botLinkCode && (
-                                            <Button onClick={handleGenerateBotCode} disabled={isGeneratingCode} className="h-11">
-                                                {isGeneratingCode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4"/>}
-                                                Получить код привязки
-                                            </Button>
-                                        )}
+                <DialogContent className="max-w-lg p-0 border-0 bg-transparent shadow-none max-h-[90vh] overflow-hidden flex items-center justify-center">
+                    <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-lg overflow-hidden">
+                        <DialogHeader className="px-8 pt-8 pb-6 border-b border-slate-100">
+                            <DialogTitle className="text-2xl font-bold tracking-tight">Профиль</DialogTitle>
+                            <DialogDescription className="text-sm text-slate-500 mt-1">Управление личными данными</DialogDescription>
+                        </DialogHeader>
 
-                                        {isGeneratingCode && <p className='text-sm text-slate-500'>Генерируем код...</p>}
-                                        {botLinkCodeError && <p className="text-sm text-red-500">{botLinkCodeError}</p>}
+                        <div className="p-8 space-y-8 overflow-y-auto max-h-[60vh]">
+                            <div className="space-y-6">
+                                <div>
+                                    <h3 className="text-lg font-bold tracking-tight mb-4 flex items-center gap-2">
+                                        <User className="h-4 w-4 text-slate-400" />
+                                        Личные данные
+                                    </h3>
+                                    <div className="space-y-3">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="fullName" className="text-sm font-medium text-slate-600">Полное имя</Label>
+                                            <Input 
+                                                id="fullName" 
+                                                value={fullName} 
+                                                onChange={(e) => setFullName(e.target.value)} 
+                                                className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all" 
+                                            />
+                                        </div>
+                                        <Button 
+                                            onClick={handleSaveName} 
+                                            disabled={isSavingName} 
+                                            className="w-full h-12 rounded-xl font-medium text-base bg-black text-white hover:bg-slate-800 transition-all"
+                                        >
+                                            {isSavingName ? (
+                                                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                            ) : nameSuccess ? (
+                                                <>
+                                                    <Check className="mr-2 h-5 w-5" />
+                                                    Сохранено!
+                                                </>
+                                            ) : (
+                                                'Сохранить имя'
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
 
-                                        {botLinkCode && (
-                                            <div className="flex flex-col items-center justify-center p-6 bg-slate-100 rounded-lg">
-                                                <p className="text-sm text-slate-600">Отправьте этот код боту в мессенджере:</p>
-                                                <p className="text-4xl font-bold tracking-widest my-4">{botLinkCode}</p>
-                                                <p className="text-xs text-slate-500">Код истекает через: {getCountdown()}</p>
-                                            </div>
+                                <div className="border-t border-slate-100 pt-6">
+                                    <h3 className="text-lg font-bold tracking-tight mb-4 flex items-center gap-2">
+                                        <ShieldAlert className="h-4 w-4 text-slate-400" />
+                                        Безопасность
+                                    </h3>
+                                    <div className="space-y-3">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="password" className="text-sm font-medium text-slate-600">Новый пароль</Label>
+                                            <Input 
+                                                id="password" 
+                                                type="password" 
+                                                value={password} 
+                                                onChange={(e) => setPassword(e.target.value)} 
+                                                className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all" 
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-600">Подтвердите пароль</Label>
+                                            <Input 
+                                                id="confirmPassword" 
+                                                type="password" 
+                                                value={confirmPassword} 
+                                                onChange={(e) => setConfirmPassword(e.target.value)} 
+                                                className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all" 
+                                            />
+                                        </div>
+                                        {passwordError && (
+                                            <p className="text-sm text-red-500 flex items-center gap-1">
+                                                <AlertTriangle className="h-4 w-4" />
+                                                {passwordError}
+                                            </p>
                                         )}
-                                    </CardContent>
-                                </Card>
-
-                                {/* --- Section: Active Links --- */}
-                                <Card className="border-slate-200 shadow-sm">
-                                    <CardHeader>
-                                        <CardTitle>Активные привязки</CardTitle>
-                                        <CardDescription>
-                                            Список аккаунтов, привязанных к вашему профилю DashAdmin.
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {isLinksLoading ? (
-                                            <div className="flex items-center justify-center h-24">
-                                                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-                                            </div>
-                                        ) : botLinks.length === 0 ? (
-                                            <p className="text-sm text-slate-500 italic">Нет активных привязок.</p>
-                                        ) : (
-                                            <ul className="space-y-3">
-                                                {botLinks.map(link => (
-                                                    <li key={link.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-600">
-                                                                <Bot className="h-4 w-4" />
-                                                            </div>
-                                                            <div>
-                                                                <p className="font-mono text-sm font-medium">{link.messenger_type}</p>
-                                                                <p className="text-xs text-slate-500">ID: {link.messenger_user_id}</p>
-                                                            </div>
-                                                        </div>
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="icon"
-                                                            onClick={() => handleDeleteLink(link.id)}
-                                                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                    </CardContent>
-                                </Card>
+                                        <Button 
+                                            onClick={handleSavePassword} 
+                                            disabled={isSavingPassword} 
+                                            className="w-full h-12 rounded-xl font-medium text-base bg-black text-white hover:bg-slate-800 transition-all"
+                                        >
+                                            {isSavingPassword ? (
+                                                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                            ) : passwordSuccess ? (
+                                                <>
+                                                    <Check className="mr-2 h-5 w-5" />
+                                                    Пароль изменён!
+                                                </>
+                                            ) : (
+                                                'Изменить пароль'
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
                             </div>
-                        </TabsContent>
-                    </Tabs>
+                        </div>
+
+                        <div className="px-8 pb-8">
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setIsProfileModalOpen(false)}
+                                className="w-full h-12 rounded-xl font-medium text-base border-slate-200 text-slate-600 hover:bg-slate-50 transition-all"
+                            >
+                                Закрыть
+                            </Button>
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

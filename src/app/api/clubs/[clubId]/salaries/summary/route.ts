@@ -516,17 +516,18 @@ export async function GET(
 
             // 2. Completed Tasks for Payment (Accrual) - for distributing to shifts
             const paymentTasksRes = await query(
-                `SELECT id, bonus_earned, completed_at, overdue_days_at_completion, was_overdue
-                 FROM equipment_maintenance_tasks
-                 WHERE completed_by = $1 AND status = 'COMPLETED'
-                   AND completed_at >= $2 AND completed_at <= $3`,
+                `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, e.type as equipment_type
+                 FROM equipment_maintenance_tasks mt
+                 JOIN equipment e ON mt.equipment_id = e.id
+                 WHERE mt.completed_by = $1 AND mt.status = 'COMPLETED'
+                   AND mt.completed_at >= $2 AND mt.completed_at <= $3`,
                 [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]
             );
             const paymentTasks = paymentTasksRes.rows;
             const totalMaintenanceBonus = paymentTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
 
             const overdueTasksRes = await query(
-                `SELECT overdue_days_at_completion, was_overdue, bonus_earned, completed_at
+                `SELECT overdue_days_at_completion, was_overdue, bonus_earned, overdue_penalty
                  FROM equipment_maintenance_tasks
                  WHERE responsible_user_id_at_completion = $1
                    AND status = 'COMPLETED'
@@ -534,14 +535,6 @@ export async function GET(
                 [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]
             );
             const overdueTasks = overdueTasksRes.rows;
-
-            const monthBonusRes = await query(
-                `SELECT COALESCE(SUM(bonus_amount), 0) as total_monthly_bonus
-                 FROM maintenance_monthly_bonuses
-                 WHERE club_id = $1 AND user_id = $2 AND year = $3 AND month = $4`,
-                [clubId, emp.id, startOfMonth.getFullYear(), startOfMonth.getMonth() + 1]
-            );
-            const totalMonthlyBonus = parseFloat(monthBonusRes.rows[0]?.total_monthly_bonus || 0);
 
             // Use frozen scheme if payment was made, otherwise use current employee scheme
             const hasPaidSnapshot = empShifts.some((s: any) => s.salary_snapshot?.paid_at);
@@ -566,11 +559,11 @@ export async function GET(
                 maintenanceOverdueDays = penaltyMeta.overdue_days;
 
                 if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
-                    // Mode: Monthly Tiers (ignore per-task accrued bonuses)
+                    // Mode: Monthly Tiers
+                    // Штраф за просрочку применяется к tier-бонусу (если были просроченные задачи в месяце)
                     const efficiency = qualityMetrics.efficiency;
                     const thresholds = maintenanceBonusConfig.efficiency_thresholds || [];
                     
-                    // Sort by threshold desc
                     const sortedTiers = [...thresholds].sort((a: any, b: any) => (b.from_percent || 0) - (a.from_percent || 0));
                     const achievedTier = sortedTiers.find((t: any) => efficiency >= (t.from_percent || 0));
                     
@@ -578,16 +571,33 @@ export async function GET(
                         finalMaintenanceBonus = parseFloat(achievedTier.amount || '0');
                     }
                 } else {
-                    // Mode: Per Task (default) - use accrued bonuses from DB
-                    // This includes both per-task bonuses and legacy monthly bonuses stored in DB
-                    finalMaintenanceBonus = totalMaintenanceBonus + totalMonthlyBonus;
+                    // Mode: Per Task (default)
+                    // Бонус уже рассчитан с вычетом штрафа при завершении задачи
+                    // totalMaintenanceBonus = сумма всех bonus_earned (уже с вычетом)
+                    finalMaintenanceBonus = totalMaintenanceBonus;
                 }
             } else {
-                // If maintenance_kpi is NOT in scheme, force 0 even if tasks were completed
                 finalMaintenanceBonus = 0;
             }
 
-            maintenanceOverduePenaltyApplied = Math.min(finalMaintenanceBonus, maintenanceOverduePenaltyRaw);
+            // Штраф за просрочку:
+            // - Для PER_TASK: уже учтён в bonus_earned, не применяем повторно
+            // - Для MONTHLY: применяем штраф к tier-бонусу если есть просроченные задачи
+            if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
+                const penaltyMeta = calculateMaintenanceOverduePenalty(maintenanceBonusConfig, overdueTasks);
+                maintenanceOverduePenaltyRaw = penaltyMeta.total;
+                maintenanceOverdueIncidents = penaltyMeta.incidents;
+                maintenanceOverdueDays = penaltyMeta.overdue_days;
+                maintenanceOverduePenaltyApplied = Math.min(finalMaintenanceBonus, maintenanceOverduePenaltyRaw);
+            } else {
+                // Для PER_TASK штраф уже применён при завершении задачи
+                // overdue_penalty из БД показывает сколько было вычтено
+                maintenanceOverduePenaltyRaw = overdueTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.overdue_penalty) || 0), 0);
+                maintenanceOverduePenaltyApplied = maintenanceOverduePenaltyRaw;
+                maintenanceOverdueIncidents = overdueTasks.filter((t: any) => t.overdue_days_at_completion > 0).length;
+                maintenanceOverdueDays = overdueTasks.reduce((sum: number, t: any) => sum + Math.max(0, parseInt(t.overdue_days_at_completion) || 0), 0);
+            }
+            
             const maintenanceBonusFinal = Math.max(0, finalMaintenanceBonus - maintenanceOverduePenaltyApplied);
 
             monthlyMetrics['maintenance_bonus_base'] = finalMaintenanceBonus;

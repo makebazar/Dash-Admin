@@ -270,13 +270,7 @@ export async function GET(
             [userId, startOfMonthIso, endOfMonthIso]
         );
 
-        const monthlyBonusRes = await query(
-            `SELECT COALESCE(SUM(bonus_amount), 0) as total_monthly_bonus
-             FROM maintenance_monthly_bonuses
-             WHERE club_id = $1 AND user_id = $2 AND year = $3 AND month = $4`,
-            [clubId, userId, year, month]
-        );
-        const totalManualMaintBonus = parseFloat(monthlyBonusRes.rows[0]?.total_monthly_bonus || '0');
+        const taskBonusSum = overdueHistoryRes.rows.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
 
         const barDeductionsRes = await query(
             `SELECT COALESCE(SUM(i.quantity * i.selling_price_snapshot), 0) as total
@@ -536,7 +530,7 @@ export async function GET(
                     earned = Number(achievedTier.amount) || 0;
                 }
             } else {
-                earned = parseFloat(maintRes.rows[0]?.bonus || '0') + totalManualMaintBonus;
+                earned = taskBonusSum;
             }
 
             const penaltyMeta = calculateMaintenanceOverduePenalty(maintConfig, overdueHistoryRes.rows);

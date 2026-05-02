@@ -377,6 +377,15 @@ export async function DELETE(
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        // Clean up pending maintenance tasks before deletion
+        await query(
+            `UPDATE equipment_maintenance_tasks
+             SET status = 'CANCELLED',
+                 notes = COALESCE(notes || E'\n', '') || '[Система] Оборудование удалено'
+             WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')`,
+            [equipmentId]
+        );
+
         const result = await query(
             `DELETE FROM equipment WHERE id = $1 AND club_id = $2 RETURNING id`,
             [equipmentId, clubId]
@@ -386,7 +395,7 @@ export async function DELETE(
             return NextResponse.json({ error: 'Equipment not found' }, { status: 404 });
         }
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true, tasks_cleaned: true });
     } catch (error) {
         console.error('Delete Equipment Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

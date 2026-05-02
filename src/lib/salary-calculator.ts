@@ -295,60 +295,83 @@ export async function calculateSalary(
                 }
             } else if (bonus.type === 'maintenance_kpi') {
                 // Handle maintenance bonus
-                // For MONTHLY/TIERED bonuses, we don't add them to individual shifts 
-                // because they are calculated and shown as a monthly total.
-                // We only process them here if it's a simple per-task bonus (no thresholds or per-task reward type).
                 
                 const rawSum = reportMetrics['maintenance_raw_sum'] || 0;
-                const isMonthlyTiers = bonus.reward_type === 'FIXED' || bonus.calculation_mode === 'MONTHLY' || bonus.calculation_mode === 'MONTHLY_TIERS';
-
-                if (rawSum > 0 && !isMonthlyTiers) {
-                    let finalAmount = rawSum;
-                    let efficiencyMultiplier = 1.0;
-
-                    // Calculate efficiency if thresholds exist (multiplier mode)
-                    if (bonus.efficiency_thresholds && bonus.efficiency_thresholds.length > 0) {
-                        const completed = reportMetrics['maintenance_tasks_completed'] || 0;
-                        const assigned = reportMetrics['maintenance_tasks_assigned'] || 0;
-                        
-                        let efficiencyPercent = 100;
-                        if (assigned > 0) {
-                            efficiencyPercent = (completed / assigned) * 100;
-                        }
-
-                        const sortedThresholds = [...bonus.efficiency_thresholds].sort((a, b) => b.from_percent - a.from_percent);
-                        
-                        for (const t of sortedThresholds) {
-                            if (efficiencyPercent >= t.from_percent) {
-                                efficiencyMultiplier = Number(t.multiplier);
-                                break;
-                            }
-                        }
-                        finalAmount = rawSum * efficiencyMultiplier;
+                
+                // Determine mode:
+                // - MONTHLY/MONTHLY_TIERS/reward_type=FIXED: tier-based monthly bonus
+                // - PER_TASK: per-task bonus (sum of completed tasks, penalty already deducted)
+                const isMonthlyTiers = bonus.calculation_mode === 'MONTHLY' || bonus.calculation_mode === 'MONTHLY_TIERS' || bonus.reward_type === 'FIXED';
+                
+                let bonusAmount = 0;
+                
+                if (isMonthlyTiers) {
+                    // Mode: Monthly Tiers - calculate based on efficiency
+                    const completed = reportMetrics['maintenance_tasks_completed'] || 0;
+                    const assigned = reportMetrics['maintenance_tasks_assigned'] || 0;
+                    
+                    let efficiencyPercent = 0;
+                    if (assigned > 0) {
+                        efficiencyPercent = (completed / assigned) * 100;
+                    } else if (completed > 0) {
+                        efficiencyPercent = 100;
                     }
-
-                    if (finalAmount > 0) {
+                    
+                    const thresholds = bonus.efficiency_thresholds || [];
+                    const sortedTiers = [...thresholds].sort((a, b) => (Number(b.from_percent) || 0) - (Number(a.from_percent) || 0));
+                    const achievedTier = sortedTiers.find(t => efficiencyPercent >= (Number(t.from_percent) || 0));
+                    
+                    if (achievedTier) {
+                        bonusAmount = Number(achievedTier.amount) || 0;
+                    }
+                    
+                    // For monthly tiers, penalty calculation is handled in salary summary
+                    // We just store the base amount here
+                    if (bonusAmount > 0) {
+                        breakdown.bonuses.push({
+                            name: bonus.name || 'KPI Обслуживания',
+                            type: 'MAINTENANCE_KPI',
+                            amount: parseFloat(bonusAmount.toFixed(2)),
+                            source_key: 'maintenance_tiers',
+                            source_value: efficiencyPercent,
+                            payout_type: bonus.payout_type || 'REAL_MONEY'
+                        });
+                        
+                        const payoutType = bonus.payout_type || 'REAL_MONEY';
+                        if (payoutType === 'VIRTUAL_BALANCE') {
+                            virtualBalanceTotal += bonusAmount;
+                        } else {
+                            total += bonusAmount;
+                            breakdown.accrued_payout += bonusAmount;
+                        }
+                    }
+                } else {
+                    // Mode: Per Task
+                    // rawSum уже включает вычет штрафа при завершении задачи
+                    // Не применяем efficiency_thresholds повторно (они для monthly tiers)
+                    bonusAmount = rawSum;
+                    
+                    if (bonusAmount > 0) {
                         const payoutType = bonus.payout_type || 'REAL_MONEY';
                         
                         breakdown.bonuses.push({
                             name: bonus.name || 'KPI Обслуживания',
                             type: 'MAINTENANCE_KPI',
-                            amount: parseFloat(finalAmount.toFixed(2)),
+                            amount: parseFloat(bonusAmount.toFixed(2)),
                             source_key: 'maintenance_tasks',
                             source_value: rawSum,
-                            multiplier: efficiencyMultiplier,
                             payout_type: payoutType
                         });
                         
                         if (payoutType === 'VIRTUAL_BALANCE') {
-                            virtualBalanceTotal += finalAmount;
+                            virtualBalanceTotal += bonusAmount;
                         } else {
-                            total += finalAmount;
+                            total += bonusAmount;
                             const payoutTiming = bonus.payout_timing || 'MONTH';
                             if (payoutTiming === 'SHIFT') {
-                                breakdown.instant_payout += finalAmount;
+                                breakdown.instant_payout += bonusAmount;
                             } else {
-                                breakdown.accrued_payout += finalAmount;
+                                breakdown.accrued_payout += bonusAmount;
                             }
                         }
                     }
