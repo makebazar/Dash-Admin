@@ -3,27 +3,35 @@ import { requireBotAuth } from '@/lib/bot-auth';
 import { query } from '@/db';
 import { z } from 'zod';
 
-const QuerySchema = z.object({
-  tool: z.union([
-    z.enum(['getRevenue', 'getShiftsSummary', 'getEmployees', 'getEmployeeHours', 'selectClub', 'parseCallback']),
-    z.array(z.enum(['getRevenue', 'getShiftsSummary', 'getEmployees', 'getEmployeeHours', 'selectClub', 'parseCallback']))
-  ]).transform(v => Array.isArray(v) ? v[0] : v),
-  clubId: z.union([z.number(), z.string(), z.array(z.union([z.number(), z.string()]))]).optional().transform(v => {
-    if (v === undefined || v === null || v === '') return undefined;
-    if (Array.isArray(v)) v = v[0];
-    return Number(v);
-  }),
-  employeeId: z.union([z.string(), z.array(z.string())]).optional().transform(v => {
-    if (!v || v === '') return undefined;
-    if (Array.isArray(v)) v = v[0];
-    return v;
-  }),
-  period: z.union([
-    z.enum(['today', 'yesterday', 'last7days', 'last30days', 'this_month']),
-    z.array(z.enum(['today', 'yesterday', 'last7days', 'last30days', 'this_month']))
-  ]).optional().transform(v => Array.isArray(v) ? v[0] : v),
+// Preprocess arrays in input before validation (fix for n8n sending arrays)
+const preprocessArrays = (schema: z.ZodTypeAny) => {
+  return z.preprocess((arg) => {
+    if (arg === undefined || arg === null) return arg;
+    if (typeof arg === 'object' && !Array.isArray(arg)) {
+      const obj = { ...arg as Record<string, unknown> };
+      for (const key of Object.keys(obj)) {
+        if (Array.isArray(obj[key])) {
+          obj[key] = (obj[key] as unknown[])[0];
+        }
+      }
+      return obj;
+    }
+    return arg;
+  }, schema);
+};
+
+const toolEnum = ['getRevenue', 'getShiftsSummary', 'getEmployees', 'getEmployeeHours', 'selectClub', 'parseCallback'] as const;
+const periodEnum = ['today', 'yesterday', 'last7days', 'last30days', 'this_month'] as const;
+
+const QueryInput = z.object({
+  tool: z.enum(toolEnum),
+  clubId: z.union([z.coerce.number(), z.number()]).optional(),
+  employeeId: z.string().optional(),
+  period: z.enum(periodEnum).optional(),
   data: z.string().optional(),
 });
+
+const QuerySchema = preprocessArrays(QueryInput);
 
 function getDateRange(period?: string) {
   const now = new Date();
@@ -57,7 +65,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid request', details: validation.error.issues }, { status: 400 });
     }
 
-    const { tool, clubId, employeeId, period, data } = validation.data;
+    const { tool, clubId, employeeId, period, data } = validation.data as { tool: string; clubId?: number; employeeId?: string; period?: string; data?: string };
     const { start, end } = getDateRange(period);
 
     switch (tool) {
