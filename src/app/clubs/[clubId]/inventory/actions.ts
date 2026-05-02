@@ -173,6 +173,7 @@ export type ShiftZoneOverviewShift = {
     close_zones_count: number
     discrepancy_items_count: number
     discrepancy_total_abs: number
+    unresolved_discrepancy_count: number
     status: 'COMPLETE' | 'OPEN_ONLY' | 'CLOSE_ONLY' | 'PARTIAL'
     last_snapshot_at: string | null
 }
@@ -1475,6 +1476,7 @@ export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
                 close_zones_count: 0,
                 discrepancy_items_count: 0,
                 discrepancy_total_abs: 0,
+                unresolved_discrepancy_count: 0,
                 status: 'PARTIAL',
                 last_snapshot_at: null,
             })
@@ -1556,8 +1558,22 @@ export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
             const discrepancyItemsCount = discrepancyRows.length
             const discrepancyAbs = discrepancyRows.reduce((sum, row) => sum + Math.abs(Number(row.difference_quantity || 0)), 0)
 
+            const resolutionsRes = await client.query(
+                `SELECT product_id, warehouse_id FROM shift_zone_discrepancy_resolutions WHERE shift_id = $1`,
+                [shiftId]
+            )
+            const resolvedKeys = new Set<string>()
+            for (const res of resolutionsRes.rows) {
+                resolvedKeys.add(`${res.warehouse_id}:${res.product_id}`)
+            }
+            const unresolvedCount = discrepancyRows.filter(row => {
+                const key = `${row.warehouse_id}:${row.product_id}`
+                return !resolvedKeys.has(key)
+            }).length
+
             shiftEntry.discrepancy_items_count = discrepancyItemsCount
             shiftEntry.discrepancy_total_abs = discrepancyAbs
+            shiftEntry.unresolved_discrepancy_count = unresolvedCount
 
             if (discrepancyItemsCount > 0) {
                 discrepancyShiftsCount += 1

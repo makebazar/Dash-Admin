@@ -113,6 +113,7 @@ interface Stats {
         }>
         revenue_kpi_bonuses: number
         bar_deductions?: number
+        zone_deductions?: number
         revenue_kpi_breakdown?: Array<{
             name: string
             amount: number
@@ -1370,6 +1371,12 @@ export default function EmployeeClubPage({ params }: { params: Promise<{ clubId:
                                     <div className="flex justify-between text-xs">
                                         <span className="text-muted-foreground">Бар в счет ЗП</span>
                                         <span className="font-medium text-rose-600 dark:text-rose-400">-{formatCurrency(stats.breakdown.bar_deductions || 0)}</span>
+                                    </div>
+                                )}
+                                {(stats.breakdown.zone_deductions || 0) > 0 && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Списание по недостаче</span>
+                                        <span className="font-medium text-rose-600 dark:text-rose-400">-{formatCurrency(stats.breakdown.zone_deductions || 0)}</span>
                                     </div>
                                 )}
                             </div>

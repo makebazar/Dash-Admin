@@ -286,6 +286,19 @@ export async function GET(
         );
         const totalBarDeductions = parseFloat(barDeductionsRes.rows[0]?.total || '0');
 
+        const zoneDeductionsRes = await query(
+            `SELECT COALESCE(SUM(r.resolution_amount), 0) as total
+             FROM shift_zone_discrepancy_resolutions r
+             JOIN shifts s ON s.id = r.shift_id
+             WHERE r.club_id = $1
+               AND s.user_id = $2
+               AND r.resolution_type = 'SALARY_DEDUCTION'
+               AND r.resolved_at >= $3
+               AND r.resolved_at <= $4`,
+            [clubId, userId, startOfMonthIso, endOfMonthIso]
+        );
+        const totalZoneDeductions = parseFloat(zoneDeductionsRes.rows[0]?.total || '0');
+
         let totalCalculatedSalary = 0;
         let totalHours = 0;
         let todayHours = 0;
@@ -574,7 +587,7 @@ export async function GET(
         const totalKpiBonusVirtual = revenueKpiBonusVirtual + checklistMonthlyBonusVirtual + maintenanceBonusVirtual + leaderboardBonusVirtual;
         
         // Month earnings: Sum of calculated salary for closed shifts + ANY monthly bonuses reached so far
-        const monthEarnings = totalCalculatedSalary + totalKpiBonusReal - maintenancePenaltyReal - totalBarDeductions;
+        const monthEarnings = totalCalculatedSalary + totalKpiBonusReal - maintenancePenaltyReal - totalBarDeductions - totalZoneDeductions;
 
         // CRITICAL: Ensure we are sending ALL pieces of info needed for the breakdown
         const breakdown = {
@@ -586,6 +599,7 @@ export async function GET(
             leaderboard_bonuses: leaderboardBonusBreakdown,
             revenue_kpi_bonuses: revenueKpiBonusReal,
             bar_deductions: totalBarDeductions,
+            zone_deductions: totalZoneDeductions,
             revenue_kpi_breakdown: revenueKpiBreakdown, 
             total_kpi_bonuses: totalKpiBonusReal,
             virtual_bonuses: {

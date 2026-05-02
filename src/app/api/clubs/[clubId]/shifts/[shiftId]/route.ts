@@ -596,6 +596,41 @@ export async function POST(
         if (!guard.ok) return guard.response
 
         const body = await request.json();
+        if (body?.action === 'unresolve_zone_discrepancy') {
+            const warehouseId = Number(body.warehouse_id)
+            const productId = Number(body.product_id)
+
+            if (!Number.isInteger(warehouseId) || warehouseId <= 0 || !Number.isInteger(productId) || productId <= 0) {
+                return NextResponse.json({ error: 'Некорректная строка расхождения' }, { status: 400 });
+            }
+
+            const resolutionRes = await query(
+                `SELECT id, salary_payment_id, finance_transaction_id
+                 FROM shift_zone_discrepancy_resolutions
+                 WHERE club_id = $1 AND shift_id = $2 AND warehouse_id = $3 AND product_id = $4`,
+                [clubId, shiftId, warehouseId, productId]
+            )
+
+            if ((resolutionRes.rowCount || 0) === 0) {
+                return NextResponse.json({ error: 'Решение не найдено' }, { status: 404 });
+            }
+
+            const resolution = resolutionRes.rows[0]
+
+            if (resolution.salary_payment_id) {
+                await query(`DELETE FROM salary_payments WHERE id = $1`, [resolution.salary_payment_id])
+            }
+            if (resolution.finance_transaction_id) {
+                await query(`DELETE FROM finance_transactions WHERE id = $1`, [resolution.finance_transaction_id])
+            }
+            await query(
+                `DELETE FROM shift_zone_discrepancy_resolutions WHERE id = $1`,
+                [resolution.id]
+            )
+
+            return NextResponse.json({ success: true })
+        }
+
         if (body?.action !== 'resolve_zone_discrepancy') {
             return NextResponse.json({ error: 'Unsupported action' }, { status: 400 });
         }

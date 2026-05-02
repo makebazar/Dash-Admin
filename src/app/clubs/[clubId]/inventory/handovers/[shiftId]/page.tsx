@@ -131,6 +131,10 @@ function isSurplus(row: ShiftZoneDiscrepancy) {
     return getDiscrepancyValue(row) > 0
 }
 
+function isResolved(row: ShiftZoneDiscrepancy) {
+    return row.resolution !== null
+}
+
 function getMovementMeta(type: string) {
     if (type === "SALE") return { label: "Продажа", className: "border-red-200 bg-red-50 text-red-700" }
     if (type === "RETURN") return { label: "Возврат", className: "border-emerald-200 bg-emerald-50 text-emerald-700" }
@@ -194,6 +198,7 @@ export default function InventoryHandoverDetailsPage() {
     const [page, setPage] = useState(1)
     const [isDetailsOpen, setIsDetailsOpen] = useState(false)
     const [detailsTarget, setDetailsTarget] = useState<ShiftZoneDiscrepancy | null>(null)
+    const [isUnresolving, setIsUnresolving] = useState(false)
 
     const fetchDetails = useCallback(async () => {
         setIsLoading(true)
@@ -420,6 +425,33 @@ export default function InventoryHandoverDetailsPage() {
         }
     }, [clubId, shiftId, resolutionTarget, resolutionType, resolutionNote, resolutionMode, resolutionAmount, getMaxResolutionAmount, fetchDetails, closeResolutionDialog])
 
+    const handleUnresolve = useCallback(async (row: ShiftZoneDiscrepancy) => {
+        if (!confirm("Отменить решение по этому товару?")) return
+        setIsUnresolving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/shifts/${shiftId}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "unresolve_zone_discrepancy",
+                    warehouse_id: row.warehouse_id,
+                    product_id: row.product_id,
+                }),
+            })
+            const data = await res.json()
+            if (!res.ok) {
+                alert(data.error || "Не удалось отменить решение")
+                return
+            }
+            await fetchDetails()
+        } catch (requestError) {
+            console.error("Error unresolving handover discrepancy:", requestError)
+            alert("Не удалось отменить решение")
+        } finally {
+            setIsUnresolving(false)
+        }
+    }, [clubId, shiftId, fetchDetails])
+
     const renderResolution = useCallback((row: ShiftZoneDiscrepancy) => {
         if (!row.resolution) {
             if (isSurplus(row)) {
@@ -451,7 +483,20 @@ export default function InventoryHandoverDetailsPage() {
 
     const renderActions = useCallback((row: ShiftZoneDiscrepancy) => {
         if (row.resolution) {
-            return <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Решение сохранено</span>
+            return (
+                <div className="flex justify-end items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-[10px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                        onClick={() => handleUnresolve(row)}
+                        disabled={isUnresolving}
+                    >
+                        <X className="mr-1 h-3 w-3" />
+                        {isUnresolving ? "..." : "Отменить"}
+                    </Button>
+                </div>
+            )
         }
         if (isSurplus(row)) {
             return <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Без удержания</span>
@@ -478,7 +523,7 @@ export default function InventoryHandoverDetailsPage() {
                 </Button>
             </div>
         )
-    }, [openResolutionDialog])
+    }, [openResolutionDialog, handleUnresolve, isUnresolving])
 
     return (
         <PageShell maxWidth="7xl" className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
@@ -655,19 +700,23 @@ export default function InventoryHandoverDetailsPage() {
                                                             </td>
                                                             <td className="px-4 py-2 align-middle text-right">
                                                                 <div className="flex justify-end items-center gap-2">
-                                                                    {canResolve && (
+                                                                    {row.resolution ? (
+                                                                        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[10px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50" onClick={() => handleUnresolve(row)} disabled={isUnresolving}>
+                                                                            <X className="mr-1 h-3 w-3" /> {isUnresolving ? "..." : "Отменить"}
+                                                                        </Button>
+                                                                    ) : canResolve ? (
                                                                         <>
                                                                             <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px] font-bold" onClick={() => openResolutionDialog(row, "SALARY_DEDUCTION")}>
                                                                                 <Wallet className="mr-1 h-3 w-3" /> ЗП
                                                                             </Button>
-                                                                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px] font-bold" onClick={() => openResolutionDialog(row, "NO_DEDUCTION")}>
-                                                                            <PackageCheck className="mr-1 h-3 w-3" /> Без удержания
-                                                                        </Button>
+                                                                            <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px] font-bold" onClick={() => openResolutionDialog(row, "NO_DEDUCTION")}>
+                                                                                <PackageCheck className="mr-1 h-3 w-3" /> Без удержания
+                                                                            </Button>
                                                                             <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={() => openResolutionDialog(row, "LOSS")}>
                                                                                 <PackageX className="mr-1 h-3 w-3" /> Потери
                                                                             </Button>
                                                                         </>
-                                                                    )}
+                                                                    ) : null}
                                                                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-900" onClick={() => openDetailsDialog(row)}>
                                                                         <Info className="h-4 w-4" />
                                                                     </Button>
@@ -760,19 +809,23 @@ export default function InventoryHandoverDetailsPage() {
                                                     </div>
 
                                                     <div className="mt-2 flex items-center justify-end gap-1.5">
-                                                        {canResolve && (
+                                                        {row.resolution ? (
+                                                            <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-[11px] font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50" onClick={() => handleUnresolve(row)} disabled={isUnresolving}>
+                                                                <X className="mr-1.5 h-4 w-4" /> {isUnresolving ? "..." : "Отменить"}
+                                                            </Button>
+                                                        ) : canResolve ? (
                                                             <>
                                                                 <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => openResolutionDialog(row, "SALARY_DEDUCTION")}>
                                                                     <Wallet className="mr-1.5 h-4 w-4" /> ЗП
                                                                 </Button>
-                                                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => openResolutionDialog(row, "NO_DEDUCTION")}>
-                                                            <PackageCheck className="mr-1.5 h-4 w-4" /> Без удержания
-                                                        </Button>
+                                                                <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => openResolutionDialog(row, "NO_DEDUCTION")}>
+                                                                    <PackageCheck className="mr-1.5 h-4 w-4" /> Без удержания
+                                                                </Button>
                                                                 <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={() => openResolutionDialog(row, "LOSS")}>
                                                                     <PackageX className="mr-1.5 h-4 w-4" /> Потери
                                                                 </Button>
                                                             </>
-                                                        )}
+                                                        ) : null}
                                                         <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px] font-bold" onClick={() => openDetailsDialog(row)}>
                                                             <Info className="mr-1.5 h-4 w-4" /> Детали
                                                         </Button>

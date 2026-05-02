@@ -71,9 +71,9 @@ export function ShiftZonesOverviewTab({ clubId, overview, currentMonth }: ShiftZ
         newParams.set('tab', 'zones')
         router.push(`${pathname}?${newParams.toString()}`, { scroll: false })
     }
-    // Выделяем проблемные смены (где есть расхождения, либо сдана без приемки, либо передача сломана)
+    // Выделяем проблемные смены (где есть нерешённые расхождения, либо сдана без приемки)
     const problematicShifts = overview.recent_shifts.filter(s => 
-        s.discrepancy_items_count > 0 || s.status === 'CLOSE_ONLY' || s.status === 'PARTIAL'
+        s.unresolved_discrepancy_count > 0 || s.status === 'CLOSE_ONLY'
     )
     
     // Обычные смены — это те, которые не попали в проблемные
