@@ -18,15 +18,13 @@
             { "name": "messenger_user_id", "value": "={{ $('Max Trigger').item.json.message.recipient.user_id }}" },
             { "name": "messenger_type", "value": "N8N" }
           ]
-        },
-        "options": { "response": { "neverError": true } }
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [-260, 0],
       "id": "get-user-context",
-      "name": "Get User Context",
-      "credentials": { "reportingApiKey": { "id": "REPORTING_API_KEY_ID", "name": "Reporting API Key" } }
+      "name": "Get User Context"
     },
     {
       "parameters": {
@@ -51,8 +49,7 @@
       "typeVersion": 1,
       "position": [180, -120],
       "id": "send-link-request",
-      "name": "Send Link Request",
-      "credentials": { "maxApi": { "id": "MAX_API_ID", "name": "Max account" } }
+      "name": "Send Link Request"
     },
     {
       "parameters": {
@@ -83,59 +80,13 @@
     },
     {
       "parameters": {
-        "promptType": "define",
-        "text": "=КОНТЕКСТ:\n{{ $('Get User Context').json | json }}\n\nЗАПРОС: \"{{ $('Prepare Data').item.json.prompt }}\"",
-        "options": {
-          "systemMessage": "=Ты — дружелюбный AI-ассистент для владельцев киберклубов.\nКонтекст содержит: user, selected_club, available_clubs, employee_clubs.\n\nФОРМАТЫ ОТВЕТОВ:\n- Выручка: 📊 [сумма] ₽ | Смен: [число]\n- Смены: 📅 [число] смен, [часы] часов\n- Сотрудники: 👥 [список]\n\nПРАВИЛА:\n1. Если selected_club = null и клубов > 1 — верни buttons для выбора\n2. Если clubId не передан — используй selected_club\n3. Если данных нет — \"Нет данных за период\"\n\nВЫЗЫВАЙ callTool с параметрами:\n- tool: getRevenue, getShiftsSummary, getEmployees, getEmployeeHours, selectClub\n- clubId: число\n- period: today, yesterday, last7days, last30days, this_month\n- employeeId: uuid\n\nДля кнопок выбора клуба верни:\n{\"output\": \"текст\", \"buttons\": [{\"text\": \"Клуб\", \"data\": \"selectClub:ID\"}]}"
-        }
+        "model": "qwen/qwen3.5-flash-02-23"
       },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 3.1,
-      "position": [400, 40],
-      "id": "ai-agent",
-      "name": "AI Agent"
-    },
-    {
-      "parameters": { "model": "qwen/qwen3.5-flash-02-23" },
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
       "typeVersion": 1,
       "position": [140, 280],
       "id": "openrouter-model",
-      "name": "OpenRouter Model",
-      "credentials": { "openRouterApi": { "id": "OPENROUTER_ID", "name": "OpenRouter account" } }
-    },
-    {
-      "parameters": {
-        "mode": "webhook",
-        "webhook": {
-          "body": [
-            { "name": "tool", "mappingMode": "reference", "value": "={{ $json.tool }}", "type": "string" },
-            { "name": "clubId", "mappingMode": "reference", "value": "={{ $json.clubId }}", "type": "number" },
-            { "name": "employeeId", "mappingMode": "reference", "value": "={{ $json.employeeId }}", "type": "string" },
-            { "name": "period", "mappingMode": "reference", "value": "={{ $json.period }}", "type": "string" }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [380, 200],
-      "id": "call-tool",
-      "name": "callTool"
-    },
-    {
-      "parameters": {
-        "sendTo": "chat",
-        "chatId": "={{ $('Max Trigger').item.json.message.recipient.chat_id }}",
-        "text": "={{ $json.output }}",
-        "keyboard": "={{ $json.buttons ? JSON.stringify($json.buttons) : $json.keyboard }}"
-      },
-      "type": "n8n-nodes-max.max",
-      "typeVersion": 1,
-      "position": [620, 40],
-      "id": "send-response",
-      "name": "Send Response",
-      "credentials": { "maxApi": { "id": "MAX_API_ID", "name": "Max account" } }
+      "name": "OpenRouter Model"
     },
     {
       "parameters": {
@@ -189,8 +140,140 @@
       "typeVersion": 1,
       "position": [600, 120],
       "id": "send-club-select",
-      "name": "Send Club Selection",
-      "credentials": { "maxApi": { "id": "MAX_API_ID", "name": "Max account" } }
+      "name": "Send Club Selection"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=КОНТЕКСТ:\n{{ $('Get User Context').json | json }}\n\nЗАПРОС: \"{{ $('Prepare Data').item.json.prompt }}\"",
+        "options": {
+          "systemMessage": "=Ты — дружелюбный AI-ассистент для владельцев киберклубов.\nКонтекст содержит: user, selected_club, available_clubs, employee_clubs.\n\nФОРМАТЫ ОТВЕТОВ:\n- Выручка: 📊 [сумма] ₽ | Смен: [число]\n- Смены: 📅 [число] смен, [часы] часов\n- Сотрудники: 👥 [список]\n\nПРАВИЛА:\n1. Если selected_club = null и клубов > 1 — верни buttons для выбора\n2. Если clubId не передан — используй selected_club\n3. Если данных нет — \"Нет данных за период\"\n\nВЫЗЫВАЙ tool_call с параметрами:\n{\"tool\": \"getRevenue\", \"clubId\": число, \"period\": \"today|yesterday|last7days|last30days|this_month\"}\n{\"tool\": \"getShiftsSummary\", \"clubId\": число, \"period\": \"...\"}\n{\"tool\": \"getEmployees\", \"clubId\": число}\n{\"tool\": \"getEmployeeHours\", \"employeeId\": \"uuid\", \"period\": \"...\"}\n{\"tool\": \"selectClub\", \"clubId\": число}\n\nДля кнопок выбора клуба верни:\n{\"output\": \"текст\", \"buttons\": [{\"text\": \"Клуб\", \"data\": \"selectClub:ID\"}]}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [400, 40],
+      "id": "ai-agent",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            { "leftValue": "={{ $json.tool }}", "rightValue": "getRevenue", "id": "r1", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } },
+            { "leftValue": "={{ $json.tool }}", "rightValue": "getShiftsSummary", "id": "r2", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } },
+            { "leftValue": "={{ $json.tool }}", "rightValue": "getEmployees", "id": "r3", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } },
+            { "leftValue": "={{ $json.tool }}", "rightValue": "getEmployeeHours", "id": "r4", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } },
+            { "leftValue": "={{ $json.tool }}", "rightValue": "selectClub", "id": "r5", "operator": { "type": "string", "operation": "equals", "name": "filter.operator.equals" } }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.1,
+      "position": [600, 200],
+      "id": "tool-switch",
+      "name": "Tool Switch"
+    },
+    {
+      "parameters": {
+        "url": "https://www.mydashadmin.ru/api/ai-tools/revenue",
+        "method": "GET",
+        "queryParameters": {
+          "parameters": [
+            { "name": "clubId", "value": "={{ $json.clubId }}" },
+            { "name": "period", "value": "={{ $json.period }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, -160],
+      "id": "tool-revenue",
+      "name": "toolGetRevenue"
+    },
+    {
+      "parameters": {
+        "url": "https://www.mydashadmin.ru/api/ai-tools/shifts-summary",
+        "method": "GET",
+        "queryParameters": {
+          "parameters": [
+            { "name": "clubId", "value": "={{ $json.clubId }}" },
+            { "name": "period", "value": "={{ $json.period }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, -80],
+      "id": "tool-shifts",
+      "name": "toolGetShifts"
+    },
+    {
+      "parameters": {
+        "url": "https://www.mydashadmin.ru/api/ai-tools/employees-list",
+        "method": "GET",
+        "queryParameters": {
+          "parameters": [
+            { "name": "clubId", "value": "={{ $json.clubId }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 0],
+      "id": "tool-employees",
+      "name": "toolGetEmployees"
+    },
+    {
+      "parameters": {
+        "url": "https://www.mydashadmin.ru/api/ai-tools/employee-hours",
+        "method": "GET",
+        "queryParameters": {
+          "parameters": [
+            { "name": "employeeId", "value": "={{ $json.employeeId }}" },
+            { "name": "period", "value": "={{ $json.period }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 80],
+      "id": "tool-employee-hours",
+      "name": "toolGetEmployeeHours"
+    },
+    {
+      "parameters": {
+        "url": "https://www.mydashadmin.ru/api/ai-tools/select-club",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Messenger-Type", "value": "N8N" },
+            { "name": "X-Messenger-User-Id", "value": "={{ $('Max Trigger').item.json.message.recipient.user_id }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"clubId\": {{ $json.clubId }}\n}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 160],
+      "id": "tool-select-club",
+      "name": "toolSelectClub"
+    },
+    {
+      "parameters": {
+        "sendTo": "chat",
+        "chatId": "={{ $('Max Trigger').item.json.message.recipient.chat_id }}",
+        "text": "={{ $json.output }}",
+        "keyboard": "={{ $json.buttons ? JSON.stringify($json.buttons) : $json.keyboard }}"
+      },
+      "type": "n8n-nodes-max.max",
+      "typeVersion": 1,
+      "position": [620, 40],
+      "id": "send-response",
+      "name": "Send Response"
     }
   ],
   "connections": {
@@ -203,12 +286,24 @@
     "Prepare Data": { "main": [[{ "node": "Chat Memory", "type": "main", "index": 0 }]] },
     "Chat Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
     "OpenRouter Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
-    "callTool": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
+    "AI Agent": { "ai_tool": [[{ "node": "Tool Switch", "type": "ai_tool", "index": 0 }]] },
+    "Tool Switch": { "main": [
+      [{ "node": "toolGetRevenue", "type": "main", "index": 0 }],
+      [{ "node": "toolGetShifts", "type": "main", "index": 0 }],
+      [{ "node": "toolGetEmployees", "type": "main", "index": 0 }],
+      [{ "node": "toolGetEmployeeHours", "type": "main", "index": 0 }],
+      [{ "node": "toolSelectClub", "type": "main", "index": 0 }]
+    ]},
+    "toolGetRevenue": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "toolGetShifts": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "toolGetEmployees": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "toolGetEmployeeHours": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "toolSelectClub": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
     "AI Agent": { "main": [[{ "node": "Send Response", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },
-  "versionId": "dashadmin-v10",
+  "versionId": "dashadmin-v11",
   "id": "dashadmin-ai-workflow",
   "tags": ["dashadmin", "ai", "assistant"]
 }
