@@ -183,6 +183,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const [periodCalcStart, setPeriodCalcStart] = useState('')
     const [periodCalcEnd, setPeriodCalcEnd] = useState('')
     const [periodCalcSummary, setPeriodCalcSummary] = useState<null | { shiftsCount: number, base: number, monthKpi: number, shiftBonuses: number, bonuses: number, bar: number, total: number }>(null)
+    const [openMaintenanceDetails, setOpenMaintenanceDetails] = useState<Record<number, boolean>>({});
 
     const toggleCard = (employeeId: number) => {
         setExpandedCards(prev => {
@@ -215,6 +216,10 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         const list = expandedShiftDetails[employeeId]
         return Array.isArray(list) && list.includes(key)
     }
+
+    const toggleMaintenanceDetails = (employeeId: number) => {
+        setOpenMaintenanceDetails(prev => ({ ...prev, [employeeId]: !prev[employeeId] }));
+    };
 
     const openPaymentModal = (employee: Employee) => {
         setPaymentModal({ open: true, employee });
@@ -853,95 +858,82 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                     {employee.maintenance_status && (Number(employee.maintenance_status.bonus_amount || 0) > 0 || Number(employee.maintenance_status.current_value || 0) > 0) ? (
                         <div className="pt-4 border-t border-slate-200">
                             {(() => {
-                                const thresholds = Array.isArray(employee.maintenance_status?.thresholds) ? employee.maintenance_status.thresholds : [];
-                                const sortedThresholds = [...thresholds].sort((a: any, b: any) => (Number(a?.from || 0) - Number(b?.from || 0)));
-                                const mode = String(employee.maintenance_status?.calculation_mode || '');
-                                const metricValue = mode === 'MONTHLY' ? Number(employee.maintenance_status?.efficiency || 0) : Number(employee.maintenance_status?.current_value || 0);
-                                const metIndex = sortedThresholds.reduce((acc: number, t: any, i: number) => {
-                                    const from = Number(t?.from || 0);
-                                    return metricValue >= from ? i : acc;
-                                }, -1);
-                                const tier = metIndex >= 0 ? sortedThresholds[metIndex] : null;
-                                const tierLabel = tier?.label ? String(tier.label) : tier ? `≥ ${tier.from}${mode === 'MONTHLY' ? '%' : ''}` : '—';
-                                const tierReward = tier ? formatCurrency(Number(tier?.amount || 0)) : null;
-                                const tierPos = sortedThresholds.length > 0 ? `${Math.max(0, metIndex + 1)}/${sortedThresholds.length}` : null;
-                                const penaltyAmount = Number(employee.maintenance_status?.penalty_amount || 0);
-                                const penaltyRawAmount = Number(employee.maintenance_status?.penalty_raw_amount || 0);
-                                const baseBonusAmount = Number(employee.maintenance_status?.base_bonus_amount || 0);
-                                const qualityPenaltyUnits = Number(employee.maintenance_status?.quality_penalty_units || 0);
+                                const ms = employee.maintenance_status;
+                                const isOpen = openMaintenanceDetails[employee.id];
 
                                 return (
                                     <>
                                         <div className="flex items-start justify-between gap-4">
                                             <div className="min-w-0">
-                                                <div className="text-sm font-black text-slate-900">{employee.maintenance_status.name || 'KPI Обслуживание'}</div>
+                                                <div className="text-sm font-black text-slate-900">{ms.name || 'KPI Обслуживание'}</div>
                                                 <div className="mt-1 text-[11px] text-slate-600">
-                                                    Выполнено: <span className="font-bold text-slate-900">{employee.maintenance_status.current_value}</span> из <span className="font-bold text-slate-900">{employee.maintenance_status.target_value}</span> • Эффективность: <span className="font-bold text-slate-900">{Number(employee.maintenance_status.efficiency || 0).toFixed(0)}%</span>
+                                                    Выполнено: <span className="font-bold text-slate-900">{ms.current_value}</span> из <span className="font-bold text-slate-900">{ms.target_value}</span> • Эффективность: <span className="font-bold text-slate-900">{Number(ms.efficiency || 0).toFixed(0)}%</span>
                                                 </div>
-                                                {sortedThresholds.length > 0 ? (
-                                                    <div className="mt-1 text-[11px] text-slate-600">
-                                                        Ступень: <span className="font-bold text-slate-900">{tierLabel}</span> <span className="text-slate-500">({tierPos})</span>
-                                                        {tierReward ? <span> • <span className="font-bold text-slate-900">{tierReward}</span></span> : null}
-                                                    </div>
-                                                ) : null}
-                                                {(penaltyAmount > 0 || qualityPenaltyUnits > 0) ? (
-                                                    <div className="mt-1 text-[11px] text-slate-600">
-                                                        {penaltyAmount > 0 ? (
-                                                            <>
-                                                                Штраф: <span className="font-bold text-rose-700">-{formatCurrency(penaltyAmount)}</span>
-                                                                {baseBonusAmount > 0 ? <span> • База: <span className="font-bold text-slate-900">{formatCurrency(baseBonusAmount)}</span></span> : null}
-                                                            </>
-                                                        ) : null}
-                                                        {qualityPenaltyUnits > 0 ? (
-                                                            <span>{penaltyAmount > 0 ? ' • ' : ''}Качество: <span className="font-bold text-rose-700">-{qualityPenaltyUnits}</span></span>
-                                                        ) : null}
-                                                    </div>
-                                                ) : null}
                                             </div>
-                                            <div className="text-right">
+                                            <div className="text-right flex-shrink-0">
                                                 <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Начислено</div>
-                                                <div className="text-lg font-black text-indigo-700 whitespace-nowrap">+{formatCurrency(employee.maintenance_status.bonus_amount || 0)}</div>
-                                                {Array.isArray(employee.maintenance_status.thresholds) && employee.maintenance_status.thresholds.length > 0 ? (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="mt-2 h-7 px-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-900"
-                                                        onClick={() => setOpenMaintenanceThresholds(v => !v)}
-                                                    >
-                                                        Ступени {openMaintenanceThresholds ? <ChevronUp className="ml-1 h-3.5 w-3.5" /> : <ChevronDown className="ml-1 h-3.5 w-3.5" />}
-                                                    </Button>
-                                                ) : null}
+                                                <div className="text-lg font-black text-indigo-700 whitespace-nowrap">+{formatCurrency(ms.bonus_amount || 0)}</div>
                                             </div>
                                         </div>
-                                        {openMaintenanceThresholds && Array.isArray(employee.maintenance_status.thresholds) && employee.maintenance_status.thresholds.length > 0 ? (
-                                            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/40 p-3">
-                                                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ступени</div>
-                                                <div className="mt-2 space-y-2">
-                                                    {[...employee.maintenance_status.thresholds]
-                                                        .sort((a: any, b: any) => (Number(a?.from || 0) - Number(b?.from || 0)))
-                                                        .map((t: any, ti: number) => {
-                                                            const from = Number(t?.from || 0);
-                                                            const isActive = ti === metIndex;
-                                                            const isMet = metricValue >= from;
-                                                            const rowClass = isActive
-                                                                ? 'rounded-xl border border-slate-300 bg-white px-2 py-1 -mx-2'
-                                                                : isMet
-                                                                    ? 'text-slate-700'
-                                                                    : 'text-slate-400';
-                                                            return (
-                                                                <div key={`maint-th-${ti}`} className={`flex items-start justify-between gap-4 ${rowClass}`}>
-                                                                    <div className="text-[11px] font-bold text-slate-900">
-                                                                        {t?.label ? String(t.label) : `≥ ${t.from}${employee.maintenance_status.calculation_mode === 'MONTHLY' ? '%' : ''}`}
-                                                                    </div>
-                                                                    <div className="text-[11px] font-black text-slate-900 whitespace-nowrap">
-                                                                        {formatCurrency(Number(t?.amount || 0))}
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="mt-2 h-7 px-2 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-900"
+                                            onClick={() => toggleMaintenanceDetails(employee.id)}
+                                        >
+                                            {isOpen ? 'Свернуть детали' : 'Показать детали'}
+                                            {isOpen ? <ChevronUp className="ml-1 h-3.5 w-3.5" /> : <ChevronDown className="ml-1 h-3.5 w-3.5" />}
+                                        </Button>
+                                        
+                                        {isOpen && (
+                                            <div className="mt-4 space-y-4">
+                                                {ms.breakdown && ms.breakdown.length > 0 && (
+                                                    <div className="rounded-2xl border border-slate-200 bg-slate-50/40 p-3">
+                                                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">По типам оборудования</div>
+                                                        <div className="mt-2 space-y-2">
+                                                            {ms.breakdown.map((item: any, index: number) => (
+                                                                <div key={index} className="flex justify-between items-center text-sm">
+                                                                    <span className="text-slate-700 font-medium">{item.type}</span>
+                                                                    <div className="flex items-center gap-3 text-xs">
+                                                                        <span className="text-slate-400">{item.count} шт.</span>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <span className="text-emerald-600 font-bold">+{formatCurrency(item.gross)}</span>
+                                                                            {item.penalty > 0 && (
+                                                                                <span className="text-rose-500">-{formatCurrency(item.penalty)}</span>
+                                                                            )}
+                                                                            <span className="text-slate-400">=</span>
+                                                                            <span className="text-slate-800 font-bold">{formatCurrency(item.gross - item.penalty)}</span>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            );
-                                                        })}
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="rounded-2xl border border-slate-200 bg-slate-50/40 p-3">
+                                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Штрафы и проблемы</div>
+                                                     <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                                                        <div>
+                                                            <span className="text-slate-700">Штраф за просрочку:</span>
+                                                            <span className="font-bold text-rose-700 float-right">-{formatCurrency(ms.penalty_amount || 0)}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-slate-700">Просрочено открытых:</span>
+                                                            <span className="font-bold text-rose-700 float-right">{ms.overdue_open_tasks || 0}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-slate-700">Штраф за качество:</span>
+                                                            <span className="font-bold text-rose-700 float-right">-{ms.quality_penalty_units || 0}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-slate-700">На доработке:</span>
+                                                            <span className="font-bold text-yellow-600 float-right">{ms.rework_open_tasks || 0}</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        ) : null}
+                                        )}
                                     </>
                                 );
                             })()}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Target, TrendingUp, Zap, Trophy, ChevronRight, ClipboardCheck, Wrench } from "lucide-react";
+import { Target, TrendingUp, Zap, Trophy, ChevronRight, ClipboardCheck, Wrench, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -51,72 +51,93 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
                     </div>
 
                     <div className="text-center mb-6">
-                        <p className="text-muted-foreground text-sm mb-1">Эффективность</p>
+                        <p className="text-muted-foreground text-sm mb-1">Выполнено задач</p>
                         <div className="flex items-baseline justify-center gap-2">
-                            <span className="text-4xl font-semibold tracking-tight text-foreground">{(kpi.efficiency || 0).toFixed(1)}</span>
-                            <span className="text-xl font-medium text-muted-foreground">%</span>
+                            <span className="text-4xl font-semibold tracking-tight text-foreground">{completedMonthValue}</span>
+                            <span className="text-xl font-medium text-muted-foreground">/</span>
+                            <span className="text-2xl font-medium text-muted-foreground">{totalMonthTarget}</span>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-                        <div className="rounded-2xl border border-border bg-accent/50 p-4 flex flex-col items-center justify-center text-center">
-                            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Задачи (план месяца)</p>
-                            <p className="text-2xl font-semibold text-foreground">
-                                <span className="text-emerald-400 font-black">{completedMonthValue}</span> <span className="text-muted-foreground">/</span> {totalMonthTarget}
-                            </p>
+                        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex flex-col items-center justify-center text-center">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 mb-1">Сумма премии</p>
+                            <p className="text-3xl font-black text-emerald-400">+{formatCurrency(kpi.bonus_amount || 0)}</p>
+                            {(kpi.overdue_penalty_amount || 0) > 0 && (
+                                <p className="text-[10px] font-medium text-rose-400/80 mt-1">Штраф: -{formatCurrency(kpi.overdue_penalty_amount || 0)}</p>
+                            )}
                         </div>
                         <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 flex flex-col items-center justify-center text-center">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-rose-500 mb-1">Просрочено</p>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-rose-500 mb-1">Просрочки</p>
                             <p className="text-3xl font-black text-rose-500">{kpi.overdue_open_tasks || 0}</p>
-                            <div className="mt-2 space-y-1">
-                                {(kpi.rework_open_tasks || 0) > 0 && (
-                                    <p className="text-[10px] font-medium text-rose-400/80">На доработке: {kpi.rework_open_tasks}</p>
-                                )}
-                                {(kpi.overdue_penalty_amount || 0) > 0 && (
-                                    <p className="text-[10px] font-bold text-rose-500 mt-1">Штраф: -{formatCurrency(kpi.overdue_penalty_amount || 0)}</p>
-                                )}
-                            </div>
+                            {(kpi.rework_open_tasks || 0) > 0 && (
+                                <p className="text-[10px] font-medium text-rose-400/80 mt-1">На доработке: {kpi.rework_open_tasks}</p>
+                            )}
                         </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2 mb-6">
-                        {oldDebtClosed > 0 && (
-                            <div className="rounded-full border border-border bg-accent/50 px-3 py-1 text-[11px] text-foreground/70">
-                                Закрыт старый долг: <span className="font-bold text-foreground">{oldDebtClosed}</span>
-                            </div>
-                        )}
-                        {(kpi.overdue_completed_tasks || 0) > 0 && (
-                            <div className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-[11px] text-rose-400">
-                                С просрочкой: <span className="font-bold">{kpi.overdue_completed_tasks}</span> (в ср. {overdueCompletedAverageDays} дн.)
-                            </div>
-                        )}
                     </div>
 
-                    <div className="space-y-4">
-                        <div className="h-2 w-full bg-accent/50 rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-foreground/60"
-                                style={{ width: `${progressPercent}%` }}
-                            />
-                        </div>
-                        
-                        <div className="flex justify-between items-center pt-2 border-t border-border">
-                            <div>
-                                <p className="text-xs text-foreground/50">Текущий бонус</p>
-                                <p className="text-xl font-bold text-emerald-400">+{formatCurrency(kpi.bonus_amount)}</p>
+                    {kpi.mode === 'MONTHLY' && kpi.breakdown && kpi.breakdown.length > 0 && (
+                        <div className="rounded-xl border border-border bg-accent/30 p-4 mb-6">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Lightbulb className="h-4 w-4 text-amber-500" />
+                                <p className="text-xs font-bold text-foreground/60 uppercase tracking-wider">По типам оборудования</p>
                             </div>
-                            {nextThreshold && (
-                                <div className="text-right">
-                                    <p className="text-xs text-foreground/50">Цель</p>
-                                    <p className="text-sm font-bold text-foreground">эфф. ≥ {nextThreshold.from}% → {formatCurrency(nextThreshold.amount)}</p>
-                                </div>
-                            )}
+                            <div className="space-y-2">
+                                {kpi.breakdown.map((item: any, idx: number) => {
+                                    const rateDisplay = item.rate > 0 ? item.rate : (item.count > 0 ? item.gross / item.count : 0);
+                                    return (
+                                        <div key={idx} className="flex items-center justify-between text-sm">
+                                            <span className="text-foreground/70 font-medium">{item.type}</span>
+                                            <div className="flex items-center gap-3 text-xs">
+                                                <span className="text-muted-foreground">{item.count} шт.</span>
+                                                <span className="text-amber-500 font-medium">{formatCurrency(rateDisplay)}/шт.</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-emerald-500 font-semibold">+{formatCurrency(item.gross)}</span>
+                                                    {item.penalty > 0 && (
+                                                        <span className="text-rose-500">-{formatCurrency(item.penalty)}</span>
+                                                    )}
+                                                    <span className="text-muted-foreground">=</span>
+                                                    <span className="text-foreground font-bold">{formatCurrency(item.gross - item.penalty)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-border flex justify-end items-center gap-3 text-sm">
+                                <span className="text-muted-foreground text-xs font-medium">Итого:</span>
+                                <span className="text-emerald-500 font-semibold">+{formatCurrency(kpi.total_gross || 0)}</span>
+                                {kpi.breakdown.reduce((sum: number, b: any) => sum + (b.penalty || 0), 0) > 0 && (
+                                    <span className="text-rose-500">
+                                        -{formatCurrency(kpi.breakdown.reduce((sum: number, b: any) => sum + (b.penalty || 0), 0))}
+                                    </span>
+                                )}
+                                <span className="text-muted-foreground">=</span>
+                                <span className="text-foreground font-bold">
+                                    {formatCurrency((kpi.total_gross || 0) - kpi.breakdown.reduce((sum: number, b: any) => sum + (b.penalty || 0), 0))}
+                                </span>
+                            </div>
                         </div>
+                    )}
 
-                        {kpi.thresholds?.length > 0 && (
+                    <div className="space-y-4">
+                        {kpi.mode === 'PER_TASK' && kpi.breakdown && kpi.breakdown.length > 0 && (
                             <button
                                 onClick={() => setShowDetails(!showDetails)}
-                                className="w-full flex items-center justify-center gap-2 text-sm text-foreground/40 hover:text-foreground/70 transition-colors pt-2 border-t border-border mt-2"
+                                className="w-full flex items-center justify-center gap-2 text-sm text-foreground/40 hover:text-foreground/70 transition-colors pt-2 border-t border-border"
+                            >
+                                <span>{showDetails ? 'Скрыть детали' : 'Показать по типам оборудования'}</span>
+                                <ChevronRight className={cn("h-4 w-4 transition-transform", showDetails && "rotate-90")} />
+                            </button>
+                        )}
+
+                        {kpi.mode === 'MONTHLY' && kpi.thresholds?.length > 0 && (
+                            <button
+                                onClick={() => setShowDetails(!showDetails)}
+                                className="w-full flex items-center justify-center gap-2 text-sm text-foreground/40 hover:text-foreground/70 transition-colors pt-2 border-t border-border"
                             >
                                 <span>{showDetails ? 'Скрыть уровни' : 'Показать все уровни'}</span>
                                 <ChevronRight className={cn("h-4 w-4 transition-transform", showDetails && "rotate-90")} />
@@ -126,7 +147,53 @@ export function MaintenanceKpiCard({ kpi, formatCurrency }: { kpi: any, formatCu
                 </CardContent>
             </Card>
 
-            {showDetails && kpi.thresholds && (
+            {showDetails && kpi.mode === 'PER_TASK' && kpi.breakdown && kpi.breakdown.length > 0 && (
+                <Card className="border border-border shadow-lg bg-card overflow-hidden">
+                    <CardContent className="p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Wrench className="h-4 w-4 text-amber-500" />
+                            <p className="text-xs font-bold text-foreground/60 uppercase tracking-wider">Оплата по типам оборудования</p>
+                        </div>
+                        <div className="space-y-2">
+                            {kpi.breakdown.map((item: any, idx: number) => {
+                                const rateDisplay = item.rate > 0 ? item.rate : (item.count > 0 ? item.gross / item.count : 0);
+                                return (
+                                    <div key={idx} className="flex items-center justify-between text-sm">
+                                        <span className="text-foreground/70 font-medium">{item.type}</span>
+                                        <div className="flex items-center gap-3 text-xs">
+                                            <span className="text-muted-foreground">{item.count} шт.</span>
+                                            <span className="text-amber-500 font-medium">{formatCurrency(rateDisplay)}/шт.</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-emerald-500 font-semibold">+{formatCurrency(item.gross)}</span>
+                                                {item.penalty > 0 && (
+                                                    <span className="text-rose-500">-{formatCurrency(item.penalty)}</span>
+                                                )}
+                                                <span className="text-muted-foreground">=</span>
+                                                <span className="text-foreground font-bold">{formatCurrency(item.gross - item.penalty)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-border flex justify-end items-center gap-3 text-sm">
+                            <span className="text-muted-foreground text-xs font-medium">Итого:</span>
+                            <span className="text-emerald-500 font-semibold">+{formatCurrency(kpi.total_gross || 0)}</span>
+                            {kpi.breakdown.reduce((sum: number, b: any) => sum + (b.penalty || 0), 0) > 0 && (
+                                <span className="text-rose-500">
+                                    -{formatCurrency(kpi.breakdown.reduce((sum: number, b: any) => sum + (b.penalty || 0), 0))}
+                                </span>
+                            )}
+                            <span className="text-muted-foreground">=</span>
+                            <span className="text-foreground font-bold">
+                                {formatCurrency((kpi.total_gross || 0) - kpi.breakdown.reduce((sum: number, b: any) => sum + (b.penalty || 0), 0))}
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {showDetails && kpi.mode === 'MONTHLY' && kpi.thresholds && (
                 <Card className="border border-border shadow-lg bg-card overflow-hidden">
                     <CardContent className="p-4 space-y-2">
                         {kpi.thresholds.map((t: any) => (

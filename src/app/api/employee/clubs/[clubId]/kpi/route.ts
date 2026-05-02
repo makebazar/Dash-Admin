@@ -273,13 +273,39 @@ export async function GET(
         );
 
         const overdueHistoryRes = await query(
-            `SELECT overdue_days_at_completion, was_overdue, bonus_earned
+            `SELECT overdue_days_at_completion, was_overdue, bonus_earned, overdue_penalty, due_date
              FROM equipment_maintenance_tasks
              WHERE responsible_user_id_at_completion = $1
                AND status = 'COMPLETED'
                AND completed_at >= $2 AND completed_at <= $3`,
             [userId, startOfMonthIso, endOfMonthIso]
         );
+
+        // Breakdown by equipment type
+        // Penalty ONLY for tasks due in current month (filter by due_date)
+        const breakdownRes = await query(
+            `SELECT 
+                e.type as equipment_type_code,
+                et.name_ru as equipment_type_name,
+                COUNT(*) as task_count,
+                COALESCE(SUM(mt.bonus_earned), 0) as gross_earnings,
+                COALESCE(SUM(CASE WHEN mt.due_date >= $4::date AND mt.due_date <= $5::date THEN mt.overdue_penalty ELSE 0 END), 0) as penalty
+             FROM equipment_maintenance_tasks mt
+             JOIN equipment e ON mt.equipment_id = e.id
+             LEFT JOIN equipment_types et ON e.type = et.code
+             WHERE mt.responsible_user_id_at_completion = $1
+               AND mt.status = 'COMPLETED'
+               AND mt.completed_at >= $2 AND mt.completed_at <= $3
+             GROUP BY e.type, et.name_ru
+             ORDER BY task_count DESC`,
+            [userId, startOfMonthIso, endOfMonthIso, startOfMonth.toISOString().split('T')[0], endOfMonth.toISOString().split('T')[0]]
+        );
+
+        // Filter overdue history for penalty calculation to current month only (by due_date)
+        const currentMonthOverdueHistory = overdueHistoryRes.rows.filter((t: any) => {
+            const dueDate = new Date(t.due_date);
+            return dueDate >= startOfMonth && dueDate <= endOfMonth;
+        });
 
         const taskBonusSum = overdueHistoryRes.rows.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
 
@@ -661,7 +687,7 @@ export async function GET(
                 let bonusAmount = 0;
                 let projectedBonusAmount = 0;
                 let projectedTierLabel: string | null = null;
-                const overduePenaltyMeta = calculateMaintenanceOverduePenalty(maintConfig, overdueHistoryRes.rows);
+                const overduePenaltyMeta = calculateMaintenanceOverduePenalty(maintConfig, currentMonthOverdueHistory);
                 if (maintConfig.calculation_mode === 'MONTHLY') {
                     const thresholds = maintConfig.efficiency_thresholds || [];
                     const sortedTiers = [...thresholds].sort((a: any, b: any) => (Number(b.from_percent) || 0) - (Number(a.from_percent) || 0));
@@ -698,6 +724,48 @@ export async function GET(
                         }));
                 }
 
+                // Create full breakdown with all equipment types from scheme
+                const perTypeRewards = maintConfig.per_equipment_type_rewards || [];
+                const equipmentTypesMap = new Map();
+                
+                // Initialize with all types from scheme
+                for (const reward of perTypeRewards) {
+                    const code = reward.equipment_type_code || reward.type_code || reward.code || reward.type || '';
+                    const name = reward.equipment_type_name || reward.name_ru || reward.name || code;
+                    equipmentTypesMap.set(code.toLowerCase(), {
+                        type: name,
+                        type_code: code,
+                        count: 0,
+                        gross: 0,
+                        penalty: 0,
+                        rate: Number(reward.amount || reward.reward || reward.value || reward.bonus || 0)
+                    });
+                }
+                
+                // Fill in actual data
+                for (const row of breakdownRes.rows) {
+                    const code = (row.equipment_type_code || '').toLowerCase();
+                    if (equipmentTypesMap.has(code)) {
+                        const item = equipmentTypesMap.get(code);
+                        item.count = parseInt(row.task_count) || 0;
+                        item.gross = parseFloat(row.gross_earnings) || 0;
+                        item.penalty = Math.abs(parseFloat(row.penalty)) || 0;
+                    } else {
+                        // Type exists in tasks but not in scheme - add it
+                        equipmentTypesMap.set(code, {
+                            type: row.equipment_type_name || row.equipment_type_code || 'Другое',
+                            type_code: row.equipment_type_code,
+                            count: parseInt(row.task_count) || 0,
+                            gross: parseFloat(row.gross_earnings) || 0,
+                            penalty: Math.abs(parseFloat(row.penalty)) || 0,
+                            rate: 0
+                        });
+                    }
+                }
+                
+                const breakdown = Array.from(equipmentTypesMap.values());
+                const totalGross = breakdown.reduce((sum: number, b: any) => sum + b.gross, 0);
+                
                 maintenance_progress = {
                     id: maintConfig.id || 'maintenance',
                     name: maintConfig.name || 'Обслуживание',
@@ -722,7 +790,14 @@ export async function GET(
                     projected_bonus_amount: projectedBonusAmount,
                     projected_tier_label: projectedTierLabel,
                     thresholds: current_thresholds,
-                    mode: maintConfig.calculation_mode || 'PER_TASK'
+                    mode: maintConfig.calculation_mode || 'PER_TASK',
+                    breakdown,
+                    total_gross: totalGross,
+                    per_type_rates: perTypeRewards.map((r: any) => ({
+                        type: r.equipment_type_name || r.name_ru || r.name || r.equipment_type_code || r.type_code || r.code || r.type || 'Другое',
+                        type_code: r.equipment_type_code || r.type_code || r.code || r.type || '',
+                        rate: Number(r.amount || r.reward || r.value || r.bonus || 0)
+                    }))
                 };
             }
         } catch (e) {

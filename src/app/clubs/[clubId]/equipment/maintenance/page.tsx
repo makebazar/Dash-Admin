@@ -187,6 +187,7 @@ export default function MaintenanceSchedule() {
     const [employees, setEmployees] = useState<Employee[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isGenerating, setIsGenerating] = useState(false)
+    const [isRecalculating, setIsRecalculating] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1)
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
     const [searchQuery, setSearchQuery] = useState("")
@@ -281,6 +282,27 @@ export default function MaintenanceSchedule() {
             console.error("Error generating tasks:", error)
         }
     }
+
+    const handleRecalculateBonuses = async () => {
+        setIsRecalculating(true);
+        try {
+            const res = await fetch(
+                `/api/clubs/${clubId}/equipment/maintenance/recalculate-bonuses?month=${selectedMonth}&year=${selectedYear}`,
+                { method: 'POST' }
+            );
+            const data = await res.json();
+            if (res.ok) {
+                alert(data.message || 'Перерасчет завершен.');
+            } else {
+                alert(`Ошибка: ${data.error || 'Не удалось выполнить перерасчет'}`);
+            }
+        } catch (error) {
+            console.error("Recalculation error:", error);
+            alert('Произошла ошибка при перерасчете бонусов.');
+        } finally {
+            setIsRecalculating(false);
+        }
+    };
 
     const handleAssignEquipment = async (equipmentId: string, value: string) => {
         setEditingEquipmentKey(null)
@@ -929,12 +951,21 @@ export default function MaintenanceSchedule() {
                             </Link>
                         </Button>
                         <Button
+                            onClick={handleRecalculateBonuses}
+                            disabled={isRecalculating}
+                            variant="outline"
+                            className="w-full sm:w-auto rounded-xl h-11 px-6 font-medium"
+                        >
+                            {isRecalculating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                            Пересчитать бонусы
+                        </Button>
+                        <Button
                             onClick={handleGenerateTasks}
                             disabled={isGenerating}
                             className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 sm:w-auto rounded-xl h-11 px-6 font-medium"
                         >
                             {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                            Пересчитать
+                            Обновить план
                         </Button>
                     </div>
                 </div>

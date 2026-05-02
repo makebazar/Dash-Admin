@@ -516,25 +516,57 @@ export async function GET(
 
             // 2. Completed Tasks for Payment (Accrual) - for distributing to shifts
             const paymentTasksRes = await query(
-                `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, e.type as equipment_type
+                `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, mt.overdue_penalty, mt.due_date, e.type as equipment_type_code, et.name_ru as equipment_type_name
                  FROM equipment_maintenance_tasks mt
                  JOIN equipment e ON mt.equipment_id = e.id
+                 LEFT JOIN equipment_types et ON e.type = et.code
                  WHERE mt.completed_by = $1 AND mt.status = 'COMPLETED'
                    AND mt.completed_at >= $2 AND mt.completed_at <= $3`,
                 [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]
             );
             const paymentTasks = paymentTasksRes.rows;
-            const totalMaintenanceBonus = paymentTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
 
-            const overdueTasksRes = await query(
-                `SELECT overdue_days_at_completion, was_overdue, bonus_earned, overdue_penalty
-                 FROM equipment_maintenance_tasks
-                 WHERE responsible_user_id_at_completion = $1
-                   AND status = 'COMPLETED'
-                   AND completed_at >= $2 AND completed_at <= $3`,
-                [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString()]
-            );
-            const overdueTasks = overdueTasksRes.rows;
+            // Gross earnings breakdown by type (full rate, before penalty)
+            const maintenance_breakdown_by_type: Record<string, { count: number; gross: number; type: string; penalty: number; overdue_days: number; overdue_incidents: number }> = {};
+            for (const task of paymentTasks) {
+                const type = task.equipment_type_name || task.equipment_type_code || 'Другое';
+                if (!maintenance_breakdown_by_type[type]) {
+                    maintenance_breakdown_by_type[type] = { count: 0, gross: 0, type, penalty: 0, overdue_days: 0, overdue_incidents: 0 };
+                }
+                const grossBonus = (parseFloat(task.bonus_earned) || 0);
+                const overdueDays = parseInt(task.overdue_days_at_completion) || 0;
+                maintenance_breakdown_by_type[type].count++;
+                maintenance_breakdown_by_type[type].gross += grossBonus;
+                maintenance_breakdown_by_type[type].overdue_days += overdueDays;
+                if (overdueDays > 0) {
+                    maintenance_breakdown_by_type[type].overdue_incidents++;
+                }
+            }
+
+            // Penalty ONLY for tasks due in current month
+            const currentMonthTasks = paymentTasks.filter(t => {
+                const dueDate = new Date(t.due_date);
+                return dueDate >= startOfMonth && dueDate <= endOfMonth;
+            });
+            
+            const currentMonthPenalty = currentMonthTasks.reduce((sum, t) => sum + Math.abs(parseFloat(t.overdue_penalty) || 0), 0);
+
+            // Add penalty to breakdown (distributed proportionally)
+            for (const task of currentMonthTasks) {
+                const type = task.equipment_type_name || task.equipment_type_code || 'Другое';
+                if (maintenance_breakdown_by_type[type]) {
+                    const taskPenalty = Math.abs(parseFloat(task.overdue_penalty) || 0);
+                    maintenance_breakdown_by_type[type].penalty += taskPenalty;
+                }
+            }
+
+            const maintenance_breakdown = Object.values(maintenance_breakdown_by_type);
+
+            // Total gross earnings
+            const totalMaintenanceGross = paymentTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
+
+            // Final bonus = gross - penalty (penalty only for current month tasks)
+            const totalMaintenanceFinal = Math.max(0, totalMaintenanceGross - currentMonthPenalty);
 
             // Use frozen scheme if payment was made, otherwise use current employee scheme
             const hasPaidSnapshot = empShifts.some((s: any) => s.salary_snapshot?.paid_at);
@@ -545,43 +577,14 @@ export async function GET(
             const schemeBonuses = activeScheme.bonuses || [];
             const maintenanceBonusConfig = schemeBonuses.find((b: any) => b.type === 'maintenance_kpi');
 
-            // Calculate Maintenance Bonus based on Scheme Mode
-            let finalMaintenanceBonus = 0;
-            let maintenanceOverduePenaltyRaw = 0;
-            let maintenanceOverduePenaltyApplied = 0;
-            let maintenanceOverdueIncidents = 0;
-            let maintenanceOverdueDays = 0;
-
-            if (maintenanceBonusConfig) {
-                // Calculate bonus
-                if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
-                    const efficiency = qualityMetrics.efficiency;
-                    const thresholds = maintenanceBonusConfig.efficiency_thresholds || [];
-                    const sortedTiers = [...thresholds].sort((a: any, b: any) => (b.from_percent || 0) - (a.from_percent || 0));
-                    const achievedTier = sortedTiers.find((t: any) => efficiency >= (t.from_percent || 0));
-                    if (achievedTier) {
-                        finalMaintenanceBonus = parseFloat(achievedTier.amount || '0');
-                    }
-                } else {
-                    finalMaintenanceBonus = totalMaintenanceBonus;
-                }
-
-                // Calculate penalty
-                if (maintenanceBonusConfig.calculation_mode === 'MONTHLY') {
-                    const penaltyMeta = calculateMaintenanceOverduePenalty(maintenanceBonusConfig, overdueTasks);
-                    maintenanceOverduePenaltyRaw = penaltyMeta.total;
-                    maintenanceOverdueIncidents = penaltyMeta.incidents;
-                    maintenanceOverdueDays = penaltyMeta.overdue_days;
-                    maintenanceOverduePenaltyApplied = Math.min(finalMaintenanceBonus, maintenanceOverduePenaltyRaw);
-                } else {
-                    maintenanceOverduePenaltyRaw = overdueTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.overdue_penalty) || 0), 0);
-                    maintenanceOverduePenaltyApplied = maintenanceOverduePenaltyRaw;
-                    maintenanceOverdueIncidents = overdueTasks.filter((t: any) => t.overdue_days_at_completion > 0).length;
-                    maintenanceOverdueDays = overdueTasks.reduce((sum: number, t: any) => sum + Math.max(0, parseInt(t.overdue_days_at_completion) || 0), 0);
-                }
-            }
+            // Use stored values directly: gross from bonus_earned, penalty only for current month
+            const finalMaintenanceBonus = totalMaintenanceGross;
+            const maintenanceOverduePenaltyRaw = currentMonthPenalty;
+            const maintenanceOverdueIncidents = maintenance_breakdown.reduce((sum, b) => sum + b.overdue_incidents, 0);
+            const maintenanceOverdueDays = maintenance_breakdown.reduce((sum, b) => sum + b.overdue_days, 0);
+            const maintenanceOverduePenaltyApplied = currentMonthPenalty;
             
-            const maintenanceBonusFinal = Math.max(0, finalMaintenanceBonus - maintenanceOverduePenaltyApplied);
+            const maintenanceBonusFinal = totalMaintenanceFinal;
 
             monthlyMetrics['maintenance_bonus_base'] = finalMaintenanceBonus;
             monthlyMetrics['maintenance_bonus'] = maintenanceBonusFinal;
@@ -817,7 +820,7 @@ export async function GET(
                 });
                 
                 const shiftRawSum = shiftTasks.reduce((sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0), 0);
-                const shiftPenaltyTasks = overdueTasks.filter((t: any) => {
+                const shiftPenaltyTasks = currentMonthTasks.filter((t: any) => {
                     const d = new Date(t.completed_at);
                     return d >= shiftStart && (s.check_out ? d <= shiftEnd : true);
                 });
@@ -1010,10 +1013,10 @@ export async function GET(
                 const completed = monthlyMetrics['maintenance_tasks_completed'] || 0;
                 const assigned = monthlyMetrics['maintenance_tasks_assigned'] || 0;
                 const adjustedCompleted = monthlyMetrics['maintenance_adjusted_completed'] || 0;
-                const bonusAmount = monthlyMetrics['maintenance_bonus'] || 0;
-                const penaltyAmount = monthlyMetrics['maintenance_overdue_penalty'] || 0;
-                const penaltyRawAmount = monthlyMetrics['maintenance_overdue_penalty_raw'] || 0;
-                const baseBonusAmount = monthlyMetrics['maintenance_bonus_base'] || 0;
+                const bonusAmount = totalMaintenanceFinal;
+                const penaltyAmount = currentMonthPenalty;
+                const penaltyRawAmount = currentMonthPenalty;
+                const baseBonusAmount = totalMaintenanceGross;
                 const overdueIncidents = monthlyMetrics['maintenance_overdue_incidents'] || 0;
                 const qualityPenaltyUnits = monthlyMetrics['maintenance_quality_penalty_units'] || 0;
                 const oldDebtClosed = monthlyMetrics['maintenance_old_debt_closed_tasks'] || 0;
@@ -1057,6 +1060,7 @@ export async function GET(
                     stale_rework_tasks: staleRework,
                     quality_penalty_units: qualityPenaltyUnits,
                     thresholds: current_thresholds,
+                    breakdown: maintenance_breakdown,
                     is_met: bonusAmount > 0
                 };
 

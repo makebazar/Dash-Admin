@@ -105,35 +105,65 @@ export async function POST(
         const nextCycle = isResubmission ? currentCycle + 1 : Math.max(currentCycle, 1);
 
         // 0. Get KPI Config from Active Salary Scheme & Current Task Info
-        // We fetch the active salary scheme for this user to get their specific KPI rates
-        const [schemeRes, taskRes] = await Promise.all([
-            query(
-                `SELECT sv.formula
-                 FROM employee_salary_assignments esa
-                 JOIN salary_schemes ss ON esa.scheme_id = ss.id
-                 JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
-                 WHERE esa.user_id = $1 AND esa.club_id = $2
-                 ORDER BY sv.version DESC
-                 LIMIT 1`,
-                [userId, clubId]
-            ),
-            query(`
-                SELECT mt.due_date, mt.task_type, e.type as equipment_type
-                FROM equipment_maintenance_tasks mt
-                JOIN equipment e ON mt.equipment_id = e.id
-                WHERE mt.id = $1
-            `, [taskId])
-        ]);
-        
-        const schemeFormula = schemeRes.rows[0]?.formula || {};
-        const bonuses = schemeFormula.bonuses || [];
-        // Find the maintenance KPI bonus config (handle potential case sensitivity)
-        const kpiBonus = bonuses.find((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
+        // Find the correct salary scheme for the user (role-based or direct)
+        const taskRes = await query(`
+            SELECT mt.due_date, mt.task_type, e.type as equipment_type
+            FROM equipment_maintenance_tasks mt
+            JOIN equipment e ON mt.equipment_id = e.id
+            WHERE mt.id = $1
+        `, [taskId]);
+
         const task = taskRes.rows[0];
 
         if (!task) {
             return NextResponse.json({ error: 'Task not found' }, { status: 404 });
         }
+
+        const rolesRes = await query(
+            `SELECT role_id FROM club_employee_roles WHERE club_id = $1 AND user_id = $2 ORDER BY priority ASC`,
+            [clubId, userId]
+        );
+
+        let schemeFormula: any = null;
+
+        if (rolesRes.rows.length > 0) {
+            for (const role of rolesRes.rows) {
+                const roleSchemeRes = await query(
+                    `SELECT sv.formula
+                     FROM employee_role_salary_assignments ersa
+                     JOIN salary_schemes ss ON ersa.scheme_id = ss.id
+                     JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
+                     WHERE ersa.user_id = $1 AND ersa.club_id = $2 AND ersa.role_id = $3 AND ss.id IS NOT NULL
+                     ORDER BY sv.version DESC
+                     LIMIT 1`,
+                    [userId, clubId, role.role_id]
+                );
+                if (roleSchemeRes.rows.length > 0) {
+                    schemeFormula = roleSchemeRes.rows[0]?.formula;
+                    break; 
+                }
+            }
+        }
+
+        if (!schemeFormula) {
+            const userSchemeRes = await query(
+                `SELECT sv.formula
+                 FROM employee_salary_assignments esa
+                 JOIN salary_schemes ss ON esa.scheme_id = ss.id
+                 JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
+                 WHERE esa.user_id = $1 AND esa.club_id = $2 AND ss.id IS NOT NULL
+                 ORDER BY sv.version DESC
+                 LIMIT 1`,
+                [userId, clubId]
+            );
+            if (userSchemeRes.rows.length > 0) {
+                schemeFormula = userSchemeRes.rows[0]?.formula;
+            }
+        }
+
+        const finalSchemeFormula = schemeFormula || {};
+        const bonuses = finalSchemeFormula.bonuses || [];
+        const kpiBonus = bonuses.find((b: any) => b.type === 'maintenance_kpi' || b.type === 'MAINTENANCE_KPI');
 
         // 1. Calculate Bonus
         // Штраф за просрочку применяется сразу при завершении задачи
@@ -143,7 +173,7 @@ export async function POST(
             const perTypeRewards = kpiBonus.per_equipment_type_rewards || [];
             const equipmentTypeCode = task.equipment_type;
             
-            const typeReward = perTypeRewards.find((r: any) => r.equipment_type_code === equipmentTypeCode);
+            const typeReward = perTypeRewards.find((r: any) => r.equipment_type_code?.trim().toLowerCase() === equipmentTypeCode?.trim().toLowerCase());
             const baseValue = typeReward 
                 ? Number(typeReward.amount) 
                 : Number(kpiBonus.amount) || 0;
@@ -168,7 +198,6 @@ export async function POST(
         );
 
         const overduePenalty = overduePenaltyPreview.total;
-        const finalBonusEarned = Math.max(0, bonusEarned - overduePenalty);
 
         const completeTask = await query(
             `UPDATE equipment_maintenance_tasks
@@ -189,7 +218,7 @@ export async function POST(
                  responsible_user_id_at_completion = $9
              WHERE id = $1
              RETURNING equipment_id`,
-            [taskId, userId, photos, notes, finalBonusEarned, overduePenalty, overdueDaysAtCompletion, wasOverdue, responsibleUserIdAtCompletion]
+            [taskId, userId, photos, notes, bonusEarned, overduePenalty, overdueDaysAtCompletion, wasOverdue, responsibleUserIdAtCompletion]
         );
 
         if ((completeTask.rowCount || 0) === 0) {
