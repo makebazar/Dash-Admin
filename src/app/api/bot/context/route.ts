@@ -3,7 +3,6 @@ import { query } from '@/db';
 
 // GET /api/bot/context?messenger_type=...&messenger_user_id=...
 // This endpoint is called by n8n to check if a user is already linked
-// and to retrieve their context (e.g., user_id, selected club).
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const messenger_type = searchParams.get('messenger_type');
@@ -14,7 +13,6 @@ export async function GET(request: Request) {
     }
 
     try {
-
         const result = await query(
             `
             SELECT 
@@ -83,7 +81,6 @@ export async function GET(request: Request) {
             );
             response.selected_club = unique_clubs[0];
         }
-
 
         return NextResponse.json(response);
 
