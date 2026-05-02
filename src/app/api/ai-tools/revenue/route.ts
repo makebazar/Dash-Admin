@@ -105,8 +105,67 @@ export async function GET(request: Request) {
       ${filterConditions};
     `;
 
+    // Получаем системные метрики (тип MONEY)
+    const metricsSql = `
+      SELECT key, label, type 
+      FROM system_metrics 
+      WHERE type = 'MONEY';
+    `;
+    const metricsResult = await query(metricsSql, []);
+
+    // Получаем кастомные метрики клуба (тип MONEY)
+    const customMetricsSql = `
+      SELECT key, label, type 
+      FROM club_custom_metrics 
+      WHERE club_id = $1 AND type = 'MONEY' AND is_active = true;
+    `;
+    const customMetricsResult = await query(customMetricsSql, [targetClubId]);
+
+    // Получаем суммы по всем метрикам из report_data
+    const allMetricKeys = [
+      ...metricsResult.rows.map(r => r.key),
+      ...customMetricsResult.rows.map(r => r.key)
+    ];
+
+    // Получаем данные с aggregated metrics из report_data
+    const aggregatedMetrics: Record<string, { sum: number; label: string }> = {};
+    
+    for (const metric of metricsResult.rows) {
+      aggregatedMetrics[metric.key] = { sum: 0, label: metric.label };
+    }
+    for (const metric of customMetricsResult.rows) {
+      aggregatedMetrics[metric.key] = { sum: 0, label: metric.label };
+    }
+
+    const metricsSumSql = `
+      SELECT report_data
+      FROM shifts
+      WHERE club_id = $1 AND check_in::date BETWEEN $2 AND $3
+        AND report_data IS NOT NULL AND report_data != '{}'::jsonb
+      ${filterConditions};
+    `;
+    const metricsDataResult = await query(metricsSumSql, queryParams);
+
+    for (const row of metricsDataResult.rows) {
+      const data = row.report_data as Record<string, unknown>;
+      for (const key of allMetricKeys) {
+        if (data && data[key] !== undefined) {
+          const val = parseFloat(String(data[key])) || 0;
+          aggregatedMetrics[key].sum += val;
+        }
+      }
+    }
+
     const result = await query(sql, queryParams);
     const data = result.rows[0];
+
+    // Формируем объект custom_metrics с суммами
+    const customMetrics: Record<string, { sum: number; label: string }> = {};
+    for (const [key, val] of Object.entries(aggregatedMetrics)) {
+      if (val.sum > 0) {
+        customMetrics[key] = val;
+      }
+    }
 
     return NextResponse.json({
       club_id: targetClubId,
@@ -127,7 +186,8 @@ export async function GET(request: Request) {
         count: parseInt(data?.shift_count || 0),
         total_hours: parseFloat(data?.total_hours || 0),
         employees: parseInt(data?.employees_count || 0)
-      }
+      },
+      custom_metrics: customMetrics
     });
 
   } catch (error: any) {
