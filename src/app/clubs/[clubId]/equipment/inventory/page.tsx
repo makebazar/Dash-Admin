@@ -1,2531 +1,3370 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef, Fragment, type MouseEvent } from "react"
-import { useParams, useRouter, useSearchParams } from "next/navigation"
-import Link from "next/link"
-import * as XLSX from "xlsx"
 import {
-    Plus,
-    Search,
-    AlertCircle,
-    LayoutGrid,
-    ChevronLeft,
-    Loader2,
-    Info,
-    Wrench,
-    Archive,
-    Trash2,
-    Download,
-    Upload,
-    RefreshCw,
-    Box,
-    Clock3,
-    ChevronDown,
-    ChevronRight,
-    Copy,
-    Check,
-    ChevronsUpDown,
-    ArrowLeftRight
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  Fragment,
+  type MouseEvent,
+} from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import * as XLSX from "xlsx";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow
-} from "@/components/ui/table"
+  Plus,
+  Search,
+  AlertCircle,
+  LayoutGrid,
+  ChevronLeft,
+  Loader2,
+  Info,
+  Wrench,
+  Archive,
+  Trash2,
+  Download,
+  Upload,
+  RefreshCw,
+  Box,
+  Clock3,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Check,
+  ChevronsUpDown,
+  ArrowLeftRight,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
-import { cn, formatLocalDate } from "@/lib/utils"
-import { PageShell } from "@/components/layout/PageShell"
-import { renderEquipmentIcon } from "@/lib/equipment-icons"
-import { EQUIPMENT_STATUS_LABELS, type EquipmentStatus } from "@/lib/equipment-status"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { cn, formatLocalDate } from "@/lib/utils";
+import { PageShell } from "@/components/layout/PageShell";
+import { renderEquipmentIcon } from "@/lib/equipment-icons";
+import {
+  EQUIPMENT_STATUS_LABELS,
+  type EquipmentStatus,
+} from "@/lib/equipment-status";
 
 interface Equipment {
-    id: string
-    name: string
-    type: string
-    type_name: string
-    type_icon: string
-    identifier: string | null
-    brand: string | null
-    model: string | null
-    workstation_id: string | null
-    workstation_name: string | null
-    workstation_zone: string | null
-    warranty_expires: string | null
-    warranty_status: 'ACTIVE' | 'EXPIRED' | 'EXPIRING_SOON' | null
-    last_cleaned_at: string | null
-    cleaning_interval_days?: number
-    is_active: boolean
-    notes: string | null
-    maintenance_enabled?: boolean
-    assigned_user_id?: string | null
-    open_issues_count?: number
-    status: EquipmentStatus
-    purchase_date?: string
-    price?: number
+  id: string;
+  name: string;
+  type: string;
+  type_name: string;
+  type_icon: string;
+  identifier: string | null;
+  brand: string | null;
+  model: string | null;
+  workstation_id: string | null;
+  workstation_name: string | null;
+  workstation_zone: string | null;
+  warranty_expires: string | null;
+  warranty_status: "ACTIVE" | "EXPIRED" | "EXPIRING_SOON" | null;
+  last_cleaned_at: string | null;
+  cleaning_interval_days?: number;
+  is_active: boolean;
+  notes: string | null;
+  maintenance_enabled?: boolean;
+  assigned_user_id?: string | null;
+  open_issues_count?: number;
+  status: EquipmentStatus;
+  purchase_date?: string;
+  price?: number;
 }
 
 interface EquipmentType {
-    code: string
-    name_ru: string
-    icon: string
+  code: string;
+  name_ru: string;
+  icon: string;
 }
 
 interface Workstation {
-    id: string
-    name: string
-    zone: string
+  id: string;
+  name: string;
+  zone: string;
 }
 
 interface InterclubTargetClub {
-    id: number
-    name: string
-    workstations: Array<{
-        id: string
-        name: string
-        zone: string
-        assigned_user_id?: string | null
-        assigned_user_name?: string | null
-    }>
+  id: number;
+  name: string;
+  workstations: Array<{
+    id: string;
+    name: string;
+    zone: string;
+    assigned_user_id?: string | null;
+    assigned_user_name?: string | null;
+  }>;
 }
 
 interface InterclubTransferItem {
-    equipment_id: string
-    equipment_name: string
-    equipment_type: string
-    target_workstation_id: string | null
-    target_workstation_name: string | null
-    target_workstation_zone: string | null
+  equipment_id: string;
+  equipment_name: string;
+  equipment_type: string;
+  target_workstation_id: string | null;
+  target_workstation_name: string | null;
+  target_workstation_zone: string | null;
 }
 
 interface InterclubTransfer {
-    id: string
-    source_club_id: number
-    target_club_id: number
-    status: string
-    comment: string | null
-    created_by: string | null
-    created_at: string
-    completed_by: string | null
-    completed_at: string | null
-    direction: "IN" | "OUT"
-    source_club_name: string
-    target_club_name: string
-    created_by_name: string | null
-    completed_by_name: string | null
-    item_count: number
-    items: InterclubTransferItem[]
+  id: string;
+  source_club_id: number;
+  target_club_id: number;
+  status: string;
+  comment: string | null;
+  created_by: string | null;
+  created_at: string;
+  completed_by: string | null;
+  completed_at: string | null;
+  direction: "IN" | "OUT";
+  source_club_name: string;
+  target_club_name: string;
+  created_by_name: string | null;
+  completed_by_name: string | null;
+  item_count: number;
+  items: InterclubTransferItem[];
 }
 
 interface PendingInterclubTransfer {
-    target_club_id: number
-    target_club_name: string
-    comment: string
-    items: Array<{
-        equipment_id: string
-        target_workstation_id: string | null
-    }>
+  target_club_id: number;
+  target_club_name: string;
+  comment: string;
+  items: Array<{
+    equipment_id: string;
+    target_workstation_id: string | null;
+  }>;
 }
 
 interface Employee {
-    id: string
-    full_name: string
-    role?: string
-    is_active?: boolean
-    dismissed_at?: string | null
+  id: string;
+  full_name: string;
+  role?: string;
+  is_active?: boolean;
+  dismissed_at?: string | null;
 }
 
 const INVENTORY_IMPORT_COLUMNS = [
-    "ID",
-    "Название",
-    "Тип код",
-    "Тип",
-    "Серийный номер",
-    "Бренд",
-    "Модель",
-    "Зона",
-    "Место",
-    "Статус",
-    "Дата покупки",
-    "Гарантия до",
-    "Интервал чистки (дней)",
-    "Обслуживание включено",
-    "Примечание",
-] as const
+  "ID",
+  "Название",
+  "Тип код",
+  "Тип",
+  "Серийный номер",
+  "Бренд",
+  "Модель",
+  "Зона",
+  "Место",
+  "Статус",
+  "Дата покупки",
+  "Гарантия до",
+  "Интервал чистки (дней)",
+  "Обслуживание включено",
+  "Примечание",
+] as const;
 
 const INVENTORY_TEMPLATE_EXAMPLE = {
-    ID: "",
-    "Название": "Игровой ПК #12",
-    "Тип код": "PC",
-    "Тип": "Компьютер",
-    "Серийный номер": "INV-0012",
-    "Бренд": "ASUS",
-    "Модель": "ROG Strix",
-    "Зона": "Основной зал",
-    "Место": "PC-12",
-    "Статус": "ACTIVE",
-    "Дата покупки": "2026-01-15",
-    "Гарантия до": "2027-01-15",
-    "Интервал чистки (дней)": 30,
-    "Обслуживание включено": "Да",
-    "Примечание": "Пример строки для импорта",
-}
+  ID: "",
+  Название: "Игровой ПК #12",
+  "Тип код": "PC",
+  Тип: "Компьютер",
+  "Серийный номер": "INV-0012",
+  Бренд: "ASUS",
+  Модель: "ROG Strix",
+  Зона: "Основной зал",
+  Место: "PC-12",
+  Статус: "ACTIVE",
+  "Дата покупки": "2026-01-15",
+  "Гарантия до": "2027-01-15",
+  "Интервал чистки (дней)": 30,
+  "Обслуживание включено": "Да",
+  Примечание: "Пример строки для импорта",
+};
 
 const INVENTORY_STATUS_IMPORT_MAP: Record<string, EquipmentStatus> = {
-    active: "ACTIVE",
-    "в эксплуатации": "ACTIVE",
-    storage: "STORAGE",
-    "на складе": "STORAGE",
-    repair: "REPAIR",
-    "в ремонте": "REPAIR",
-    written_off: "WRITTEN_OFF",
-    writtenoff: "WRITTEN_OFF",
-    "списано": "WRITTEN_OFF",
-}
+  active: "ACTIVE",
+  "в эксплуатации": "ACTIVE",
+  storage: "STORAGE",
+  "на складе": "STORAGE",
+  repair: "REPAIR",
+  "в ремонте": "REPAIR",
+  written_off: "WRITTEN_OFF",
+  writtenoff: "WRITTEN_OFF",
+  списано: "WRITTEN_OFF",
+};
 
-const SELECTION_LIMIT = 50
+const SELECTION_LIMIT = 50;
 
 export default function EquipmentInventory() {
-    const { clubId } = useParams()
-    const router = useRouter()
-    const searchParams = useSearchParams()
+  const { clubId } = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-    const [equipment, setEquipment] = useState<Equipment[]>([])
-    const [types, setTypes] = useState<EquipmentType[]>([])
-    const [workstations, setWorkstations] = useState<Workstation[]>([])
-    const [employees, setEmployees] = useState<Employee[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const [isSaving, setIsSaving] = useState(false)
-    const [isImporting, setIsImporting] = useState(false)
-    const [isImportExportDialogOpen, setIsImportExportDialogOpen] = useState(false)
-    const importInputRef = useRef<HTMLInputElement | null>(null)
-    const [isCloneDialogOpen, setIsCloneDialogOpen] = useState(false)
-    const [cloneSourceWorkstationId, setCloneSourceWorkstationId] = useState<string>("")
-    const [cloneTargetWorkstationIds, setCloneTargetWorkstationIds] = useState<Set<string>>(new Set())
-    const [isCloneTargetsOpen, setIsCloneTargetsOpen] = useState(false)
-    const [cloneTargetsSearch, setCloneTargetsSearch] = useState("")
-    const [isCloning, setIsCloning] = useState(false)
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [types, setTypes] = useState<EquipmentType[]>([]);
+  const [workstations, setWorkstations] = useState<Workstation[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isImportExportDialogOpen, setIsImportExportDialogOpen] =
+    useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [isCloneDialogOpen, setIsCloneDialogOpen] = useState(false);
+  const [cloneSourceWorkstationId, setCloneSourceWorkstationId] =
+    useState<string>("");
+  const [cloneTargetWorkstationIds, setCloneTargetWorkstationIds] = useState<
+    Set<string>
+  >(new Set());
+  const [isCloneTargetsOpen, setIsCloneTargetsOpen] = useState(false);
+  const [cloneTargetsSearch, setCloneTargetsSearch] = useState("");
+  const [isCloning, setIsCloning] = useState(false);
 
-    // Pagination (by places)
-    const [page, setPage] = useState(1)
-    const placesPerPage = 20
-    const fetchLimit = 5000
+  // Pagination (by places)
+  const [page, setPage] = useState(1);
+  const placesPerPage = 20;
+  const fetchLimit = 5000;
 
-    // Stats state
-    const [inventoryStats, setInventoryStats] = useState({
-        total: 0,
-        storage: 0,
-        overdue_tasks: 0,
-        active_issues: 0
-    })
+  // Stats state
+  const [inventoryStats, setInventoryStats] = useState({
+    total: 0,
+    storage: 0,
+    overdue_tasks: 0,
+    active_issues: 0,
+  });
 
-    // Filters
-    const [search, setSearch] = useState("")
-    const [debouncedSearch, setDebouncedSearch] = useState("")
-    const [typeFilter, setTypeFilter] = useState("all")
-    const [zoneFilter, setZoneFilter] = useState("all")
-    const [workstationFilter, setWorkstationFilter] = useState("all")
-    const [statusFilter, setStatusFilter] = useState<string>("all")
-    const isGrouped = true
+  // Filters
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [zoneFilter, setZoneFilter] = useState("all");
+  const [workstationFilter, setWorkstationFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const isGrouped = true;
 
-    // Selection
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-    // Grouping & Expansion
-    const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  // Grouping & Expansion
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-    // Dialog states
-    const [isDialogOpen, setIsDialogOpen] = useState(false)
-    const [editingEquipment, setEditingEquipment] = useState<Partial<Equipment> | null>(null)
+  // Dialog states
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingEquipment, setEditingEquipment] =
+    useState<Partial<Equipment> | null>(null);
 
-    const activeTab = searchParams.get('tab') === 'transfers' ? 'transfers' : 'inventory'
+  const activeTab =
+    searchParams.get("tab") === "transfers" ? "transfers" : "inventory";
 
-    const setTab = useCallback((tab: 'inventory' | 'transfers') => {
-        const nextParams = new URLSearchParams(searchParams.toString())
-        if (tab === 'transfers') {
-            nextParams.set('tab', 'transfers')
-        } else {
-            nextParams.delete('tab')
+  const setTab = useCallback(
+    (tab: "inventory" | "transfers") => {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      if (tab === "transfers") {
+        nextParams.set("tab", "transfers");
+      } else {
+        nextParams.delete("tab");
+      }
+      router.push(
+        `/clubs/${clubId}/equipment/inventory?${nextParams.toString()}`,
+      );
+    },
+    [clubId, router, searchParams],
+  );
+
+  const [interclubTargets, setInterclubTargets] = useState<
+    InterclubTargetClub[]
+  >([]);
+  const [isTargetsLoading, setIsTargetsLoading] = useState(false);
+  const [isInterclubDialogOpen, setIsInterclubDialogOpen] = useState(false);
+  const [interclubTargetClubId, setInterclubTargetClubId] =
+    useState<string>("");
+  const [interclubComment, setInterclubComment] = useState("");
+  const [interclubItemTargets, setInterclubItemTargets] = useState<
+    Record<string, string>
+  >({});
+  const [isInterclubConfirmOpen, setIsInterclubConfirmOpen] = useState(false);
+  const [pendingInterclubTransfer, setPendingInterclubTransfer] =
+    useState<PendingInterclubTransfer | null>(null);
+
+  const [interclubTransfers, setInterclubTransfers] = useState<
+    InterclubTransfer[]
+  >([]);
+  const [isTransfersLoading, setIsTransfersLoading] = useState(false);
+  const [expandedTransfers, setExpandedTransfers] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const maintenanceResponsibleEmployees = useMemo(
+    () =>
+      employees.filter(
+        (emp) =>
+          (emp.role === "Админ" ||
+            emp.role === "Управляющий" ||
+            emp.role === "Manager") &&
+          emp.is_active !== false &&
+          !emp.dismissed_at,
+      ),
+    [employees],
+  );
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1); // Reset to first page on search
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        include_inactive: "true",
+        limit: fetchLimit.toString(),
+        offset: "0",
+      });
+
+      if (debouncedSearch) params.append("search", debouncedSearch);
+      if (typeFilter !== "all") params.append("type", typeFilter);
+      if (workstationFilter !== "all")
+        params.append("workstation_id", workstationFilter);
+      if (statusFilter !== "all") params.append("status", statusFilter);
+
+      const [eqRes, typeRes, wsRes, statsRes, empRes] = await Promise.all([
+        fetch(`/api/clubs/${clubId}/equipment?${params.toString()}`, {
+          cache: "no-store",
+        }),
+        fetch(`/api/equipment-types?clubId=${clubId}`, { cache: "no-store" }),
+        fetch(`/api/clubs/${clubId}/workstations`, { cache: "no-store" }),
+        fetch(`/api/clubs/${clubId}/equipment/stats`, { cache: "no-store" }),
+        fetch(`/api/clubs/${clubId}/employees`, { cache: "no-store" }),
+      ]);
+
+      const eqData = await eqRes.json();
+      const typeData = await typeRes.json();
+      const wsData = await wsRes.json();
+      const statsData = await statsRes.json();
+      const empData = await empRes.json();
+
+      if (eqRes.ok) {
+        const enriched = (eqData.equipment || []).map((e: any) => ({
+          ...e,
+          maintenance_enabled: e.maintenance_enabled !== false,
+        }));
+        setEquipment(enriched);
+      }
+      if (typeRes.ok) setTypes(typeData || []);
+      if (wsRes.ok) setWorkstations(wsData || []);
+      if (empRes.ok) setEmployees(empData.employees || []);
+      if (statsRes.ok) {
+        setInventoryStats({
+          total: statsData.total || 0,
+          storage: statsData.storage || 0,
+          overdue_tasks: statsData.overdue_tasks || 0,
+          active_issues: statsData.active_issues || 0,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching inventory data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [
+    clubId,
+    fetchLimit,
+    debouncedSearch,
+    typeFilter,
+    workstationFilter,
+    statusFilter,
+  ]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const fetchInterclubTransfers = useCallback(async () => {
+    setIsTransfersLoading(true);
+    try {
+      const res = await fetch(
+        `/api/clubs/${clubId}/equipment/interclub-transfers`,
+        { cache: "no-store" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Ошибка загрузки");
+      setInterclubTransfers(
+        Array.isArray(data?.transfers) ? data.transfers : [],
+      );
+    } catch (e) {
+      console.error(e);
+      setInterclubTransfers([]);
+    } finally {
+      setIsTransfersLoading(false);
+    }
+  }, [clubId]);
+
+  useEffect(() => {
+    if (activeTab !== "transfers") return;
+    fetchInterclubTransfers();
+  }, [activeTab, fetchInterclubTransfers]);
+
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      handleCreate();
+    }
+  }, [searchParams]);
+
+  const selectedEquipment = useMemo(() => {
+    return equipment.filter((e) => selectedIds.has(e.id));
+  }, [equipment, selectedIds]);
+
+  const fetchInterclubTargets = useCallback(async () => {
+    setIsTargetsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/clubs/${clubId}/equipment/interclub-targets`,
+        { cache: "no-store" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Ошибка загрузки");
+      setInterclubTargets(Array.isArray(data?.clubs) ? data.clubs : []);
+    } catch (e) {
+      console.error(e);
+      setInterclubTargets([]);
+    } finally {
+      setIsTargetsLoading(false);
+    }
+  }, [clubId]);
+
+  const openInterclubDialog = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setInterclubTargetClubId("");
+    setInterclubComment("");
+    setPendingInterclubTransfer(null);
+    setIsInterclubConfirmOpen(false);
+    const nextTargets: Record<string, string> = {};
+    for (const eq of selectedEquipment) {
+      nextTargets[eq.id] = "storage";
+    }
+    setInterclubItemTargets(nextTargets);
+    setIsInterclubDialogOpen(true);
+    if (interclubTargets.length === 0 && !isTargetsLoading) {
+      await fetchInterclubTargets();
+    }
+  }, [
+    fetchInterclubTargets,
+    interclubTargets.length,
+    isTargetsLoading,
+    selectedEquipment,
+    selectedIds.size,
+  ]);
+
+  const executePendingInterclubTransfer = useCallback(
+    async (payload: PendingInterclubTransfer) => {
+      setIsSaving(true);
+      try {
+        const res = await fetch(
+          `/api/clubs/${clubId}/equipment/interclub-transfers`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              target_club_id: payload.target_club_id,
+              comment: payload.comment,
+              items: payload.items,
+            }),
+          },
+        );
+        const data = await res.json();
+        if (!res.ok)
+          throw new Error(data?.error || "Ошибка создания перемещения");
+
+        setIsInterclubConfirmOpen(false);
+        setPendingInterclubTransfer(null);
+        setIsInterclubDialogOpen(false);
+        setSelectedIds(new Set());
+        await fetchData();
+        if (activeTab === "transfers") await fetchInterclubTransfers();
+      } catch (e: any) {
+        console.error(e);
+        alert(e?.message || "Ошибка сети");
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [activeTab, clubId, fetchData, fetchInterclubTransfers],
+  );
+
+  const submitInterclubTransfer = useCallback(async () => {
+    if (!interclubTargetClubId) {
+      alert("Выберите клуб назначения");
+      return;
+    }
+
+    const targetClub = interclubTargets.find(
+      (c) => String(c.id) === interclubTargetClubId,
+    );
+    if (!targetClub) {
+      alert("Некорректный клуб назначения");
+      return;
+    }
+
+    const items = selectedEquipment.map((eq) => {
+      const ws = interclubItemTargets[eq.id];
+      return {
+        equipment_id: eq.id,
+        target_workstation_id: ws && ws !== "storage" ? ws : null,
+      };
+    });
+
+    const payload: PendingInterclubTransfer = {
+      target_club_id: Number(targetClub.id),
+      target_club_name: String(targetClub.name || ""),
+      comment: interclubComment,
+      items,
+    };
+
+    setPendingInterclubTransfer(payload);
+    setIsInterclubDialogOpen(false);
+    setIsInterclubConfirmOpen(true);
+  }, [
+    interclubComment,
+    interclubItemTargets,
+    interclubTargetClubId,
+    interclubTargets,
+    selectedEquipment,
+  ]);
+
+  const toggleTransfer = useCallback((transferId: string) => {
+    setExpandedTransfers((prev) => {
+      const next = new Set(prev);
+      if (next.has(transferId)) next.delete(transferId);
+      else next.add(transferId);
+      return next;
+    });
+  }, []);
+
+  // Reset page when filters change
+  const handleFilterChange =
+    (setter: (val: string) => void) => (val: string) => {
+      setter(val);
+      setPage(1);
+    };
+
+  const zones = useMemo(() => {
+    return Array.from(
+      new Set(workstations.map((w) => w.zone).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b, "ru"));
+  }, [workstations]);
+  const hasImportLocations = workstations.length > 0 && zones.length > 0;
+
+  const filteredWorkstations = useMemo(() => {
+    if (zoneFilter === "all") return workstations;
+    return workstations.filter((w) => w.zone === zoneFilter);
+  }, [workstations, zoneFilter]);
+
+  useEffect(() => {
+    if (workstationFilter === "all" || workstationFilter === "unassigned")
+      return;
+    const ws = workstations.find((w) => w.id === workstationFilter);
+    if (!ws) return;
+    if (zoneFilter !== "all" && ws.zone !== zoneFilter)
+      setWorkstationFilter("all");
+  }, [zoneFilter, workstationFilter, workstations]);
+
+  useEffect(() => {
+    if (workstationFilter !== "all" && workstationFilter !== "unassigned") {
+      setExpandedGroups(new Set([workstationFilter]));
+    } else if (workstationFilter === "unassigned") {
+      setExpandedGroups(new Set(["unassigned"]));
+    } else {
+      setExpandedGroups(new Set());
+    }
+  }, [workstationFilter]);
+
+  const filteredEquipment = useMemo(() => {
+    if (zoneFilter === "all") return equipment;
+    return equipment.filter((e) => e.workstation_zone === zoneFilter);
+  }, [equipment, zoneFilter]);
+
+  const groupedEquipment = useMemo(() => {
+    const groups: Record<
+      string,
+      { name: string; zone?: string; items: Equipment[] }
+    > = {
+      unassigned: { name: "Склад (Не назначено)", items: [] },
+    };
+
+    // Initialize groups for all workstations
+    workstations.forEach((ws) => {
+      groups[ws.id] = { name: ws.name, zone: ws.zone, items: [] };
+    });
+
+    // Distribute equipment into groups
+    filteredEquipment.forEach((item) => {
+      const groupId = item.workstation_id || "unassigned";
+      if (!groups[groupId]) {
+        groups[groupId] = {
+          name: item.workstation_name || "Неизвестная локация",
+          zone: item.workstation_zone || undefined,
+          items: [],
+        };
+      }
+      groups[groupId].items.push(item);
+    });
+
+    // Filter out empty workstation groups, but keep unassigned if it has items or if we are filtering
+    return Object.entries(groups)
+      .filter(([, group]) => group.items.length > 0)
+      .sort(([idA, groupA], [idB, groupB]) => {
+        if (idA === "unassigned") return -1;
+        if (idB === "unassigned") return 1;
+        return groupA.name.localeCompare(groupB.name, "ru");
+      });
+  }, [filteredEquipment, workstations]);
+
+  const totalPlaces = groupedEquipment.length;
+  const totalPlacePages = Math.max(1, Math.ceil(totalPlaces / placesPerPage));
+
+  useEffect(() => {
+    if (page > totalPlacePages) setPage(totalPlacePages);
+  }, [page, totalPlacePages]);
+
+  const pagedGroupedEquipment = useMemo(() => {
+    const start = (page - 1) * placesPerPage;
+    return groupedEquipment.slice(start, start + placesPerPage);
+  }, [groupedEquipment, page, placesPerPage]);
+
+  const toggleGroup = (groupId: string) => {
+    const newSet = new Set(expandedGroups);
+    if (newSet.has(groupId)) newSet.delete(groupId);
+    else newSet.add(groupId);
+    setExpandedGroups(newSet);
+  };
+
+  const toggleGroupSelection = (_groupId: string, items: Equipment[]) => {
+    const newSet = new Set(selectedIds);
+    const selectedInGroup = items.reduce(
+      (sum, item) => sum + (newSet.has(item.id) ? 1 : 0),
+      0,
+    );
+    if (selectedInGroup > 0) {
+      items.forEach((item) => newSet.delete(item.id));
+    } else {
+      for (const item of items) {
+        if (newSet.size >= SELECTION_LIMIT) break;
+        newSet.add(item.id);
+      }
+      if (newSet.size >= SELECTION_LIMIT && items.length > selectedInGroup) {
+        alert(`Можно выбрать максимум ${SELECTION_LIMIT} позиций за раз`);
+      }
+    }
+    setSelectedIds(newSet);
+  };
+
+  const sortedWorkstations = useMemo(() => {
+    return [...workstations].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  }, [workstations]);
+
+  const cloneTargetsLabel = useMemo(() => {
+    if (cloneTargetWorkstationIds.size === 0) return "Выберите места...";
+    if (cloneTargetWorkstationIds.size === 1) {
+      const id = Array.from(cloneTargetWorkstationIds)[0];
+      const ws = workstations.find((w) => w.id === id);
+      return ws ? ws.name : "1 место";
+    }
+    return `Выбрано мест: ${cloneTargetWorkstationIds.size}`;
+  }, [cloneTargetWorkstationIds, workstations]);
+
+  useEffect(() => {
+    if (!cloneSourceWorkstationId) return;
+    setCloneTargetWorkstationIds((prev) => {
+      if (!prev.has(cloneSourceWorkstationId)) return prev;
+      const next = new Set(prev);
+      next.delete(cloneSourceWorkstationId);
+      return next;
+    });
+  }, [cloneSourceWorkstationId]);
+
+  const openCloneDialog = () => {
+    setCloneSourceWorkstationId("");
+    setCloneTargetWorkstationIds(new Set());
+    setIsCloneTargetsOpen(false);
+    setCloneTargetsSearch("");
+    setIsCloneDialogOpen(true);
+  };
+
+  const toggleCloneTarget = (id: string) => {
+    setCloneTargetWorkstationIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleCloneWorkstationInventory = async () => {
+    if (!cloneSourceWorkstationId || cloneTargetWorkstationIds.size === 0) {
+      alert("Выберите место-источник и места-цели");
+      return;
+    }
+
+    setIsCloning(true);
+    try {
+      const targets = Array.from(cloneTargetWorkstationIds).filter(
+        (id) => id !== cloneSourceWorkstationId,
+      );
+      const dryRunRes = await fetch(
+        `/api/clubs/${clubId}/equipment/clone-to-workstations`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_workstation_id: cloneSourceWorkstationId,
+            target_workstation_ids: targets,
+            dry_run: true,
+          }),
+        },
+      );
+
+      const dryRunData = await dryRunRes.json().catch(() => ({}));
+      if (!dryRunRes.ok) {
+        alert(dryRunData.error || "Не удалось подготовить копирование");
+        return;
+      }
+
+      const lines: string[] = [];
+      lines.push(`Источник: ${dryRunData.source?.name || ""}`);
+      lines.push(`Скопируем единиц: ${dryRunData.source?.items || 0}`);
+      lines.push(`Мест-целей: ${(dryRunData.targets || []).length}`);
+      lines.push("");
+      lines.push(
+        "Перед копированием места будут очищены: оборудование переместится на склад.",
+      );
+      lines.push("У новых единиц серийный номер будет пустым.");
+      lines.push("");
+      for (const t of dryRunData.targets || []) {
+        lines.push(
+          `${t.name}: убрать ${t.existing_items || 0}, создать ${dryRunData.source?.items || 0}`,
+        );
+      }
+
+      const ok = confirm(lines.join("\n"));
+      if (!ok) return;
+
+      const res = await fetch(
+        `/api/clubs/${clubId}/equipment/clone-to-workstations`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_workstation_id: cloneSourceWorkstationId,
+            target_workstation_ids: targets,
+          }),
+        },
+      );
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || "Не удалось выполнить копирование");
+        return;
+      }
+
+      alert(
+        `Готово. Создано: ${data.created || 0}. Перемещено на склад: ${data.cleared || 0}.`,
+      );
+      setIsCloneDialogOpen(false);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      alert("Ошибка сервера");
+    } finally {
+      setIsCloning(false);
+    }
+  };
+
+  // --- Actions ---
+
+  const handleCreate = () => {
+    setEditingEquipment({
+      type: "PC",
+      name: "",
+      is_active: true,
+      status: "STORAGE",
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleEdit = (item: Equipment) => {
+    router.push(`/clubs/${clubId}/equipment/${item.id}`);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEquipment?.name || !editingEquipment?.type) return;
+
+    setIsSaving(true);
+    try {
+      const isNew = !editingEquipment.id;
+      const url = isNew
+        ? `/api/clubs/${clubId}/equipment`
+        : `/api/clubs/${clubId}/equipment/${editingEquipment.id}`;
+
+      const res = await fetch(url, {
+        method: isNew ? "POST" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingEquipment),
+      });
+
+      if (res.ok) {
+        setIsDialogOpen(false);
+        fetchData();
+      }
+    } catch (error) {
+      console.error("Error saving equipment:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSelectAll = () => {
+    const ids = filteredEquipment.slice(0, SELECTION_LIMIT).map((e) => e.id);
+    const allSelected =
+      ids.length > 0 &&
+      ids.every((id) => selectedIds.has(id)) &&
+      selectedIds.size === ids.length;
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      if (filteredEquipment.length > SELECTION_LIMIT) {
+        alert(`Можно выбрать максимум ${SELECTION_LIMIT} позиций за раз`);
+      }
+      setSelectedIds(new Set(ids));
+    }
+  };
+
+  const toggleSelection = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else {
+      if (newSet.size >= SELECTION_LIMIT) {
+        alert(`Можно выбрать максимум ${SELECTION_LIMIT} позиций за раз`);
+        return;
+      }
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const handleExport = () => {
+    const rows = filteredEquipment.map((item) => ({
+      ID: item.id,
+      Название: item.name,
+      "Тип код": item.type,
+      Тип: item.type_name || item.type,
+      "Серийный номер": item.identifier || "",
+      Бренд: item.brand || "",
+      Модель: item.model || "",
+      Зона: item.workstation_zone || "",
+      Место: item.workstation_name || "",
+      Статус: item.status,
+      "Дата покупки": item.purchase_date || "",
+      "Гарантия до": item.warranty_expires || "",
+      "Интервал чистки (дней)": item.cleaning_interval_days ?? "",
+      "Обслуживание включено":
+        item.maintenance_enabled === false ? "Нет" : "Да",
+      Примечание: item.notes || "",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows, {
+      header: [...INVENTORY_IMPORT_COLUMNS],
+    });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Инвентарь");
+    XLSX.writeFile(
+      workbook,
+      `inventory_export_${formatLocalDate(new Date())}.xlsx`,
+    );
+  };
+
+  const handleDownloadTemplate = () => {
+    const worksheet = XLSX.utils.json_to_sheet([INVENTORY_TEMPLATE_EXAMPLE], {
+      header: [...INVENTORY_IMPORT_COLUMNS],
+    });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Шаблон");
+    XLSX.writeFile(workbook, "inventory_import_template.xlsx");
+  };
+
+  const parseImportStatus = (value: unknown): EquipmentStatus => {
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase();
+    return INVENTORY_STATUS_IMPORT_MAP[normalized] || "STORAGE";
+  };
+
+  const parseImportBoolean = (value: unknown) => {
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase();
+    if (!normalized) return true;
+    return !["нет", "false", "0", "off", "disabled"].includes(normalized);
+  };
+
+  const normalizeImportDate = (value: unknown) => {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return null;
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const handleImportClick = () => {
+    if (!hasImportLocations) {
+      alert(
+        "Перед импортом сначала создайте зоны и места в разделе рабочих мест",
+      );
+      return;
+    }
+    importInputRef.current?.click();
+  };
+
+  const handleImportFile = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+        defval: "",
+      });
+
+      if (rows.length === 0) {
+        alert("Файл пустой");
+        return;
+      }
+
+      const typeByCode = new Map(
+        types.map((type) => [type.code.trim().toLowerCase(), type.code]),
+      );
+      const typeByName = new Map(
+        types.map((type) => [type.name_ru.trim().toLowerCase(), type.code]),
+      );
+      const workstationByKey = new Map<string, string>();
+      const workstationByName = new Map<string, string>();
+
+      workstations.forEach((workstation) => {
+        workstationByName.set(
+          workstation.name.trim().toLowerCase(),
+          workstation.id,
+        );
+        workstationByKey.set(
+          `${(workstation.zone || "").trim().toLowerCase()}::${workstation.name.trim().toLowerCase()}`,
+          workstation.id,
+        );
+      });
+
+      const existingById = new Map(equipment.map((item) => [item.id, item]));
+      const existingByIdentifier = new Map(
+        equipment
+          .filter((item) => item.identifier)
+          .map((item) => [String(item.identifier).trim().toLowerCase(), item]),
+      );
+
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+
+      for (const [index, row] of rows.entries()) {
+        const rowNumber = index + 2;
+        const name = String(row["Название"] || "").trim();
+        const rawTypeCode = String(row["Тип код"] || "")
+          .trim()
+          .toLowerCase();
+        const rawTypeName = String(row["Тип"] || "")
+          .trim()
+          .toLowerCase();
+        const identifier = String(row["Серийный номер"] || "").trim();
+        const importId = String(row["ID"] || "").trim();
+        const zone = String(row["Зона"] || "").trim();
+        const workstationName = String(row["Место"] || "").trim();
+
+        if (!name) {
+          skipped += 1;
+          continue;
         }
-        router.push(`/clubs/${clubId}/equipment/inventory?${nextParams.toString()}`)
-    }, [clubId, router, searchParams])
 
-    const [interclubTargets, setInterclubTargets] = useState<InterclubTargetClub[]>([])
-    const [isTargetsLoading, setIsTargetsLoading] = useState(false)
-    const [isInterclubDialogOpen, setIsInterclubDialogOpen] = useState(false)
-    const [interclubTargetClubId, setInterclubTargetClubId] = useState<string>("")
-    const [interclubComment, setInterclubComment] = useState("")
-    const [interclubItemTargets, setInterclubItemTargets] = useState<Record<string, string>>({})
-    const [isInterclubConfirmOpen, setIsInterclubConfirmOpen] = useState(false)
-    const [pendingInterclubTransfer, setPendingInterclubTransfer] = useState<PendingInterclubTransfer | null>(null)
+        const resolvedType =
+          typeByCode.get(rawTypeCode) || typeByName.get(rawTypeName);
 
-    const [interclubTransfers, setInterclubTransfers] = useState<InterclubTransfer[]>([])
-    const [isTransfersLoading, setIsTransfersLoading] = useState(false)
-    const [expandedTransfers, setExpandedTransfers] = useState<Set<string>>(new Set())
+        if (!resolvedType) {
+          errors.push(
+            `Строка ${rowNumber}: неизвестный тип "${row["Тип код"] || row["Тип"]}"`,
+          );
+          continue;
+        }
 
-    const maintenanceResponsibleEmployees = useMemo(
-        () => employees.filter(emp =>
-            (emp.role === "Админ" || emp.role === "Управляющий") &&
-            emp.is_active !== false &&
-            !emp.dismissed_at
+        let workstationId: string | null | undefined = undefined;
+        if (workstationName) {
+          workstationId =
+            workstationByKey.get(
+              `${zone.toLowerCase()}::${workstationName.toLowerCase()}`,
+            ) ||
+            workstationByName.get(workstationName.toLowerCase()) ||
+            null;
+
+          if (!workstationId) {
+            errors.push(
+              `Строка ${rowNumber}: место "${workstationName}" не найдено`,
+            );
+            continue;
+          }
+        } else {
+          workstationId = null;
+        }
+
+        const payload = {
+          workstation_id: workstationId,
+          type: resolvedType,
+          name,
+          identifier: identifier || null,
+          brand: String(row["Бренд"] || "").trim() || null,
+          model: String(row["Модель"] || "").trim() || null,
+          purchase_date: normalizeImportDate(row["Дата покупки"]),
+          warranty_expires: normalizeImportDate(row["Гарантия до"]),
+          cleaning_interval_days:
+            Number(row["Интервал чистки (дней)"] || 0) || undefined,
+          maintenance_enabled: parseImportBoolean(row["Обслуживание включено"]),
+          notes: String(row["Примечание"] || "").trim() || null,
+          status: parseImportStatus(row["Статус"]),
+        };
+
+        const existing =
+          (importId ? existingById.get(importId) : undefined) ||
+          (identifier
+            ? existingByIdentifier.get(identifier.toLowerCase())
+            : undefined);
+
+        const endpoint = existing
+          ? `/api/clubs/${clubId}/equipment/${existing.id}`
+          : `/api/clubs/${clubId}/equipment`;
+
+        const method = existing ? "PATCH" : "POST";
+        const response = await fetch(endpoint, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          errors.push(
+            `Строка ${rowNumber}: ${errorData.error || "не удалось сохранить запись"}`,
+          );
+          continue;
+        }
+
+        const persistedEquipment = await response.json().catch(() => null);
+
+        if (!existing && persistedEquipment?.id) {
+          const patchResponse = await fetch(
+            `/api/clubs/${clubId}/equipment/${persistedEquipment.id}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                cleaning_interval_days: payload.cleaning_interval_days,
+                maintenance_enabled: payload.maintenance_enabled,
+              }),
+            },
+          );
+
+          if (!patchResponse.ok) {
+            const patchError = await patchResponse.json().catch(() => ({}));
+            errors.push(
+              `Строка ${rowNumber}: запись создана, но доп. поля не обновлены (${patchError.error || "PATCH error"})`,
+            );
+          }
+        }
+
+        if (existing) {
+          updated += 1;
+        } else {
+          created += 1;
+        }
+      }
+
+      await fetchData();
+
+      const summary = [
+        `Импорт завершен`,
+        `Создано: ${created}`,
+        `Обновлено: ${updated}`,
+        `Пропущено пустых строк: ${skipped}`,
+      ];
+
+      if (errors.length > 0) {
+        summary.push(`Ошибки: ${errors.length}`);
+        summary.push("");
+        summary.push(errors.slice(0, 10).join("\n"));
+      }
+
+      alert(summary.join("\n"));
+    } catch (error) {
+      console.error("Import equipment error:", error);
+      alert("Не удалось импортировать файл");
+    } finally {
+      event.target.value = "";
+      setIsImporting(false);
+    }
+  };
+
+  const handleBulkRepair = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Отправить в ремонт ${selectedIds.size} поз.?`)) return;
+
+    setIsSaving(true);
+    try {
+      // Logic for bulk repair (e.g., creating issues or changing status)
+      // For now, let's just show an alert since we don't have a bulk API yet
+      alert("Функция группового ремонта будет доступна в следующем обновлении");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Списать ${selectedIds.size} поз.?`)) return;
+
+    setIsSaving(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/clubs/${clubId}/equipment/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "WRITTEN_OFF" }),
+          }),
         ),
-        [employees]
+      );
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (error) {
+      console.error("Bulk archive error:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Удалить ${selectedIds.size} поз.?`)) return;
+
+    setIsSaving(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await fetch(`/api/clubs/${clubId}/equipment`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data?.error || "Не удалось удалить оборудование");
+        return;
+      }
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (error) {
+      console.error("Bulk delete error:", error);
+      alert("Не удалось удалить оборудование");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // --- Render Helpers ---
+
+  const getStatusBadge = (item: Equipment) => {
+    if (item.status === "WRITTEN_OFF") {
+      return (
+        <Badge variant="secondary" className="bg-slate-100 text-slate-500">
+          Списано
+        </Badge>
+      );
+    }
+    if (item.status === "REPAIR") {
+      return (
+        <Badge
+          variant="outline"
+          className="border-rose-200 bg-rose-50 text-rose-700"
+        >
+          В ремонте
+        </Badge>
+      );
+    }
+    if (item.status === "STORAGE") {
+      return (
+        <Badge
+          variant="outline"
+          className="text-amber-600 border-amber-200 bg-amber-50"
+        >
+          На складе
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20 shadow-none border-none">
+        В эксплуатации
+      </Badge>
+    );
+  };
+
+  const getEquipmentIcon = (type: string, typeIcon?: string | null) =>
+    renderEquipmentIcon(type, typeIcon, "h-5 w-5");
+
+  const isCleaningOverdue = (item: Equipment) => {
+    if (item.maintenance_enabled === false) return false;
+    if (!item.last_cleaned_at) return false;
+
+    const last = new Date(item.last_cleaned_at);
+    if (Number.isNaN(last.valueOf())) return false;
+
+    const due = new Date(last);
+    due.setHours(0, 0, 0, 0);
+    due.setDate(due.getDate() + (item.cleaning_interval_days ?? 30));
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return due < today;
+  };
+
+  const handleEquipmentRowClick = (
+    event: MouseEvent<HTMLElement>,
+    item: Equipment,
+  ) => {
+    const target = event.target as HTMLElement;
+    if (
+      target.closest("button") ||
+      target.closest("input") ||
+      target.closest("a") ||
+      target.closest("label")
     )
+      return;
+    handleEdit(item);
+  };
 
-    // Debounce search
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setDebouncedSearch(search)
-            setPage(1) // Reset to first page on search
-        }, 500)
-        return () => clearTimeout(timer)
-    }, [search])
-
-
-    const fetchData = useCallback(async () => {
-        setIsLoading(true)
-        try {
-            const params = new URLSearchParams({
-                include_inactive: 'true',
-                limit: fetchLimit.toString(),
-                offset: "0"
-            })
-
-            if (debouncedSearch) params.append('search', debouncedSearch)
-            if (typeFilter !== 'all') params.append('type', typeFilter)
-            if (workstationFilter !== 'all') params.append('workstation_id', workstationFilter)
-            if (statusFilter !== 'all') params.append('status', statusFilter)
-
-            const [eqRes, typeRes, wsRes, statsRes, empRes] = await Promise.all([
-                fetch(`/api/clubs/${clubId}/equipment?${params.toString()}`, { cache: 'no-store' }),
-                fetch(`/api/equipment-types?clubId=${clubId}`, { cache: 'no-store' }),
-                fetch(`/api/clubs/${clubId}/workstations`, { cache: 'no-store' }),
-                fetch(`/api/clubs/${clubId}/equipment/stats`, { cache: 'no-store' }),
-                fetch(`/api/clubs/${clubId}/employees`, { cache: 'no-store' })
-            ])
-
-            const eqData = await eqRes.json()
-            const typeData = await typeRes.json()
-            const wsData = await wsRes.json()
-            const statsData = await statsRes.json()
-            const empData = await empRes.json()
-
-            if (eqRes.ok) {
-                const enriched = (eqData.equipment || []).map((e: any) => ({
-                    ...e,
-                    maintenance_enabled: e.maintenance_enabled !== false
-                }))
-                setEquipment(enriched)
-            }
-            if (typeRes.ok) setTypes(typeData || [])
-            if (wsRes.ok) setWorkstations(wsData || [])
-            if (empRes.ok) setEmployees(empData.employees || [])
-            if (statsRes.ok) {
-                setInventoryStats({
-                    total: statsData.total || 0,
-                    storage: statsData.storage || 0,
-                    overdue_tasks: statsData.overdue_tasks || 0,
-                    active_issues: statsData.active_issues || 0
-                })
-            }
-
-        } catch (error) {
-            console.error("Error fetching inventory data:", error)
-        } finally {
-            setIsLoading(false)
-        }
-    }, [clubId, fetchLimit, debouncedSearch, typeFilter, workstationFilter, statusFilter])
-
-    useEffect(() => {
-        fetchData()
-    }, [fetchData])
-
-    const fetchInterclubTransfers = useCallback(async () => {
-        setIsTransfersLoading(true)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/interclub-transfers`, { cache: 'no-store' })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data?.error || 'Ошибка загрузки')
-            setInterclubTransfers(Array.isArray(data?.transfers) ? data.transfers : [])
-        } catch (e) {
-            console.error(e)
-            setInterclubTransfers([])
-        } finally {
-            setIsTransfersLoading(false)
-        }
-    }, [clubId])
-
-    useEffect(() => {
-        if (activeTab !== 'transfers') return
-        fetchInterclubTransfers()
-    }, [activeTab, fetchInterclubTransfers])
-
-    useEffect(() => {
-        if (searchParams.get('action') === 'new') {
-            handleCreate()
-        }
-    }, [searchParams])
-
-    const selectedEquipment = useMemo(() => {
-        return equipment.filter((e) => selectedIds.has(e.id))
-    }, [equipment, selectedIds])
-
-    const fetchInterclubTargets = useCallback(async () => {
-        setIsTargetsLoading(true)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/interclub-targets`, { cache: 'no-store' })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data?.error || 'Ошибка загрузки')
-            setInterclubTargets(Array.isArray(data?.clubs) ? data.clubs : [])
-        } catch (e) {
-            console.error(e)
-            setInterclubTargets([])
-        } finally {
-            setIsTargetsLoading(false)
-        }
-    }, [clubId])
-
-    const openInterclubDialog = useCallback(async () => {
-        if (selectedIds.size === 0) return
-        setInterclubTargetClubId("")
-        setInterclubComment("")
-        setPendingInterclubTransfer(null)
-        setIsInterclubConfirmOpen(false)
-        const nextTargets: Record<string, string> = {}
-        for (const eq of selectedEquipment) {
-            nextTargets[eq.id] = "storage"
-        }
-        setInterclubItemTargets(nextTargets)
-        setIsInterclubDialogOpen(true)
-        if (interclubTargets.length === 0 && !isTargetsLoading) {
-            await fetchInterclubTargets()
-        }
-    }, [fetchInterclubTargets, interclubTargets.length, isTargetsLoading, selectedEquipment, selectedIds.size])
-
-    const executePendingInterclubTransfer = useCallback(async (payload: PendingInterclubTransfer) => {
-        setIsSaving(true)
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/equipment/interclub-transfers`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    target_club_id: payload.target_club_id,
-                    comment: payload.comment,
-                    items: payload.items,
-                }),
-            })
-            const data = await res.json()
-            if (!res.ok) throw new Error(data?.error || 'Ошибка создания перемещения')
-
-            setIsInterclubConfirmOpen(false)
-            setPendingInterclubTransfer(null)
-            setIsInterclubDialogOpen(false)
-            setSelectedIds(new Set())
-            await fetchData()
-            if (activeTab === 'transfers') await fetchInterclubTransfers()
-        } catch (e: any) {
-            console.error(e)
-            alert(e?.message || 'Ошибка сети')
-        } finally {
-            setIsSaving(false)
-        }
-    }, [activeTab, clubId, fetchData, fetchInterclubTransfers])
-
-    const submitInterclubTransfer = useCallback(async () => {
-        if (!interclubTargetClubId) {
-            alert('Выберите клуб назначения')
-            return
-        }
-
-        const targetClub = interclubTargets.find((c) => String(c.id) === interclubTargetClubId)
-        if (!targetClub) {
-            alert('Некорректный клуб назначения')
-            return
-        }
-
-        const items = selectedEquipment.map((eq) => {
-            const ws = interclubItemTargets[eq.id]
-            return {
-                equipment_id: eq.id,
-                target_workstation_id: ws && ws !== "storage" ? ws : null,
-            }
-        })
-
-        const payload: PendingInterclubTransfer = {
-            target_club_id: Number(targetClub.id),
-            target_club_name: String(targetClub.name || ""),
-            comment: interclubComment,
-            items,
-        }
-
-        setPendingInterclubTransfer(payload)
-        setIsInterclubDialogOpen(false)
-        setIsInterclubConfirmOpen(true)
-    }, [
-        interclubComment,
-        interclubItemTargets,
-        interclubTargetClubId,
-        interclubTargets,
-        selectedEquipment,
-    ])
-
-    const toggleTransfer = useCallback((transferId: string) => {
-        setExpandedTransfers((prev) => {
-            const next = new Set(prev)
-            if (next.has(transferId)) next.delete(transferId)
-            else next.add(transferId)
-            return next
-        })
-    }, [])
-
-    // Reset page when filters change
-    const handleFilterChange = (setter: (val: string) => void) => (val: string) => {
-        setter(val)
-        setPage(1)
+  const renderWarrantyInfo = (item: Equipment, compact = false) => {
+    if (!item.warranty_expires) {
+      return <span className="text-xs text-muted-foreground">—</span>;
     }
-
-    const zones = useMemo(() => {
-        return Array.from(new Set(workstations.map(w => w.zone).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ru"))
-    }, [workstations])
-    const hasImportLocations = workstations.length > 0 && zones.length > 0
-
-    const filteredWorkstations = useMemo(() => {
-        if (zoneFilter === "all") return workstations
-        return workstations.filter(w => w.zone === zoneFilter)
-    }, [workstations, zoneFilter])
-
-    useEffect(() => {
-        if (workstationFilter === "all" || workstationFilter === "unassigned") return
-        const ws = workstations.find(w => w.id === workstationFilter)
-        if (!ws) return
-        if (zoneFilter !== "all" && ws.zone !== zoneFilter) setWorkstationFilter("all")
-    }, [zoneFilter, workstationFilter, workstations])
-
-    useEffect(() => {
-        if (workstationFilter !== "all" && workstationFilter !== "unassigned") {
-            setExpandedGroups(new Set([workstationFilter]))
-        } else if (workstationFilter === "unassigned") {
-            setExpandedGroups(new Set(["unassigned"]))
-        } else {
-            setExpandedGroups(new Set())
-        }
-    }, [workstationFilter])
-
-    const filteredEquipment = useMemo(() => {
-        if (zoneFilter === "all") return equipment
-        return equipment.filter(e => e.workstation_zone === zoneFilter)
-    }, [equipment, zoneFilter])
-
-    const groupedEquipment = useMemo(() => {
-        const groups: Record<string, { name: string, zone?: string, items: Equipment[] }> = {
-            'unassigned': { name: 'Склад (Не назначено)', items: [] }
-        }
-
-        // Initialize groups for all workstations
-        workstations.forEach(ws => {
-            groups[ws.id] = { name: ws.name, zone: ws.zone, items: [] }
-        })
-
-        // Distribute equipment into groups
-        filteredEquipment.forEach(item => {
-            const groupId = item.workstation_id || 'unassigned'
-            if (!groups[groupId]) {
-                groups[groupId] = { 
-                    name: item.workstation_name || 'Неизвестная локация', 
-                    zone: item.workstation_zone || undefined,
-                    items: [] 
-                }
-            }
-            groups[groupId].items.push(item)
-        })
-
-        // Filter out empty workstation groups, but keep unassigned if it has items or if we are filtering
-        return Object.entries(groups)
-            .filter(([, group]) => group.items.length > 0)
-            .sort(([idA, groupA], [idB, groupB]) => {
-                if (idA === 'unassigned') return -1
-                if (idB === 'unassigned') return 1
-                return groupA.name.localeCompare(groupB.name, "ru")
-            })
-    }, [filteredEquipment, workstations])
-
-    const totalPlaces = groupedEquipment.length
-    const totalPlacePages = Math.max(1, Math.ceil(totalPlaces / placesPerPage))
-
-    useEffect(() => {
-        if (page > totalPlacePages) setPage(totalPlacePages)
-    }, [page, totalPlacePages])
-
-    const pagedGroupedEquipment = useMemo(() => {
-        const start = (page - 1) * placesPerPage
-        return groupedEquipment.slice(start, start + placesPerPage)
-    }, [groupedEquipment, page, placesPerPage])
-
-    const toggleGroup = (groupId: string) => {
-        const newSet = new Set(expandedGroups)
-        if (newSet.has(groupId)) newSet.delete(groupId)
-        else newSet.add(groupId)
-        setExpandedGroups(newSet)
-    }
-
-    const toggleGroupSelection = (_groupId: string, items: Equipment[]) => {
-        const newSet = new Set(selectedIds)
-        const selectedInGroup = items.reduce((sum, item) => sum + (newSet.has(item.id) ? 1 : 0), 0)
-        if (selectedInGroup > 0) {
-            items.forEach(item => newSet.delete(item.id))
-        } else {
-            for (const item of items) {
-                if (newSet.size >= SELECTION_LIMIT) break
-                newSet.add(item.id)
-            }
-            if (newSet.size >= SELECTION_LIMIT && items.length > selectedInGroup) {
-                alert(`Можно выбрать максимум ${SELECTION_LIMIT} позиций за раз`)
-            }
-        }
-        setSelectedIds(newSet)
-    }
-
-    const sortedWorkstations = useMemo(() => {
-        return [...workstations].sort((a, b) => a.name.localeCompare(b.name, "ru"))
-    }, [workstations])
-
-    const cloneTargetsLabel = useMemo(() => {
-        if (cloneTargetWorkstationIds.size === 0) return "Выберите места..."
-        if (cloneTargetWorkstationIds.size === 1) {
-            const id = Array.from(cloneTargetWorkstationIds)[0]
-            const ws = workstations.find((w) => w.id === id)
-            return ws ? ws.name : "1 место"
-        }
-        return `Выбрано мест: ${cloneTargetWorkstationIds.size}`
-    }, [cloneTargetWorkstationIds, workstations])
-
-    useEffect(() => {
-        if (!cloneSourceWorkstationId) return
-        setCloneTargetWorkstationIds((prev) => {
-            if (!prev.has(cloneSourceWorkstationId)) return prev
-            const next = new Set(prev)
-            next.delete(cloneSourceWorkstationId)
-            return next
-        })
-    }, [cloneSourceWorkstationId])
-
-    const openCloneDialog = () => {
-        setCloneSourceWorkstationId("")
-        setCloneTargetWorkstationIds(new Set())
-        setIsCloneTargetsOpen(false)
-        setCloneTargetsSearch("")
-        setIsCloneDialogOpen(true)
-    }
-
-    const toggleCloneTarget = (id: string) => {
-        setCloneTargetWorkstationIds((prev) => {
-            const next = new Set(prev)
-            if (next.has(id)) next.delete(id)
-            else next.add(id)
-            return next
-        })
-    }
-
-    const handleCloneWorkstationInventory = async () => {
-        if (!cloneSourceWorkstationId || cloneTargetWorkstationIds.size === 0) {
-            alert("Выберите место-источник и места-цели")
-            return
-        }
-
-        setIsCloning(true)
-        try {
-            const targets = Array.from(cloneTargetWorkstationIds).filter((id) => id !== cloneSourceWorkstationId)
-            const dryRunRes = await fetch(`/api/clubs/${clubId}/equipment/clone-to-workstations`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    source_workstation_id: cloneSourceWorkstationId,
-                    target_workstation_ids: targets,
-                    dry_run: true
-                })
-            })
-
-            const dryRunData = await dryRunRes.json().catch(() => ({}))
-            if (!dryRunRes.ok) {
-                alert(dryRunData.error || "Не удалось подготовить копирование")
-                return
-            }
-
-            const lines: string[] = []
-            lines.push(`Источник: ${dryRunData.source?.name || ""}`)
-            lines.push(`Скопируем единиц: ${dryRunData.source?.items || 0}`)
-            lines.push(`Мест-целей: ${(dryRunData.targets || []).length}`)
-            lines.push("")
-            lines.push("Перед копированием места будут очищены: оборудование переместится на склад.")
-            lines.push("У новых единиц серийный номер будет пустым.")
-            lines.push("")
-            for (const t of dryRunData.targets || []) {
-                lines.push(`${t.name}: убрать ${t.existing_items || 0}, создать ${dryRunData.source?.items || 0}`)
-            }
-
-            const ok = confirm(lines.join("\n"))
-            if (!ok) return
-
-            const res = await fetch(`/api/clubs/${clubId}/equipment/clone-to-workstations`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    source_workstation_id: cloneSourceWorkstationId,
-                    target_workstation_ids: targets
-                })
-            })
-
-            const data = await res.json().catch(() => ({}))
-            if (!res.ok) {
-                alert(data.error || "Не удалось выполнить копирование")
-                return
-            }
-
-            alert(`Готово. Создано: ${data.created || 0}. Перемещено на склад: ${data.cleared || 0}.`)
-            setIsCloneDialogOpen(false)
-            fetchData()
-        } catch (error) {
-            console.error(error)
-            alert("Ошибка сервера")
-        } finally {
-            setIsCloning(false)
-        }
-    }
-
-    // --- Actions ---
-
-    const handleCreate = () => {
-        setEditingEquipment({
-            type: 'PC',
-            name: '',
-            is_active: true,
-            status: 'STORAGE'
-        })
-        setIsDialogOpen(true)
-    }
-
-    const handleEdit = (item: Equipment) => {
-        router.push(`/clubs/${clubId}/equipment/${item.id}`)
-    }
-
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!editingEquipment?.name || !editingEquipment?.type) return
-
-        setIsSaving(true)
-        try {
-            const isNew = !editingEquipment.id
-            const url = isNew
-                ? `/api/clubs/${clubId}/equipment`
-                : `/api/clubs/${clubId}/equipment/${editingEquipment.id}`
-
-            const res = await fetch(url, {
-                method: isNew ? "POST" : "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(editingEquipment)
-            })
-
-            if (res.ok) {
-                setIsDialogOpen(false)
-                fetchData()
-            }
-        } catch (error) {
-            console.error("Error saving equipment:", error)
-        } finally {
-            setIsSaving(false)
-        }
-    }
-
-    const handleSelectAll = () => {
-        const ids = filteredEquipment.slice(0, SELECTION_LIMIT).map(e => e.id)
-        const allSelected = ids.length > 0 && ids.every(id => selectedIds.has(id)) && selectedIds.size === ids.length
-        if (allSelected) {
-            setSelectedIds(new Set())
-        } else {
-            if (filteredEquipment.length > SELECTION_LIMIT) {
-                alert(`Можно выбрать максимум ${SELECTION_LIMIT} позиций за раз`)
-            }
-            setSelectedIds(new Set(ids))
-        }
-    }
-
-    const toggleSelection = (id: string) => {
-        const newSet = new Set(selectedIds)
-        if (newSet.has(id)) newSet.delete(id)
-        else {
-            if (newSet.size >= SELECTION_LIMIT) {
-                alert(`Можно выбрать максимум ${SELECTION_LIMIT} позиций за раз`)
-                return
-            }
-            newSet.add(id)
-        }
-        setSelectedIds(newSet)
-    }
-
-    const handleExport = () => {
-        const rows = filteredEquipment.map(item => ({
-            ID: item.id,
-            "Название": item.name,
-            "Тип код": item.type,
-            "Тип": item.type_name || item.type,
-            "Серийный номер": item.identifier || "",
-            "Бренд": item.brand || "",
-            "Модель": item.model || "",
-            "Зона": item.workstation_zone || "",
-            "Место": item.workstation_name || "",
-            "Статус": item.status,
-            "Дата покупки": item.purchase_date || "",
-            "Гарантия до": item.warranty_expires || "",
-            "Интервал чистки (дней)": item.cleaning_interval_days ?? "",
-            "Обслуживание включено": item.maintenance_enabled === false ? "Нет" : "Да",
-            "Примечание": item.notes || "",
-        }))
-
-        const worksheet = XLSX.utils.json_to_sheet(rows, { header: [...INVENTORY_IMPORT_COLUMNS] })
-        const workbook = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Инвентарь")
-        XLSX.writeFile(workbook, `inventory_export_${formatLocalDate(new Date())}.xlsx`)
-    }
-
-    const handleDownloadTemplate = () => {
-        const worksheet = XLSX.utils.json_to_sheet([INVENTORY_TEMPLATE_EXAMPLE], { header: [...INVENTORY_IMPORT_COLUMNS] })
-        const workbook = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Шаблон")
-        XLSX.writeFile(workbook, "inventory_import_template.xlsx")
-    }
-
-    const parseImportStatus = (value: unknown): EquipmentStatus => {
-        const normalized = String(value || "").trim().toLowerCase()
-        return INVENTORY_STATUS_IMPORT_MAP[normalized] || "STORAGE"
-    }
-
-    const parseImportBoolean = (value: unknown) => {
-        const normalized = String(value || "").trim().toLowerCase()
-        if (!normalized) return true
-        return !["нет", "false", "0", "off", "disabled"].includes(normalized)
-    }
-
-    const normalizeImportDate = (value: unknown) => {
-        const raw = String(value || "").trim()
-        if (!raw) return null
-
-        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
-
-        const parsed = new Date(raw)
-        if (Number.isNaN(parsed.getTime())) return null
-
-        const year = parsed.getFullYear()
-        const month = String(parsed.getMonth() + 1).padStart(2, "0")
-        const day = String(parsed.getDate()).padStart(2, "0")
-        return `${year}-${month}-${day}`
-    }
-
-    const handleImportClick = () => {
-        if (!hasImportLocations) {
-            alert("Перед импортом сначала создайте зоны и места в разделе рабочих мест")
-            return
-        }
-        importInputRef.current?.click()
-    }
-
-    const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0]
-        if (!file) return
-
-        setIsImporting(true)
-        try {
-            const buffer = await file.arrayBuffer()
-            const workbook = XLSX.read(buffer, { type: "array" })
-            const sheet = workbook.Sheets[workbook.SheetNames[0]]
-            const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" })
-
-            if (rows.length === 0) {
-                alert("Файл пустой")
-                return
-            }
-
-            const typeByCode = new Map(types.map(type => [type.code.trim().toLowerCase(), type.code]))
-            const typeByName = new Map(types.map(type => [type.name_ru.trim().toLowerCase(), type.code]))
-            const workstationByKey = new Map<string, string>()
-            const workstationByName = new Map<string, string>()
-
-            workstations.forEach(workstation => {
-                workstationByName.set(workstation.name.trim().toLowerCase(), workstation.id)
-                workstationByKey.set(`${(workstation.zone || "").trim().toLowerCase()}::${workstation.name.trim().toLowerCase()}`, workstation.id)
-            })
-
-            const existingById = new Map(equipment.map(item => [item.id, item]))
-            const existingByIdentifier = new Map(
-                equipment
-                    .filter(item => item.identifier)
-                    .map(item => [String(item.identifier).trim().toLowerCase(), item])
-            )
-
-            let created = 0
-            let updated = 0
-            let skipped = 0
-            const errors: string[] = []
-
-            for (const [index, row] of rows.entries()) {
-                const rowNumber = index + 2
-                const name = String(row["Название"] || "").trim()
-                const rawTypeCode = String(row["Тип код"] || "").trim().toLowerCase()
-                const rawTypeName = String(row["Тип"] || "").trim().toLowerCase()
-                const identifier = String(row["Серийный номер"] || "").trim()
-                const importId = String(row["ID"] || "").trim()
-                const zone = String(row["Зона"] || "").trim()
-                const workstationName = String(row["Место"] || "").trim()
-
-                if (!name) {
-                    skipped += 1
-                    continue
-                }
-
-                const resolvedType =
-                    typeByCode.get(rawTypeCode) ||
-                    typeByName.get(rawTypeName)
-
-                if (!resolvedType) {
-                    errors.push(`Строка ${rowNumber}: неизвестный тип "${row["Тип код"] || row["Тип"]}"`)
-                    continue
-                }
-
-                let workstationId: string | null | undefined = undefined
-                if (workstationName) {
-                    workstationId =
-                        workstationByKey.get(`${zone.toLowerCase()}::${workstationName.toLowerCase()}`) ||
-                        workstationByName.get(workstationName.toLowerCase()) ||
-                        null
-
-                    if (!workstationId) {
-                        errors.push(`Строка ${rowNumber}: место "${workstationName}" не найдено`)
-                        continue
-                    }
-                } else {
-                    workstationId = null
-                }
-
-                const payload = {
-                    workstation_id: workstationId,
-                    type: resolvedType,
-                    name,
-                    identifier: identifier || null,
-                    brand: String(row["Бренд"] || "").trim() || null,
-                    model: String(row["Модель"] || "").trim() || null,
-                    purchase_date: normalizeImportDate(row["Дата покупки"]),
-                    warranty_expires: normalizeImportDate(row["Гарантия до"]),
-                    cleaning_interval_days: Number(row["Интервал чистки (дней)"] || 0) || undefined,
-                    maintenance_enabled: parseImportBoolean(row["Обслуживание включено"]),
-                    notes: String(row["Примечание"] || "").trim() || null,
-                    status: parseImportStatus(row["Статус"]),
-                }
-
-                const existing =
-                    (importId ? existingById.get(importId) : undefined) ||
-                    (identifier ? existingByIdentifier.get(identifier.toLowerCase()) : undefined)
-
-                const endpoint = existing
-                    ? `/api/clubs/${clubId}/equipment/${existing.id}`
-                    : `/api/clubs/${clubId}/equipment`
-
-                const method = existing ? "PATCH" : "POST"
-                const response = await fetch(endpoint, {
-                    method,
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
-                })
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}))
-                    errors.push(`Строка ${rowNumber}: ${errorData.error || "не удалось сохранить запись"}`)
-                    continue
-                }
-
-                const persistedEquipment = await response.json().catch(() => null)
-
-                if (!existing && persistedEquipment?.id) {
-                    const patchResponse = await fetch(`/api/clubs/${clubId}/equipment/${persistedEquipment.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            cleaning_interval_days: payload.cleaning_interval_days,
-                            maintenance_enabled: payload.maintenance_enabled,
-                        }),
-                    })
-
-                    if (!patchResponse.ok) {
-                        const patchError = await patchResponse.json().catch(() => ({}))
-                        errors.push(`Строка ${rowNumber}: запись создана, но доп. поля не обновлены (${patchError.error || "PATCH error"})`)
-                    }
-                }
-
-                if (existing) {
-                    updated += 1
-                } else {
-                    created += 1
-                }
-            }
-
-            await fetchData()
-
-            const summary = [
-                `Импорт завершен`,
-                `Создано: ${created}`,
-                `Обновлено: ${updated}`,
-                `Пропущено пустых строк: ${skipped}`,
-            ]
-
-            if (errors.length > 0) {
-                summary.push(`Ошибки: ${errors.length}`)
-                summary.push("")
-                summary.push(errors.slice(0, 10).join("\n"))
-            }
-
-            alert(summary.join("\n"))
-        } catch (error) {
-            console.error("Import equipment error:", error)
-            alert("Не удалось импортировать файл")
-        } finally {
-            event.target.value = ""
-            setIsImporting(false)
-        }
-    }
-
-    const handleBulkRepair = async () => {
-        if (selectedIds.size === 0) return
-        if (!confirm(`Отправить в ремонт ${selectedIds.size} поз.?`)) return
-        
-        setIsSaving(true)
-        try {
-            // Logic for bulk repair (e.g., creating issues or changing status)
-            // For now, let's just show an alert since we don't have a bulk API yet
-            alert("Функция группового ремонта будет доступна в следующем обновлении")
-        } finally {
-            setIsSaving(false)
-        }
-    }
-
-    const handleBulkArchive = async () => {
-        if (selectedIds.size === 0) return
-        if (!confirm(`Списать ${selectedIds.size} поз.?`)) return
-        
-        setIsSaving(true)
-        try {
-            const ids = Array.from(selectedIds)
-            await Promise.all(ids.map(id => 
-                fetch(`/api/clubs/${clubId}/equipment/${id}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ status: "WRITTEN_OFF" })
-                })
-            ))
-            setSelectedIds(new Set())
-            fetchData()
-        } catch (error) {
-            console.error("Bulk archive error:", error)
-        } finally {
-            setIsSaving(false)
-        }
-    }
-
-    const handleBulkDelete = async () => {
-        if (selectedIds.size === 0) return
-        if (!confirm(`Удалить ${selectedIds.size} поз.?`)) return
-
-        setIsSaving(true)
-        try {
-            const ids = Array.from(selectedIds)
-            const res = await fetch(`/api/clubs/${clubId}/equipment`, {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ids })
-            })
-            const data = await res.json().catch(() => ({}))
-            if (!res.ok) {
-                alert(data?.error || "Не удалось удалить оборудование")
-                return
-            }
-            setSelectedIds(new Set())
-            fetchData()
-        } catch (error) {
-            console.error("Bulk delete error:", error)
-            alert("Не удалось удалить оборудование")
-        } finally {
-            setIsSaving(false)
-        }
-    }
-
-    // --- Render Helpers ---
-
-    const getStatusBadge = (item: Equipment) => {
-        if (item.status === "WRITTEN_OFF") {
-            return <Badge variant="secondary" className="bg-slate-100 text-slate-500">Списано</Badge>
-        }
-        if (item.status === "REPAIR") {
-            return <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700">В ремонте</Badge>
-        }
-        if (item.status === "STORAGE") {
-            return <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50">На складе</Badge>
-        }
-        return <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20 shadow-none border-none">В эксплуатации</Badge>
-    }
-
-    const getEquipmentIcon = (type: string, typeIcon?: string | null) => renderEquipmentIcon(type, typeIcon, "h-5 w-5")
-
-    const isCleaningOverdue = (item: Equipment) => {
-        if (item.maintenance_enabled === false) return false
-        if (!item.last_cleaned_at) return false
-
-        const last = new Date(item.last_cleaned_at)
-        if (Number.isNaN(last.valueOf())) return false
-
-        const due = new Date(last)
-        due.setHours(0, 0, 0, 0)
-        due.setDate(due.getDate() + (item.cleaning_interval_days ?? 30))
-
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        return due < today
-    }
-
-    const handleEquipmentRowClick = (event: MouseEvent<HTMLElement>, item: Equipment) => {
-        const target = event.target as HTMLElement
-        if (target.closest("button") || target.closest("input") || target.closest("a") || target.closest("label")) return
-        handleEdit(item)
-    }
-
-    const renderWarrantyInfo = (item: Equipment, compact = false) => {
-        if (!item.warranty_expires) {
-            return <span className="text-xs text-muted-foreground">—</span>
-        }
-
-        return (
-            <div className="flex flex-col gap-1">
-                <span className={cn(
-                    compact ? "text-[11px] font-medium" : "text-xs font-medium",
-                    item.warranty_status === 'EXPIRED' ? "text-rose-600" :
-                    item.warranty_status === 'EXPIRING_SOON' ? "text-amber-600" : "text-slate-600"
-                )}>
-                    {new Date(item.warranty_expires).toLocaleDateString("ru-RU")}
-                </span>
-                {item.warranty_status === 'EXPIRED' && (
-                    <span className={cn(
-                        compact ? "text-[9px] font-bold uppercase tracking-wide text-rose-600" : "text-[9px] text-rose-600 font-bold uppercase tracking-wide"
-                    )}>
-                        Истекла
-                    </span>
-                )}
-            </div>
-        )
-    }
-
-    // --- Stats calculation removed (now from server) ---
 
     return (
-        <PageShell maxWidth="5xl">
-            <div className="space-y-8 pb-28 sm:pb-12">
-            {/* Header & Breadcrumbs */}
-            <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
-                    <div className="min-w-0">
-                        <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">Инвентаризация</h1>
-                        <p className="text-slate-500 text-lg mt-2">База данных оборудования и периферии</p>
-                    </div>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-                        <Button asChild variant="outline" className="hidden w-full md:inline-flex md:w-auto rounded-xl h-11 px-6 font-medium">
-                            <Link href={`/clubs/${clubId}/equipment`}>
-                                <ChevronLeft className="mr-2 h-4 w-4" />
-                                Назад
-                            </Link>
-                        </Button>
-                        <input
-                            ref={importInputRef}
-                            type="file"
-                            accept=".xlsx,.xls,.csv"
-                            className="hidden"
-                            onChange={handleImportFile}
-                        />
-                        <Button variant="outline" size="icon" onClick={() => setIsImportExportDialogOpen(true)} className="rounded-xl h-11 w-11">
-                            <Download className="h-5 w-5" />
-                        </Button>
-                        <Button variant="outline" size="icon" onClick={openCloneDialog} className="rounded-xl h-11 w-11">
-                            <Copy className="h-5 w-5" />
-                        </Button>
-                        <Button onClick={handleCreate} className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 sm:w-auto rounded-xl h-11 px-6 font-medium">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Добавить оборудование
-                        </Button>
-                    </div>
-                </div>
+      <div className="flex flex-col gap-1">
+        <span
+          className={cn(
+            compact ? "text-[11px] font-medium" : "text-xs font-medium",
+            item.warranty_status === "EXPIRED"
+              ? "text-rose-600"
+              : item.warranty_status === "EXPIRING_SOON"
+                ? "text-amber-600"
+                : "text-slate-600",
+          )}
+        >
+          {new Date(item.warranty_expires).toLocaleDateString("ru-RU")}
+        </span>
+        {item.warranty_status === "EXPIRED" && (
+          <span
+            className={cn(
+              compact
+                ? "text-[9px] font-bold uppercase tracking-wide text-rose-600"
+                : "text-[9px] text-rose-600 font-bold uppercase tracking-wide",
+            )}
+          >
+            Истекла
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  // --- Stats calculation removed (now from server) ---
+
+  return (
+    <PageShell maxWidth="5xl">
+      <div className="space-y-8 pb-28 sm:pb-12">
+        {/* Header & Breadcrumbs */}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
+            <div className="min-w-0">
+              <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900 truncate">
+                Инвентаризация
+              </h1>
+              <p className="text-slate-500 text-lg mt-2">
+                База данных оборудования и периферии
+              </p>
             </div>
-
-            <div className="space-y-6">
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex gap-2">
-                    <Button
-                        variant={activeTab === 'inventory' ? 'default' : 'outline'}
-                        className={cn("h-10 rounded-xl px-4", activeTab === 'inventory' ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-white")}
-                        onClick={() => setTab('inventory')}
-                    >
-                        Реестр
-                    </Button>
-                    <Button
-                        variant={activeTab === 'transfers' ? 'default' : 'outline'}
-                        className={cn("h-10 rounded-xl px-4", activeTab === 'transfers' ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-white")}
-                        onClick={() => setTab('transfers')}
-                    >
-                        Межклубные перемещения
-                    </Button>
-                </div>
-                {activeTab === 'transfers' ? (
-                    <Button
-                        variant="outline"
-                        className="h-10 rounded-xl bg-white"
-                        onClick={fetchInterclubTransfers}
-                        disabled={isTransfersLoading}
-                    >
-                        {isTransfersLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                        Обновить
-                    </Button>
-                ) : null}
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
+              <Button
+                asChild
+                variant="outline"
+                className="hidden w-full md:inline-flex md:w-auto rounded-xl h-11 px-6 font-medium"
+              >
+                <Link href={`/clubs/${clubId}/equipment`}>
+                  <ChevronLeft className="mr-2 h-4 w-4" />
+                  Назад
+                </Link>
+              </Button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsImportExportDialogOpen(true)}
+                className="rounded-xl h-11 w-11"
+              >
+                <Download className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={openCloneDialog}
+                className="rounded-xl h-11 w-11"
+              >
+                <Copy className="h-5 w-5" />
+              </Button>
+              <Button
+                onClick={handleCreate}
+                className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 sm:w-auto rounded-xl h-11 px-6 font-medium"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Добавить оборудование
+              </Button>
             </div>
+          </div>
+        </div>
 
-            {activeTab === 'transfers' ? (
-                <div className="space-y-4">
-                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[48px]" />
-                                    <TableHead>Дата</TableHead>
-                                    <TableHead>Направление</TableHead>
-                                    <TableHead>Клуб</TableHead>
-                                    <TableHead>Позиции</TableHead>
-                                    <TableHead>Статус</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {isTransfersLoading ? (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="h-40 text-center">
-                                            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                                            <p className="text-muted-foreground mt-2">Загрузка...</p>
-                                        </TableCell>
-                                    </TableRow>
-                                ) : interclubTransfers.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
-                                            Перемещений пока нет
-                                        </TableCell>
-                                    </TableRow>
+        <div className="space-y-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-2">
+              <Button
+                variant={activeTab === "inventory" ? "default" : "outline"}
+                className={cn(
+                  "h-10 rounded-xl px-4",
+                  activeTab === "inventory"
+                    ? "bg-slate-900 text-white hover:bg-slate-800"
+                    : "bg-white",
+                )}
+                onClick={() => setTab("inventory")}
+              >
+                Реестр
+              </Button>
+              <Button
+                variant={activeTab === "transfers" ? "default" : "outline"}
+                className={cn(
+                  "h-10 rounded-xl px-4",
+                  activeTab === "transfers"
+                    ? "bg-slate-900 text-white hover:bg-slate-800"
+                    : "bg-white",
+                )}
+                onClick={() => setTab("transfers")}
+              >
+                Межклубные перемещения
+              </Button>
+            </div>
+            {activeTab === "transfers" ? (
+              <Button
+                variant="outline"
+                className="h-10 rounded-xl bg-white"
+                onClick={fetchInterclubTransfers}
+                disabled={isTransfersLoading}
+              >
+                {isTransfersLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Обновить
+              </Button>
+            ) : null}
+          </div>
+
+          {activeTab === "transfers" ? (
+            <div className="space-y-4">
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[48px]" />
+                      <TableHead>Дата</TableHead>
+                      <TableHead>Направление</TableHead>
+                      <TableHead>Клуб</TableHead>
+                      <TableHead>Позиции</TableHead>
+                      <TableHead>Статус</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isTransfersLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-40 text-center">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                          <p className="text-muted-foreground mt-2">
+                            Загрузка...
+                          </p>
+                        </TableCell>
+                      </TableRow>
+                    ) : interclubTransfers.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={6}
+                          className="h-40 text-center text-muted-foreground"
+                        >
+                          Перемещений пока нет
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      interclubTransfers.map((t) => {
+                        const isExpanded = expandedTransfers.has(t.id);
+                        const otherClubName =
+                          t.direction === "OUT"
+                            ? t.target_club_name
+                            : t.source_club_name;
+                        return (
+                          <Fragment key={t.id}>
+                            <TableRow
+                              className="cursor-pointer hover:bg-slate-50"
+                              onClick={() => toggleTransfer(t.id)}
+                            >
+                              <TableCell>
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4 text-slate-500" />
                                 ) : (
-                                    interclubTransfers.map((t) => {
-                                        const isExpanded = expandedTransfers.has(t.id)
-                                        const otherClubName = t.direction === "OUT" ? t.target_club_name : t.source_club_name
-                                        return (
-                                            <Fragment key={t.id}>
-                                                <TableRow className="cursor-pointer hover:bg-slate-50" onClick={() => toggleTransfer(t.id)}>
-                                                    <TableCell>
-                                                        {isExpanded ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm font-medium">
-                                                        {formatLocalDate(new Date(t.created_at))}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge className={cn("border-none", t.direction === "OUT" ? "bg-blue-600 text-white" : "bg-emerald-600 text-white")}>
-                                                            {t.direction === "OUT" ? "Исходящее" : "Входящее"}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-sm font-semibold text-slate-800">
-                                                        {otherClubName}
-                                                    </TableCell>
-                                                    <TableCell className="text-sm">
-                                                        {t.item_count}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge className={cn("border-none", t.status === "COMPLETED" ? "bg-slate-900 text-white" : "bg-amber-600 text-white")}>
-                                                            {t.status === "COMPLETED" ? "Принято" : "Создано"}
-                                                        </Badge>
-                                                    </TableCell>
-                                                </TableRow>
-                                                {isExpanded ? (
-                                                    <TableRow className="bg-slate-50">
-                                                        <TableCell colSpan={6} className="p-4">
-                                                            <div className="space-y-3">
-                                                                <div className="space-y-1 text-xs text-slate-600">
-                                                                    <div>
-                                                                        Создал: <span className="font-semibold text-slate-900">{t.created_by_name || "—"}</span>
-                                                                    </div>
-                                                                    <div>
-                                                                        Принял: <span className="font-semibold text-slate-900">{t.completed_by_name || "—"}</span>
-                                                                    </div>
-                                                                    {t.comment ? (
-                                                                        <div className="whitespace-pre-wrap">
-                                                                            <span className="font-semibold text-slate-900">Комментарий:</span> {t.comment}
-                                                                        </div>
-                                                                    ) : null}
-                                                                </div>
-                                                                <div className="space-y-2">
-                                                                    {t.items.map((item) => (
-                                                                        <div key={item.equipment_id} className="flex flex-col gap-0.5 rounded-xl border bg-white p-3">
-                                                                            <div className="text-sm font-semibold text-slate-900">{item.equipment_name}</div>
-                                                                            <div className="text-xs text-slate-500">
-                                                                                Поставить: {item.target_workstation_name ? `${item.target_workstation_name}${item.target_workstation_zone ? ` (${item.target_workstation_zone})` : ''}` : 'Склад'}
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ) : null}
-                                            </Fragment>
-                                        )
-                                    })
+                                  <ChevronRight className="h-4 w-4 text-slate-500" />
                                 )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </div>
-            ) : (
-            <>
-
-            {/* Dashboard Stats (New) */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
-                    <div className="flex items-center justify-between p-6 sm:p-8">
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground">Всего единиц</p>
-                            <h3 className="text-2xl font-bold mt-1">{inventoryStats.total}</h3>
-                        </div>
-                        <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-                            <Box className="h-6 w-6" />
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
-                    <div className="flex items-center justify-between p-6 sm:p-8">
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground">На складе</p>
-                            <h3 className="text-2xl font-bold mt-1 text-amber-600">{inventoryStats.storage}</h3>
-                        </div>
-                        <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-                            <Archive className="h-6 w-6" />
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
-                    <div className="flex items-center justify-between p-6 sm:p-8">
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground">Просрочена чистка</p>
-                            <h3 className="text-2xl font-bold mt-1 text-rose-600">{inventoryStats.overdue_tasks}</h3>
-                        </div>
-                        <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
-                            <Clock3 className="h-6 w-6" />
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
-                    <div className="flex items-center justify-between p-6 sm:p-8">
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground">С проблемами</p>
-                            <h3 className="text-2xl font-bold mt-1 text-orange-600">{inventoryStats.active_issues}</h3>
-                        </div>
-                        <div className="p-3 bg-orange-50 text-orange-600 rounded-xl">
-                            <AlertCircle className="h-6 w-6" />
-                        </div>
-                    </div>
-                </div>
+                              </TableCell>
+                              <TableCell className="text-sm font-medium">
+                                {formatLocalDate(new Date(t.created_at))}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  className={cn(
+                                    "border-none",
+                                    t.direction === "OUT"
+                                      ? "bg-blue-600 text-white"
+                                      : "bg-emerald-600 text-white",
+                                  )}
+                                >
+                                  {t.direction === "OUT"
+                                    ? "Исходящее"
+                                    : "Входящее"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-sm font-semibold text-slate-800">
+                                {otherClubName}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {t.item_count}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  className={cn(
+                                    "border-none",
+                                    t.status === "COMPLETED"
+                                      ? "bg-slate-900 text-white"
+                                      : "bg-amber-600 text-white",
+                                  )}
+                                >
+                                  {t.status === "COMPLETED"
+                                    ? "Принято"
+                                    : "Создано"}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                            {isExpanded ? (
+                              <TableRow className="bg-slate-50">
+                                <TableCell colSpan={6} className="p-4">
+                                  <div className="space-y-3">
+                                    <div className="space-y-1 text-xs text-slate-600">
+                                      <div>
+                                        Создал:{" "}
+                                        <span className="font-semibold text-slate-900">
+                                          {t.created_by_name || "—"}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        Принял:{" "}
+                                        <span className="font-semibold text-slate-900">
+                                          {t.completed_by_name || "—"}
+                                        </span>
+                                      </div>
+                                      {t.comment ? (
+                                        <div className="whitespace-pre-wrap">
+                                          <span className="font-semibold text-slate-900">
+                                            Комментарий:
+                                          </span>{" "}
+                                          {t.comment}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    <div className="space-y-2">
+                                      {t.items.map((item) => (
+                                        <div
+                                          key={item.equipment_id}
+                                          className="flex flex-col gap-0.5 rounded-xl border bg-white p-3"
+                                        >
+                                          <div className="text-sm font-semibold text-slate-900">
+                                            {item.equipment_name}
+                                          </div>
+                                          <div className="text-xs text-slate-500">
+                                            Поставить:{" "}
+                                            {item.target_workstation_name
+                                              ? `${item.target_workstation_name}${item.target_workstation_zone ? ` (${item.target_workstation_zone})` : ""}`
+                                              : "Склад"}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
-
-            {/* Advanced Filters Bar */}
-            <div className="flex flex-col gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-                <div className="flex flex-col gap-4">
-                    <div className="relative w-full">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Поиск по названию, серийному номеру..."
-                            className="h-12 pl-10 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
+          ) : (
+            <>
+              {/* Dashboard Stats (New) */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center justify-between p-6 sm:p-8">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Всего единиц
+                      </p>
+                      <h3 className="text-2xl font-bold mt-1">
+                        {inventoryStats.total}
+                      </h3>
                     </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,160px))_auto] xl:items-center">
-                        <Select value={typeFilter} onValueChange={handleFilterChange(setTypeFilter)}>
-                            <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
-                                <SelectValue placeholder="Тип оборудования" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Все типы</SelectItem>
-                                {types.map(t => (
-                                    <SelectItem key={t.code} value={t.code}>{t.name_ru}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-
-                        <Select value={zoneFilter} onValueChange={handleFilterChange(setZoneFilter)}>
-                            <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
-                                <SelectValue placeholder="Зона" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Все зоны</SelectItem>
-                                {zones.map(z => (
-                                    <SelectItem key={z} value={z}>{z}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-
-                        <Select value={workstationFilter} onValueChange={handleFilterChange(setWorkstationFilter)}>
-                            <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
-                                <SelectValue placeholder="Место" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Все локации</SelectItem>
-                                <SelectItem value="unassigned">Склад (Не назначено)</SelectItem>
-                                {filteredWorkstations.map(w => (
-                                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-
-                        <Select value={statusFilter} onValueChange={handleFilterChange(setStatusFilter)}>
-                            <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
-                                <SelectValue placeholder="Статус" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Любой статус</SelectItem>
-                                <SelectItem value="ACTIVE">В эксплуатации</SelectItem>
-                                <SelectItem value="STORAGE">На складе</SelectItem>
-                                <SelectItem value="REPAIR">В ремонте</SelectItem>
-                                <SelectItem value="WRITTEN_OFF">Списано</SelectItem>
-                            </SelectContent>
-                        </Select>
-
-                        <Button variant="ghost" className="w-full justify-center xl:w-auto h-11 rounded-xl font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100" onClick={() => {
-                            setSearch("")
-                            setTypeFilter("all")
-                            setZoneFilter("all")
-                            setWorkstationFilter("all")
-                            setStatusFilter("all")
-                            setPage(1)
-                        }}>
-                            <RefreshCw className="mr-2 h-4 w-4 xl:mr-0" />
-                            <span className="xl:hidden">Сбросить фильтры</span>
-                        </Button>
+                    <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                      <Box className="h-6 w-6" />
                     </div>
+                  </div>
                 </div>
-                
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center justify-between p-6 sm:p-8">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        На складе
+                      </p>
+                      <h3 className="text-2xl font-bold mt-1 text-amber-600">
+                        {inventoryStats.storage}
+                      </h3>
+                    </div>
+                    <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+                      <Archive className="h-6 w-6" />
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center justify-between p-6 sm:p-8">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Просрочена чистка
+                      </p>
+                      <h3 className="text-2xl font-bold mt-1 text-rose-600">
+                        {inventoryStats.overdue_tasks}
+                      </h3>
+                    </div>
+                    <div className="p-3 bg-rose-50 text-rose-600 rounded-xl">
+                      <Clock3 className="h-6 w-6" />
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center justify-between p-6 sm:p-8">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        С проблемами
+                      </p>
+                      <h3 className="text-2xl font-bold mt-1 text-orange-600">
+                        {inventoryStats.active_issues}
+                      </h3>
+                    </div>
+                    <div className="p-3 bg-orange-50 text-orange-600 rounded-xl">
+                      <AlertCircle className="h-6 w-6" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Advanced Filters Bar */}
+              <div className="flex flex-col gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                <div className="flex flex-col gap-4">
+                  <div className="relative w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Поиск по названию, серийному номеру..."
+                      className="h-12 pl-10 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,160px))_auto] xl:items-center">
+                    <Select
+                      value={typeFilter}
+                      onValueChange={handleFilterChange(setTypeFilter)}
+                    >
+                      <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
+                        <SelectValue placeholder="Тип оборудования" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Все типы</SelectItem>
+                        {types.map((t) => (
+                          <SelectItem key={t.code} value={t.code}>
+                            {t.name_ru}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={zoneFilter}
+                      onValueChange={handleFilterChange(setZoneFilter)}
+                    >
+                      <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
+                        <SelectValue placeholder="Зона" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Все зоны</SelectItem>
+                        {zones.map((z) => (
+                          <SelectItem key={z} value={z}>
+                            {z}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={workstationFilter}
+                      onValueChange={handleFilterChange(setWorkstationFilter)}
+                    >
+                      <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
+                        <SelectValue placeholder="Место" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Все локации</SelectItem>
+                        <SelectItem value="unassigned">
+                          Склад (Не назначено)
+                        </SelectItem>
+                        {filteredWorkstations.map((w) => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={statusFilter}
+                      onValueChange={handleFilterChange(setStatusFilter)}
+                    >
+                      <SelectTrigger className="w-full h-11 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900">
+                        <SelectValue placeholder="Статус" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Любой статус</SelectItem>
+                        <SelectItem value="ACTIVE">В эксплуатации</SelectItem>
+                        <SelectItem value="STORAGE">На складе</SelectItem>
+                        <SelectItem value="REPAIR">В ремонте</SelectItem>
+                        <SelectItem value="WRITTEN_OFF">Списано</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-center xl:w-auto h-11 rounded-xl font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                      onClick={() => {
+                        setSearch("");
+                        setTypeFilter("all");
+                        setZoneFilter("all");
+                        setWorkstationFilter("all");
+                        setStatusFilter("all");
+                        setPage(1);
+                      }}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4 xl:mr-0" />
+                      <span className="xl:hidden">Сбросить фильтры</span>
+                    </Button>
+                  </div>
+                </div>
+
                 {/* Bulk Actions Bar (Conditional) */}
                 {selectedIds.size > 0 && (
-                    <div className="animate-in fade-in slide-in-from-top-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
-                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                        <span className="font-medium">Выбрано: {selectedIds.size} / {SELECTION_LIMIT}</span>
-                        <div className="hidden h-4 w-px bg-blue-200 sm:block" />
-                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={handleBulkRepair}>
-                            <Wrench className="h-3.5 w-3.5 mr-2" /> Отправить в ремонт
-                        </Button>
-                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={handleBulkArchive}>
-                            <Archive className="h-3.5 w-3.5 mr-2" /> Списать
-                        </Button>
-                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-rose-100 hover:text-rose-800 sm:justify-center" onClick={handleBulkDelete}>
-                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Удалить
-                        </Button>
-                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center" onClick={openInterclubDialog}>
-                            <ArrowLeftRight className="h-3.5 w-3.5 mr-2" /> Переместить
-                        </Button>
-                        <Button size="sm" variant="ghost" className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:ml-auto sm:justify-center" onClick={() => setSelectedIds(new Set())}>
-                            Снять выделение
-                        </Button>
-                        </div>
+                  <div className="animate-in fade-in slide-in-from-top-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
+                    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                      <span className="font-medium">
+                        Выбрано: {selectedIds.size} / {SELECTION_LIMIT}
+                      </span>
+                      <div className="hidden h-4 w-px bg-blue-200 sm:block" />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center"
+                        onClick={handleBulkRepair}
+                      >
+                        <Wrench className="h-3.5 w-3.5 mr-2" /> Отправить в
+                        ремонт
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center"
+                        onClick={handleBulkArchive}
+                      >
+                        <Archive className="h-3.5 w-3.5 mr-2" /> Списать
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 whitespace-nowrap justify-start hover:bg-rose-100 hover:text-rose-800 sm:justify-center"
+                        onClick={handleBulkDelete}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-2" /> Удалить
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:justify-center"
+                        onClick={openInterclubDialog}
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5 mr-2" />{" "}
+                        Переместить
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 whitespace-nowrap justify-start hover:bg-blue-100 hover:text-blue-800 sm:ml-auto sm:justify-center"
+                        onClick={() => setSelectedIds(new Set())}
+                      >
+                        Снять выделение
+                      </Button>
                     </div>
+                  </div>
                 )}
-            </div>
+              </div>
 
-            {/* Data Table */}
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              {/* Data Table */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="space-y-4 p-4 sm:p-6 md:hidden">
-                    {isLoading ? (
-                        <div className="flex h-40 flex-col items-center justify-center text-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                            <p className="mt-2 text-sm text-muted-foreground">Загрузка реестра...</p>
-                        </div>
-                    ) : (isGrouped && pagedGroupedEquipment.length > 0) ? (
-                        pagedGroupedEquipment.map(([groupId, group]) => {
-                            const isExpanded = expandedGroups.has(groupId)
-                            const groupSelectedCount = group.items.reduce((sum, item) => sum + (selectedIds.has(item.id) ? 1 : 0), 0)
-                            const allGroupSelected = group.items.length > 0 && groupSelectedCount === group.items.length
-                            const someGroupSelected = groupSelectedCount > 0 && !allGroupSelected
-                            const issuesCount = group.items.reduce((sum, item) => sum + (item.open_issues_count || 0), 0)
-                            const maintenanceOffCount = group.items.filter(i => i.maintenance_enabled === false).length
-                            const overdueCount = group.items.filter(i => isCleaningOverdue(i)).length
+                  {isLoading ? (
+                    <div className="flex h-40 flex-col items-center justify-center text-center">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Загрузка реестра...
+                      </p>
+                    </div>
+                  ) : isGrouped && pagedGroupedEquipment.length > 0 ? (
+                    pagedGroupedEquipment.map(([groupId, group]) => {
+                      const isExpanded = expandedGroups.has(groupId);
+                      const groupSelectedCount = group.items.reduce(
+                        (sum, item) => sum + (selectedIds.has(item.id) ? 1 : 0),
+                        0,
+                      );
+                      const allGroupSelected =
+                        group.items.length > 0 &&
+                        groupSelectedCount === group.items.length;
+                      const someGroupSelected =
+                        groupSelectedCount > 0 && !allGroupSelected;
+                      const issuesCount = group.items.reduce(
+                        (sum, item) => sum + (item.open_issues_count || 0),
+                        0,
+                      );
+                      const maintenanceOffCount = group.items.filter(
+                        (i) => i.maintenance_enabled === false,
+                      ).length;
+                      const overdueCount = group.items.filter((i) =>
+                        isCleaningOverdue(i),
+                      ).length;
 
-                            return (
-                                <div key={groupId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                                    <div className="flex items-start gap-3 p-4" onClick={() => toggleGroup(groupId)}>
-                                        <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-                                            <input
-                                                type="checkbox"
-                                                className={cn("rounded border-gray-300", someGroupSelected && "opacity-50")}
-                                                checked={groupSelectedCount > 0}
-                                                onChange={() => toggleGroupSelection(groupId, group.items)}
-                                            />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2">
-                                                {groupId === "unassigned" ? (
-                                                    <Box className="h-4 w-4 shrink-0 text-amber-600" />
-                                                ) : (
-                                                    <LayoutGrid className="h-4 w-4 shrink-0 text-indigo-600" />
-                                                )}
-                                                <p className="truncate font-semibold text-slate-900">{group.name}</p>
-                                                <Badge className="border-none bg-indigo-600 text-[10px] text-white">{group.items.length}</Badge>
-                                            </div>
-                                            {group.zone && <p className="mt-1 text-xs text-muted-foreground">{group.zone}</p>}
-                                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                                                <span className={cn(issuesCount > 0 ? "text-orange-700" : "text-slate-400")}>Проблемы {issuesCount}</span>
-                                                <span className={cn(maintenanceOffCount > 0 ? "text-slate-700" : "text-slate-400")}>Откл. обслуж {maintenanceOffCount}</span>
-                                                <span className={cn(overdueCount > 0 ? "text-amber-700" : "text-slate-400")}>Просроч. {overdueCount}</span>
-                                            </div>
-                                        </div>
-                                        <div className="pt-1 text-slate-400">
-                                            {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-                                        </div>
-                                    </div>
-
-                                    {isExpanded && (
-                                        <div className="space-y-4 border-t border-slate-100 bg-slate-50/50 p-4 sm:p-6">
-                                            {group.items.map((item) => (
-                                                <div
-                                                    key={item.id}
-                                                    className={cn(
-                                                        "rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer",
-                                                        selectedIds.has(item.id) && "border-indigo-200 bg-indigo-50/40",
-                                                        !selectedIds.has(item.id) && (item.open_issues_count || 0) > 0 && "border-orange-200"
-                                                    )}
-                                                    onClick={(event) => handleEquipmentRowClick(event, item)}
-                                                >
-                                                    <div className="flex items-start gap-3">
-                                                        <div className="pt-1">
-                                                            <input
-                                                                type="checkbox"
-                                                                className="rounded border-gray-300"
-                                                                checked={selectedIds.has(item.id)}
-                                                                onChange={() => toggleSelection(item.id)}
-                                                            />
-                                                        </div>
-                                                        <div className={cn(
-                                                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-slate-50 text-slate-500",
-                                                            (item.open_issues_count || 0) > 0 && "border-orange-200 text-orange-700"
-                                                        )}>
-                                                            {getEquipmentIcon(item.type, item.type_icon)}
-                                                        </div>
-                                                        <div className="min-w-0 flex-1 space-y-3">
-                                                            <div className="flex items-start justify-between gap-2">
-                                                                <div className="min-w-0">
-                                                                    <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
-                                                                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{item.type_name || item.type}</p>
-                                                                </div>
-                                                                {getStatusBadge(item)}
-                                                            </div>
-                                                            {(item.open_issues_count || 0) > 0 && (
-                                                                <Badge className="border-none bg-orange-600 text-[10px] font-black text-white">
-                                                                    <AlertCircle className="mr-1 h-3 w-3" />
-                                                                    {(item.open_issues_count || 0)} проблем
-                                                                </Badge>
-                                                            )}
-                                                            <div className="grid grid-cols-1 gap-3 text-xs">
-                                                                <div>
-                                                                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Идентификация</p>
-                                                                    {item.identifier ? (
-                                                                        <code className="mt-1 inline-block rounded-lg border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">{item.identifier}</code>
-                                                                    ) : (
-                                                                        <p className="mt-1 text-muted-foreground">—</p>
-                                                                    )}
-                                                                    <p className="mt-1 text-[11px] text-muted-foreground">{item.brand} {item.model}</p>
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Расположение</p>
-                                                                    {item.workstation_name ? (
-                                                                        <div className="mt-1 flex items-center gap-2">
-                                                                            <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
-                                                                            <div className="min-w-0">
-                                                                                <p className="truncate font-medium text-slate-700">{item.workstation_name}</p>
-                                                                                <p className="text-[10px] text-muted-foreground">{item.workstation_zone}</p>
-                                                                            </div>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="mt-1 flex items-center gap-2">
-                                                                            <Box className="h-3.5 w-3.5 text-amber-500" />
-                                                                            <span className="font-medium text-amber-600">Склад</span>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Гарантия</p>
-                                                                    <div className="mt-1">{renderWarrantyInfo(item, true)}</div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        })
-                    ) : filteredEquipment.length === 0 ? (
-                        <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed text-center text-muted-foreground">
-                            <div className="rounded-full bg-slate-100 p-4">
-                                <Search className="h-8 w-8 opacity-20" />
+                      return (
+                        <div
+                          key={groupId}
+                          className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                        >
+                          <div
+                            className="flex items-start gap-3 p-4"
+                            onClick={() => toggleGroup(groupId)}
+                          >
+                            <div
+                              className="pt-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                className={cn(
+                                  "rounded border-gray-300",
+                                  someGroupSelected && "opacity-50",
+                                )}
+                                checked={groupSelectedCount > 0}
+                                onChange={() =>
+                                  toggleGroupSelection(groupId, group.items)
+                                }
+                              />
                             </div>
-                            <p className="mt-3 text-base font-semibold">Ничего не найдено</p>
-                            <p className="mt-1 max-w-xs text-sm">Попробуйте изменить параметры фильтрации или добавить новое оборудование</p>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                {groupId === "unassigned" ? (
+                                  <Box className="h-4 w-4 shrink-0 text-amber-600" />
+                                ) : (
+                                  <LayoutGrid className="h-4 w-4 shrink-0 text-indigo-600" />
+                                )}
+                                <p className="truncate font-semibold text-slate-900">
+                                  {group.name}
+                                </p>
+                                <Badge className="border-none bg-indigo-600 text-[10px] text-white">
+                                  {group.items.length}
+                                </Badge>
+                              </div>
+                              {group.zone && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {group.zone}
+                                </p>
+                              )}
+                              <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                                <span
+                                  className={cn(
+                                    issuesCount > 0
+                                      ? "text-orange-700"
+                                      : "text-slate-400",
+                                  )}
+                                >
+                                  Проблемы {issuesCount}
+                                </span>
+                                <span
+                                  className={cn(
+                                    maintenanceOffCount > 0
+                                      ? "text-slate-700"
+                                      : "text-slate-400",
+                                  )}
+                                >
+                                  Откл. обслуж {maintenanceOffCount}
+                                </span>
+                                <span
+                                  className={cn(
+                                    overdueCount > 0
+                                      ? "text-amber-700"
+                                      : "text-slate-400",
+                                  )}
+                                >
+                                  Просроч. {overdueCount}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="pt-1 text-slate-400">
+                              {isExpanded ? (
+                                <ChevronDown className="h-5 w-5" />
+                              ) : (
+                                <ChevronRight className="h-5 w-5" />
+                              )}
+                            </div>
+                          </div>
+
+                          {isExpanded && (
+                            <div className="space-y-4 border-t border-slate-100 bg-slate-50/50 p-4 sm:p-6">
+                              {group.items.map((item) => (
+                                <div
+                                  key={item.id}
+                                  className={cn(
+                                    "rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer",
+                                    selectedIds.has(item.id) &&
+                                      "border-indigo-200 bg-indigo-50/40",
+                                    !selectedIds.has(item.id) &&
+                                      (item.open_issues_count || 0) > 0 &&
+                                      "border-orange-200",
+                                  )}
+                                  onClick={(event) =>
+                                    handleEquipmentRowClick(event, item)
+                                  }
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <div className="pt-1">
+                                      <input
+                                        type="checkbox"
+                                        className="rounded border-gray-300"
+                                        checked={selectedIds.has(item.id)}
+                                        onChange={() =>
+                                          toggleSelection(item.id)
+                                        }
+                                      />
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-slate-50 text-slate-500",
+                                        (item.open_issues_count || 0) > 0 &&
+                                          "border-orange-200 text-orange-700",
+                                      )}
+                                    >
+                                      {getEquipmentIcon(
+                                        item.type,
+                                        item.type_icon,
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 flex-1 space-y-3">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                          <p className="truncate text-sm font-semibold text-slate-900">
+                                            {item.name}
+                                          </p>
+                                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                            {item.type_name || item.type}
+                                          </p>
+                                        </div>
+                                        {getStatusBadge(item)}
+                                      </div>
+                                      {(item.open_issues_count || 0) > 0 && (
+                                        <Badge className="border-none bg-orange-600 text-[10px] font-black text-white">
+                                          <AlertCircle className="mr-1 h-3 w-3" />
+                                          {item.open_issues_count || 0} проблем
+                                        </Badge>
+                                      )}
+                                      <div className="grid grid-cols-1 gap-3 text-xs">
+                                        <div>
+                                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                            Идентификация
+                                          </p>
+                                          {item.identifier ? (
+                                            <code className="mt-1 inline-block rounded-lg border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                                              {item.identifier}
+                                            </code>
+                                          ) : (
+                                            <p className="mt-1 text-muted-foreground">
+                                              —
+                                            </p>
+                                          )}
+                                          <p className="mt-1 text-[11px] text-muted-foreground">
+                                            {item.brand} {item.model}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                            Расположение
+                                          </p>
+                                          {item.workstation_name ? (
+                                            <div className="mt-1 flex items-center gap-2">
+                                              <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
+                                              <div className="min-w-0">
+                                                <p className="truncate font-medium text-slate-700">
+                                                  {item.workstation_name}
+                                                </p>
+                                                <p className="text-[10px] text-muted-foreground">
+                                                  {item.workstation_zone}
+                                                </p>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="mt-1 flex items-center gap-2">
+                                              <Box className="h-3.5 w-3.5 text-amber-500" />
+                                              <span className="font-medium text-amber-600">
+                                                Склад
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div>
+                                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                            Гарантия
+                                          </p>
+                                          <div className="mt-1">
+                                            {renderWarrantyInfo(item, true)}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                    ) : null}
+                      );
+                    })
+                  ) : filteredEquipment.length === 0 ? (
+                    <div className="flex h-40 flex-col items-center justify-center rounded-xl border border-dashed text-center text-muted-foreground">
+                      <div className="rounded-full bg-slate-100 p-4">
+                        <Search className="h-8 w-8 opacity-20" />
+                      </div>
+                      <p className="mt-3 text-base font-semibold">
+                        Ничего не найдено
+                      </p>
+                      <p className="mt-1 max-w-xs text-sm">
+                        Попробуйте изменить параметры фильтрации или добавить
+                        новое оборудование
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="hidden overflow-x-auto md:block">
-                    <Table>
-                        {!isGrouped && (
-                            <TableHeader className="bg-slate-50/50">
-                                <TableRow>
-                                    <TableHead className="w-[40px]">
-                                        <input 
-                                            type="checkbox" 
-                                            className="rounded border-gray-300"
-                                            checked={filteredEquipment.length > 0 && selectedIds.size === Math.min(filteredEquipment.length, SELECTION_LIMIT)}
-                                            onChange={handleSelectAll}
-                                        />
-                                    </TableHead>
-                                    <TableHead className="w-[300px]">Оборудование</TableHead>
-                                    <TableHead>Идентификация</TableHead>
-                                    <TableHead>Расположение</TableHead>
-                                    <TableHead>Состояние</TableHead>
-                                    <TableHead>Гарантия</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                        )}
-                        <TableBody>
-                            {isLoading ? (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="h-64 text-center">
-                                        <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                                        <p className="text-muted-foreground mt-2">Загрузка реестра...</p>
-                                    </TableCell>
-                                </TableRow>
-                            ) : (isGrouped && groupedEquipment.length > 0) ? (
-                                pagedGroupedEquipment.map(([groupId, group]) => {
-                                    const isExpanded = expandedGroups.has(groupId)
-                                    const groupSelectedCount = group.items.reduce((sum, item) => sum + (selectedIds.has(item.id) ? 1 : 0), 0)
-                                    const allGroupSelected = group.items.length > 0 && groupSelectedCount === group.items.length
-                                    const someGroupSelected = groupSelectedCount > 0 && !allGroupSelected
-                                    const issuesCount = group.items.reduce((sum, item) => sum + (item.open_issues_count || 0), 0)
-                                    const maintenanceOffCount = group.items.filter(i => i.maintenance_enabled === false).length
-                                    const overdueCount = group.items.filter(i => isCleaningOverdue(i)).length
+                  <Table>
+                    {!isGrouped && (
+                      <TableHeader className="bg-slate-50/50">
+                        <TableRow>
+                          <TableHead className="w-[40px]">
+                            <input
+                              type="checkbox"
+                              className="rounded border-gray-300"
+                              checked={
+                                filteredEquipment.length > 0 &&
+                                selectedIds.size ===
+                                  Math.min(
+                                    filteredEquipment.length,
+                                    SELECTION_LIMIT,
+                                  )
+                              }
+                              onChange={handleSelectAll}
+                            />
+                          </TableHead>
+                          <TableHead className="w-[300px]">
+                            Оборудование
+                          </TableHead>
+                          <TableHead>Идентификация</TableHead>
+                          <TableHead>Расположение</TableHead>
+                          <TableHead>Состояние</TableHead>
+                          <TableHead>Гарантия</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                    )}
+                    <TableBody>
+                      {isLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="h-64 text-center">
+                            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                            <p className="text-muted-foreground mt-2">
+                              Загрузка реестра...
+                            </p>
+                          </TableCell>
+                        </TableRow>
+                      ) : isGrouped && groupedEquipment.length > 0 ? (
+                        pagedGroupedEquipment.map(([groupId, group]) => {
+                          const isExpanded = expandedGroups.has(groupId);
+                          const groupSelectedCount = group.items.reduce(
+                            (sum, item) =>
+                              sum + (selectedIds.has(item.id) ? 1 : 0),
+                            0,
+                          );
+                          const allGroupSelected =
+                            group.items.length > 0 &&
+                            groupSelectedCount === group.items.length;
+                          const someGroupSelected =
+                            groupSelectedCount > 0 && !allGroupSelected;
+                          const issuesCount = group.items.reduce(
+                            (sum, item) => sum + (item.open_issues_count || 0),
+                            0,
+                          );
+                          const maintenanceOffCount = group.items.filter(
+                            (i) => i.maintenance_enabled === false,
+                          ).length;
+                          const overdueCount = group.items.filter((i) =>
+                            isCleaningOverdue(i),
+                          ).length;
 
-                                    return (
-                                        <Fragment key={groupId}>
-                                            {/* Group Header Row */}
-                                            <TableRow 
-                                                className="bg-slate-100 hover:bg-slate-200 transition-colors border-y-2 border-slate-300 cursor-pointer"
-                                                onClick={() => toggleGroup(groupId)}
-                                            >
-                                                <TableCell className="w-[40px]" onClick={(e) => e.stopPropagation()}>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        className={cn(
-                                                            "rounded border-gray-300",
-                                                            someGroupSelected && "opacity-50"
-                                                        )}
-                                                        checked={groupSelectedCount > 0}
-                                                        onChange={() => toggleGroupSelection(groupId, group.items)}
-                                                    />
-                                                </TableCell>
-                                                <TableCell colSpan={5} className="py-4">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="text-slate-500">
-                                                                {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                {groupId === 'unassigned' ? (
-                                                                    <Box className="h-5 w-5 text-amber-600" />
-                                                                ) : (
-                                                                    <LayoutGrid className="h-5 w-5 text-indigo-600" />
-                                                                )}
-                                                                <span className="font-black text-sm uppercase tracking-wider text-slate-800">
-                                                                    {group.name} 
-                                                                    {group.zone && <span className="text-slate-500 font-bold ml-3">| {group.zone}</span>}
-                                                                </span>
-                                                                <Badge className="ml-3 bg-indigo-600 text-white border-none text-[10px] font-black px-2">
-                                                                    {group.items.length}
-                                                                </Badge>
-                                                            </div>
-                                                        </div>
-                                                        
-                                                        <div className="flex items-center gap-4 text-[10px] text-slate-500 font-black uppercase tracking-widest">
-                                                            <span className={cn(issuesCount > 0 ? "text-orange-700" : "text-slate-400")}>Проблемы {issuesCount}</span>
-                                                            <div className="h-3 w-px bg-slate-300" />
-                                                            <span className={cn(maintenanceOffCount > 0 ? "text-slate-700" : "text-slate-400")}>Откл. обслуж {maintenanceOffCount}</span>
-                                                            <div className="h-3 w-px bg-slate-300" />
-                                                            <span className={cn(overdueCount > 0 ? "text-amber-700" : "text-slate-400")}>Чистка просроч. {overdueCount}</span>
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-
-                                            {/* Group Items */}
-                                            {isExpanded && (
-                                                <TableRow className="bg-white border-b border-slate-200 hidden md:table-row">
-                                                    <TableCell colSpan={2} className="py-2 pl-6 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                                        Оборудование
-                                                    </TableCell>
-                                                    <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                                        Идентификация
-                                                    </TableCell>
-                                                    <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                                        Расположение
-                                                    </TableCell>
-                                                    <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                                        Состояние
-                                                    </TableCell>
-                                                    <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                                                        Гарантия
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                            {isExpanded && group.items.map((item) => (
-                                                <TableRow 
-                                                    key={item.id} 
-                                                    className={cn(
-                                                        "group hover:bg-slate-50 transition-colors cursor-pointer border-l-4 border-l-transparent",
-                                                        selectedIds.has(item.id) && "bg-indigo-50/50 hover:bg-indigo-50 border-l-indigo-600",
-                                                        !selectedIds.has(item.id) && (item.open_issues_count || 0) > 0 && "bg-orange-50/40 hover:bg-orange-50/60 border-l-orange-500"
-                                                    )}
-                                                    onClick={(event) => handleEquipmentRowClick(event, item)}
-                                                >
-                                                    <TableCell className="pl-6">
-                                                        <input 
-                                                            type="checkbox" 
-                                                            className="rounded border-gray-300"
-                                                            checked={selectedIds.has(item.id)}
-                                                            onChange={() => toggleSelection(item.id)}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={cn(
-                                                                "h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-400 group-hover:shadow-md transition-all border border-slate-100",
-                                                                (item.open_issues_count || 0) > 0 ? "text-orange-700 border-orange-200 group-hover:border-orange-300" : "group-hover:text-indigo-600 group-hover:border-indigo-100"
-                                                            )}>
-                                                                {getEquipmentIcon(item.type, item.type_icon)}
-                                                            </div>
-                                                            <div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <p className="font-bold text-sm text-slate-800">{item.name}</p>
-                                                                    {(item.open_issues_count || 0) > 0 && (
-                                                                        <Badge className="bg-orange-600 text-white border-none text-[10px] font-black px-2 py-0">
-                                                                            <AlertCircle className="h-3 w-3 mr-1" />
-                                                                            {(item.open_issues_count || 0)} проблем
-                                                                        </Badge>
-                                                                    )}
-                                                                </div>
-                                                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black">{item.type_name || item.type}</p>
-                                                            </div>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="space-y-1">
-                                                            {item.identifier ? (
-                                                                <code className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-lg text-slate-700 font-mono border border-slate-200 font-bold">{item.identifier}</code>
-                                                            ) : <span className="text-xs text-muted-foreground">—</span>}
-                                                            <p className="text-[10px] text-slate-400 font-medium tracking-tight">{item.brand} {item.model}</p>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs font-bold text-slate-600">{group.name}</span>
-                                                            {group.zone && <span className="text-[10px] text-slate-400 font-medium">{group.zone}</span>}
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {getStatusBadge(item)}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {renderWarrantyInfo(item)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </Fragment>
-                                    )
-                                })
-                            ) : filteredEquipment.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="h-64 text-center text-muted-foreground">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <div className="p-4 bg-slate-100 rounded-full">
-                                                <Search className="h-8 w-8 opacity-20" />
-                                            </div>
-                                            <p className="font-semibold text-lg">Ничего не найдено</p>
-                                            <p className="text-sm max-w-xs mx-auto">Попробуйте изменить параметры фильтрации или добавить новое оборудование</p>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                filteredEquipment.map((item) => (
-                                    <TableRow 
-                                        key={item.id} 
-                                        className={cn(
-                                            "group hover:bg-slate-50/80 transition-colors cursor-pointer",
-                                            selectedIds.has(item.id) && "bg-blue-50/50 hover:bg-blue-50/80"
+                          return (
+                            <Fragment key={groupId}>
+                              {/* Group Header Row */}
+                              <TableRow
+                                className="bg-slate-100 hover:bg-slate-200 transition-colors border-y-2 border-slate-300 cursor-pointer"
+                                onClick={() => toggleGroup(groupId)}
+                              >
+                                <TableCell
+                                  className="w-[40px]"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className={cn(
+                                      "rounded border-gray-300",
+                                      someGroupSelected && "opacity-50",
+                                    )}
+                                    checked={groupSelectedCount > 0}
+                                    onChange={() =>
+                                      toggleGroupSelection(groupId, group.items)
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell colSpan={5} className="py-4">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className="text-slate-500">
+                                        {isExpanded ? (
+                                          <ChevronDown className="h-5 w-5" />
+                                        ) : (
+                                          <ChevronRight className="h-5 w-5" />
                                         )}
-                                        onClick={(event) => handleEquipmentRowClick(event, item)}
-                                    >
-                                        <TableCell>
-                                            <input 
-                                                type="checkbox" 
-                                                className="rounded border-gray-300"
-                                                checked={selectedIds.has(item.id)}
-                                                onChange={() => toggleSelection(item.id)}
-                                            />
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-200">
-                                                    {getEquipmentIcon(item.type, item.type_icon)}
-                                                </div>
-                                                <div>
-                                                    <p className="font-semibold text-sm">{item.name}</p>
-                                                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-500">{item.type_name || item.type}</Badge>
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="space-y-1">
-                                                {item.identifier ? (
-                                                    <code className="text-[11px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono border border-slate-200">{item.identifier}</code>
-                                                ) : <span className="text-xs text-muted-foreground">—</span>}
-                                                <p className="text-[11px] text-muted-foreground">{item.brand} {item.model}</p>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {item.workstation_name ? (
-                                                <div className="flex items-center gap-2">
-                                                    <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-medium">{item.workstation_name}</span>
-                                                        <span className="text-[10px] text-muted-foreground">{item.workstation_zone}</span>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <Box className="h-3.5 w-3.5 text-amber-500" />
-                                                    <span className="text-xs text-amber-600 font-medium">Склад</span>
-                                                </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {groupId === "unassigned" ? (
+                                          <Box className="h-5 w-5 text-amber-600" />
+                                        ) : (
+                                          <LayoutGrid className="h-5 w-5 text-indigo-600" />
+                                        )}
+                                        <span className="font-black text-sm uppercase tracking-wider text-slate-800">
+                                          {group.name}
+                                          {group.zone && (
+                                            <span className="text-slate-500 font-bold ml-3">
+                                              | {group.zone}
+                                            </span>
+                                          )}
+                                        </span>
+                                        <Badge className="ml-3 bg-indigo-600 text-white border-none text-[10px] font-black px-2">
+                                          {group.items.length}
+                                        </Badge>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-4 text-[10px] text-slate-500 font-black uppercase tracking-widest">
+                                      <span
+                                        className={cn(
+                                          issuesCount > 0
+                                            ? "text-orange-700"
+                                            : "text-slate-400",
+                                        )}
+                                      >
+                                        Проблемы {issuesCount}
+                                      </span>
+                                      <div className="h-3 w-px bg-slate-300" />
+                                      <span
+                                        className={cn(
+                                          maintenanceOffCount > 0
+                                            ? "text-slate-700"
+                                            : "text-slate-400",
+                                        )}
+                                      >
+                                        Откл. обслуж {maintenanceOffCount}
+                                      </span>
+                                      <div className="h-3 w-px bg-slate-300" />
+                                      <span
+                                        className={cn(
+                                          overdueCount > 0
+                                            ? "text-amber-700"
+                                            : "text-slate-400",
+                                        )}
+                                      >
+                                        Чистка просроч. {overdueCount}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+
+                              {/* Group Items */}
+                              {isExpanded && (
+                                <TableRow className="bg-white border-b border-slate-200 hidden md:table-row">
+                                  <TableCell
+                                    colSpan={2}
+                                    className="py-2 pl-6 text-[10px] font-black uppercase tracking-widest text-slate-500"
+                                  >
+                                    Оборудование
+                                  </TableCell>
+                                  <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    Идентификация
+                                  </TableCell>
+                                  <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    Расположение
+                                  </TableCell>
+                                  <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    Состояние
+                                  </TableCell>
+                                  <TableCell className="py-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    Гарантия
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                              {isExpanded &&
+                                group.items.map((item) => (
+                                  <TableRow
+                                    key={item.id}
+                                    className={cn(
+                                      "group hover:bg-slate-50 transition-colors cursor-pointer border-l-4 border-l-transparent",
+                                      selectedIds.has(item.id) &&
+                                        "bg-indigo-50/50 hover:bg-indigo-50 border-l-indigo-600",
+                                      !selectedIds.has(item.id) &&
+                                        (item.open_issues_count || 0) > 0 &&
+                                        "bg-orange-50/40 hover:bg-orange-50/60 border-l-orange-500",
+                                    )}
+                                    onClick={(event) =>
+                                      handleEquipmentRowClick(event, item)
+                                    }
+                                  >
+                                    <TableCell className="pl-6">
+                                      <input
+                                        type="checkbox"
+                                        className="rounded border-gray-300"
+                                        checked={selectedIds.has(item.id)}
+                                        onChange={() =>
+                                          toggleSelection(item.id)
+                                        }
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-3">
+                                        <div
+                                          className={cn(
+                                            "h-10 w-10 bg-white rounded-xl flex items-center justify-center text-slate-400 group-hover:shadow-md transition-all border border-slate-100",
+                                            (item.open_issues_count || 0) > 0
+                                              ? "text-orange-700 border-orange-200 group-hover:border-orange-300"
+                                              : "group-hover:text-indigo-600 group-hover:border-indigo-100",
+                                          )}
+                                        >
+                                          {getEquipmentIcon(
+                                            item.type,
+                                            item.type_icon,
+                                          )}
+                                        </div>
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <p className="font-bold text-sm text-slate-800">
+                                              {item.name}
+                                            </p>
+                                            {(item.open_issues_count || 0) >
+                                              0 && (
+                                              <Badge className="bg-orange-600 text-white border-none text-[10px] font-black px-2 py-0">
+                                                <AlertCircle className="h-3 w-3 mr-1" />
+                                                {item.open_issues_count || 0}{" "}
+                                                проблем
+                                              </Badge>
                                             )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {getStatusBadge(item)}
-                                        </TableCell>
-                                        <TableCell>
-                                            {renderWarrantyInfo(item)}
-                                        </TableCell>
-                                    </TableRow>
-                                ))
+                                          </div>
+                                          <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                                            {item.type_name || item.type}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="space-y-1">
+                                        {item.identifier ? (
+                                          <code className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-lg text-slate-700 font-mono border border-slate-200 font-bold">
+                                            {item.identifier}
+                                          </code>
+                                        ) : (
+                                          <span className="text-xs text-muted-foreground">
+                                            —
+                                          </span>
+                                        )}
+                                        <p className="text-[10px] text-slate-400 font-medium tracking-tight">
+                                          {item.brand} {item.model}
+                                        </p>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-slate-600">
+                                          {group.name}
+                                        </span>
+                                        {group.zone && (
+                                          <span className="text-[10px] text-slate-400 font-medium">
+                                            {group.zone}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      {getStatusBadge(item)}
+                                    </TableCell>
+                                    <TableCell>
+                                      {renderWarrantyInfo(item)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                            </Fragment>
+                          );
+                        })
+                      ) : filteredEquipment.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={6}
+                            className="h-64 text-center text-muted-foreground"
+                          >
+                            <div className="flex flex-col items-center gap-2">
+                              <div className="p-4 bg-slate-100 rounded-full">
+                                <Search className="h-8 w-8 opacity-20" />
+                              </div>
+                              <p className="font-semibold text-lg">
+                                Ничего не найдено
+                              </p>
+                              <p className="text-sm max-w-xs mx-auto">
+                                Попробуйте изменить параметры фильтрации или
+                                добавить новое оборудование
+                              </p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredEquipment.map((item) => (
+                          <TableRow
+                            key={item.id}
+                            className={cn(
+                              "group hover:bg-slate-50/80 transition-colors cursor-pointer",
+                              selectedIds.has(item.id) &&
+                                "bg-blue-50/50 hover:bg-blue-50/80",
                             )}
-                        </TableBody>
-                    </Table>
+                            onClick={(event) =>
+                              handleEquipmentRowClick(event, item)
+                            }
+                          >
+                            <TableCell>
+                              <input
+                                type="checkbox"
+                                className="rounded border-gray-300"
+                                checked={selectedIds.has(item.id)}
+                                onChange={() => toggleSelection(item.id)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:shadow-sm transition-all border border-transparent group-hover:border-slate-200">
+                                  {getEquipmentIcon(item.type, item.type_icon)}
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-sm">
+                                    {item.name}
+                                  </p>
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px] h-5 px-1.5 font-normal bg-slate-100 text-slate-500"
+                                  >
+                                    {item.type_name || item.type}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                {item.identifier ? (
+                                  <code className="text-[11px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono border border-slate-200">
+                                    {item.identifier}
+                                  </code>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    —
+                                  </span>
+                                )}
+                                <p className="text-[11px] text-muted-foreground">
+                                  {item.brand} {item.model}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {item.workstation_name ? (
+                                <div className="flex items-center gap-2">
+                                  <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-medium">
+                                      {item.workstation_name}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {item.workstation_zone}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <Box className="h-3.5 w-3.5 text-amber-500" />
+                                  <span className="text-xs text-amber-600 font-medium">
+                                    Склад
+                                  </span>
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>{getStatusBadge(item)}</TableCell>
+                            <TableCell>{renderWarrantyInfo(item)}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
-                
+
                 {/* Pagination Controls */}
                 {!isLoading && totalPlaces > 0 && (
-                    <div className="flex flex-col gap-3 border-t bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                        <p className="text-xs text-muted-foreground">
-                            Показано <span className="font-medium">{Math.min(totalPlaces, (page - 1) * placesPerPage + 1)}</span> - <span className="font-medium">{Math.min(totalPlaces, page * placesPerPage)}</span> из <span className="font-medium">{totalPlaces}</span> мест
-                        </p>
-                        <div className="flex items-center justify-between gap-2 sm:justify-end">
-                            <Button
-                                variant="outline"
+                  <div className="flex flex-col gap-3 border-t bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                    <p className="text-xs text-muted-foreground">
+                      Показано{" "}
+                      <span className="font-medium">
+                        {Math.min(totalPlaces, (page - 1) * placesPerPage + 1)}
+                      </span>{" "}
+                      -{" "}
+                      <span className="font-medium">
+                        {Math.min(totalPlaces, page * placesPerPage)}
+                      </span>{" "}
+                      из <span className="font-medium">{totalPlaces}</span> мест
+                    </p>
+                    <div className="flex items-center justify-between gap-2 sm:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="h-8 bg-white"
+                      >
+                        Назад
+                      </Button>
+                      <div className="text-xs text-muted-foreground sm:hidden">
+                        {page} / {totalPlacePages}
+                      </div>
+                      <div className="hidden items-center gap-1 sm:flex">
+                        {[...Array(Math.min(5, totalPlacePages))].map(
+                          (_, i) => {
+                            // Logic for showing pages near current page
+                            let pageNum = page;
+                            if (totalPlacePages <= 5) pageNum = i + 1;
+                            else if (page <= 3) pageNum = i + 1;
+                            else if (page >= totalPlacePages - 2)
+                              pageNum = totalPlacePages - 4 + i;
+                            else pageNum = page - 2 + i;
+
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={
+                                  page === pageNum ? "default" : "outline"
+                                }
                                 size="sm"
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={page === 1}
-                                className="h-8 bg-white"
-                            >
-                                Назад
-                            </Button>
-                            <div className="text-xs text-muted-foreground sm:hidden">
-                                {page} / {totalPlacePages}
-                            </div>
-                            <div className="hidden items-center gap-1 sm:flex">
-                                {[...Array(Math.min(5, totalPlacePages))].map((_, i) => {
-                                    // Logic for showing pages near current page
-                                    let pageNum = page;
-                                    if (totalPlacePages <= 5) pageNum = i + 1;
-                                    else if (page <= 3) pageNum = i + 1;
-                                    else if (page >= totalPlacePages - 2) pageNum = totalPlacePages - 4 + i;
-                                    else pageNum = page - 2 + i;
-
-                                    return (
-                                        <Button
-                                            key={pageNum}
-                                            variant={page === pageNum ? "default" : "outline"}
-                                            size="sm"
-                                            onClick={() => setPage(pageNum)}
-                                            className={cn("h-8 w-8 p-0 bg-white", page === pageNum ? "bg-slate-900 text-white" : "")}
-                                        >
-                                            {pageNum}
-                                        </Button>
-                                    );
-                                })}
-                                {totalPlacePages > 5 && page < totalPlacePages - 2 && (
-                                    <>
-                                        <span className="text-muted-foreground px-1 text-xs">...</span>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setPage(totalPlacePages)}
-                                            className="h-8 w-8 p-0 bg-white"
-                                        >
-                                            {totalPlacePages}
-                                        </Button>
-                                    </>
-                                )}
-                            </div>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setPage(p => Math.min(totalPlacePages, p + 1))}
-                                disabled={page === totalPlacePages}
-                                className="h-8 bg-white"
-                            >
-                                Вперед
-                            </Button>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            </>
-            )}
-
-            </div>
-
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-                <div className="mx-auto flex max-w-7xl gap-2">
-                    <Button asChild variant="outline" className="h-11 flex-1">
-                        <Link href={`/clubs/${clubId}/equipment`}>
-                            <ChevronLeft className="mr-2 h-4 w-4" />
-                            Назад
-                        </Link>
-                    </Button>
-                </div>
-            </div>
-
-            <Dialog open={isCloneDialogOpen} onOpenChange={setIsCloneDialogOpen}>
-                <DialogContent className="sm:max-w-[720px]">
-                    <DialogHeader>
-                        <DialogTitle>Копировать наполнение места</DialogTitle>
-                        <DialogDescription>
-                            Полностью заменяет оборудование в выбранных местах на копию набора из места-источника.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-5 pt-2">
-                        <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
-                            Перед копированием целевые места будут очищены: их оборудование переместится на склад.
-                        </div>
-
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Место-источник</Label>
-                                <Select value={cloneSourceWorkstationId} onValueChange={setCloneSourceWorkstationId}>
-                                    <SelectTrigger className="h-12 md:h-12 bg-slate-50 hover:bg-slate-100 border-slate-200 shadow-sm">
-                                        <SelectValue placeholder="Выберите место" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {sortedWorkstations.map((ws) => (
-                                            <SelectItem key={ws.id} value={ws.id}>
-                                                {ws.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Места-цели</Label>
-                                <Popover open={isCloneTargetsOpen} onOpenChange={setIsCloneTargetsOpen}>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            role="combobox"
-                                            aria-expanded={isCloneTargetsOpen}
-                                            className="w-full justify-between h-12 md:h-12 px-3 py-2 bg-slate-50 hover:bg-slate-100 border-slate-200 font-normal shadow-sm"
-                                        >
-                                            {cloneTargetsLabel}
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent portalled={false} className="w-[340px] p-0 z-[60]" align="start">
-                                        <div className="border-b p-2">
-                                            <Input
-                                                placeholder="Поиск места..."
-                                                className="h-10 bg-white border-slate-200"
-                                                value={cloneTargetsSearch}
-                                                onChange={(e) => setCloneTargetsSearch(e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="max-h-[300px] overflow-y-auto p-1">
-                                            {sortedWorkstations
-                                                .filter((ws) => ws.id !== cloneSourceWorkstationId)
-                                                .filter((ws) => ws.name.toLowerCase().includes(cloneTargetsSearch.trim().toLowerCase()))
-                                                .map((ws) => (
-                                                    <button
-                                                        key={ws.id}
-                                                        type="button"
-                                                        onClick={() => toggleCloneTarget(ws.id)}
-                                                        className="flex w-full items-center rounded-md px-2 py-2 text-sm text-slate-900 hover:bg-slate-50"
-                                                    >
-                                                        <Check
-                                                            className={cn(
-                                                                "mr-2 h-4 w-4",
-                                                                cloneTargetWorkstationIds.has(ws.id) ? "opacity-100" : "opacity-0"
-                                                            )}
-                                                        />
-                                                        {ws.name}
-                                                    </button>
-                                                ))}
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
-                        </div>
-                    </div>
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button type="button" variant="ghost" onClick={() => setIsCloneDialogOpen(false)} disabled={isCloning}>
-                            Отмена
-                        </Button>
-                        <Button
-                            type="button"
-                            onClick={handleCloneWorkstationInventory}
-                            disabled={isCloning || !cloneSourceWorkstationId || cloneTargetWorkstationIds.size === 0}
-                            className="bg-slate-900 text-white hover:bg-slate-800"
-                        >
-                            {isCloning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Copy className="mr-2 h-4 w-4" />}
-                            Скопировать
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog open={isImportExportDialogOpen} onOpenChange={setIsImportExportDialogOpen}>
-                <DialogContent className="sm:max-w-[640px]">
-                    <DialogHeader>
-                        <DialogTitle>Импорт и экспорт инвентаря</DialogTitle>
-                        <DialogDescription>
-                            Загружай шаблон, экспортируй текущую базу и импортируй оборудование из Excel.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-5 pt-2">
-                        <div className="rounded-xl border bg-slate-50 p-4">
-                            <div className="flex items-start gap-3">
-                                <Info className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
-                                <div className="space-y-2 text-sm text-slate-600">
-                                    <p className="font-medium text-slate-900">Как работает импорт</p>
-                                    <p>Сначала создай зоны и места в разделе рабочих мест. Импорт не создаёт локации автоматически.</p>
-                                    <p>Если в файле заполнено поле `Место`, оно должно уже существовать в клубе. Иначе строка попадёт в ошибки.</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {!hasImportLocations ? (
-                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                                <p className="font-medium">Сначала создай зоны и места</p>
-                                <p className="mt-1 text-amber-800">
-                                    Сейчас импорт заблокирован, потому что в клубе ещё нет подготовленных зон или рабочих мест.
-                                </p>
-                                <div className="mt-3">
-                                    <Button asChild variant="outline" className="bg-white">
-                                        <Link href={`/clubs/${clubId}/equipment/workplaces`}>
-                                            Перейти к рабочим местам
-                                        </Link>
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : null}
-
-                        <div className="grid gap-3 sm:grid-cols-3">
-                            <button
-                                type="button"
-                                onClick={handleDownloadTemplate}
-                                className="rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
-                            >
-                                <Download className="h-5 w-5 text-slate-700" />
-                                <div className="mt-3 text-sm font-semibold text-slate-900">Скачать шаблон</div>
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                    Пустой `.xlsx` с колонками и примером строки
-                                </div>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={handleExport}
-                                className="rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
-                            >
-                                <Download className="h-5 w-5 text-slate-700" />
-                                <div className="mt-3 text-sm font-semibold text-slate-900">Экспорт XLSX</div>
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                    Выгрузить текущий инвентарь с основными полями
-                                </div>
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={handleImportClick}
-                                disabled={!hasImportLocations || isImporting}
+                                onClick={() => setPage(pageNum)}
                                 className={cn(
-                                    "rounded-xl border bg-white p-4 text-left shadow-sm transition",
-                                    hasImportLocations ? "hover:border-slate-300 hover:shadow-md" : "cursor-not-allowed opacity-60"
+                                  "h-8 w-8 p-0 bg-white",
+                                  page === pageNum
+                                    ? "bg-slate-900 text-white"
+                                    : "",
                                 )}
+                              >
+                                {pageNum}
+                              </Button>
+                            );
+                          },
+                        )}
+                        {totalPlacePages > 5 && page < totalPlacePages - 2 && (
+                          <>
+                            <span className="text-muted-foreground px-1 text-xs">
+                              ...
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPage(totalPlacePages)}
+                              className="h-8 w-8 p-0 bg-white"
                             >
-                                {isImporting ? (
-                                    <Loader2 className="h-5 w-5 animate-spin text-slate-700" />
-                                ) : (
-                                    <Upload className="h-5 w-5 text-slate-700" />
+                              {totalPlacePages}
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setPage((p) => Math.min(totalPlacePages, p + 1))
+                        }
+                        disabled={page === totalPlacePages}
+                        className="h-8 bg-white"
+                      >
+                        Вперед
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+          <div className="mx-auto flex max-w-7xl gap-2">
+            <Button asChild variant="outline" className="h-11 flex-1">
+              <Link href={`/clubs/${clubId}/equipment`}>
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                Назад
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <Dialog open={isCloneDialogOpen} onOpenChange={setIsCloneDialogOpen}>
+          <DialogContent className="sm:max-w-[720px]">
+            <DialogHeader>
+              <DialogTitle>Копировать наполнение места</DialogTitle>
+              <DialogDescription>
+                Полностью заменяет оборудование в выбранных местах на копию
+                набора из места-источника.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-5 pt-2">
+              <div className="rounded-xl border bg-slate-50 p-4 text-sm text-slate-600">
+                Перед копированием целевые места будут очищены: их оборудование
+                переместится на склад.
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Место-источник
+                  </Label>
+                  <Select
+                    value={cloneSourceWorkstationId}
+                    onValueChange={setCloneSourceWorkstationId}
+                  >
+                    <SelectTrigger className="h-12 md:h-12 bg-slate-50 hover:bg-slate-100 border-slate-200 shadow-sm">
+                      <SelectValue placeholder="Выберите место" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortedWorkstations.map((ws) => (
+                        <SelectItem key={ws.id} value={ws.id}>
+                          {ws.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Места-цели
+                  </Label>
+                  <Popover
+                    open={isCloneTargetsOpen}
+                    onOpenChange={setIsCloneTargetsOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={isCloneTargetsOpen}
+                        className="w-full justify-between h-12 md:h-12 px-3 py-2 bg-slate-50 hover:bg-slate-100 border-slate-200 font-normal shadow-sm"
+                      >
+                        {cloneTargetsLabel}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      portalled={false}
+                      className="w-[340px] p-0 z-[60]"
+                      align="start"
+                    >
+                      <div className="border-b p-2">
+                        <Input
+                          placeholder="Поиск места..."
+                          className="h-10 bg-white border-slate-200"
+                          value={cloneTargetsSearch}
+                          onChange={(e) =>
+                            setCloneTargetsSearch(e.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto p-1">
+                        {sortedWorkstations
+                          .filter((ws) => ws.id !== cloneSourceWorkstationId)
+                          .filter((ws) =>
+                            ws.name
+                              .toLowerCase()
+                              .includes(
+                                cloneTargetsSearch.trim().toLowerCase(),
+                              ),
+                          )
+                          .map((ws) => (
+                            <button
+                              key={ws.id}
+                              type="button"
+                              onClick={() => toggleCloneTarget(ws.id)}
+                              className="flex w-full items-center rounded-md px-2 py-2 text-sm text-slate-900 hover:bg-slate-50"
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  cloneTargetWorkstationIds.has(ws.id)
+                                    ? "opacity-100"
+                                    : "opacity-0",
                                 )}
-                                <div className="mt-3 text-sm font-semibold text-slate-900">Импорт файла</div>
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                    Загрузить `.xlsx`, `.xls` или `.csv` и обновить инвентарь
-                                </div>
+                              />
+                              {ws.name}
                             </button>
-                        </div>
-
-                        <div className="rounded-xl border bg-white p-4">
-                            <p className="text-sm font-medium text-slate-900">Поддерживаемые колонки</p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                {INVENTORY_IMPORT_COLUMNS.join(" • ")}
-                            </p>
-                        </div>
-                    </div>
-
-                    <DialogFooter>
-                        <Button type="button" variant="ghost" onClick={() => setIsImportExportDialogOpen(false)}>
-                            Закрыть
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog open={isInterclubDialogOpen} onOpenChange={setIsInterclubDialogOpen}>
-                <DialogContent className="sm:max-w-[840px]">
-                    <DialogHeader>
-                        <DialogTitle>Межклубное перемещение</DialogTitle>
-                        <DialogDescription>
-                            Оборудование будет снято с мест и отправлено задачей на приёмку в клуб назначения.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-5 pt-2">
-                        <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Клуб назначения</Label>
-                                <Select value={interclubTargetClubId} onValueChange={setInterclubTargetClubId}>
-                                    <SelectTrigger className="h-12 bg-slate-50 hover:bg-slate-100 border-slate-200 shadow-sm">
-                                        <SelectValue placeholder={isTargetsLoading ? "Загрузка..." : "Выберите клуб"} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {interclubTargets
-                                            .filter((c) => String(c.id) !== String(clubId))
-                                            .map((c) => (
-                                                <SelectItem key={c.id} value={String(c.id)}>
-                                                    {c.name}
-                                                </SelectItem>
-                                            ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Комментарий</Label>
-                                <Textarea
-                                    value={interclubComment}
-                                    onChange={(e) => setInterclubComment(e.target.value)}
-                                    className="min-h-[48px] bg-slate-50 border-slate-200"
-                                    placeholder="Комментарий для принимающей стороны"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Куда поставить</Label>
-                            <div className="max-h-[420px] overflow-y-auto space-y-2 rounded-xl border bg-white p-3">
-                                {selectedEquipment.map((eq) => {
-                                    const targetClub = interclubTargets.find((c) => String(c.id) === interclubTargetClubId)
-                                    const wsOptions = targetClub?.workstations || []
-                                    const value = interclubItemTargets[eq.id] || "storage"
-                                    return (
-                                        <div key={eq.id} className="grid gap-2 rounded-xl border bg-slate-50/40 p-3 sm:grid-cols-[1fr_280px] sm:items-center">
-                                            <div className="min-w-0">
-                                                <div className="truncate text-sm font-semibold text-slate-900">{eq.name}</div>
-                                                <div className="text-xs text-slate-500">{eq.type_name || eq.type}</div>
-                                            </div>
-                                            <Select
-                                                value={value}
-                                                onValueChange={(v) => setInterclubItemTargets((prev) => ({ ...prev, [eq.id]: v }))}
-                                                disabled={!interclubTargetClubId}
-                                            >
-                                                <SelectTrigger className="h-11 bg-white border-slate-200">
-                                                    <SelectValue placeholder={interclubTargetClubId ? "Выберите место" : "Сначала выберите клуб"} />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="storage">Склад</SelectItem>
-                                                    {wsOptions.map((ws) => (
-                                                        <SelectItem key={ws.id} value={ws.id}>
-                                                            {ws.name}{ws.zone ? ` (${ws.zone})` : ''}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    </div>
-
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button type="button" variant="ghost" onClick={() => setIsInterclubDialogOpen(false)} disabled={isSaving}>
-                            Отмена
-                        </Button>
-                        <Button
-                            type="button"
-                            onClick={submitInterclubTransfer}
-                            disabled={isSaving || selectedEquipment.length === 0}
-                            className="bg-slate-900 text-white hover:bg-slate-800"
-                        >
-                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowLeftRight className="mr-2 h-4 w-4" />}
-                            Создать перемещение
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog open={isInterclubConfirmOpen} onOpenChange={setIsInterclubConfirmOpen}>
-                <DialogContent className="sm:max-w-[560px]">
-                    <DialogHeader>
-                        <DialogTitle>Подтвердите действие</DialogTitle>
-                        <DialogDescription>
-                            {pendingInterclubTransfer
-                                ? `Создать перемещение (${pendingInterclubTransfer.items.length} шт.) в клуб «${pendingInterclubTransfer.target_club_name}»? Оборудование будет снято с мест сразу.`
-                                : ''}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={() => {
-                                setIsInterclubConfirmOpen(false)
-                                setPendingInterclubTransfer(null)
-                                setIsInterclubDialogOpen(true)
-                            }}
-                            disabled={isSaving}
-                        >
-                            Отмена
-                        </Button>
-                        <Button
-                            type="button"
-                            onClick={() => pendingInterclubTransfer ? executePendingInterclubTransfer(pendingInterclubTransfer) : undefined}
-                            disabled={isSaving || !pendingInterclubTransfer}
-                            className="bg-slate-900 text-white hover:bg-slate-800"
-                        >
-                            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            ОК
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            {/* Create Dialog */}
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="flex max-h-[90vh] w-[calc(100vw-1rem)] max-w-[700px] flex-col gap-0 overflow-hidden p-0">
-                    <DialogHeader className="border-b bg-slate-50 p-4 pb-2 sm:p-6">
-                        <DialogTitle className="text-xl">Новое оборудование</DialogTitle>
-                        <DialogDescription>
-                            Заполните данные для регистрации нового оборудования
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="flex-1 overflow-y-auto bg-white">
-                        <form id="eq-form" onSubmit={handleSave} className="space-y-8 p-4 sm:p-6">
-                            <section className="space-y-6">
-                                <div>
-                                    <h3 className="text-base font-semibold text-slate-950">Основные данные</h3>
-                                    <p className="text-sm text-muted-foreground">Краткая информация о новом оборудовании.</p>
-                                </div>
-
-                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                                    <div className="space-y-2 sm:col-span-2">
-                                        <Label>Название <span className="text-rose-500">*</span></Label>
-                                        <Input
-                                            placeholder="Название модели"
-                                            value={editingEquipment?.name || ""}
-                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, name: e.target.value }))}
-                                            required
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Тип</Label>
-                                        <Select
-                                            value={editingEquipment?.type}
-                                            onValueChange={(val) => setEditingEquipment(prev => ({ ...prev, type: val }))}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Выберите тип" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {types.map(t => (
-                                                    <SelectItem key={t.code} value={t.code}>{t.name_ru}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Серийный номер / ID</Label>
-                                        <Input
-                                            placeholder="SN12345678"
-                                            value={editingEquipment?.identifier || ""}
-                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, identifier: e.target.value }))}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Бренд</Label>
-                                        <Input
-                                            placeholder="Напр: ASUS, Logitech"
-                                            value={editingEquipment?.brand || ""}
-                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, brand: e.target.value }))}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Модель</Label>
-                                        <Input
-                                            placeholder="Напр: G502 Hero"
-                                            value={editingEquipment?.model || ""}
-                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, model: e.target.value }))}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Локация (Рабочее место)</Label>
-                                        <Select
-                                            value={editingEquipment?.workstation_id || "unassigned"}
-                                            onValueChange={(val) => setEditingEquipment(prev => ({ ...prev, workstation_id: val === 'unassigned' ? null : val }))}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Склад" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="unassigned">Склад (Не назначено)</SelectItem>
-                                                {workstations.map(w => (
-                                                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Статус оборудования</Label>
-                                        <Select
-                                            value={editingEquipment?.status}
-                                            onValueChange={(val: EquipmentStatus) => setEditingEquipment(prev => ({
-                                                ...prev,
-                                                status: val,
-                                                is_active: val !== "WRITTEN_OFF",
-                                            }))}
-                                        >
-                                            <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
-                                                <SelectValue placeholder="Выберите статус" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="ACTIVE">{EQUIPMENT_STATUS_LABELS.ACTIVE}</SelectItem>
-                                                <SelectItem value="STORAGE">{EQUIPMENT_STATUS_LABELS.STORAGE}</SelectItem>
-                                                <SelectItem value="REPAIR">{EQUIPMENT_STATUS_LABELS.REPAIR}</SelectItem>
-                                                <SelectItem value="WRITTEN_OFF">{EQUIPMENT_STATUS_LABELS.WRITTEN_OFF}</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                <Separator />
-
-                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                                    <div className="space-y-2">
-                                        <Label>Дата покупки</Label>
-                                        <Input
-                                            type="date"
-                                            value={editingEquipment?.purchase_date || ""}
-                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, purchase_date: e.target.value }))}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Срок гарантии до</Label>
-                                        <Input
-                                            type="date"
-                                            value={editingEquipment?.warranty_expires || ""}
-                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, warranty_expires: e.target.value }))}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Цена (₽)</Label>
-                                        <Input
-                                            type="number"
-                                            placeholder="0"
-                                            value={editingEquipment?.price || ""}
-                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, price: Number(e.target.value) }))}
-                                        />
-                                    </div>
-                                    <div className="space-y-2 sm:col-span-2">
-                                        <Label>Заметки / Примечания</Label>
-                                        <Textarea
-                                            placeholder="Любая дополнительная информация..."
-                                            className="resize-none"
-                                            value={editingEquipment?.notes || ""}
-                                            onChange={(e) => setEditingEquipment(prev => ({ ...prev, notes: e.target.value }))}
-                                        />
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section className="space-y-6">
-                                <div>
-                                    <h3 className="text-base font-semibold text-slate-950">Обслуживание</h3>
-                                    <p className="text-sm text-muted-foreground">Первичная настройка обслуживания для нового оборудования.</p>
-                                </div>
-
-                                <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                                    <Info className="h-5 w-5 shrink-0 text-blue-500" />
-                                    <div className="text-sm text-blue-700">
-                                        <p className="font-semibold">Настройка обслуживания</p>
-                                        <ul className="mt-1 ml-4 list-disc space-y-1 opacity-80">
-                                            <li>Если ответственный не назначен, задачи на чистку создаваться не будут.</li>
-                                            <li>Назначьте конкретного сотрудника или выберите свободный пул.</li>
-                                        </ul>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-                                        <div className="space-y-0.5">
-                                            <Label className="text-base font-bold">Обслуживание</Label>
-                                            <p className="text-xs text-muted-foreground">Включает напоминания о необходимости чистки</p>
-                                        </div>
-                                        <Switch
-                                            checked={editingEquipment?.maintenance_enabled}
-                                            onCheckedChange={(val) => setEditingEquipment(prev => ({
-                                                ...prev,
-                                                maintenance_enabled: val,
-                                                assigned_user_id: val ? prev?.assigned_user_id : null
-                                            }))}
-                                        />
-                                    </div>
-
-                                    {editingEquipment?.maintenance_enabled && (
-                                        <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                                            <div className="space-y-2">
-                                                <Label>Ответственный за обслуживание</Label>
-                                                <Select
-                                                    value={editingEquipment?.assigned_user_id ? editingEquipment.assigned_user_id : (editingEquipment?.maintenance_enabled ? "free_pool" : "none")}
-                                                    onValueChange={(val) => {
-                                                        if (val === "free_pool") {
-                                                            setEditingEquipment(prev => ({
-                                                                ...prev,
-                                                                assigned_user_id: null,
-                                                                maintenance_enabled: true
-                                                            }))
-                                                            return
-                                                        }
-                                                        const userId = val === "none" ? null : val
-                                                        setEditingEquipment(prev => ({
-                                                            ...prev,
-                                                            assigned_user_id: userId,
-                                                            maintenance_enabled: !!userId
-                                                        }))
-                                                    }}
-                                                >
-                                                    <SelectTrigger className="bg-white">
-                                                        <SelectValue placeholder="Не назначено" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">Не назначено</SelectItem>
-                                                        <SelectItem value="free_pool">🤝 Свободный пул</SelectItem>
-                                                        {maintenanceResponsibleEmployees.map(emp => (
-                                                            <SelectItem key={emp.id} value={emp.id}>{emp.full_name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <p className="text-[10px] italic text-muted-foreground">
-                                                    При выборе сотрудника обслуживание включается автоматически.
-                                                </p>
-                                            </div>
-
-                                            <div className="space-y-2 border-t border-slate-200/50 pt-2">
-                                                <Label>Интервал обслуживания</Label>
-                                                <div className="rounded-xl border bg-white px-4 py-3">
-                                                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                                        <div>
-                                                            <p className="text-sm font-medium text-slate-900">Будет взят из стандарта типа</p>
-                                                            <p className="text-[10px] text-muted-foreground">
-                                                                После сохранения карточки система подставит клубный стандарт для выбранного типа оборудования.
-                                                            </p>
-                                                        </div>
-                                                        <Link
-                                                            href={`/clubs/${clubId}/equipment/settings`}
-                                                            className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
-                                                        >
-                                                            Открыть настройки
-                                                        </Link>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </section>
-                        </form>
-                    </div>
-
-                    <DialogFooter className="flex-col-reverse gap-2 border-t bg-slate-50 p-4 sm:flex-row sm:justify-end sm:p-6">
-                        <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsDialogOpen(false)} disabled={isSaving}>Отмена</Button>
-                        <Button className="w-full sm:w-auto" form="eq-form" type="submit" disabled={isSaving}>
-                            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Добавить в реестр
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                          ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
             </div>
-        </PageShell>
-    )
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsCloneDialogOpen(false)}
+                disabled={isCloning}
+              >
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                onClick={handleCloneWorkstationInventory}
+                disabled={
+                  isCloning ||
+                  !cloneSourceWorkstationId ||
+                  cloneTargetWorkstationIds.size === 0
+                }
+                className="bg-slate-900 text-white hover:bg-slate-800"
+              >
+                {isCloning ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Copy className="mr-2 h-4 w-4" />
+                )}
+                Скопировать
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={isImportExportDialogOpen}
+          onOpenChange={setIsImportExportDialogOpen}
+        >
+          <DialogContent className="sm:max-w-[640px]">
+            <DialogHeader>
+              <DialogTitle>Импорт и экспорт инвентаря</DialogTitle>
+              <DialogDescription>
+                Загружай шаблон, экспортируй текущую базу и импортируй
+                оборудование из Excel.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-5 pt-2">
+              <div className="rounded-xl border bg-slate-50 p-4">
+                <div className="flex items-start gap-3">
+                  <Info className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
+                  <div className="space-y-2 text-sm text-slate-600">
+                    <p className="font-medium text-slate-900">
+                      Как работает импорт
+                    </p>
+                    <p>
+                      Сначала создай зоны и места в разделе рабочих мест. Импорт
+                      не создаёт локации автоматически.
+                    </p>
+                    <p>
+                      Если в файле заполнено поле `Место`, оно должно уже
+                      существовать в клубе. Иначе строка попадёт в ошибки.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {!hasImportLocations ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="font-medium">Сначала создай зоны и места</p>
+                  <p className="mt-1 text-amber-800">
+                    Сейчас импорт заблокирован, потому что в клубе ещё нет
+                    подготовленных зон или рабочих мест.
+                  </p>
+                  <div className="mt-3">
+                    <Button asChild variant="outline" className="bg-white">
+                      <Link href={`/clubs/${clubId}/equipment/workplaces`}>
+                        Перейти к рабочим местам
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                >
+                  <Download className="h-5 w-5 text-slate-700" />
+                  <div className="mt-3 text-sm font-semibold text-slate-900">
+                    Скачать шаблон
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Пустой `.xlsx` с колонками и примером строки
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  className="rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                >
+                  <Download className="h-5 w-5 text-slate-700" />
+                  <div className="mt-3 text-sm font-semibold text-slate-900">
+                    Экспорт XLSX
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Выгрузить текущий инвентарь с основными полями
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleImportClick}
+                  disabled={!hasImportLocations || isImporting}
+                  className={cn(
+                    "rounded-xl border bg-white p-4 text-left shadow-sm transition",
+                    hasImportLocations
+                      ? "hover:border-slate-300 hover:shadow-md"
+                      : "cursor-not-allowed opacity-60",
+                  )}
+                >
+                  {isImporting ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-slate-700" />
+                  ) : (
+                    <Upload className="h-5 w-5 text-slate-700" />
+                  )}
+                  <div className="mt-3 text-sm font-semibold text-slate-900">
+                    Импорт файла
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Загрузить `.xlsx`, `.xls` или `.csv` и обновить инвентарь
+                  </div>
+                </button>
+              </div>
+
+              <div className="rounded-xl border bg-white p-4">
+                <p className="text-sm font-medium text-slate-900">
+                  Поддерживаемые колонки
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {INVENTORY_IMPORT_COLUMNS.join(" • ")}
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsImportExportDialogOpen(false)}
+              >
+                Закрыть
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={isInterclubDialogOpen}
+          onOpenChange={setIsInterclubDialogOpen}
+        >
+          <DialogContent className="sm:max-w-[840px]">
+            <DialogHeader>
+              <DialogTitle>Межклубное перемещение</DialogTitle>
+              <DialogDescription>
+                Оборудование будет снято с мест и отправлено задачей на приёмку
+                в клуб назначения.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-5 pt-2">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Клуб назначения
+                  </Label>
+                  <Select
+                    value={interclubTargetClubId}
+                    onValueChange={setInterclubTargetClubId}
+                  >
+                    <SelectTrigger className="h-12 bg-slate-50 hover:bg-slate-100 border-slate-200 shadow-sm">
+                      <SelectValue
+                        placeholder={
+                          isTargetsLoading ? "Загрузка..." : "Выберите клуб"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {interclubTargets
+                        .filter((c) => String(c.id) !== String(clubId))
+                        .map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Комментарий
+                  </Label>
+                  <Textarea
+                    value={interclubComment}
+                    onChange={(e) => setInterclubComment(e.target.value)}
+                    className="min-h-[48px] bg-slate-50 border-slate-200"
+                    placeholder="Комментарий для принимающей стороны"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Куда поставить
+                </Label>
+                <div className="max-h-[420px] overflow-y-auto space-y-2 rounded-xl border bg-white p-3">
+                  {selectedEquipment.map((eq) => {
+                    const targetClub = interclubTargets.find(
+                      (c) => String(c.id) === interclubTargetClubId,
+                    );
+                    const wsOptions = targetClub?.workstations || [];
+                    const value = interclubItemTargets[eq.id] || "storage";
+                    return (
+                      <div
+                        key={eq.id}
+                        className="grid gap-2 rounded-xl border bg-slate-50/40 p-3 sm:grid-cols-[1fr_280px] sm:items-center"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-slate-900">
+                            {eq.name}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {eq.type_name || eq.type}
+                          </div>
+                        </div>
+                        <Select
+                          value={value}
+                          onValueChange={(v) =>
+                            setInterclubItemTargets((prev) => ({
+                              ...prev,
+                              [eq.id]: v,
+                            }))
+                          }
+                          disabled={!interclubTargetClubId}
+                        >
+                          <SelectTrigger className="h-11 bg-white border-slate-200">
+                            <SelectValue
+                              placeholder={
+                                interclubTargetClubId
+                                  ? "Выберите место"
+                                  : "Сначала выберите клуб"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="storage">Склад</SelectItem>
+                            {wsOptions.map((ws) => (
+                              <SelectItem key={ws.id} value={ws.id}>
+                                {ws.name}
+                                {ws.zone ? ` (${ws.zone})` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsInterclubDialogOpen(false)}
+                disabled={isSaving}
+              >
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                onClick={submitInterclubTransfer}
+                disabled={isSaving || selectedEquipment.length === 0}
+                className="bg-slate-900 text-white hover:bg-slate-800"
+              >
+                {isSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowLeftRight className="mr-2 h-4 w-4" />
+                )}
+                Создать перемещение
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={isInterclubConfirmOpen}
+          onOpenChange={setIsInterclubConfirmOpen}
+        >
+          <DialogContent className="sm:max-w-[560px]">
+            <DialogHeader>
+              <DialogTitle>Подтвердите действие</DialogTitle>
+              <DialogDescription>
+                {pendingInterclubTransfer
+                  ? `Создать перемещение (${pendingInterclubTransfer.items.length} шт.) в клуб «${pendingInterclubTransfer.target_club_name}»? Оборудование будет снято с мест сразу.`
+                  : ""}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsInterclubConfirmOpen(false);
+                  setPendingInterclubTransfer(null);
+                  setIsInterclubDialogOpen(true);
+                }}
+                disabled={isSaving}
+              >
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                onClick={() =>
+                  pendingInterclubTransfer
+                    ? executePendingInterclubTransfer(pendingInterclubTransfer)
+                    : undefined
+                }
+                disabled={isSaving || !pendingInterclubTransfer}
+                className="bg-slate-900 text-white hover:bg-slate-800"
+              >
+                {isSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                ОК
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Dialog */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="flex max-h-[90vh] w-[calc(100vw-1rem)] max-w-[700px] flex-col gap-0 overflow-hidden p-0">
+            <DialogHeader className="border-b bg-slate-50 p-4 pb-2 sm:p-6">
+              <DialogTitle className="text-xl">Новое оборудование</DialogTitle>
+              <DialogDescription>
+                Заполните данные для регистрации нового оборудования
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto bg-white">
+              <form
+                id="eq-form"
+                onSubmit={handleSave}
+                className="space-y-8 p-4 sm:p-6"
+              >
+                <section className="space-y-6">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-950">
+                      Основные данные
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Краткая информация о новом оборудовании.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>
+                        Название <span className="text-rose-500">*</span>
+                      </Label>
+                      <Input
+                        placeholder="Название модели"
+                        value={editingEquipment?.name || ""}
+                        onChange={(e) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            name: e.target.value,
+                          }))
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Тип</Label>
+                      <Select
+                        value={editingEquipment?.type}
+                        onValueChange={(val) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            type: val,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Выберите тип" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {types.map((t) => (
+                            <SelectItem key={t.code} value={t.code}>
+                              {t.name_ru}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Серийный номер / ID</Label>
+                      <Input
+                        placeholder="SN12345678"
+                        value={editingEquipment?.identifier || ""}
+                        onChange={(e) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            identifier: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Бренд</Label>
+                      <Input
+                        placeholder="Напр: ASUS, Logitech"
+                        value={editingEquipment?.brand || ""}
+                        onChange={(e) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            brand: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Модель</Label>
+                      <Input
+                        placeholder="Напр: G502 Hero"
+                        value={editingEquipment?.model || ""}
+                        onChange={(e) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            model: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Локация (Рабочее место)</Label>
+                      <Select
+                        value={editingEquipment?.workstation_id || "unassigned"}
+                        onValueChange={(val) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            workstation_id: val === "unassigned" ? null : val,
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Склад" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unassigned">
+                            Склад (Не назначено)
+                          </SelectItem>
+                          {workstations.map((w) => (
+                            <SelectItem key={w.id} value={w.id}>
+                              {w.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Статус оборудования</Label>
+                      <Select
+                        value={editingEquipment?.status}
+                        onValueChange={(val: EquipmentStatus) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            status: val,
+                            is_active: val !== "WRITTEN_OFF",
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
+                          <SelectValue placeholder="Выберите статус" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ACTIVE">
+                            {EQUIPMENT_STATUS_LABELS.ACTIVE}
+                          </SelectItem>
+                          <SelectItem value="STORAGE">
+                            {EQUIPMENT_STATUS_LABELS.STORAGE}
+                          </SelectItem>
+                          <SelectItem value="REPAIR">
+                            {EQUIPMENT_STATUS_LABELS.REPAIR}
+                          </SelectItem>
+                          <SelectItem value="WRITTEN_OFF">
+                            {EQUIPMENT_STATUS_LABELS.WRITTEN_OFF}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Дата покупки</Label>
+                      <Input
+                        type="date"
+                        value={editingEquipment?.purchase_date || ""}
+                        onChange={(e) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            purchase_date: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Срок гарантии до</Label>
+                      <Input
+                        type="date"
+                        value={editingEquipment?.warranty_expires || ""}
+                        onChange={(e) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            warranty_expires: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Цена (₽)</Label>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={editingEquipment?.price || ""}
+                        onChange={(e) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            price: Number(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>Заметки / Примечания</Label>
+                      <Textarea
+                        placeholder="Любая дополнительная информация..."
+                        className="resize-none"
+                        value={editingEquipment?.notes || ""}
+                        onChange={(e) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            notes: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-6">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-950">
+                      Обслуживание
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Первичная настройка обслуживания для нового оборудования.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <Info className="h-5 w-5 shrink-0 text-blue-500" />
+                    <div className="text-sm text-blue-700">
+                      <p className="font-semibold">Настройка обслуживания</p>
+                      <ul className="mt-1 ml-4 list-disc space-y-1 opacity-80">
+                        <li>
+                          Если ответственный не назначен, задачи на чистку
+                          создаваться не будут.
+                        </li>
+                        <li>
+                          Назначьте конкретного сотрудника или выберите
+                          свободный пул.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-base font-bold">
+                          Обслуживание
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Включает напоминания о необходимости чистки
+                        </p>
+                      </div>
+                      <Switch
+                        checked={editingEquipment?.maintenance_enabled}
+                        onCheckedChange={(val) =>
+                          setEditingEquipment((prev) => ({
+                            ...prev,
+                            maintenance_enabled: val,
+                            assigned_user_id: val
+                              ? prev?.assigned_user_id
+                              : null,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {editingEquipment?.maintenance_enabled && (
+                      <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="space-y-2">
+                          <Label>Ответственный за обслуживание</Label>
+                          <Select
+                            value={
+                              editingEquipment?.assigned_user_id
+                                ? editingEquipment.assigned_user_id
+                                : editingEquipment?.maintenance_enabled
+                                  ? "free_pool"
+                                  : "none"
+                            }
+                            onValueChange={(val) => {
+                              if (val === "free_pool") {
+                                setEditingEquipment((prev) => ({
+                                  ...prev,
+                                  assigned_user_id: null,
+                                  maintenance_enabled: true,
+                                }));
+                                return;
+                              }
+                              const userId = val === "none" ? null : val;
+                              setEditingEquipment((prev) => ({
+                                ...prev,
+                                assigned_user_id: userId,
+                                maintenance_enabled: !!userId,
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className="bg-white">
+                              <SelectValue placeholder="Не назначено" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Не назначено</SelectItem>
+                              <SelectItem value="free_pool">
+                                🤝 Свободный пул
+                              </SelectItem>
+                              {maintenanceResponsibleEmployees.map((emp) => (
+                                <SelectItem key={emp.id} value={emp.id}>
+                                  {emp.full_name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[10px] italic text-muted-foreground">
+                            При выборе сотрудника обслуживание включается
+                            автоматически.
+                          </p>
+                        </div>
+
+                        <div className="space-y-2 border-t border-slate-200/50 pt-2">
+                          <Label>Интервал обслуживания</Label>
+                          <div className="rounded-xl border bg-white px-4 py-3">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-slate-900">
+                                  Будет взят из стандарта типа
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  После сохранения карточки система подставит
+                                  клубный стандарт для выбранного типа
+                                  оборудования.
+                                </p>
+                              </div>
+                              <Link
+                                href={`/clubs/${clubId}/equipment/settings`}
+                                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                              >
+                                Открыть настройки
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </form>
+            </div>
+
+            <DialogFooter className="flex-col-reverse gap-2 border-t bg-slate-50 p-4 sm:flex-row sm:justify-end sm:p-6">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => setIsDialogOpen(false)}
+                disabled={isSaving}
+              >
+                Отмена
+              </Button>
+              <Button
+                className="w-full sm:w-auto"
+                form="eq-form"
+                type="submit"
+                disabled={isSaving}
+              >
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Добавить в реестр
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </PageShell>
+  );
 }

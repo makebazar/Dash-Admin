@@ -49,15 +49,6 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copy database files and migrations
-COPY --from=builder /app/src/db ./src/db
-COPY --from=builder /app/migrations ./migrations
-COPY --from=builder /app/scripts/start.sh ./scripts/start.sh
-COPY --from=builder /app/scripts/migrate.js ./scripts/migrate.js
-
-# Install pg module for migrations (simpler than copying individual modules)
-RUN npm install pg --omit=dev --no-save --no-audit --no-fund
-
 # Make startup script executable
 RUN chmod +x ./scripts/start.sh
 
@@ -70,5 +61,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Use startup script that runs migrations before starting
+# Use startup script that starts the app
 CMD ["sh", "./scripts/start.sh"]

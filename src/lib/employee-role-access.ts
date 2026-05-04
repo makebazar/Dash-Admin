@@ -1,69 +1,84 @@
-import { query } from "@/db"
-import { cookies } from "next/headers"
+import { query } from "@/db";
+import { cookies } from "next/headers";
 
-export type EmployeeShiftEndMode = "FULL_REPORT" | "NO_REPORT"
-export type EmployeeHandoverChecklistMode = "DISABLED" | "OPTIONAL" | "REQUIRED"
+export type EmployeeShiftEndMode = "FULL_REPORT" | "NO_REPORT";
+export type EmployeeHandoverChecklistMode =
+  | "DISABLED"
+  | "OPTIONAL"
+  | "REQUIRED";
 
 export type EmployeeAccessSettings = {
-    employee_only: boolean
-    shift_start_enabled: boolean
-    shift_end_mode: EmployeeShiftEndMode
-    handover_checklist_on_start?: EmployeeHandoverChecklistMode
-    closing_checklist_enabled?: boolean
-    shift_zone_handover_enabled: boolean
-    inventory_actions_enabled: boolean
-    maintenance_enabled: boolean
-    schedule_enabled: boolean
-    requests_enabled: boolean
-    workstations_view_enabled: boolean
-}
+  employee_only: boolean;
+  shift_start_enabled: boolean;
+  shift_end_mode: EmployeeShiftEndMode;
+  handover_checklist_on_start?: EmployeeHandoverChecklistMode;
+  closing_checklist_enabled?: boolean;
+  shift_zone_handover_enabled: boolean;
+  inventory_actions_enabled: boolean;
+  maintenance_enabled: boolean;
+  schedule_enabled: boolean;
+  requests_enabled: boolean;
+  workstations_view_enabled: boolean;
+};
 
-type AccessError = Error & { status?: number }
+type AccessError = Error & { status?: number };
 
 export type EmployeeRoleAccess = {
-    userId: string
-    roleId: number | null
-    roleName: string | null
-    settings: EmployeeAccessSettings
-}
+  userId: string;
+  roleId: number | null;
+  roleName: string | null;
+  settings: EmployeeAccessSettings;
+};
 
 function normalizeShiftEndMode(value: unknown): EmployeeShiftEndMode {
-    if (value === "NO_REPORT") return "NO_REPORT"
-    return "FULL_REPORT"
+  if (value === "NO_REPORT") return "NO_REPORT";
+  return "FULL_REPORT";
 }
 
-function normalizeHandoverMode(value: unknown): EmployeeHandoverChecklistMode | undefined {
-    if (value === "DISABLED" || value === "OPTIONAL" || value === "REQUIRED") return value
-    return undefined
+function normalizeHandoverMode(
+  value: unknown,
+): EmployeeHandoverChecklistMode | undefined {
+  if (value === "DISABLED" || value === "OPTIONAL" || value === "REQUIRED")
+    return value;
+  return undefined;
 }
 
-export function normalizeEmployeeAccessSettings(raw: any): EmployeeAccessSettings {
-    const source = raw && typeof raw === "object" ? raw : {}
+export function normalizeEmployeeAccessSettings(
+  raw: any,
+): EmployeeAccessSettings {
+  const source = raw && typeof raw === "object" ? raw : {};
 
-    return {
-        employee_only: Boolean(source.employee_only),
-        shift_start_enabled: source.shift_start_enabled !== false,
-        shift_end_mode: normalizeShiftEndMode(source.shift_end_mode),
-        handover_checklist_on_start: normalizeHandoverMode(source.handover_checklist_on_start),
-        closing_checklist_enabled: typeof source.closing_checklist_enabled === "boolean" ? source.closing_checklist_enabled : undefined,
-        shift_zone_handover_enabled: source.shift_zone_handover_enabled !== false,
-        inventory_actions_enabled: source.inventory_actions_enabled !== false,
-        maintenance_enabled: source.maintenance_enabled !== false,
-        schedule_enabled: source.schedule_enabled !== false,
-        requests_enabled: source.requests_enabled !== false,
-        workstations_view_enabled: source.workstations_view_enabled !== false,
-    }
+  return {
+    employee_only: Boolean(source.employee_only),
+    shift_start_enabled: source.shift_start_enabled !== false,
+    shift_end_mode: normalizeShiftEndMode(source.shift_end_mode),
+    handover_checklist_on_start: normalizeHandoverMode(
+      source.handover_checklist_on_start,
+    ),
+    closing_checklist_enabled:
+      typeof source.closing_checklist_enabled === "boolean"
+        ? source.closing_checklist_enabled
+        : undefined,
+    shift_zone_handover_enabled: source.shift_zone_handover_enabled !== false,
+    inventory_actions_enabled: source.inventory_actions_enabled !== false,
+    maintenance_enabled: source.maintenance_enabled !== false,
+    schedule_enabled: source.schedule_enabled !== false,
+    requests_enabled: source.requests_enabled !== false,
+    workstations_view_enabled: source.workstations_view_enabled !== false,
+  };
 }
 
-export async function getEmployeeRoleAccess(clubId: string): Promise<EmployeeRoleAccess> {
-    const userId = (await cookies()).get("session_user_id")?.value
-    if (!userId) {
-        const error = new Error("Unauthorized") as AccessError
-        error.status = 401
-        throw error
-    }
+export async function getEmployeeRoleAccess(
+  clubId: string,
+): Promise<EmployeeRoleAccess> {
+  const userId = (await cookies()).get("session_user_id")?.value;
+  if (!userId) {
+    const error = new Error("Unauthorized") as AccessError;
+    error.status = 401;
+    throw error;
+  }
 
-    await query(`
+  await query(`
         CREATE TABLE IF NOT EXISTS club_employee_roles (
             club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -74,8 +89,8 @@ export async function getEmployeeRoleAccess(clubId: string): Promise<EmployeeRol
             UNIQUE(club_id, user_id, role_id)
         );
         CREATE INDEX IF NOT EXISTS idx_club_employee_roles_club_user ON club_employee_roles(club_id, user_id);
-    `)
-    await query(`
+    `);
+  await query(`
         CREATE TABLE IF NOT EXISTS club_employee_role_preferences (
             club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -84,12 +99,14 @@ export async function getEmployeeRoleAccess(clubId: string): Promise<EmployeeRol
             UNIQUE(club_id, user_id)
         );
         CREATE INDEX IF NOT EXISTS idx_club_employee_role_preferences_club_user ON club_employee_role_preferences(club_id, user_id);
-    `)
+    `);
 
-    await query(`INSERT INTO roles (name, default_kpi_settings) VALUES ('Владелец', '{}'::jsonb) ON CONFLICT (name) DO NOTHING`)
+  await query(
+    `INSERT INTO roles (name, default_kpi_settings) VALUES ('Владелец', '{}'::jsonb) ON CONFLICT (name) DO NOTHING`,
+  );
 
-    const accessRes = await query(
-        `
+  const accessRes = await query(
+    `
         WITH membership AS (
             SELECT 1 as ok
             WHERE (
@@ -155,10 +172,17 @@ export async function getEmployeeRoleAccess(clubId: string): Promise<EmployeeRol
             ORDER BY priority ASC
             LIMIT 1
         ),
+        direct_club_role AS (
+            SELECT role_id
+            FROM club_employees
+            WHERE club_id = $2 AND user_id = $1 AND dismissed_at IS NULL
+            LIMIT 1
+        ),
         effective_role AS (
             SELECT COALESCE(
                 (SELECT role_id FROM preferred_role),
                 (SELECT role_id FROM assigned_role),
+                (SELECT role_id FROM direct_club_role),
                 (SELECT user_role_id FROM base_user),
                 (
                     CASE
@@ -172,27 +196,30 @@ export async function getEmployeeRoleAccess(clubId: string): Promise<EmployeeRol
         SELECT
             (SELECT role_id FROM effective_role) as role_id,
             r.name as role_name,
-            r.employee_access_settings
+            COALESCE(crs.employee_access_settings, r.employee_access_settings) as employee_access_settings
         FROM membership m
         LEFT JOIN roles r ON r.id = (SELECT role_id FROM effective_role)
+        LEFT JOIN club_role_settings crs ON crs.club_id = $2 AND crs.role_id = r.id
         LIMIT 1
         `,
-        [userId, clubId]
-    )
+    [userId, clubId],
+  );
 
-    if ((accessRes.rowCount || 0) === 0) {
-        const error = new Error("Forbidden") as AccessError
-        error.status = 403
-        throw error
-    }
+  if ((accessRes.rowCount || 0) === 0) {
+    const error = new Error("Forbidden") as AccessError;
+    error.status = 403;
+    throw error;
+  }
 
-    const row = accessRes.rows[0] || {}
-    const settings = normalizeEmployeeAccessSettings(row.employee_access_settings)
+  const row = accessRes.rows[0] || {};
+  const settings = normalizeEmployeeAccessSettings(
+    row.employee_access_settings,
+  );
 
-    return {
-        userId,
-        roleId: row.role_id ? Number(row.role_id) : null,
-        roleName: row.role_name || null,
-        settings,
-    }
+  return {
+    userId,
+    roleId: row.role_id ? Number(row.role_id) : null,
+    roleName: row.role_name || null,
+    settings,
+  };
 }

@@ -1,95 +1,90 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
-import { hasColumn } from '@/lib/db-compat';
-import { resolveSubscriptionState } from '@/lib/subscriptions';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { cookies } from "next/headers";
+import { hasColumn } from "@/lib/db-compat";
+import { resolveSubscriptionState } from "@/lib/subscriptions";
+import { getClubApiAccess } from "@/lib/club-api-access";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const { clubId } = await params;
-        const userId = (await cookies()).get('session_user_id')?.value;
+  try {
+    const { clubId } = await params;
+    const userId = (await cookies()).get("session_user_id")?.value;
 
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!userId)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-        const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
-        const ownerSubscriptionRes = await query(
-            `SELECT 
+    // Use unified access helper - getClubApiAccess is already designed to re-fetch on every call.
+    const access = await getClubApiAccess(clubId);
+    console.log(
+      `[DEBUG] my-permissions for userId=${access.userId}:`,
+      JSON.stringify(access.permissions.modules),
+    );
+
+    const hasSubscriptionStatus = await hasColumn(
+      "users",
+      "subscription_status",
+    );
+    const ownerSubscriptionRes = await query(
+      `SELECT
                 u.subscription_plan,
-                ${hasSubscriptionStatus ? 'u.subscription_status' : "NULL::varchar as subscription_status"},
+                ${hasSubscriptionStatus ? "u.subscription_status" : "NULL::varchar as subscription_status"},
                 u.subscription_ends_at
              FROM clubs c
              JOIN users u ON u.id = c.owner_id
              WHERE c.id = $1`,
-            [clubId]
-        );
-        if ((ownerSubscriptionRes.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Club not found' }, { status: 404 });
-        }
-        const ownerSubscription = resolveSubscriptionState(ownerSubscriptionRes.rows[0]);
-        const subscriptionMeta = {
-            subscription_status: ownerSubscription.status,
-            subscription_is_active: ownerSubscription.isActive,
-            subscription_ends_at: ownerSubscription.endsAt
-        };
-
-        // Check if the user is the owner of the club
-        const clubOwnerRes = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if (clubOwnerRes.rowCount && clubOwnerRes.rowCount > 0) {
-            return NextResponse.json({ isFullAccess: true, ...subscriptionMeta });
-        }
-
-        // Get user's role in this club
-        const userRoleRes = await query(
-            `SELECT ce.role as club_role, u.role_id, r.name as role_name
-             FROM club_employees ce
-             LEFT JOIN users u ON u.id = ce.user_id
-             LEFT JOIN roles r ON r.id = u.role_id
-             WHERE ce.club_id = $1 AND ce.user_id = $2
-               AND ce.is_active = true
-               AND ce.dismissed_at IS NULL`,
-            [clubId, userId]
-        );
-
-        if (userRoleRes.rowCount === 0) {
-            // Not in club_employees, and not the owner (checked above)
-            return NextResponse.json({ error: 'Not a club employee' }, { status: 403 });
-        }
-
-        const { role_id, role_name, club_role } = userRoleRes.rows[0];
-
-        // Owner и Управляющий имеют полный доступ
-        if (club_role === 'Владелец' || club_role === 'Управляющий' || role_name === 'Управляющий') {
-            return NextResponse.json({ isFullAccess: true, user_role: club_role || role_name, ...subscriptionMeta });
-        }
-
-        if (!role_id) {
-            return NextResponse.json({ isFullAccess: false, permissions: {}, user_role: club_role || role_name, ...subscriptionMeta });
-        }
-
-        // Get permissions for this role
-        const permissionsRes = await query(
-            `SELECT permission_key, is_allowed
-             FROM role_permissions
-             WHERE club_id = $1 AND role_id = $2`,
-            [clubId, role_id]
-        );
-
-        const permissions: Record<string, boolean> = {};
-        permissionsRes.rows.forEach(row => {
-            permissions[row.permission_key] = row.is_allowed;
-        });
-
-        return NextResponse.json({ isFullAccess: false, permissions, user_role: club_role || role_name, ...subscriptionMeta });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+      [clubId],
+    );
+    if ((ownerSubscriptionRes.rowCount || 0) === 0) {
+      return NextResponse.json({ error: "Club not found" }, { status: 404 });
     }
+    const ownerSubscription = resolveSubscriptionState(
+      ownerSubscriptionRes.rows[0],
+    );
+    const subscriptionMeta = {
+      subscription_status: ownerSubscription.status,
+      subscription_is_active: ownerSubscription.isActive,
+      subscription_ends_at: ownerSubscription.endsAt,
+    };
+
+    // Use the new flag system universally
+    const isFull = access.isFullAccess;
+    const mod = access.permissions.modules;
+
+    // Provide backward compatibility boolean flags for the current UI
+    const mappedPermissions: Record<string, boolean> = {
+      view_dashboard:
+        isFull || mod.dashboard === "view" || mod.dashboard === "edit",
+      view_shifts: isFull || mod.shifts === "view" || mod.shifts === "edit",
+      view_schedule:
+        isFull || mod.schedule === "view" || mod.schedule === "edit",
+      manage_employees: isFull || mod.employees === "edit",
+      view_salaries:
+        isFull || mod.salaries === "view" || mod.salaries === "edit",
+      view_finance: isFull || mod.finance === "view" || mod.finance === "edit",
+      manage_inventory: isFull || mod.inventory === "edit",
+      manage_equipment: isFull || mod.equipment === "edit",
+      view_reviews: isFull || mod.reviews === "view" || mod.reviews === "edit",
+      manage_club_settings: isFull || mod.settings_general === "edit",
+      edit_salaries_settings: isFull || mod.settings_salary === "edit",
+      manage_report_template: isFull || mod.settings_reports === "edit",
+      manage_checklists: isFull || mod.settings_checklists === "edit",
+      manage_kb: isFull || mod.kb === "edit",
+    };
+
+    return NextResponse.json({
+      isFullAccess: access.isFullAccess,
+      permissions: mappedPermissions, // Legacy format
+      modules: access.permissions.modules, // New format
+      user_role: access.clubRole || access.roleName,
+      ...subscriptionMeta,
+    });
+  } catch (error: any) {
+    console.error("MyPermissions Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

@@ -1,31 +1,36 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
-import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { cookies } from "next/headers";
+import { ensureOwnerSubscriptionActive } from "@/lib/club-subscription-guard";
 
 // GET: Get all salary schemes for a club
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
-        const url = new URL(request.url);
-        const archivedParam = url.searchParams.get('archived');
-        const archived = archivedParam === '1' || archivedParam === 'true';
-        const desiredActive = !archived;
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
+    const url = new URL(request.url);
+    const archivedParam = url.searchParams.get("archived");
+    const archived = archivedParam === "1" || archivedParam === "true";
+    const desiredActive = !archived;
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
-        if (!guard.ok) return guard.response
+    const guard = await ensureOwnerSubscriptionActive(
+      clubId,
+      userId,
+      "settings_salary",
+      "edit",
+    );
+    if (!guard.ok) return guard.response;
 
-        // Get schemes with latest version formula and employee count
-        const result = await query(
-            `SELECT 
+    // Get schemes with latest version formula and employee count
+    const result = await query(
+      `SELECT
                 s.id,
                 s.name,
                 s.description,
@@ -39,79 +44,106 @@ export async function GET(
                 (SELECT COUNT(*) FROM employee_salary_assignments WHERE scheme_id = s.id) as employee_count
              FROM salary_schemes s
              LEFT JOIN LATERAL (
-                 SELECT * FROM salary_scheme_versions 
-                 WHERE scheme_id = s.id 
-                 ORDER BY version DESC 
+                 SELECT * FROM salary_scheme_versions
+                 WHERE scheme_id = s.id
+                 ORDER BY version DESC
                  LIMIT 1
              ) v ON true
              WHERE s.club_id = $1
                AND s.is_active = $2
              ORDER BY s.created_at DESC`,
-            [clubId, desiredActive]
-        );
+      [clubId, desiredActive],
+    );
 
-        return NextResponse.json({ schemes: result.rows });
-
-    } catch (error: any) {
-        console.error('Get Salary Schemes Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    return NextResponse.json({ schemes: result.rows });
+  } catch (error: any) {
+    console.error("Get Salary Schemes Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
 
 // POST: Create a new salary scheme
 export async function POST(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
-        const body = await request.json();
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
+    const body = await request.json();
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        const guard = await ensureOwnerSubscriptionActive(clubId, userId)
-        if (!guard.ok) return guard.response
+    const guard = await ensureOwnerSubscriptionActive(
+      clubId,
+      userId,
+      "settings_salary",
+      "edit",
+    );
+    if (!guard.ok) return guard.response;
 
-        const { name, description, formula, period_bonuses, standard_monthly_shifts } = body;
+    const {
+      name,
+      description,
+      formula,
+      period_bonuses,
+      standard_monthly_shifts,
+    } = body;
 
-        if (!name || !formula) {
-            return NextResponse.json({ error: 'Name and formula are required' }, { status: 400 });
-        }
+    if (!name || !formula) {
+      return NextResponse.json(
+        { error: "Name and formula are required" },
+        { status: 400 },
+      );
+    }
 
-        if (formula?.base?.rate_tiers?.period === 'MONTH' && formula?.base?.payout_timing === 'SHIFT') {
-            return NextResponse.json({ error: 'Base payout_timing SHIFT is not allowed when base rate tiers are MONTH-based' }, { status: 400 });
-        }
+    if (
+      formula?.base?.rate_tiers?.period === "MONTH" &&
+      formula?.base?.payout_timing === "SHIFT"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Base payout_timing SHIFT is not allowed when base rate tiers are MONTH-based",
+        },
+        { status: 400 },
+      );
+    }
 
-        // Create scheme
-        const schemeResult = await query(
-            `INSERT INTO salary_schemes (club_id, name, description, period_bonuses, standard_monthly_shifts)
+    // Create scheme
+    const schemeResult = await query(
+      `INSERT INTO salary_schemes (club_id, name, description, period_bonuses, standard_monthly_shifts)
              VALUES ($1, $2, $3, $4, $5)
              RETURNING id`,
-            [clubId, name, description || '', JSON.stringify(period_bonuses || []), standard_monthly_shifts || 15]
-        );
+      [
+        clubId,
+        name,
+        description || "",
+        JSON.stringify(period_bonuses || []),
+        standard_monthly_shifts || 15,
+      ],
+    );
 
-        const schemeId = schemeResult.rows[0].id;
+    const schemeId = schemeResult.rows[0].id;
 
-        // Create first version
-        const versionResult = await query(
-            `INSERT INTO salary_scheme_versions (scheme_id, version, formula)
+    // Create first version
+    const versionResult = await query(
+      `INSERT INTO salary_scheme_versions (scheme_id, version, formula)
              VALUES ($1, 1, $2)
              RETURNING id, version`,
-            [schemeId, JSON.stringify(formula)]
-        );
+      [schemeId, JSON.stringify(formula)],
+    );
 
-        return NextResponse.json({
-            success: true,
-            scheme_id: schemeId,
-            version_id: versionResult.rows[0].id,
-            version: 1
-        });
-
-    } catch (error: any) {
-        console.error('Create Salary Scheme Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    return NextResponse.json({
+      success: true,
+      scheme_id: schemeId,
+      version_id: versionResult.rows[0].id,
+      version: 1,
+    });
+  } catch (error: any) {
+    console.error("Create Salary Scheme Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

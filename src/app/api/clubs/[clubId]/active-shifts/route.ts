@@ -1,33 +1,18 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { requireModuleAccess } from "@/lib/club-api-access";
 
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
+  try {
+    const { clubId } = await params;
+    await requireModuleAccess(clubId, "shifts", "view");
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const accessCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-             UNION
-             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-
-        // Get active shifts
-        const result = await query(
-            `SELECT 
+    // Get active shifts
+    const result = await query(
+      `SELECT
         s.id,
         s.check_in,
         s.total_hours,
@@ -39,21 +24,30 @@ export async function GET(
        JOIN shift_reports sr ON s.shift_report_id = sr.id
        WHERE sr.club_id = $1 AND s.status = 'ACTIVE'
        ORDER BY s.check_in DESC`,
-            [clubId]
-        );
+      [clubId],
+    );
 
-        const shifts = result.rows.map(row => ({
-            id: row.id,
-            user_name: row.user_name,
-            role: row.role_name || 'Сотрудник',
-            check_in: row.check_in,
-            total_hours: parseFloat(row.total_hours || 0)
-        }));
+    const shifts = result.rows.map((row) => ({
+      id: row.id,
+      user_name: row.user_name,
+      role: row.role_name || "Сотрудник",
+      check_in: row.check_in,
+      total_hours: parseFloat(row.total_hours || 0),
+    }));
 
-        return NextResponse.json({ shifts });
-
-    } catch (error) {
-        console.error('Get Active Shifts Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ shifts });
+  } catch (error: any) {
+    const status = error?.status;
+    if (status) {
+      return NextResponse.json(
+        { error: status === 401 ? "Unauthorized" : "Forbidden" },
+        { status },
+      );
     }
+    console.error("Get Active Shifts Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }

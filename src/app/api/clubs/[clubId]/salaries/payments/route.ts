@@ -1,24 +1,24 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
-import { requireClubFullAccess } from '@/lib/club-api-access';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { cookies } from "next/headers";
+import { requireModuleAccess } from "@/lib/club-api-access";
 
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        await requireClubFullAccess(String(clubId));
+    await requireModuleAccess(String(clubId), "salaries", "view");
 
-        const result = await query(
-            `SELECT
+    const result = await query(
+      `SELECT
                 sp.id,
                 sp.amount,
                 sp.payment_type,
@@ -30,49 +30,60 @@ export async function GET(
              WHERE sp.club_id = $1
              ORDER BY sp.paid_at DESC
              LIMIT 100`,
-            [clubId]
-        );
+      [clubId],
+    );
 
-        return NextResponse.json({ payments: result.rows });
-    } catch (error) {
-        console.error('Payments API Error:', error);
-        const status = typeof (error as any)?.status === 'number' ? (error as any).status : 500
-        return NextResponse.json({ error: (error as any)?.message || 'Internal Server Error' }, { status });
-    }
+    return NextResponse.json({ payments: result.rows });
+  } catch (error) {
+    console.error("Payments API Error:", error);
+    const status =
+      typeof (error as any)?.status === "number" ? (error as any).status : 500;
+    return NextResponse.json(
+      { error: (error as any)?.message || "Internal Server Error" },
+      { status },
+    );
+  }
 }
 
 export async function POST(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
 
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!userId)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-        await requireClubFullAccess(String(clubId));
+    await requireModuleAccess(String(clubId), "salaries", "view");
 
-        const body = await request.json();
-        const { employee_id, amount, payment_type, comment } = body;
+    const body = await request.json();
+    const { employee_id, amount, payment_type, comment } = body;
 
-        if (!employee_id || !amount || !payment_type) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-        }
+    if (!employee_id || !amount || !payment_type) {
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 },
+      );
+    }
 
-        const result = await query(
-            `INSERT INTO salary_payments
+    const result = await query(
+      `INSERT INTO salary_payments
                 (club_id, user_id, amount, payment_type, comment, created_by)
              VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING id`,
-            [clubId, employee_id, amount, payment_type, comment, userId]
-        );
+      [clubId, employee_id, amount, payment_type, comment, userId],
+    );
 
-        return NextResponse.json({ success: true, id: result.rows[0].id });
-
-    } catch (error) {
-        console.error('Create Payment Error:', error);
-        const status = typeof (error as any)?.status === 'number' ? (error as any).status : 500
-        return NextResponse.json({ error: (error as any)?.message || 'Internal Server Error' }, { status });
-    }
+    return NextResponse.json({ success: true, id: result.rows[0].id });
+  } catch (error) {
+    console.error("Create Payment Error:", error);
+    const status =
+      typeof (error as any)?.status === "number" ? (error as any).status : 500;
+    return NextResponse.json(
+      { error: (error as any)?.message || "Internal Server Error" },
+      { status },
+    );
+  }
 }

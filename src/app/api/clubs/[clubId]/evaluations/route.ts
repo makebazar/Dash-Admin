@@ -1,38 +1,27 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
-import { getEmployeeRoleAccess } from '@/lib/employee-role-access';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { cookies } from "next/headers";
+import { getEmployeeRoleAccess } from "@/lib/employee-role-access";
+import { requireModuleAccess } from "@/lib/club-api-access";
 
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
-        const { searchParams } = new URL(request.url);
-        const employeeId = searchParams.get('employee_id');
-        const status = searchParams.get('status'); // 'active' (pending) or 'history' (approved/rejected)
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
+    const { searchParams } = new URL(request.url);
+    const employeeId = searchParams.get("employee_id");
+    const status = searchParams.get("status"); // 'active' (pending) or 'history' (approved/rejected)
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        // Check access
-        const accessCheck = await query(
-            `
-            SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-            UNION
-            SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
-            `,
-            [clubId, userId]
-        );
+    await requireModuleAccess(clubId, "reviews", "view");
 
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-
-        let queryStr = `
+    let queryStr = `
             SELECT e.*, t.name as template_name, u.full_name as employee_name, ev.full_name as evaluator_name, rv.full_name as reviewer_name
             FROM evaluations e
             JOIN evaluation_templates t ON e.template_id = t.id
@@ -41,173 +30,202 @@ export async function GET(
             LEFT JOIN users rv ON e.reviewed_by = rv.id
             WHERE e.club_id = $1
         `;
-        const queryParams: any[] = [clubId];
-        let paramIndex = 2;
+    const queryParams: any[] = [clubId];
+    let paramIndex = 2;
 
-        if (employeeId) {
-            queryStr += ` AND e.employee_id = $${paramIndex}`;
-            queryParams.push(employeeId);
-            paramIndex++;
-        }
-
-        if (status === 'history') {
-            queryStr += ` AND (e.status = 'approved' OR e.status = 'rejected')`;
-        } else if (status === 'active') {
-            queryStr += ` AND (e.status = 'pending' OR e.status IS NULL)`;
-        }
-
-        queryStr += ` ORDER BY e.evaluation_date DESC`;
-
-        const result = await query(queryStr, queryParams);
-        return NextResponse.json(result.rows);
-
-    } catch (error) {
-        console.error('Get Evaluations Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    if (employeeId) {
+      queryStr += ` AND e.employee_id = $${paramIndex}`;
+      queryParams.push(employeeId);
+      paramIndex++;
     }
+
+    if (status === "history") {
+      queryStr += ` AND (e.status = 'approved' OR e.status = 'rejected')`;
+    } else if (status === "active") {
+      queryStr += ` AND (e.status = 'pending' OR e.status IS NULL)`;
+    }
+
+    queryStr += ` ORDER BY e.evaluation_date DESC`;
+
+    const result = await query(queryStr, queryParams);
+    return NextResponse.json(result.rows);
+  } catch (error) {
+    console.error("Get Evaluations Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
-        const { template_id, employee_id, responses, comments, shift_id, target_user_id } = await request.json();
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
+    const {
+      template_id,
+      employee_id,
+      responses,
+      comments,
+      shift_id,
+      target_user_id,
+    } = await request.json();
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        const roleAccess = await getEmployeeRoleAccess(clubId)
-        if (roleAccess.settings.handover_checklist_on_start === 'DISABLED' && roleAccess.settings.closing_checklist_enabled === false) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+    const roleAccess = await getEmployeeRoleAccess(clubId);
+    if (
+      roleAccess.settings.handover_checklist_on_start === "DISABLED" &&
+      roleAccess.settings.closing_checklist_enabled === false
+    ) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-        let targetUserId = target_user_id;
+    let targetUserId = target_user_id;
 
-        if (!targetUserId) {
-            // Validate employee_id
-            if (!employee_id) {
-                // If neither target_user_id nor employee_id is provided
-                // Maybe it's a self-evaluation or shift opening checklist?
-                // If it's a shift opening checklist (handover), and no previous employee found, maybe link to self or just club?
-                // For now, require ID.
-                return NextResponse.json({ error: 'Employee ID is required' }, { status: 400 });
-            }
-
-            // Fetch user_id for the employee_id
-            const employeeUserRes = await query(
-                `SELECT user_id FROM club_employees WHERE id = $1 AND club_id = $2`,
-                [employee_id, clubId]
-            );
-
-            if (employeeUserRes.rowCount === 0) {
-                return NextResponse.json({ error: 'Invalid Employee ID' }, { status: 400 });
-            }
-            targetUserId = employeeUserRes.rows[0].user_id;
-        }
-
-        // Check access (Manager check - typically owners or managers can evaluate)
-        const accessCheck = await query(
-            `
-            SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-            UNION
-            SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
-            `,
-            [clubId, userId]
+    if (!targetUserId) {
+      // Validate employee_id
+      if (!employee_id) {
+        // If neither target_user_id nor employee_id is provided
+        // Maybe it's a self-evaluation or shift opening checklist?
+        // If it's a shift opening checklist (handover), and no previous employee found, maybe link to self or just club?
+        // For now, require ID.
+        return NextResponse.json(
+          { error: "Employee ID is required" },
+          { status: 400 },
         );
+      }
 
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+      // Fetch user_id for the employee_id
+      const employeeUserRes = await query(
+        `SELECT user_id FROM club_employees WHERE id = $1 AND club_id = $2`,
+        [employee_id, clubId],
+      );
 
-        const templateTypeRes = await query(
-            `SELECT type FROM evaluation_templates WHERE id = $1 AND club_id = $2`,
-            [template_id, clubId]
-        )
-        if ((templateTypeRes.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Invalid template' }, { status: 400 })
-        }
-        const templateType = templateTypeRes.rows[0]?.type || 'manager_audit'
-        if (templateType === 'shift_handover') {
-            if (roleAccess.settings.handover_checklist_on_start === 'DISABLED' && roleAccess.settings.closing_checklist_enabled !== true) {
-                return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-            }
-        }
-
-        // Get template items to calculate max score
-        const itemsResult = await query(
-            `SELECT id, weight FROM evaluation_template_items WHERE template_id = $1`,
-            [template_id]
+      if (employeeUserRes.rowCount === 0) {
+        return NextResponse.json(
+          { error: "Invalid Employee ID" },
+          { status: 400 },
         );
-        const itemsMap = new Map(itemsResult.rows.map(i => [i.id, i.weight]));
+      }
+      targetUserId = employeeUserRes.rows[0].user_id;
+    }
 
-        let totalPoints = 0;
-        let maxPossiblePoints = 0;
+    // Check access (Manager check - typically owners or managers can evaluate)
+    await requireModuleAccess(clubId, "reviews", "view");
 
-        // Responses is an array of { item_id, score, comment }
-        // We calculate score based on the actual score provided (0 to weight)
-        // totalPoints = sum(score)
-        // maxPossiblePoints = sum(weight)
+    const templateTypeRes = await query(
+      `SELECT type FROM evaluation_templates WHERE id = $1 AND club_id = $2`,
+      [template_id, clubId],
+    );
+    if ((templateTypeRes.rowCount || 0) === 0) {
+      return NextResponse.json({ error: "Invalid template" }, { status: 400 });
+    }
+    const templateType = templateTypeRes.rows[0]?.type || "manager_audit";
+    if (templateType === "shift_handover") {
+      if (
+        roleAccess.settings.handover_checklist_on_start === "DISABLED" &&
+        roleAccess.settings.closing_checklist_enabled !== true
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
 
-        for (const resp of responses) {
-            const weight = Number(itemsMap.get(resp.item_id)) || 1;
-            // The score is already in points (e.g. 5, 4, 3...)
-            totalPoints += (Number(resp.score) || 0);
-            maxPossiblePoints += weight;
-        }
+    // Get template items to calculate max score
+    const itemsResult = await query(
+      `SELECT id, weight FROM evaluation_template_items WHERE template_id = $1`,
+      [template_id],
+    );
+    const itemsMap = new Map(itemsResult.rows.map((i) => [i.id, i.weight]));
 
-        // We store the RAW score, not percentage. Percentage is calculated on display.
-        const totalScore = totalPoints;
+    let totalPoints = 0;
+    let maxPossiblePoints = 0;
 
-        await query('BEGIN');
+    // Responses is an array of { item_id, score, comment }
+    // We calculate score based on the actual score provided (0 to weight)
+    // totalPoints = sum(score)
+    // maxPossiblePoints = sum(weight)
 
-        const evalResult = await query(
-            `INSERT INTO evaluations (club_id, template_id, employee_id, evaluator_id, total_score, max_score, comments, shift_id)
+    for (const resp of responses) {
+      const weight = Number(itemsMap.get(resp.item_id)) || 1;
+      // The score is already in points (e.g. 5, 4, 3...)
+      totalPoints += Number(resp.score) || 0;
+      maxPossiblePoints += weight;
+    }
+
+    // We store the RAW score, not percentage. Percentage is calculated on display.
+    const totalScore = totalPoints;
+
+    await query("BEGIN");
+
+    const evalResult = await query(
+      `INSERT INTO evaluations (club_id, template_id, employee_id, evaluator_id, total_score, max_score, comments, shift_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id`,
-            [clubId, template_id, targetUserId, userId, totalScore, maxPossiblePoints, comments || '', shift_id || null]
-        );
-        const evaluationId = evalResult.rows[0].id;
+      [
+        clubId,
+        template_id,
+        targetUserId,
+        userId,
+        totalScore,
+        maxPossiblePoints,
+        comments || "",
+        shift_id || null,
+      ],
+    );
+    const evaluationId = evalResult.rows[0].id;
 
-        const normalizeSelectedWorkstations = (value: any) => {
-            if (Array.isArray(value)) return value;
-            if (typeof value === 'string') {
-                try {
-                    const parsed = JSON.parse(value);
-                    return Array.isArray(parsed) ? parsed : [];
-                } catch {
-                    return [];
-                }
-            }
-            return [];
+    const normalizeSelectedWorkstations = (value: any) => {
+      if (Array.isArray(value)) return value;
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
         }
+      }
+      return [];
+    };
 
-        for (const resp of responses) {
-            await query(
-                `INSERT INTO evaluation_responses (evaluation_id, item_id, score, comment, photo_url, photo_urls, selected_workstations)
+    for (const resp of responses) {
+      await query(
+        `INSERT INTO evaluation_responses (evaluation_id, item_id, score, comment, photo_url, photo_urls, selected_workstations)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [
-                    evaluationId, 
-                    resp.item_id, 
-                    resp.score, 
-                    resp.comment, 
-                    (resp.photo_urls && resp.photo_urls.length > 0) ? resp.photo_urls[0] : (resp.photo_url || null),
-                    resp.photo_urls || (resp.photo_url ? [resp.photo_url] : []),
-                    JSON.stringify(normalizeSelectedWorkstations(resp.selected_workstations))
-                ]
-            );
-        }
-
-        await query('COMMIT');
-
-        return NextResponse.json({ success: true, id: evaluationId, score: totalScore });
-
-    } catch (error) {
-        await query('ROLLBACK');
-        console.error('Submit Evaluation Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        [
+          evaluationId,
+          resp.item_id,
+          resp.score,
+          resp.comment,
+          resp.photo_urls && resp.photo_urls.length > 0
+            ? resp.photo_urls[0]
+            : resp.photo_url || null,
+          resp.photo_urls || (resp.photo_url ? [resp.photo_url] : []),
+          JSON.stringify(
+            normalizeSelectedWorkstations(resp.selected_workstations),
+          ),
+        ],
+      );
     }
+
+    await query("COMMIT");
+
+    return NextResponse.json({
+      success: true,
+      id: evaluationId,
+      score: totalScore,
+    });
+  } catch (error) {
+    await query("ROLLBACK");
+    console.error("Submit Evaluation Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }

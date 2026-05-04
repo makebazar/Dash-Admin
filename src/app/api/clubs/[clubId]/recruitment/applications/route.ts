@@ -1,35 +1,35 @@
-import { NextResponse } from "next/server"
-import { query } from "@/db"
-import { requireClubFullAccess } from "@/lib/club-api-access"
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { requireModuleAccess } from "@/lib/club-api-access";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const { clubId } = await params
-        await requireClubFullAccess(clubId)
+  try {
+    const { clubId } = await params;
+    await requireModuleAccess(clubId, "employees", "view");
 
-        const url = new URL(request.url)
-        const templateId = url.searchParams.get("template_id")
-        const status = url.searchParams.get("status")
+    const url = new URL(request.url);
+    const templateId = url.searchParams.get("template_id");
+    const status = url.searchParams.get("status");
 
-        const where: string[] = ["a.club_id = $1"]
-        const values: any[] = [clubId]
+    const where: string[] = ["a.club_id = $1"];
+    const values: any[] = [clubId];
 
-        if (templateId) {
-            values.push(templateId)
-            where.push(`a.template_id = $${values.length}`)
-        }
-        if (status) {
-            values.push(status)
-            where.push(`a.status = $${values.length}`)
-        }
+    if (templateId) {
+      values.push(templateId);
+      where.push(`a.template_id = $${values.length}`);
+    }
+    if (status) {
+      values.push(status);
+      where.push(`a.status = $${values.length}`);
+    }
 
-        const res = await query(
-            `
+    const res = await query(
+      `
             SELECT
                 a.id,
                 a.club_id,
@@ -78,13 +78,17 @@ export async function GET(
             WHERE ${where.join(" AND ")}
             ORDER BY a.created_at DESC
             `,
-            values
-        )
+      values,
+    );
 
-        return NextResponse.json(res.rows)
-    } catch (error: any) {
-        const status = typeof error?.status === "number" ? error.status : 500
-        if (status === 500) console.error("Recruitment Applications GET Error:", error)
-        return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status })
-    }
+    return NextResponse.json(res.rows);
+  } catch (error: any) {
+    const status = typeof error?.status === "number" ? error.status : 500;
+    if (status === 500)
+      console.error("Recruitment Applications GET Error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Internal Server Error" },
+      { status },
+    );
+  }
 }

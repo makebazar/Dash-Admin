@@ -1,19 +1,19 @@
-import { NextResponse } from "next/server"
-import { query } from "@/db"
-import { requireClubFullAccess } from "@/lib/club-api-access"
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { requireModuleAccess } from "@/lib/club-api-access";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
 export async function GET(
-    _request: Request,
-    { params }: { params: Promise<{ clubId: string; applicationId: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ clubId: string; applicationId: string }> },
 ) {
-    try {
-        const { clubId, applicationId } = await params
-        await requireClubFullAccess(clubId)
+  try {
+    const { clubId, applicationId } = await params;
+    await requireModuleAccess(clubId, "employees", "view");
 
-        const res = await query(
-            `
+    const res = await query(
+      `
             SELECT
                 a.*,
                 t.name as template_name,
@@ -58,79 +58,102 @@ export async function GET(
             ) at ON at.application_id = a.id
             WHERE a.club_id = $1 AND a.id = $2
             `,
-            [clubId, applicationId]
-        )
-        if (res.rowCount === 0) return NextResponse.json({ error: "Not Found" }, { status: 404 })
-        return NextResponse.json(res.rows[0])
-    } catch (error: any) {
-        const status = typeof error?.status === "number" ? error.status : 500
-        if (status === 500) console.error("Recruitment Application GET Error:", error)
-        return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status })
-    }
+      [clubId, applicationId],
+    );
+    if (res.rowCount === 0)
+      return NextResponse.json({ error: "Not Found" }, { status: 404 });
+    return NextResponse.json(res.rows[0]);
+  } catch (error: any) {
+    const status = typeof error?.status === "number" ? error.status : 500;
+    if (status === 500)
+      console.error("Recruitment Application GET Error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Internal Server Error" },
+      { status },
+    );
+  }
 }
 
 export async function PUT(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string; applicationId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string; applicationId: string }> },
 ) {
-    try {
-        const { clubId, applicationId } = await params
-        await requireClubFullAccess(clubId)
+  try {
+    const { clubId, applicationId } = await params;
+    await requireModuleAccess(clubId, "employees", "edit");
 
-        const body = await request.json()
-        const fields: { sql: string; value: any }[] = []
-        if (body?.status !== undefined) fields.push({ sql: "status", value: String(body.status) })
-        if (body?.manual_score !== undefined) {
-            const n = body.manual_score === null ? null : Number(body.manual_score)
-            fields.push({ sql: "manual_score", value: Number.isFinite(n) ? n : null })
-        }
+    const body = await request.json();
+    const fields: { sql: string; value: any }[] = [];
+    if (body?.status !== undefined)
+      fields.push({ sql: "status", value: String(body.status) });
+    if (body?.manual_score !== undefined) {
+      const n = body.manual_score === null ? null : Number(body.manual_score);
+      fields.push({
+        sql: "manual_score",
+        value: Number.isFinite(n) ? n : null,
+      });
+    }
 
-        if (fields.length === 0) return NextResponse.json({ error: "No fields to update" }, { status: 400 })
+    if (fields.length === 0)
+      return NextResponse.json(
+        { error: "No fields to update" },
+        { status: 400 },
+      );
 
-        const setSql = fields.map((f, i) => `${f.sql} = $${i + 3}`).join(", ")
-        const values = fields.map(f => f.value)
+    const setSql = fields.map((f, i) => `${f.sql} = $${i + 3}`).join(", ");
+    const values = fields.map((f) => f.value);
 
-        const res = await query(
-            `
+    const res = await query(
+      `
             UPDATE recruitment_applications
             SET ${setSql},
                 reviewed_at = NOW()
             WHERE club_id = $1 AND id = $2
             RETURNING *
             `,
-            [clubId, applicationId, ...values]
-        )
-        if (res.rowCount === 0) return NextResponse.json({ error: "Not Found" }, { status: 404 })
-        return NextResponse.json(res.rows[0])
-    } catch (error: any) {
-        const status = typeof error?.status === "number" ? error.status : 500
-        if (status === 500) console.error("Recruitment Application PUT Error:", error)
-        return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status })
-    }
+      [clubId, applicationId, ...values],
+    );
+    if (res.rowCount === 0)
+      return NextResponse.json({ error: "Not Found" }, { status: 404 });
+    return NextResponse.json(res.rows[0]);
+  } catch (error: any) {
+    const status = typeof error?.status === "number" ? error.status : 500;
+    if (status === 500)
+      console.error("Recruitment Application PUT Error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Internal Server Error" },
+      { status },
+    );
+  }
 }
 
 export async function DELETE(
-    _request: Request,
-    { params }: { params: Promise<{ clubId: string; applicationId: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ clubId: string; applicationId: string }> },
 ) {
-    try {
-        const { clubId, applicationId } = await params
-        await requireClubFullAccess(clubId)
+  try {
+    const { clubId, applicationId } = await params;
+    await requireModuleAccess(clubId, "employees", "edit");
 
-        const res = await query(
-            `
+    const res = await query(
+      `
             DELETE FROM recruitment_applications
             WHERE club_id = $1 AND id = $2
             RETURNING id
             `,
-            [clubId, applicationId]
-        )
+      [clubId, applicationId],
+    );
 
-        if (res.rowCount === 0) return NextResponse.json({ error: "Not Found" }, { status: 404 })
-        return NextResponse.json({ success: true, id: res.rows[0].id })
-    } catch (error: any) {
-        const status = typeof error?.status === "number" ? error.status : 500
-        if (status === 500) console.error("Recruitment Application DELETE Error:", error)
-        return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status })
-    }
+    if (res.rowCount === 0)
+      return NextResponse.json({ error: "Not Found" }, { status: 404 });
+    return NextResponse.json({ success: true, id: res.rows[0].id });
+  } catch (error: any) {
+    const status = typeof error?.status === "number" ? error.status : 500;
+    if (status === 500)
+      console.error("Recruitment Application DELETE Error:", error);
+    return NextResponse.json(
+      { error: error?.message || "Internal Server Error" },
+      { status },
+    );
+  }
 }

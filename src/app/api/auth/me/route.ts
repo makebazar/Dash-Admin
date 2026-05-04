@@ -1,61 +1,76 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
-import { isSuperAdmin } from '@/lib/super-admin';
-import { resolveSubscriptionState } from '@/lib/subscriptions';
-import { hasColumn } from '@/lib/db-compat';
-import { normalizeInventorySettings } from '@/lib/inventory-settings';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { cookies } from "next/headers";
+import { isSuperAdmin } from "@/lib/super-admin";
+import { resolveSubscriptionState } from "@/lib/subscriptions";
+import { hasColumn } from "@/lib/db-compat";
+import { normalizeInventorySettings } from "@/lib/inventory-settings";
 
-const LEGAL_ACCEPTANCE_VERSION = '2026-04-01'
+const LEGAL_ACCEPTANCE_VERSION = "2026-04-01";
 
 export async function GET() {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
 
-        console.log('[Auth/Me] Fetching user data for userId:', userId);
+    console.log("[Auth/Me] Fetching user data for userId:", userId);
 
-        if (!userId) {
-            console.log('[Auth/Me] No session_user_id found');
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      console.log("[Auth/Me] No session_user_id found");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        // Get user info
-        const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
-        const hasSubscriptionCanceledAt = await hasColumn('users', 'subscription_canceled_at');
-        const hasLegalAcceptedAt = await hasColumn('users', 'legal_accepted_at');
-        const hasLegalAcceptanceVersion = await hasColumn('users', 'legal_acceptance_version');
-        const userResult = await query(
-            `SELECT 
+    // Get user info
+    const hasSubscriptionStatus = await hasColumn(
+      "users",
+      "subscription_status",
+    );
+    const hasSubscriptionCanceledAt = await hasColumn(
+      "users",
+      "subscription_canceled_at",
+    );
+    const hasLegalAcceptedAt = await hasColumn("users", "legal_accepted_at");
+    const hasLegalAcceptanceVersion = await hasColumn(
+      "users",
+      "legal_acceptance_version",
+    );
+    const userResult = await query(
+      `SELECT
                 id,
                 full_name,
                 phone_number,
                 is_super_admin,
                 subscription_plan,
-                ${hasSubscriptionStatus ? 'subscription_status' : "NULL::varchar as subscription_status"},
+                ${hasSubscriptionStatus ? "subscription_status" : "NULL::varchar as subscription_status"},
                 subscription_started_at,
                 subscription_ends_at,
-                ${hasSubscriptionCanceledAt ? 'subscription_canceled_at' : "NULL::timestamp as subscription_canceled_at"},
-                ${hasLegalAcceptedAt ? 'legal_accepted_at' : "NULL::timestamp as legal_accepted_at"},
-                ${hasLegalAcceptanceVersion ? 'legal_acceptance_version' : "NULL::varchar as legal_acceptance_version"}
+                ${hasSubscriptionCanceledAt ? "subscription_canceled_at" : "NULL::timestamp as subscription_canceled_at"},
+                ${hasLegalAcceptedAt ? "legal_accepted_at" : "NULL::timestamp as legal_accepted_at"},
+                ${hasLegalAcceptanceVersion ? "legal_acceptance_version" : "NULL::varchar as legal_acceptance_version"}
              FROM users
              WHERE id = $1`,
-            [userId]
-        );
+      [userId],
+    );
 
-        if (userResult.rowCount === 0) {
-            console.log('[Auth/Me] User not found in DB:', userId);
-            return NextResponse.json({ error: 'User not found' }, { status: 404 });
-        }
+    if (userResult.rowCount === 0) {
+      console.log("[Auth/Me] User not found in DB:", userId);
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
-        const user = userResult.rows[0];
-        const resolvedSuperAdmin = isSuperAdmin(user.is_super_admin, user.id, user.phone_number);
-        const subscription = resolveSubscriptionState(user);
-        const legalAcceptanceRequired = !user.legal_accepted_at || user.legal_acceptance_version !== LEGAL_ACCEPTANCE_VERSION
-        console.log('[Auth/Me] User found:', user.full_name);
+    const user = userResult.rows[0];
+    const resolvedSuperAdmin = isSuperAdmin(
+      user.is_super_admin,
+      user.id,
+      user.phone_number,
+    );
+    const subscription = resolveSubscriptionState(user);
+    const legalAcceptanceRequired =
+      !user.legal_accepted_at ||
+      user.legal_acceptance_version !== LEGAL_ACCEPTANCE_VERSION;
+    console.log("[Auth/Me] User found:", user.full_name);
 
-        // Get owned clubs
-        const ownedClubsResult = await query(
-            `SELECT DISTINCT c.id, c.name, c.address, c.created_at, c.inventory_required, c.inventory_settings, c.timezone
+    // Get owned clubs
+    const ownedClubsResult = await query(
+      `SELECT DISTINCT c.id, c.name, c.address, c.created_at, c.inventory_required, c.inventory_settings, c.timezone
              FROM clubs c
              LEFT JOIN club_employees ce ON ce.club_id = c.id
              WHERE c.owner_id = $1
@@ -66,133 +81,186 @@ export async function GET() {
                     AND ce.dismissed_at IS NULL
                 )
              ORDER BY c.created_at DESC`,
-            [userId]
-        );
-        console.log('[Auth/Me] Owned clubs count:', ownedClubsResult.rowCount);
+      [userId],
+    );
+    console.log("[Auth/Me] Owned clubs count:", ownedClubsResult.rowCount);
 
-        const ownedClubs = ownedClubsResult.rows.map(row => ({
-            id: row.id,
-            name: row.name,
-            address: row.address,
-            inventory_required: row.inventory_required,
-            inventory_settings: normalizeInventorySettings(row.inventory_settings),
-            timezone: row.timezone || 'Europe/Moscow'
-        }));
+    const ownedClubs = ownedClubsResult.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      address: row.address,
+      inventory_required: row.inventory_required,
+      inventory_settings: normalizeInventorySettings(row.inventory_settings),
+      timezone: row.timezone || "Europe/Moscow",
+    }));
 
-        // Get employee clubs with role
-        const employeeClubsQuery = `
-            SELECT c.id, c.name, c.address, c.inventory_required, c.inventory_settings, c.timezone, ce.role as employee_role, r.name as global_role_name, r.id as global_role_id
+    // Get employee clubs with role
+    const employeeClubsQuery = `
+            SELECT
+                c.id, c.name, c.address, c.inventory_required, c.inventory_settings, c.timezone,
+                ce.role as employee_role,
+                r_global.name as global_role_name,
+                r_global.id as global_role_id,
+                COALESCE(r_club.employee_access_settings, r_global.employee_access_settings, '{}'::jsonb) as permissions
             FROM clubs c
             JOIN club_employees ce ON c.id = ce.club_id
             LEFT JOIN users u ON ce.user_id = u.id
-            LEFT JOIN roles r ON u.role_id = r.id
+            LEFT JOIN roles r_global ON u.role_id = r_global.id
+            LEFT JOIN roles r_club ON ce.role_id = r_club.id
             WHERE ce.user_id = $1
               AND ce.is_active = TRUE
               AND ce.dismissed_at IS NULL
             ORDER BY ce.hired_at DESC
         `;
-        
-        console.log('[Auth/Me] Executing employee clubs query for user:', userId);
-        
-        const employeeClubsResult = await query(employeeClubsQuery, [userId]);
-        
-        // Combine employee clubs and owned clubs for the employee dashboard view
-        // Owners should be able to "go on shift" in their own clubs
-        const employeeClubsMap = new Map();
-        
-        // Add actual employee roles first
-        employeeClubsResult.rows.forEach(row => {
-            const normalizedRole = (row.employee_role === 'EMPLOYEE' || row.employee_role === 'Сотрудник' || row.employee_role === 'EMP')
-                ? (row.global_role_name || 'Сотрудник')
-                : (row.employee_role || row.global_role_name || 'Сотрудник');
-            employeeClubsMap.set(row.id, {
-                id: row.id,
-                name: row.name,
-                address: row.address,
-                inventory_required: row.inventory_required,
-                inventory_settings: normalizeInventorySettings(row.inventory_settings),
-                timezone: row.timezone || 'Europe/Moscow',
-                role: normalizedRole,
-                role_id: row.global_role_id
-            });
-        });
 
-        // Add owned clubs if not already there (as Владелец)
-        ownedClubsResult.rows.forEach(row => {
-            if (!employeeClubsMap.has(row.id)) {
-                employeeClubsMap.set(row.id, {
-                    id: row.id,
-                    name: row.name,
-                    address: row.address,
-                    inventory_required: row.inventory_required,
-                    inventory_settings: normalizeInventorySettings(row.inventory_settings),
-                    timezone: row.timezone || 'Europe/Moscow',
-                    role: 'Владелец',
-                    is_owner: true
-                });
-            }
-        });
+    console.log("[Auth/Me] Executing employee clubs query for user:", userId);
 
-        const clubIds = Array.from(employeeClubsMap.keys()).map(id => Number(id)).filter(id => Number.isInteger(id));
-        if (clubIds.length > 0) {
-            const ownerSubscriptionResult = await query(
-                `SELECT c.id as club_id,
+    const employeeClubsResult = await query(employeeClubsQuery, [userId]);
+
+    // Combine employee clubs and owned clubs for the employee dashboard view
+    // Owners should be able to "go on shift" in their own clubs
+    const employeeClubsMap = new Map();
+
+    // Add actual employee roles first
+    employeeClubsResult.rows.forEach((row) => {
+      let role =
+        row.employee_role === "EMPLOYEE" ||
+        row.employee_role === "Сотрудник" ||
+        row.employee_role === "EMP"
+          ? row.global_role_name || "Сотрудник"
+          : row.employee_role || row.global_role_name || "Сотрудник";
+
+      const perms = row.permissions || {};
+      let canAccessManagement = true;
+
+      // Universally apply the new RBAC flag system: if employee_only is true, they can't access management.
+      if (perms.employee_only === true) {
+        canAccessManagement = false;
+        // Force the role name to something that doesn't trigger "Management" buttons if it's currently "Manager" but has employee_only=true
+        if (role === "Управляющий" || role === "Manager") {
+          role = "Сотрудник";
+        }
+      } else if (perms.is_full_access === true) {
+        canAccessManagement = true;
+      } else {
+        // If not explicitly employee_only and not explicitly full_access, check if they have any management module access
+        const hasAnyModuleAccess = Object.values(perms.modules || {}).some(
+          (v) => v === "view" || v === "edit",
+        );
+        canAccessManagement = !!(
+          hasAnyModuleAccess ||
+          perms.can_view_reports ||
+          perms.can_edit_settings
+        );
+
+        // Fallback for legacy roles without explicit settings yet
+        if (!canAccessManagement && Object.keys(perms).length === 0) {
+          canAccessManagement =
+            role === "Управляющий" || role === "Manager" || role === "Владелец";
+        }
+      }
+
+      employeeClubsMap.set(row.id, {
+        id: row.id,
+        name: row.name,
+        address: row.address,
+        inventory_required: row.inventory_required,
+        inventory_settings: normalizeInventorySettings(row.inventory_settings),
+        timezone: row.timezone || "Europe/Moscow",
+        role: role,
+        role_id: row.global_role_id,
+        can_access_management: canAccessManagement,
+      });
+    });
+
+    // Add owned clubs if not already there (as Владелец)
+    ownedClubsResult.rows.forEach((row) => {
+      if (!employeeClubsMap.has(row.id)) {
+        employeeClubsMap.set(row.id, {
+          id: row.id,
+          name: row.name,
+          address: row.address,
+          inventory_required: row.inventory_required,
+          inventory_settings: normalizeInventorySettings(
+            row.inventory_settings,
+          ),
+          timezone: row.timezone || "Europe/Moscow",
+          role: "Владелец",
+          is_owner: true,
+          can_access_management: true,
+        });
+      }
+    });
+
+    const clubIds = Array.from(employeeClubsMap.keys())
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id));
+    if (clubIds.length > 0) {
+      const ownerSubscriptionResult = await query(
+        `SELECT c.id as club_id,
                         u.subscription_plan,
-                        ${hasSubscriptionStatus ? 'u.subscription_status' : "NULL::varchar as subscription_status"},
+                        ${hasSubscriptionStatus ? "u.subscription_status" : "NULL::varchar as subscription_status"},
                         u.subscription_ends_at
                  FROM clubs c
                  JOIN users u ON u.id = c.owner_id
                  WHERE c.id = ANY($1::int[])`,
-                [clubIds]
-            );
+        [clubIds],
+      );
 
-            const subscriptionByClub = new Map<number, { status: string; isActive: boolean; endsAt: Date | null }>();
-            for (const row of ownerSubscriptionResult.rows) {
-                const resolved = resolveSubscriptionState(row);
-                subscriptionByClub.set(Number(row.club_id), {
-                    status: resolved.status,
-                    isActive: resolved.isActive,
-                    endsAt: resolved.endsAt
-                });
-            }
-
-            employeeClubsMap.forEach((club, clubId) => {
-                const state = subscriptionByClub.get(Number(clubId));
-                if (state) {
-                    club.subscription_status = state.status;
-                    club.subscription_is_active = state.isActive;
-                    club.subscription_ends_at = state.endsAt;
-                }
-            });
-        }
-
-        const employeeClubs = Array.from(employeeClubsMap.values());
-        const hasExpiredClubSubscription = employeeClubs.some((club: any) => club.subscription_is_active === false);
-
-        return NextResponse.json({
-            user: {
-                id: user.id,
-                full_name: user.full_name,
-                phone_number: user.phone_number,
-                is_super_admin: resolvedSuperAdmin,
-                subscription_plan: subscription.plan,
-                subscription_status: subscription.status,
-                subscription_started_at: user.subscription_started_at,
-                subscription_ends_at: user.subscription_ends_at,
-                subscription_canceled_at: user.subscription_canceled_at,
-                legal_accepted_at: user.legal_accepted_at,
-                legal_acceptance_version: user.legal_acceptance_version,
-                legal_acceptance_required: legalAcceptanceRequired,
-                subscription_limits: null, // Лимиты теперь не используются - всё включено
-            },
-            ownedClubs,
-            employeeClubs,
-            has_expired_club_subscription: hasExpiredClubSubscription,
-            legal_acceptance_version_required: LEGAL_ACCEPTANCE_VERSION
+      const subscriptionByClub = new Map<
+        number,
+        { status: string; isActive: boolean; endsAt: Date | null }
+      >();
+      for (const row of ownerSubscriptionResult.rows) {
+        const resolved = resolveSubscriptionState(row);
+        subscriptionByClub.set(Number(row.club_id), {
+          status: resolved.status,
+          isActive: resolved.isActive,
+          endsAt: resolved.endsAt,
         });
+      }
 
-    } catch (error) {
-        console.error('Get Me Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+      employeeClubsMap.forEach((club, clubId) => {
+        const state = subscriptionByClub.get(Number(clubId));
+        if (state) {
+          club.subscription_status = state.status;
+          club.subscription_is_active = state.isActive;
+          club.subscription_ends_at = state.endsAt;
+        }
+      });
     }
+
+    const employeeClubs = Array.from(employeeClubsMap.values());
+    const hasExpiredClubSubscription = employeeClubs.some(
+      (club: any) => club.subscription_is_active === false,
+    );
+
+    return NextResponse.json({
+      user: {
+        id: user.id,
+        full_name: user.full_name,
+        phone_number: user.phone_number,
+        is_super_admin: resolvedSuperAdmin,
+        subscription_plan: subscription.plan,
+        subscription_status: subscription.status,
+        subscription_started_at: user.subscription_started_at,
+        subscription_ends_at: user.subscription_ends_at,
+        subscription_canceled_at: user.subscription_canceled_at,
+        legal_accepted_at: user.legal_accepted_at,
+        legal_acceptance_version: user.legal_acceptance_version,
+        legal_acceptance_required: legalAcceptanceRequired,
+        subscription_limits: null, // Лимиты теперь не используются - всё включено
+      },
+      ownedClubs,
+      employeeClubs,
+      has_expired_club_subscription: hasExpiredClubSubscription,
+      legal_acceptance_version_required: LEGAL_ACCEPTANCE_VERSION,
+    });
+  } catch (error) {
+    console.error("Get Me Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }

@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server"
-import { query } from "@/db"
-import { requireClubFullAccess } from "@/lib/club-api-access"
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { requireModuleAccess } from "@/lib/club-api-access";
 
 export async function GET(
   request: Request,
-  { params }: { params: Promise<{ clubId: string }> }
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
   try {
-    const { clubId } = await params
-    await requireClubFullAccess(clubId)
+    const { clubId } = await params;
+    await requireModuleAccess(clubId, "signage", "view");
 
     const result = await query(
       `
@@ -35,17 +35,23 @@ export async function GET(
       WHERE club_id = $1
       ORDER BY COALESCE(last_seen_at, created_at) DESC, id DESC
       `,
-      [clubId]
-    )
+      [clubId],
+    );
 
-    return NextResponse.json({ devices: result.rows })
+    return NextResponse.json({ devices: result.rows });
   } catch (error: any) {
-    const status = error?.status
+    const status = error?.status;
     if (status) {
-      return NextResponse.json({ error: status === 401 ? "Unauthorized" : "Forbidden" }, { status })
+      return NextResponse.json(
+        { error: status === 401 ? "Unauthorized" : "Forbidden" },
+        { status },
+      );
     }
 
-    console.error("Get club signage devices error:", error)
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    console.error("Get club signage devices error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }

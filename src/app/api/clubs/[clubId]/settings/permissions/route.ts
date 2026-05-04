@@ -1,93 +1,93 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
-import { getClubApiAccess, requireClubOwner } from '@/lib/club-api-access';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { cookies } from "next/headers";
+import { getClubApiAccess, requireClubOwner } from "@/lib/club-api-access";
 
-export const dynamic = 'force-dynamic';
-
-const AVAILABLE_PERMISSIONS = [
-    { key: 'view_dashboard', label: 'Дашборд', category: 'Меню' },
-    { key: 'view_shifts', label: 'Смены', category: 'Меню' },
-    { key: 'view_schedule', label: 'График работы', category: 'Меню' },
-    { key: 'manage_employees', label: 'Сотрудники', category: 'Меню' },
-    { key: 'view_salaries', label: 'Зарплаты', category: 'Меню' },
-    { key: 'view_finance', label: 'Финансы', category: 'Меню' },
-    { key: 'manage_inventory', label: 'Склад', category: 'Меню' },
-    { key: 'manage_equipment', label: 'Оборудование', category: 'Меню' },
-    { key: 'view_reviews', label: 'Центр проверок', category: 'Меню' },
-    
-    { key: 'manage_club_settings', label: 'Общие', category: 'Настройки' },
-    { key: 'edit_salaries_settings', label: 'Зарплаты (настройки)', category: 'Настройки' },
-    { key: 'manage_report_template', label: 'Отчеты', category: 'Настройки' },
-    { key: 'manage_checklists', label: 'Чеклисты', category: 'Настройки' }
-];
+export const dynamic = "force-dynamic";
 
 export async function GET(
-    _request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const { clubId } = await params;
-        const userId = (await cookies()).get('session_user_id')?.value;
+  try {
+    const { clubId } = await params;
+    const userId = (await cookies()).get("session_user_id")?.value;
 
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!userId)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-        const access = await getClubApiAccess(String(clubId));
-        if (!access.isFullAccess) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        const canEdit = access.isOwner;
+    const access = await getClubApiAccess(String(clubId));
+    if (!access.isFullAccess)
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canEdit = access.isOwner;
 
-        // Get all roles
-        const rolesRes = await query(`SELECT id, name FROM roles ORDER BY id ASC`);
-        
-        // Get existing permissions
-        const permissionsRes = await query(
-            `SELECT role_id, permission_key, is_allowed FROM role_permissions WHERE club_id = $1`,
-            [clubId]
-        );
+    // Get customizable roles
+    const rolesRes = await query(
+      `SELECT
+                r.id,
+                r.name,
+                COALESCE(crs.employee_access_settings, r.employee_access_settings, '{}'::jsonb) as employee_access_settings
+             FROM roles r
+             LEFT JOIN club_role_settings crs ON crs.role_id = r.id AND crs.club_id = $1
+             WHERE r.is_customizable = true
+             ORDER BY r.id ASC`,
+      [clubId],
+    );
 
-        const rolePermissions: Record<number, Record<string, boolean>> = {};
-        permissionsRes.rows.forEach(row => {
-            if (!rolePermissions[row.role_id]) rolePermissions[row.role_id] = {};
-            rolePermissions[row.role_id][row.permission_key] = row.is_allowed;
-        });
-
-        return NextResponse.json({
-            roles: rolesRes.rows,
-            availablePermissions: AVAILABLE_PERMISSIONS,
-            rolePermissions,
-            canEdit
-        });
-    } catch (error: any) {
-        const status = typeof error?.status === 'number' ? error.status : 500
-        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
-    }
+    return NextResponse.json({
+      roles: rolesRes.rows,
+      canEdit,
+    });
+  } catch (error: any) {
+    const status = typeof error?.status === "number" ? error.status : 500;
+    return NextResponse.json(
+      { error: error?.message || "Internal Server Error" },
+      { status },
+    );
+  }
 }
 
-export async function POST(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const { clubId } = await params;
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { roleId, permissionKey, isAllowed } = await request.json();
+  try {
+    const { clubId } = await params;
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { roleId, employee_access_settings } = await request.json();
 
-        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!userId)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-        await requireClubOwner(String(clubId));
+    await requireClubOwner(String(clubId));
 
-        // Upsert permission
-        await query(
-            `INSERT INTO role_permissions (role_id, club_id, permission_key, is_allowed)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (role_id, club_id, permission_key)
-             DO UPDATE SET is_allowed = EXCLUDED.is_allowed`,
-            [roleId, clubId, permissionKey, isAllowed]
-        );
-
-        return NextResponse.json({ success: true });
-    } catch (error: any) {
-        const status = typeof error?.status === 'number' ? error.status : 500
-        return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status });
+    // Check if role is customizable
+    const roleRes = await query(
+      `SELECT is_customizable FROM roles WHERE id = $1`,
+      [roleId],
+    );
+    if (roleRes.rowCount === 0 || !roleRes.rows[0].is_customizable) {
+      return NextResponse.json(
+        { error: "Роль нельзя изменять" },
+        { status: 403 },
+      );
     }
+
+    // Upsert club role settings
+    await query(
+      `INSERT INTO club_role_settings (club_id, role_id, employee_access_settings, updated_at)
+             VALUES ($1, $2, $3::jsonb, NOW())
+             ON CONFLICT (club_id, role_id)
+             DO UPDATE SET employee_access_settings = EXCLUDED.employee_access_settings, updated_at = NOW()`,
+      [clubId, roleId, JSON.stringify(employee_access_settings)],
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    const status = typeof error?.status === "number" ? error.status : 500;
+    return NextResponse.json(
+      { error: error?.message || "Internal Server Error" },
+      { status },
+    );
+  }
 }

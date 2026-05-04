@@ -1,48 +1,40 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
-import { formatDateKeyInTimezone } from '@/lib/utils';
-import { hasColumn } from '@/lib/db-compat';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { cookies } from "next/headers";
+import { requireModuleAccess } from "@/lib/club-api-access";
+import { formatDateKeyInTimezone } from "@/lib/utils";
+import { hasColumn } from "@/lib/db-compat";
 import {
-    deriveEquipmentStatus,
-    participatesInCleaningSchedule,
-    normalizeEquipmentRecord,
-    resolveEquipmentStateForPersistence,
-} from '@/lib/equipment-status';
+  deriveEquipmentStatus,
+  participatesInCleaningSchedule,
+  normalizeEquipmentRecord,
+  resolveEquipmentStateForPersistence,
+} from "@/lib/equipment-status";
 
 // GET /api/clubs/[clubId]/equipment/[equipmentId] - Get single equipment
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string; equipmentId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string; equipmentId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId, equipmentId } = await params;
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId, equipmentId } = await params;
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        // Verify access
-        const accessCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-             UNION
-             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-            [clubId, userId]
-        );
+    // Verify access
+    await requireModuleAccess(clubId, "equipment", "view");
 
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+    const hasEquipmentStatusColumn = await hasColumn("equipment", "status");
+    const equipmentStatusSql = hasEquipmentStatusColumn
+      ? `COALESCE(e.status, CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END)`
+      : `CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END`;
+    const equipmentActiveSql = `CASE WHEN ${equipmentStatusSql} = 'WRITTEN_OFF' THEN FALSE ELSE TRUE END`;
 
-        const hasEquipmentStatusColumn = await hasColumn('equipment', 'status');
-        const equipmentStatusSql = hasEquipmentStatusColumn
-            ? `COALESCE(e.status, CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END)`
-            : `CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END`;
-        const equipmentActiveSql = `CASE WHEN ${equipmentStatusSql} = 'WRITTEN_OFF' THEN FALSE ELSE TRUE END`;
-
-        const result = await query(
-            `SELECT 
+    const result = await query(
+      `SELECT
                 e.*,
                 ${equipmentStatusSql} as status,
                 ${equipmentActiveSql} as is_active,
@@ -54,36 +46,39 @@ export async function GET(
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
             LEFT JOIN equipment_types et ON e.type = et.code
             WHERE e.id = $1 AND e.club_id = $2`,
-            [equipmentId, clubId]
-        );
+      [equipmentId, clubId],
+    );
 
-        if (result.rowCount === 0) {
-            return NextResponse.json({ error: 'Equipment not found' }, { status: 404 });
-        }
+    if (result.rowCount === 0) {
+      return NextResponse.json(
+        { error: "Equipment not found" },
+        { status: 404 },
+      );
+    }
 
-        // Get recent issues
-        const issuesResult = await query(
-            `SELECT * FROM equipment_issues 
-             WHERE equipment_id = $1 
-             ORDER BY created_at DESC 
+    // Get recent issues
+    const issuesResult = await query(
+      `SELECT * FROM equipment_issues
+             WHERE equipment_id = $1
+             ORDER BY created_at DESC
              LIMIT 10`,
-            [equipmentId]
-        );
+      [equipmentId],
+    );
 
-        // Get recent maintenance tasks
-        const tasksResult = await query(
-            `SELECT mt.*, u.full_name as assigned_to_name
+    // Get recent maintenance tasks
+    const tasksResult = await query(
+      `SELECT mt.*, u.full_name as assigned_to_name
              FROM equipment_maintenance_tasks mt
              LEFT JOIN users u ON mt.assigned_user_id = u.id
-             WHERE mt.equipment_id = $1 
-             ORDER BY mt.due_date DESC 
+             WHERE mt.equipment_id = $1
+             ORDER BY mt.due_date DESC
              LIMIT 10`,
-            [equipmentId]
-        );
+      [equipmentId],
+    );
 
-        // Get movement history
-        const movesResult = await query(
-            `SELECT 
+    // Get movement history
+    const movesResult = await query(
+      `SELECT
                 m.*,
                 fw.name as from_workstation_name,
                 tw.name as to_workstation_name,
@@ -92,184 +87,217 @@ export async function GET(
              LEFT JOIN club_workstations fw ON m.from_workstation_id = fw.id
              LEFT JOIN club_workstations tw ON m.to_workstation_id = tw.id
              LEFT JOIN users u ON m.moved_by = u.id
-             WHERE m.equipment_id = $1 
-             ORDER BY m.moved_at DESC 
+             WHERE m.equipment_id = $1
+             ORDER BY m.moved_at DESC
              LIMIT 20`,
-            [equipmentId]
-        );
+      [equipmentId],
+    );
 
-        return NextResponse.json({
-            ...normalizeEquipmentRecord(result.rows[0]),
-            issues: issuesResult.rows,
-            maintenance_tasks: tasksResult.rows,
-            movement_history: movesResult.rows
-        });
-    } catch (error) {
-        console.error('Get Equipment Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-    }
+    return NextResponse.json({
+      ...normalizeEquipmentRecord(result.rows[0]),
+      issues: issuesResult.rows,
+      maintenance_tasks: tasksResult.rows,
+      movement_history: movesResult.rows,
+    });
+  } catch (error) {
+    console.error("Get Equipment Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }
 
 // PATCH /api/clubs/[clubId]/equipment/[equipmentId] - Update equipment
 export async function PATCH(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string; equipmentId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string; equipmentId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId, equipmentId } = await params;
-        const body = await request.json();
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId, equipmentId } = await params;
+    const body = await request.json();
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        // Verify ownership
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
+    // Verify access
+    await requireModuleAccess(clubId, "equipment", "edit");
 
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+    const hasEquipmentStatusColumn = await hasColumn("equipment", "status");
 
-        const hasEquipmentStatusColumn = await hasColumn('equipment', 'status');
+    // Get current equipment state for movement tracking
+    const currentEquipment = await query(
+      `SELECT workstation_id, assignment_mode, is_active${hasEquipmentStatusColumn ? ", status" : ""} FROM equipment WHERE id = $1 AND club_id = $2`,
+      [equipmentId, clubId],
+    );
 
-        // Get current equipment state for movement tracking
-        const currentEquipment = await query(
-            `SELECT workstation_id, assignment_mode, is_active${hasEquipmentStatusColumn ? ', status' : ''} FROM equipment WHERE id = $1 AND club_id = $2`,
-            [equipmentId, clubId]
-        );
+    if (currentEquipment.rowCount === 0) {
+      return NextResponse.json(
+        { error: "Equipment not found" },
+        { status: 404 },
+      );
+    }
 
-        if (currentEquipment.rowCount === 0) {
-            return NextResponse.json({ error: 'Equipment not found' }, { status: 404 });
-        }
+    const currentWorkstationId = currentEquipment.rows[0].workstation_id;
+    const currentStatus = deriveEquipmentStatus({
+      status: currentEquipment.rows[0].status,
+      is_active: currentEquipment.rows[0].is_active,
+      workstation_id: currentWorkstationId,
+    });
+    const hasStateMutationRequest =
+      body.status !== undefined ||
+      body.is_active !== undefined ||
+      body.workstation_id !== undefined;
 
-        const currentWorkstationId = currentEquipment.rows[0].workstation_id;
-        const currentStatus = deriveEquipmentStatus({
-            status: currentEquipment.rows[0].status,
-            is_active: currentEquipment.rows[0].is_active,
-            workstation_id: currentWorkstationId,
-        });
-        const hasStateMutationRequest =
-            body.status !== undefined ||
-            body.is_active !== undefined ||
-            body.workstation_id !== undefined;
+    if (hasStateMutationRequest) {
+      const resolvedState = resolveEquipmentStateForPersistence({
+        currentStatus,
+        currentIsActive: currentEquipment.rows[0].is_active,
+        currentWorkstationId,
+        requestedStatus: body.status,
+        requestedIsActive: body.is_active,
+        requestedWorkstationId: body.workstation_id,
+        hasRequestedStatus: body.status !== undefined,
+        hasRequestedIsActive: body.is_active !== undefined,
+        hasRequestedWorkstation: body.workstation_id !== undefined,
+      });
 
-        if (hasStateMutationRequest) {
-            const resolvedState = resolveEquipmentStateForPersistence({
-                currentStatus,
-                currentIsActive: currentEquipment.rows[0].is_active,
-                currentWorkstationId,
-                requestedStatus: body.status,
-                requestedIsActive: body.is_active,
-                requestedWorkstationId: body.workstation_id,
-                hasRequestedStatus: body.status !== undefined,
-                hasRequestedIsActive: body.is_active !== undefined,
-                hasRequestedWorkstation: body.workstation_id !== undefined,
-            });
+      body.status = resolvedState.status;
+      body.is_active = resolvedState.is_active;
+      if (
+        body.workstation_id !== undefined ||
+        resolvedState.workstation_id !== currentWorkstationId
+      ) {
+        body.workstation_id = resolvedState.workstation_id;
+      }
+    }
 
-            body.status = resolvedState.status;
-            body.is_active = resolvedState.is_active;
-            if (body.workstation_id !== undefined || resolvedState.workstation_id !== currentWorkstationId) {
-                body.workstation_id = resolvedState.workstation_id;
-            }
-        }
+    const newWorkstationId = body.workstation_id;
 
-        const newWorkstationId = body.workstation_id;
+    if (body.assignment_mode === "INHERIT") {
+      body.assignment_mode = body.assigned_user_id ? "DIRECT" : "FREE_POOL";
+    }
 
-        if (body.assignment_mode === 'INHERIT') {
-            body.assignment_mode = body.assigned_user_id ? 'DIRECT' : 'FREE_POOL';
-        }
+    if (body.assignment_mode === "FREE_POOL") {
+      body.assigned_user_id = null;
+      if (body.maintenance_enabled === undefined) {
+        body.maintenance_enabled = true;
+      }
+    } else if (body.assignment_mode === "DIRECT" && body.assigned_user_id) {
+      body.maintenance_enabled = true;
+    } else if (body.assignment_mode === "DIRECT" && !body.assigned_user_id) {
+      body.assignment_mode = "FREE_POOL";
+      body.assigned_user_id = null;
+      if (body.maintenance_enabled === undefined) {
+        body.maintenance_enabled = true;
+      }
+    } else if (
+      body.assigned_user_id !== undefined &&
+      body.assignment_mode === undefined
+    ) {
+      body.assignment_mode = body.assigned_user_id ? "DIRECT" : "FREE_POOL";
+      if (body.maintenance_enabled === undefined) {
+        body.maintenance_enabled = true;
+      }
+    }
 
-        if (body.assignment_mode === 'FREE_POOL') {
-            body.assigned_user_id = null;
-            if (body.maintenance_enabled === undefined) {
-                body.maintenance_enabled = true;
-            }
-        } else if (body.assignment_mode === 'DIRECT' && body.assigned_user_id) {
-            body.maintenance_enabled = true;
-        } else if (body.assignment_mode === 'DIRECT' && !body.assigned_user_id) {
-            body.assignment_mode = 'FREE_POOL';
-            body.assigned_user_id = null;
-            if (body.maintenance_enabled === undefined) {
-                body.maintenance_enabled = true;
-            }
-        } else if (body.assigned_user_id !== undefined && body.assignment_mode === undefined) {
-            body.assignment_mode = body.assigned_user_id ? 'DIRECT' : 'FREE_POOL';
-            if (body.maintenance_enabled === undefined) {
-                body.maintenance_enabled = true;
-            }
-        }
+    // Build dynamic update query
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
 
-        // Build dynamic update query
-        const updates: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
+    const allowedFields = [
+      "workstation_id",
+      "type",
+      "name",
+      "identifier",
+      "brand",
+      "model",
+      "purchase_date",
+      "warranty_expires",
+      "receipt_url",
+      "last_cleaned_at",
+      "cleaning_interval_days",
+      "cleaning_interval_override_days",
+      "is_active",
+      "notes",
+      "thermal_paste_last_changed_at",
+      "thermal_paste_interval_days",
+      "thermal_paste_type",
+      "thermal_paste_note",
+      "maintenance_enabled",
+      "assigned_user_id",
+      "assignment_mode",
+      "cpu_thermal_paste_last_changed_at",
+      "cpu_thermal_paste_interval_days",
+      "cpu_thermal_paste_type",
+      "cpu_thermal_paste_note",
+      "gpu_thermal_paste_last_changed_at",
+      "gpu_thermal_paste_interval_days",
+      "gpu_thermal_paste_type",
+      "gpu_thermal_paste_note",
+    ];
 
-        const allowedFields = [
-            'workstation_id', 'type', 'name', 'identifier', 'brand', 'model',
-            'purchase_date', 'warranty_expires', 'receipt_url',
-            'last_cleaned_at', 'cleaning_interval_days', 'cleaning_interval_override_days', 'is_active', 'notes',
-            'thermal_paste_last_changed_at', 'thermal_paste_interval_days',
-            'thermal_paste_type', 'thermal_paste_note', 'maintenance_enabled',
-            'assigned_user_id', 'assignment_mode',
-            'cpu_thermal_paste_last_changed_at', 'cpu_thermal_paste_interval_days',
-            'cpu_thermal_paste_type', 'cpu_thermal_paste_note',
-            'gpu_thermal_paste_last_changed_at', 'gpu_thermal_paste_interval_days',
-            'gpu_thermal_paste_type', 'gpu_thermal_paste_note'
-        ];
+    if (hasEquipmentStatusColumn) {
+      allowedFields.push("status");
+    }
 
-        if (hasEquipmentStatusColumn) {
-            allowedFields.push('status');
-        }
+    // Logic: if assigned_user_id is set to a user or mode explicitly changes, maintenance must be enabled
+    if (
+      (body.assigned_user_id && body.assigned_user_id !== "") ||
+      body.assignment_mode
+    ) {
+      body.maintenance_enabled = true;
+    }
 
-        // Logic: if assigned_user_id is set to a user or mode explicitly changes, maintenance must be enabled
-        if ((body.assigned_user_id && body.assigned_user_id !== '') || body.assignment_mode) {
-            body.maintenance_enabled = true;
-        }
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updates.push(`${field} = $${paramIndex}`);
+        values.push(body[field] === "" ? null : body[field]);
+        paramIndex++;
+      }
+    }
 
-        for (const field of allowedFields) {
-            if (body[field] !== undefined) {
-                updates.push(`${field} = $${paramIndex}`);
-                values.push(body[field] === '' ? null : body[field]);
-                paramIndex++;
-            }
-        }
+    if (updates.length === 0) {
+      return NextResponse.json(
+        { error: "No fields to update" },
+        { status: 400 },
+      );
+    }
 
-        if (updates.length === 0) {
-            return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
-        }
+    values.push(equipmentId, clubId);
 
-        values.push(equipmentId, clubId);
-
-        const result = await query(
-            `UPDATE equipment 
-             SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
+    const result = await query(
+      `UPDATE equipment
+             SET ${updates.join(", ")}, updated_at = CURRENT_TIMESTAMP
              WHERE id = $${paramIndex} AND club_id = $${paramIndex + 1}
              RETURNING *`,
-            values
-        );
+      values,
+    );
 
-        const updatedEquipment = normalizeEquipmentRecord(result.rows[0]);
-        const schedulesCleaning = participatesInCleaningSchedule(updatedEquipment.status);
+    const updatedEquipment = normalizeEquipmentRecord(result.rows[0]);
+    const schedulesCleaning = participatesInCleaningSchedule(
+      updatedEquipment.status,
+    );
 
-        const effectiveAssigneeResult = await query(
-            `SELECT CASE
+    const effectiveAssigneeResult = await query(
+      `SELECT CASE
                         WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
                         ELSE NULL
                     END as effective_assigned_user_id
              FROM equipment e
              WHERE e.id = $1 AND e.club_id = $2`,
-            [equipmentId, clubId]
-        );
+      [equipmentId, clubId],
+    );
 
-        const effectiveAssignedUserId = effectiveAssigneeResult.rows[0]?.effective_assigned_user_id || null;
+    const effectiveAssignedUserId =
+      effectiveAssigneeResult.rows[0]?.effective_assigned_user_id || null;
 
-        if (!schedulesCleaning || !updatedEquipment.maintenance_enabled) {
-            await query(
-                `UPDATE equipment_maintenance_tasks
+    if (!schedulesCleaning || !updatedEquipment.maintenance_enabled) {
+      await query(
+        `UPDATE equipment_maintenance_tasks
                  SET status = 'SKIPPED',
                      notes = CASE
                          WHEN notes IS NULL OR notes = '' THEN $1
@@ -278,126 +306,146 @@ export async function PATCH(
                      END
                  WHERE equipment_id = $2
                    AND status = 'PENDING'`,
-                [
-                    `Автоматически пропущено: статус оборудования "${updatedEquipment.status}" не участвует в графике чисток.`,
-                    equipmentId
-                ]
-            );
-        } else if (effectiveAssignedUserId) {
-            // 1. First, update existing PENDING tasks
-            await query(
-                `UPDATE equipment_maintenance_tasks 
+        [
+          `Автоматически пропущено: статус оборудования "${updatedEquipment.status}" не участвует в графике чисток.`,
+          equipmentId,
+        ],
+      );
+    } else if (effectiveAssignedUserId) {
+      // 1. First, update existing PENDING tasks
+      await query(
+        `UPDATE equipment_maintenance_tasks
                  SET assigned_user_id = $1
                  WHERE equipment_id = $2 AND status = 'PENDING'`,
-                [effectiveAssignedUserId, equipmentId]
-            );
+        [effectiveAssignedUserId, equipmentId],
+      );
 
-            // 2. Check if ANY active task exists (PENDING/IN_PROGRESS)
-            const activeTaskCheck = await query(
-                `SELECT id FROM equipment_maintenance_tasks 
+      // 2. Check if ANY active task exists (PENDING/IN_PROGRESS)
+      const activeTaskCheck = await query(
+        `SELECT id FROM equipment_maintenance_tasks
                  WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')
                  LIMIT 1`,
-                [equipmentId]
-            );
+        [equipmentId],
+      );
 
-            // 3. If no active task exists, trigger generation for this specific equipment
-            if (activeTaskCheck.rowCount === 0) {
-                const clubRes = await query(
-                    `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+      // 3. If no active task exists, trigger generation for this specific equipment
+      if (activeTaskCheck.rowCount === 0) {
+        const clubRes = await query(
+          `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
                      FROM clubs
                      WHERE id = $1`,
-                    [clubId]
-                );
-                const today = formatDateKeyInTimezone(new Date(), clubRes.rows[0]?.timezone || 'Europe/Moscow');
-                try {
-                    // We call the internal maintenance generation logic via a fetch to our own API
-                    // This ensures the "Smart Horizon" logic is applied
-                    await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/clubs/${clubId}/equipment/maintenance`, {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Cookie': (await cookies()).toString() // Pass cookies for auth
-                        },
-                        body: JSON.stringify({
-                            date_from: today,
-                            date_to: today,
-                            equipment_ids: [equipmentId]
-                        })
-                    });
-                } catch (e) {
-                    console.error('Auto-generation failed:', e);
-                }
-            }
-        } else if (body.assigned_user_id !== undefined || body.assignment_mode !== undefined) {
-            // Just sync if maintenance_enabled wasn't part of the trigger but assignment changed
-            await query(
-                `UPDATE equipment_maintenance_tasks 
+          [clubId],
+        );
+        const today = formatDateKeyInTimezone(
+          new Date(),
+          clubRes.rows[0]?.timezone || "Europe/Moscow",
+        );
+        try {
+          // We call the internal maintenance generation logic via a fetch to our own API
+          // This ensures the "Smart Horizon" logic is applied
+          await fetch(
+            `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/clubs/${clubId}/equipment/maintenance`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Cookie: (await cookies()).toString(), // Pass cookies for auth
+              },
+              body: JSON.stringify({
+                date_from: today,
+                date_to: today,
+                equipment_ids: [equipmentId],
+              }),
+            },
+          );
+        } catch (e) {
+          console.error("Auto-generation failed:", e);
+        }
+      }
+    } else if (
+      body.assigned_user_id !== undefined ||
+      body.assignment_mode !== undefined
+    ) {
+      // Just sync if maintenance_enabled wasn't part of the trigger but assignment changed
+      await query(
+        `UPDATE equipment_maintenance_tasks
                  SET assigned_user_id = $1
                  WHERE equipment_id = $2 AND status = 'PENDING'`,
-                [effectiveAssignedUserId, equipmentId]
-            );
-        }
-
-        // Track movement if workstation changed
-        if (newWorkstationId !== undefined && newWorkstationId !== currentWorkstationId) {
-            await query(
-                `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
-                 VALUES ($1, $2, $3, $4, $5)`,
-                [equipmentId, currentWorkstationId, newWorkstationId || null, userId, body.move_reason || null]
-            );
-        }
-
-        return NextResponse.json(updatedEquipment);
-    } catch (error) {
-        console.error('Update Equipment Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        [effectiveAssignedUserId, equipmentId],
+      );
     }
+
+    // Track movement if workstation changed
+    if (
+      newWorkstationId !== undefined &&
+      newWorkstationId !== currentWorkstationId
+    ) {
+      await query(
+        `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
+                 VALUES ($1, $2, $3, $4, $5)`,
+        [
+          equipmentId,
+          currentWorkstationId,
+          newWorkstationId || null,
+          userId,
+          body.move_reason || null,
+        ],
+      );
+    }
+
+    return NextResponse.json(updatedEquipment);
+  } catch (error) {
+    console.error("Update Equipment Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }
 
 // DELETE /api/clubs/[clubId]/equipment/[equipmentId] - Delete equipment
 export async function DELETE(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string; equipmentId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string; equipmentId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId, equipmentId } = await params;
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId, equipmentId } = await params;
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        // Verify ownership
-        const ownerCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
+    // Verify access
+    await requireModuleAccess(clubId, "equipment", "edit");
 
-        if ((ownerCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-
-        // Clean up pending maintenance tasks before deletion
-        await query(
-            `UPDATE equipment_maintenance_tasks
+    // Clean up pending maintenance tasks before deletion
+    await query(
+      `UPDATE equipment_maintenance_tasks
              SET status = 'CANCELLED',
                  notes = COALESCE(notes || E'\n', '') || '[Система] Оборудование удалено'
              WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')`,
-            [equipmentId]
-        );
+      [equipmentId],
+    );
 
-        const result = await query(
-            `DELETE FROM equipment WHERE id = $1 AND club_id = $2 RETURNING id`,
-            [equipmentId, clubId]
-        );
+    const result = await query(
+      `DELETE FROM equipment WHERE id = $1 AND club_id = $2 RETURNING id`,
+      [equipmentId, clubId],
+    );
 
-        if (result.rowCount === 0) {
-            return NextResponse.json({ error: 'Equipment not found' }, { status: 404 });
-        }
-
-        return NextResponse.json({ success: true, tasks_cleaned: true });
-    } catch (error) {
-        console.error('Delete Equipment Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    if (result.rowCount === 0) {
+      return NextResponse.json(
+        { error: "Equipment not found" },
+        { status: 404 },
+      );
     }
+
+    return NextResponse.json({ success: true, tasks_cleaned: true });
+  } catch (error) {
+    console.error("Delete Equipment Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }
