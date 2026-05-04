@@ -49,6 +49,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+COPY --from=builder /app/scripts ./scripts
+
 # Make startup script executable
 RUN chmod +x ./scripts/start.sh
 
