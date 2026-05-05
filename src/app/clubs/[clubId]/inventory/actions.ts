@@ -291,6 +291,23 @@ async function resolveEffectiveEmployeeWarehouseIds(
   clubId: string,
   settings: NormalizedInventorySettings,
 ): Promise<number[]> {
+  // Если сотруднику разрешены перемещения или списания, мы должны разрешить
+  // доступ ко всем активным складам, иначе перемещения (между складами) будут невозможны.
+  // Это имеет приоритет над явным списком ограничений (explicitIds), так как
+  // явный список обычно используется для ограничения кассовых операций (какой склад видит сотрудник),
+  // а не для блокировки складских перемещений.
+  if (
+    settings.employee_transfer_enabled ||
+    settings.employee_writeoff_enabled ||
+    settings.employee_stock_operations_enabled
+  ) {
+    const allActiveRes = await client.query(
+      `SELECT id FROM warehouses WHERE club_id = $1 AND is_active = true`,
+      [clubId],
+    );
+    return allActiveRes.rows.map((r: any) => Number(r.id));
+  }
+
   const explicitIds = normalizeAllowedWarehouseIds(
     settings.employee_allowed_warehouse_ids,
   );
