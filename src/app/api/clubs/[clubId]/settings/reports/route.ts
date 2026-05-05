@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
 import { ensureOwnerSubscriptionActive } from "@/lib/club-subscription-guard";
-import { requireModuleAccess } from "@/lib/club-api-access";
+import { requireClubApiAccess } from "@/lib/club-api-access";
 
 // GET: Get current active template and available system metrics
 export async function GET(
@@ -11,7 +11,7 @@ export async function GET(
 ) {
   try {
     const { clubId } = await params;
-    await requireModuleAccess(clubId, "settings_reports", "view");
+    await requireClubApiAccess(clubId);
 
     // 1. Get all available system metrics (return empty if table doesn't exist)
     let systemMetrics: any[] = [];

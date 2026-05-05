@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getClient } from "@/db";
-import { requireModuleAccess } from "@/lib/club-api-access";
+import { requireClubApiAccess } from "@/lib/club-api-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ clubId: string }> },
 ) {
   const { clubId } = await params;
-  await requireModuleAccess(clubId, "requests", "view");
+  await requireClubApiAccess(clubId);
 
   const encoder = new TextEncoder();
   let closed = false;

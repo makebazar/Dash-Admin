@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
 import { getEmployeeRoleAccess } from "@/lib/employee-role-access";
-import { requireModuleAccess } from "@/lib/club-api-access";
+import {
+  requireModuleAccess,
+  getClubApiAccess,
+  hasModuleAccess,
+} from "@/lib/club-api-access";
 
 export async function GET(
   request: Request,
@@ -19,7 +23,18 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await requireModuleAccess(clubId, "reviews", "view");
+    const access = await getClubApiAccess(clubId);
+    const hasReviewsAccess = hasModuleAccess(access, "reviews", "view", clubId);
+
+    if (!hasReviewsAccess) {
+      // Allow users to view their own evaluations
+      if (!employeeId || employeeId !== userId) {
+        return NextResponse.json(
+          { error: "Forbidden: Missing reviews access" },
+          { status: 403 },
+        );
+      }
+    }
 
     let queryStr = `
             SELECT e.*, t.name as template_name, u.full_name as employee_name, ev.full_name as evaluator_name, rv.full_name as reviewer_name
@@ -116,9 +131,6 @@ export async function POST(
       targetUserId = employeeUserRes.rows[0].user_id;
     }
 
-    // Check access (Manager check - typically owners or managers can evaluate)
-    await requireModuleAccess(clubId, "reviews", "view");
-
     const templateTypeRes = await query(
       `SELECT type FROM evaluation_templates WHERE id = $1 AND club_id = $2`,
       [template_id, clubId],
@@ -127,6 +139,7 @@ export async function POST(
       return NextResponse.json({ error: "Invalid template" }, { status: 400 });
     }
     const templateType = templateTypeRes.rows[0]?.type || "manager_audit";
+
     if (templateType === "shift_handover") {
       if (
         roleAccess.settings.handover_checklist_on_start === "DISABLED" &&
@@ -134,6 +147,9 @@ export async function POST(
       ) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
+    } else {
+      // Check access (Manager check - typically owners or managers can evaluate)
+      await requireModuleAccess(clubId, "reviews", "view");
     }
 
     // Get template items to calculate max score

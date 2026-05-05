@@ -6,6 +6,7 @@ import {
   getClubApiAccess,
   hasModuleAccess,
   requireClubFullAccess,
+  requireClubApiAccess,
 } from "@/lib/club-api-access";
 import { normalizeInventorySettings } from "@/lib/inventory-settings";
 
@@ -16,7 +17,7 @@ export async function GET(
 ) {
   try {
     const { clubId } = await params;
-    await requireClubFullAccess(clubId);
+    await requireClubApiAccess(clubId);
 
     const result = await query(
       `SELECT id, name, address, timezone, day_start_hour, night_start_hour, inventory_required, inventory_settings FROM clubs WHERE id = $1`,

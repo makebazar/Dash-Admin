@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
-import { requireModuleAccess } from "@/lib/club-api-access";
+import {
+  requireModuleAccess,
+  getClubApiAccess,
+  hasModuleAccess,
+} from "@/lib/club-api-access";
 import { formatDateKeyInTimezone } from "@/lib/utils";
 import { hasColumn } from "@/lib/db-compat";
 import {
@@ -24,8 +28,28 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify access
-    await requireModuleAccess(clubId, "equipment", "view");
+    const access = await getClubApiAccess(clubId);
+    const hasEquipmentAccess = hasModuleAccess(
+      access,
+      "equipment",
+      "view",
+      clubId,
+    );
+
+    if (!hasEquipmentAccess) {
+      const { getEmployeeRoleAccess } =
+        await import("@/lib/employee-role-access");
+      const roleAccess = await getEmployeeRoleAccess(clubId);
+      if (
+        !roleAccess.settings.workstations_view_enabled &&
+        !roleAccess.settings.maintenance_enabled
+      ) {
+        return NextResponse.json(
+          { error: "Forbidden: Missing equipment access" },
+          { status: 403 },
+        );
+      }
+    }
 
     const hasEquipmentStatusColumn = await hasColumn("equipment", "status");
     const equipmentStatusSql = hasEquipmentStatusColumn
