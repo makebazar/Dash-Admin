@@ -1,26 +1,26 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { cookies } from "next/headers";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
-        const { searchParams } = new URL(request.url);
-        const status = searchParams.get('status');
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get("status");
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        // Active tab must include both current tasks and legacy completed tasks
-        // where verification_status has not been backfilled yet.
-        let statusFilter = `(
+    // Active tab must include both current tasks and legacy completed tasks
+    // where verification_status has not been backfilled yet.
+    let statusFilter = `(
             (
                 t.status = 'COMPLETED'
                 AND (
@@ -30,13 +30,13 @@ export async function GET(
             )
             OR t.verification_status = 'REJECTED'
         )`;
-        
-        if (status === 'history') {
-            statusFilter = "COALESCE(t.verification_status, '') = 'APPROVED'";
-        }
 
-        const result = await query(
-            `SELECT 
+    if (status === "history") {
+      statusFilter = "COALESCE(t.verification_status, '') = 'APPROVED'";
+    }
+
+    const result = await query(
+      `SELECT
                 t.id,
                 t.equipment_id,
                 e.name as equipment_name,
@@ -58,6 +58,8 @@ export async function GET(
                 u.full_name as completed_by_name,
                 vu.full_name as verified_by_name,
                 t.photos,
+                t.photos_before,
+                t.photos_after,
                 t.notes,
                 t.verification_note,
                 t.rejection_reason,
@@ -83,19 +85,19 @@ export async function GET(
                 ORDER BY created_at DESC
                 LIMIT 1
              ) lr ON TRUE
-             WHERE e.club_id = $1 
+             WHERE e.club_id = $1
                AND ${statusFilter}
              ORDER BY COALESCE(t.completed_at, t.verified_at) DESC`,
-            [clubId]
-        );
+      [clubId],
+    );
 
-        const rows = result.rows;
-        const taskIds = rows.map((row) => row.id).filter(Boolean);
-        let historyByTaskId = new Map<string, any[]>();
+    const rows = result.rows;
+    const taskIds = rows.map((row) => row.id).filter(Boolean);
+    let historyByTaskId = new Map<string, any[]>();
 
-        if (taskIds.length > 0) {
-            const historyRes = await query(
-                `SELECT
+    if (taskIds.length > 0) {
+      const historyRes = await query(
+        `SELECT
                     ev.id,
                     ev.task_id,
                     ev.cycle_no,
@@ -103,32 +105,37 @@ export async function GET(
                     ev.note,
                     ev.task_notes,
                     ev.photos,
+                    ev.photos_before,
+                    ev.photos_after,
                     ev.created_at,
                     COALESCE(u.full_name, 'Система') AS actor_name
                  FROM equipment_maintenance_task_events ev
                  LEFT JOIN users u ON u.id = ev.actor_user_id
                  WHERE ev.task_id = ANY($1::uuid[])
                  ORDER BY ev.created_at ASC, ev.id ASC`,
-                [taskIds]
-            );
+        [taskIds],
+      );
 
-            historyByTaskId = historyRes.rows.reduce((acc, item) => {
-                const key = String(item.task_id);
-                const list = acc.get(key) || [];
-                list.push(item);
-                acc.set(key, list);
-                return acc;
-            }, new Map<string, any[]>());
-        }
-
-        return NextResponse.json(
-            rows.map((row) => ({
-                ...row,
-                history: historyByTaskId.get(String(row.id)) || [],
-            }))
-        );
-    } catch (error) {
-        console.error('Fetch Verification Tasks Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+      historyByTaskId = historyRes.rows.reduce((acc, item) => {
+        const key = String(item.task_id);
+        const list = acc.get(key) || [];
+        list.push(item);
+        acc.set(key, list);
+        return acc;
+      }, new Map<string, any[]>());
     }
+
+    return NextResponse.json(
+      rows.map((row) => ({
+        ...row,
+        history: historyByTaskId.get(String(row.id)) || [],
+      })),
+    );
+  } catch (error) {
+    console.error("Fetch Verification Tasks Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }

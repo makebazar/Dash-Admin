@@ -52,6 +52,7 @@ export default function EmployeeLayout({
   const showMobileHeader = !hideMobileHeader;
   const isPosRoute =
     pathname?.includes("/employee/clubs/") && pathname?.includes("/pos");
+  const isTerminalRoute = pathname?.includes("/employee/terminal/");
   const themeVars = {
     ["--background" as any]: "oklch(0.13 0 0)",
     ["--card" as any]: "oklch(0.16 0 0)",
@@ -103,9 +104,16 @@ export default function EmployeeLayout({
           .filter((club: Club) => club.subscription_is_active === false)
           .map((club: Club) => club.name);
         setExpiredClubNames(expiredNames);
+      } else {
+        if (!isTerminalRoute) {
+          router.push("/login");
+        }
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
+      if (!isTerminalRoute) {
+        router.push("/login");
+      }
     }
   };
 
@@ -119,7 +127,7 @@ export default function EmployeeLayout({
     }
   };
 
-  if (isPosRoute) {
+  if (isPosRoute || isTerminalRoute) {
     return (
       <div
         className="dark min-h-[100dvh] bg-background text-foreground"

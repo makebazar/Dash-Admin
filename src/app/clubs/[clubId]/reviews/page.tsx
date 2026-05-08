@@ -31,6 +31,7 @@ import {
   Filter,
   CheckCircle2,
   Eye,
+  X,
   User,
   Layers,
   Calendar,
@@ -106,8 +107,10 @@ interface VerificationTask {
   verified_at?: string | null;
   rework_days?: number;
   completed_by_name: string | null;
-  verified_by_name?: string | null;
+  verified_by_name: string | null;
   photos: string[] | null;
+  photos_before?: string[] | null;
+  photos_after?: string[] | null;
   notes: string | null;
   verification_note?: string | null;
   rejection_reason?: string | null;
@@ -131,6 +134,8 @@ interface VerificationTaskEvent {
   note?: string | null;
   task_notes?: string | null;
   photos?: string[] | null;
+  photos_before?: string[] | null;
+  photos_after?: string[] | null;
   created_at: string;
   actor_name?: string | null;
 }
@@ -196,7 +201,13 @@ const getLatestTaskSubmission = (task: VerificationTask) => {
   const submissions = getTaskSubmissionEvents(task);
   if (submissions.length > 0) return submissions[submissions.length - 1];
 
-  if (task.completed_at || task.notes || (task.photos?.length || 0) > 0) {
+  if (
+    task.completed_at ||
+    task.notes ||
+    (task.photos?.length || 0) > 0 ||
+    (task.photos_before?.length || 0) > 0 ||
+    (task.photos_after?.length || 0) > 0
+  ) {
     return {
       id: -1,
       task_id: task.id,
@@ -204,6 +215,8 @@ const getLatestTaskSubmission = (task: VerificationTask) => {
       event_type: "SUBMITTED" as const,
       task_notes: task.notes,
       photos: task.photos,
+      photos_before: task.photos_before,
+      photos_after: task.photos_after,
       created_at: task.completed_at || "",
       actor_name: task.completed_by_name || null,
     };
@@ -273,6 +286,10 @@ export default function ChecklistsPage({
   const [isTasksLoading, setIsTasksLoading] = useState(true);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [comment, setComment] = useState("");
+  const [reworkPhotos, setReworkPhotos] = useState<File[]>([]);
+  const [reworkPhotosPreviews, setReworkPhotosPreviews] = useState<string[]>(
+    [],
+  );
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerImage, setViewerImage] = useState("");
@@ -654,6 +671,26 @@ export default function ChecklistsPage({
 
     setIsSubmittingTask(true);
     try {
+      let uploadedUrls: string[] = [];
+      if (action === "REJECT" && reworkPhotos.length > 0) {
+        const results = await Promise.all(
+          reworkPhotos.map(async (file) => {
+            const formData = new FormData();
+            formData.append("file", file);
+            const res = await fetch("/api/upload", {
+              method: "POST",
+              body: formData,
+            });
+            if (res.ok) {
+              const data = await res.json();
+              return data.url;
+            }
+            return null;
+          }),
+        );
+        uploadedUrls = results.filter(Boolean) as string[];
+      }
+
       const res = await fetch(
         `/api/clubs/${clubId}/equipment/maintenance/${task.id}/verify`,
         {
@@ -662,6 +699,7 @@ export default function ChecklistsPage({
           body: JSON.stringify({
             action,
             comment,
+            photos: uploadedUrls,
           }),
         },
       );
@@ -671,6 +709,8 @@ export default function ChecklistsPage({
         if (expandedTaskId === task.id) {
           setExpandedTaskId(null);
           setComment("");
+          setReworkPhotos([]);
+          setReworkPhotosPreviews([]);
         }
       } else {
         alert("Ошибка при сохранении решения");
@@ -1669,34 +1709,107 @@ export default function ChecklistsPage({
                                             </div>
                                           </div>
 
-                                          {latestSubmission?.photos &&
-                                          latestSubmission.photos.length > 0 ? (
-                                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                                              {latestSubmission.photos.map(
-                                                (photo, i) => (
-                                                  <div
-                                                    key={i}
-                                                    className="group relative aspect-video overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200 cursor-zoom-in transition-all hover:ring-2 hover:ring-slate-300"
-                                                    onClick={(e) =>
-                                                      openImage(
-                                                        photo,
-                                                        latestSubmission.photos ||
-                                                          [],
-                                                        e,
-                                                      )
-                                                    }
-                                                  >
-                                                    <img
-                                                      src={photo}
-                                                      alt={`Фото ${i + 1}`}
-                                                      className="h-full w-full object-cover"
-                                                    />
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
-                                                      <Eye className="h-5 w-5 text-white drop-shadow-md" />
+                                          {(latestSubmission?.photos_before &&
+                                            latestSubmission.photos_before
+                                              .length > 0) ||
+                                          (latestSubmission?.photos_after &&
+                                            latestSubmission.photos_after
+                                              .length > 0) ||
+                                          (latestSubmission?.photos &&
+                                            latestSubmission.photos.length >
+                                              0) ? (
+                                            <div
+                                              className={cn(
+                                                "grid gap-4",
+                                                latestSubmission?.photos_before &&
+                                                  latestSubmission.photos_before
+                                                    .length > 0
+                                                  ? "grid-cols-1 sm:grid-cols-2"
+                                                  : "grid-cols-1",
+                                              )}
+                                            >
+                                              {/* Before Photos */}
+                                              {latestSubmission?.photos_before &&
+                                                latestSubmission.photos_before
+                                                  .length > 0 && (
+                                                  <div className="space-y-2">
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                      Состояние ДО
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                      {latestSubmission.photos_before.map(
+                                                        (photo, i) => (
+                                                          <div
+                                                            key={`before-${i}`}
+                                                            className="group relative h-20 w-20 sm:h-24 sm:w-24 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200 cursor-zoom-in transition-all hover:ring-2 hover:ring-slate-300"
+                                                            onClick={(e) =>
+                                                              openImage(
+                                                                photo,
+                                                                latestSubmission.photos_before ||
+                                                                  [],
+                                                                e,
+                                                              )
+                                                            }
+                                                          >
+                                                            <img
+                                                              src={photo}
+                                                              alt={`До ${i + 1}`}
+                                                              className="h-full w-full object-cover"
+                                                            />
+                                                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+                                                              <Eye className="h-5 w-5 text-white drop-shadow-md" />
+                                                            </div>
+                                                          </div>
+                                                        ),
+                                                      )}
                                                     </div>
                                                   </div>
-                                                ),
-                                              )}
+                                                )}
+
+                                              {/* After / Main Photos */}
+                                              <div className="space-y-2">
+                                                <div className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-widest">
+                                                  {latestSubmission?.photos_before &&
+                                                  latestSubmission.photos_before
+                                                    .length > 0
+                                                    ? "Результат ПОСЛЕ"
+                                                    : "ФОТООТЧЕТ"}
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                  {(latestSubmission
+                                                    ?.photos_after?.length
+                                                    ? latestSubmission.photos_after
+                                                    : latestSubmission?.photos ||
+                                                      []
+                                                  ).map((photo, i) => (
+                                                    <div
+                                                      key={`after-${i}`}
+                                                      className="group relative h-20 w-20 sm:h-24 sm:w-24 overflow-hidden rounded-2xl bg-emerald-50/50 ring-1 ring-emerald-200/50 cursor-zoom-in transition-all hover:ring-2 hover:ring-emerald-300"
+                                                      onClick={(e) =>
+                                                        openImage(
+                                                          photo,
+                                                          latestSubmission
+                                                            ?.photos_after
+                                                            ?.length
+                                                            ? latestSubmission.photos_after
+                                                            : latestSubmission?.photos ||
+                                                                [],
+                                                          e,
+                                                        )
+                                                      }
+                                                    >
+                                                      <img
+                                                        src={photo}
+                                                        alt={`После ${i + 1}`}
+                                                        className="h-full w-full object-cover"
+                                                      />
+                                                      <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+                                                        <Eye className="h-5 w-5 text-white drop-shadow-md" />
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
                                             </div>
                                           ) : (
                                             <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
@@ -1718,7 +1831,7 @@ export default function ChecklistsPage({
                                             <div className="mb-3">
                                               <div className="min-w-0">
                                                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                                  До доработки
+                                                  Предыдущая попытка
                                                 </div>
                                                 {formatTaskMessageStamp(
                                                   previousSubmission.created_at,
@@ -1732,35 +1845,108 @@ export default function ChecklistsPage({
                                               </div>
                                             </div>
 
-                                            {previousSubmission.photos &&
-                                            previousSubmission.photos.length >
-                                              0 ? (
-                                              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                                                {previousSubmission.photos.map(
-                                                  (photo, i) => (
-                                                    <div
-                                                      key={i}
-                                                      className="group relative aspect-video overflow-hidden rounded-xl bg-white ring-1 ring-amber-200 cursor-zoom-in transition-all hover:ring-2 hover:ring-amber-300"
-                                                      onClick={(e) =>
-                                                        openImage(
-                                                          photo,
-                                                          previousSubmission.photos ||
-                                                            [],
-                                                          e,
-                                                        )
-                                                      }
-                                                    >
-                                                      <img
-                                                        src={photo}
-                                                        alt={`Фото до доработки ${i + 1}`}
-                                                        className="h-full w-full object-cover"
-                                                      />
-                                                      <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
-                                                        <Eye className="h-5 w-5 text-white drop-shadow-md" />
+                                            {(previousSubmission?.photos_before &&
+                                              previousSubmission.photos_before
+                                                .length > 0) ||
+                                            (previousSubmission?.photos_after &&
+                                              previousSubmission.photos_after
+                                                .length > 0) ||
+                                            (previousSubmission?.photos &&
+                                              previousSubmission.photos.length >
+                                                0) ? (
+                                              <div
+                                                className={cn(
+                                                  "grid gap-4",
+                                                  previousSubmission?.photos_before &&
+                                                    previousSubmission
+                                                      .photos_before.length > 0
+                                                    ? "grid-cols-1 sm:grid-cols-2"
+                                                    : "grid-cols-1",
+                                                )}
+                                              >
+                                                {/* Before Photos */}
+                                                {previousSubmission?.photos_before &&
+                                                  previousSubmission
+                                                    .photos_before.length >
+                                                    0 && (
+                                                    <div className="space-y-2">
+                                                      <div className="text-[10px] font-bold text-amber-700/50 uppercase tracking-widest">
+                                                        Состояние ДО
+                                                      </div>
+                                                      <div className="flex flex-wrap gap-2">
+                                                        {previousSubmission.photos_before.map(
+                                                          (photo, i) => (
+                                                            <div
+                                                              key={`prev-before-${i}`}
+                                                              className="group relative h-20 w-20 sm:h-24 sm:w-24 overflow-hidden rounded-2xl bg-white ring-1 ring-amber-200 cursor-zoom-in transition-all hover:ring-2 hover:ring-amber-300"
+                                                              onClick={(e) =>
+                                                                openImage(
+                                                                  photo,
+                                                                  previousSubmission.photos_before ||
+                                                                    [],
+                                                                  e,
+                                                                )
+                                                              }
+                                                            >
+                                                              <img
+                                                                src={photo}
+                                                                alt={`До ${i + 1}`}
+                                                                className="h-full w-full object-cover opacity-75"
+                                                              />
+                                                              <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+                                                                <Eye className="h-5 w-5 text-white drop-shadow-md" />
+                                                              </div>
+                                                            </div>
+                                                          ),
+                                                        )}
                                                       </div>
                                                     </div>
-                                                  ),
-                                                )}
+                                                  )}
+
+                                                {/* After / Main Photos */}
+                                                <div className="space-y-2">
+                                                  <div className="text-[10px] font-bold text-amber-700/70 uppercase tracking-widest">
+                                                    {previousSubmission?.photos_before &&
+                                                    previousSubmission
+                                                      .photos_before.length > 0
+                                                      ? "Результат ПОСЛЕ"
+                                                      : "ФОТООТЧЕТ"}
+                                                  </div>
+                                                  <div className="flex flex-wrap gap-2">
+                                                    {(previousSubmission
+                                                      ?.photos_after?.length
+                                                      ? previousSubmission.photos_after
+                                                      : previousSubmission?.photos ||
+                                                        []
+                                                    ).map((photo, i) => (
+                                                      <div
+                                                        key={`prev-after-${i}`}
+                                                        className="group relative h-20 w-20 sm:h-24 sm:w-24 overflow-hidden rounded-2xl bg-white ring-1 ring-amber-200 cursor-zoom-in transition-all hover:ring-2 hover:ring-amber-300"
+                                                        onClick={(e) =>
+                                                          openImage(
+                                                            photo,
+                                                            previousSubmission
+                                                              ?.photos_after
+                                                              ?.length
+                                                              ? previousSubmission.photos_after
+                                                              : previousSubmission?.photos ||
+                                                                  [],
+                                                            e,
+                                                          )
+                                                        }
+                                                      >
+                                                        <img
+                                                          src={photo}
+                                                          alt={`После ${i + 1}`}
+                                                          className="h-full w-full object-cover opacity-75"
+                                                        />
+                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+                                                          <Eye className="h-5 w-5 text-white drop-shadow-md" />
+                                                        </div>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                </div>
                                               </div>
                                             ) : (
                                               <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-amber-200 bg-white/70 text-sm text-amber-700/70">
@@ -1803,6 +1989,34 @@ export default function ChecklistsPage({
                                           <p className="text-sm text-amber-800 italic">
                                             "{latestRejection.note}"
                                           </p>
+                                          {latestRejection.photos &&
+                                            latestRejection.photos.length >
+                                              0 && (
+                                              <div className="mt-3 grid grid-cols-4 gap-2">
+                                                {latestRejection.photos.map(
+                                                  (url, i) => (
+                                                    <div
+                                                      key={i}
+                                                      className="aspect-square rounded-lg border border-amber-200 overflow-hidden cursor-zoom-in"
+                                                      onClick={(e) =>
+                                                        openImage(
+                                                          url,
+                                                          latestRejection.photos ||
+                                                            [],
+                                                          e,
+                                                        )
+                                                      }
+                                                    >
+                                                      <img
+                                                        src={url}
+                                                        alt="Rework proof"
+                                                        className="h-full w-full object-cover"
+                                                      />
+                                                    </div>
+                                                  ),
+                                                )}
+                                              </div>
+                                            )}
                                         </div>
                                       )}
 
@@ -1841,6 +2055,95 @@ export default function ChecklistsPage({
                                           className="bg-white min-h-[80px] resize-none text-sm"
                                           disabled={equipmentTab === "history"}
                                         />
+
+                                        {equipmentTab === "active" && (
+                                          <div className="space-y-3">
+                                            <div className="flex items-center gap-2">
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 rounded-lg border-slate-200 text-slate-600 hover:bg-slate-50"
+                                                onClick={() =>
+                                                  document
+                                                    .getElementById(
+                                                      `rework-photo-input-${task.id}`,
+                                                    )
+                                                    ?.click()
+                                                }
+                                              >
+                                                <Camera className="mr-2 h-4 w-4" />
+                                                Прикрепить фото (доработка)
+                                              </Button>
+                                              <input
+                                                id={`rework-photo-input-${task.id}`}
+                                                type="file"
+                                                multiple
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={(e) => {
+                                                  const files = Array.from(
+                                                    e.target.files || [],
+                                                  );
+                                                  setReworkPhotos((prev) => [
+                                                    ...prev,
+                                                    ...files,
+                                                  ]);
+                                                  const newPreviews = files.map(
+                                                    (f) =>
+                                                      URL.createObjectURL(f),
+                                                  );
+                                                  setReworkPhotosPreviews(
+                                                    (prev) => [
+                                                      ...prev,
+                                                      ...newPreviews,
+                                                    ],
+                                                  );
+                                                }}
+                                              />
+                                            </div>
+
+                                            {reworkPhotosPreviews.length >
+                                              0 && (
+                                              <div className="flex flex-wrap gap-2">
+                                                {reworkPhotosPreviews.map(
+                                                  (url, idx) => (
+                                                    <div
+                                                      key={idx}
+                                                      className="relative h-16 w-16 rounded-lg overflow-hidden border border-slate-200 group"
+                                                    >
+                                                      <img
+                                                        src={url}
+                                                        alt="Preview"
+                                                        className="h-full w-full object-cover"
+                                                      />
+                                                      <button
+                                                        className="absolute top-1 right-1 h-5 w-5 bg-black/50 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        onClick={() => {
+                                                          setReworkPhotos(
+                                                            (prev) =>
+                                                              prev.filter(
+                                                                (_, i) =>
+                                                                  i !== idx,
+                                                              ),
+                                                          );
+                                                          setReworkPhotosPreviews(
+                                                            (prev) =>
+                                                              prev.filter(
+                                                                (_, i) =>
+                                                                  i !== idx,
+                                                              ),
+                                                          );
+                                                        }}
+                                                      >
+                                                        <X className="h-3 w-3" />
+                                                      </button>
+                                                    </div>
+                                                  ),
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
 
                                       {equipmentTab === "active" && (

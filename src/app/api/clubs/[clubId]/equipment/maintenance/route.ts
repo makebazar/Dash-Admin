@@ -80,6 +80,7 @@ export async function GET(
             SELECT ${useDistinct ? "DISTINCT ON (mt.equipment_id)" : ""}
                 mt.id,
                 mt.equipment_id,
+                mt.session_id,
                 mt.task_type,
                 mt.status,
                 mt.due_date,
@@ -176,7 +177,8 @@ export async function GET(
       if (includeOverdue) {
         sql += ` AND (
                     mt.due_date >= $${paramIndex}
-                    OR (mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date < $${paramIndex})
+                    OR (mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $${paramIndex})
+                    OR mt.status IN ('IN_PROGRESS', 'REWORK')
                 )`;
         queryParams.push(dateFrom);
         paramIndex++;
@@ -188,19 +190,23 @@ export async function GET(
     }
 
     if (dateTo) {
-      sql += ` AND mt.due_date <= $${paramIndex}`;
+      if (includeOverdue) {
+        sql += ` AND (mt.due_date <= $${paramIndex} OR mt.status IN ('IN_PROGRESS', 'REWORK'))`;
+      } else {
+        sql += ` AND mt.due_date <= $${paramIndex}`;
+      }
       queryParams.push(dateTo);
       paramIndex++;
     }
 
     // IMPORTANT: Order by equipment_id to make DISTINCT ON work,
-    // then by status priority (PENDING/IN_PROGRESS first) to ensure we pick the active task if exists
+    // then by status priority (REWORK first) to ensure we pick the active task if exists
     sql += ` ORDER BY mt.equipment_id,
-                 CASE mt.status WHEN 'IN_PROGRESS' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END,
+                 CASE mt.status WHEN 'REWORK' THEN 1 WHEN 'IN_PROGRESS' THEN 2 WHEN 'PENDING' THEN 3 ELSE 4 END,
                  mt.due_date ASC`;
 
     let finalOrderBy = `
-            CASE status WHEN 'IN_PROGRESS' THEN 1 WHEN 'PENDING' THEN 2 ELSE 3 END,
+            CASE status WHEN 'REWORK' THEN 1 WHEN 'IN_PROGRESS' THEN 2 WHEN 'PENDING' THEN 3 ELSE 4 END,
             due_date ${order}
         `;
 
@@ -271,14 +277,13 @@ export async function GET(
 
     const statsResult = await query(
       `SELECT
-                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date < $2) as overdue_count,
-                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date = $2) as due_today_count,
-                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date > $2) as upcoming_count,
-                COUNT(*) FILTER (WHERE mt.status = 'IN_PROGRESS') as in_progress_count,
-                COUNT(*) FILTER (WHERE mt.status = 'IN_PROGRESS' AND mt.verification_status = 'REJECTED') as rework_count,
+                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $2) as overdue_count,
+                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date = $2) as due_today_count,
+                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date > $2) as upcoming_count,
+                COUNT(*) FILTER (WHERE mt.status IN ('IN_PROGRESS', 'REWORK')) as in_progress_count,
+                COUNT(*) FILTER (WHERE mt.status = 'REWORK' OR (mt.status = 'IN_PROGRESS' AND mt.verification_status = 'REJECTED')) as rework_count,
                 COUNT(*) FILTER (
-                    WHERE mt.status = 'IN_PROGRESS'
-                      AND mt.verification_status = 'REJECTED'
+                    WHERE (mt.status = 'REWORK' OR (mt.status = 'IN_PROGRESS' AND mt.verification_status = 'REJECTED'))
                       AND COALESCE(mt.verified_at::date, CURRENT_DATE) <= CURRENT_DATE - 3
                 ) as stale_rework_count,
                 COUNT(*) FILTER (

@@ -1,18 +1,18 @@
-import path from "node:path"
-import { defineConfig } from "vite"
-import react from "@vitejs/plugin-react"
+import path from "node:path";
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   root: path.resolve(__dirname),
   base: "./",
   plugins: [react()],
   server: {
-    host: "127.0.0.1",
+    host: "0.0.0.0",
     port: 3020,
     strictPort: true,
   },
   preview: {
-    host: "127.0.0.1",
+    host: "0.0.0.0",
     port: 4173,
     strictPort: true,
   },
@@ -21,4 +21,4 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
   },
-})
+});
