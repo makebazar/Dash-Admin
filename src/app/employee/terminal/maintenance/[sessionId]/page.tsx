@@ -50,6 +50,7 @@ interface Task {
   latest_rejection?: {
     note: string;
     photos: string[];
+    rejected_by_name?: string;
   };
 }
 
@@ -82,6 +83,16 @@ export default function MaintenanceTerminalPage() {
   const [submitStatus, setSubmitStatus] = useState<
     "idle" | "success" | "error"
   >("idle");
+
+  const reorderTask = (index: number, direction: "UP" | "DOWN") => {
+    const newTasks = [...tasks];
+    const targetIdx = direction === "UP" ? index - 1 : index + 1;
+    if (targetIdx < 0 || targetIdx >= tasks.length) return;
+
+    const [movedTask] = newTasks.splice(index, 1);
+    newTasks.splice(targetIdx, 0, movedTask);
+    setTasks(newTasks);
+  };
 
   const openViewer = (images: string[], index: number) => {
     setViewerImages(images);
@@ -727,7 +738,8 @@ export default function MaintenanceTerminalPage() {
               <div className="p-6 rounded-[2rem] bg-zinc-900 border border-zinc-800 space-y-4">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
-                    Комментарий менеджера
+                    {currentTask.latest_rejection.rejected_by_name ||
+                      "Управляющий"}
                   </span>
                 </div>
                 <p className="text-sm text-zinc-300 font-medium leading-relaxed italic">
@@ -785,9 +797,34 @@ export default function MaintenanceTerminalPage() {
               {tasks.map((task, i) => (
                 <div
                   key={task.id}
-                  className="p-5 rounded-3xl bg-zinc-900 border border-zinc-800 flex items-center justify-between group active:bg-zinc-800 transition-all shadow-sm"
+                  className="p-5 rounded-3xl bg-zinc-900 border border-zinc-800 flex items-center justify-between group transition-all shadow-sm"
                 >
                   <div className="flex items-center gap-4">
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "h-8 w-8 rounded-full border border-zinc-800 text-zinc-500",
+                          i === 0 && "opacity-20 pointer-events-none",
+                        )}
+                        onClick={() => reorderTask(i, "UP")}
+                      >
+                        <ChevronLeft className="h-4 w-4 rotate-90" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                          "h-8 w-8 rounded-full border border-zinc-800 text-zinc-500",
+                          i === tasks.length - 1 &&
+                            "opacity-20 pointer-events-none",
+                        )}
+                        onClick={() => reorderTask(i, "DOWN")}
+                      >
+                        <ChevronRight className="h-4 w-4 rotate-90" />
+                      </Button>
+                    </div>
                     <div>
                       <div className="text-sm font-bold tracking-tight flex items-center gap-2">
                         {task.equipment_name}

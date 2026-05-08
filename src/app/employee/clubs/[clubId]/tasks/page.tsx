@@ -45,6 +45,11 @@ interface MaintenanceTask {
   verification_status?: string;
   rejection_reason?: string;
   session_id?: string;
+  latest_rejection?: {
+    note: string;
+    photos: string[];
+    rejected_by_name?: string;
+  };
 }
 
 const normalizeDateKey = (value?: string | null) => {
@@ -656,18 +661,20 @@ function EmployeeTasksContent() {
               </div>
 
               {/* Rework Comment Box */}
-              {isRejected && task.rejection_reason && (
-                <div className="bg-rose-500/[0.03] border border-rose-500/10 rounded-2xl p-3 animate-in fade-in slide-in-from-top-1 duration-300">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] font-black text-rose-500/60 uppercase tracking-widest">
-                      Замечание менеджера
-                    </span>
-                    <p className="text-[12px] text-rose-500/90 font-bold leading-tight italic">
-                      "{task.rejection_reason}"
-                    </p>
+              {isRejected &&
+                (task.rejection_reason || task.latest_rejection?.note) && (
+                  <div className="bg-rose-500/[0.03] border border-rose-500/10 rounded-2xl p-3 animate-in fade-in slide-in-from-top-1 duration-300">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[9px] font-black text-rose-500/60 uppercase tracking-widest">
+                        {task.latest_rejection?.rejected_by_name ||
+                          "Управляющий"}
+                      </span>
+                      <p className="text-[12px] text-rose-500/90 font-bold leading-tight italic">
+                        "{task.latest_rejection?.note || task.rejection_reason}"
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           </div>
         </CardContent>

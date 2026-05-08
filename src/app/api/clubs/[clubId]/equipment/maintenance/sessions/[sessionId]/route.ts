@@ -40,10 +40,15 @@ export async function GET(
                 ei.instructions,
                 -- Latest rejection data
                 (
-                  SELECT json_build_object('note', note, 'photos', photos)
-                  FROM equipment_maintenance_task_events
-                  WHERE task_id = mt.id AND event_type = 'REJECTED'
-                  ORDER BY created_at DESC
+                  SELECT json_build_object(
+                    'note', ev.note,
+                    'photos', ev.photos,
+                    'rejected_by_name', u_rej.full_name
+                  )
+                  FROM equipment_maintenance_task_events ev
+                  LEFT JOIN users u_rej ON ev.created_by = u_rej.id
+                  WHERE ev.task_id = mt.id AND ev.event_type = 'REJECTED'
+                  ORDER BY ev.created_at DESC
                   LIMIT 1
                 ) as latest_rejection
              FROM equipment_maintenance_tasks mt

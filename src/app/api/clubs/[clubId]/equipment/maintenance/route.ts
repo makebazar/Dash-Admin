@@ -114,7 +114,19 @@ export async function GET(
                 w.zone as workstation_zone,
                 COALESCE(u.full_name, eu.full_name) as assigned_to_name,
                 cu.full_name as completed_by_name,
-                cu_v.full_name as verified_by_name
+                cu_v.full_name as verified_by_name,
+                (
+                  SELECT json_build_object(
+                    'note', ev.note,
+                    'photos', ev.photos,
+                    'rejected_by_name', u_rej.full_name
+                  )
+                  FROM equipment_maintenance_task_events ev
+                  LEFT JOIN users u_rej ON ev.created_by = u_rej.id
+                  WHERE ev.task_id = mt.id AND ev.event_type = 'REJECTED'
+                  ORDER BY ev.created_at DESC
+                  LIMIT 1
+                ) as latest_rejection
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
             LEFT JOIN equipment_types et ON e.type = et.code
