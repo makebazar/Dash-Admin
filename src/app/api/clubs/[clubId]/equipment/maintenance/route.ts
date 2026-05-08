@@ -122,7 +122,7 @@ export async function GET(
                     'rejected_by_name', u_rej.full_name
                   )
                   FROM equipment_maintenance_task_events ev
-                  LEFT JOIN users u_rej ON ev.created_by = u_rej.id
+                  LEFT JOIN users u_rej ON ev.actor_user_id = u_rej.id
                   WHERE ev.task_id = mt.id AND ev.event_type = 'REJECTED'
                   ORDER BY ev.created_at DESC
                   LIMIT 1
