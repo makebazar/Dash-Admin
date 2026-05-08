@@ -12,10 +12,7 @@ export async function GET() {
   try {
     const userId = (await cookies()).get("session_user_id")?.value;
 
-    console.log("[Auth/Me] Fetching user data for userId:", userId);
-
     if (!userId) {
-      console.log("[Auth/Me] No session_user_id found");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -52,7 +49,6 @@ export async function GET() {
     );
 
     if (userResult.rowCount === 0) {
-      console.log("[Auth/Me] User not found in DB:", userId);
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -66,7 +62,6 @@ export async function GET() {
     const legalAcceptanceRequired =
       !user.legal_accepted_at ||
       user.legal_acceptance_version !== LEGAL_ACCEPTANCE_VERSION;
-    console.log("[Auth/Me] User found:", user.full_name);
 
     // Get owned clubs
     const ownedClubsResult = await query(
@@ -83,7 +78,6 @@ export async function GET() {
              ORDER BY c.created_at DESC`,
       [userId],
     );
-    console.log("[Auth/Me] Owned clubs count:", ownedClubsResult.rowCount);
 
     const ownedClubs = ownedClubsResult.rows.map((row) => ({
       id: row.id,
@@ -112,8 +106,6 @@ export async function GET() {
               AND ce.dismissed_at IS NULL
             ORDER BY ce.hired_at DESC
         `;
-
-    console.log("[Auth/Me] Executing employee clubs query for user:", userId);
 
     const employeeClubsResult = await query(employeeClubsQuery, [userId]);
 

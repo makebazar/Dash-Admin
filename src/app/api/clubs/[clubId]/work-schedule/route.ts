@@ -116,9 +116,6 @@ export async function GET(
     // Get employees
     let employees = [];
     try {
-      console.log(
-        `Fetching schedule employees for club ${clubId}, date >= ${startDate}`,
-      );
       const employeesRes = await query(
         `WITH member_rows AS (
                     SELECT
@@ -178,9 +175,6 @@ export async function GET(
         [clubId, startDate],
       );
       employees = employeesRes.rows;
-      console.log(
-        `Found ${employees.length} employees. Dismissed included if date >= ${startDate}`,
-      );
     } catch (err: any) {
       console.error("Failed to fetch employees:", err);
       throw new Error(`Employee query failed: ${err.message}`);

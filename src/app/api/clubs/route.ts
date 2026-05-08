@@ -17,8 +17,6 @@ export async function GET() {
   try {
     const userId = (await cookies()).get("session_user_id")?.value;
 
-    console.log("[Clubs API] Fetching clubs for userId:", userId);
-
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -28,8 +26,6 @@ export async function GET() {
     const publicIdColumn = hasPublicId
       ? "c.public_id"
       : "c.id::text as public_id";
-
-    console.log("[Clubs API] Executing query for userId:", userId);
 
     const result = await query(
       `SELECT DISTINCT ON (c.id)
@@ -67,8 +63,6 @@ export async function GET() {
              ORDER BY c.id, c.created_at DESC`,
       [userId],
     );
-
-    console.log("[Clubs API] Result rows:", result.rowCount);
 
     // Filter clubs based on permissions (universally)
     const filteredClubs = result.rows.filter((club) => {

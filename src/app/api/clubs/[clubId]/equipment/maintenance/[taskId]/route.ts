@@ -128,9 +128,6 @@ export async function PATCH(
                 },
               ],
             );
-            console.log(
-              `[Maintenance] Overdue penalty preview for task ${taskId}: ${overduePenaltyPreview.total}`,
-            );
           }
 
           updates.push(`overdue_days_at_completion = $${paramIndex}`);
@@ -207,18 +204,10 @@ export async function PATCH(
               const rawInterval = eq.cleaning_interval_days;
               const intervalDays = Math.max(1, rawInterval || 30);
 
-              console.log(
-                `[Maintenance] Completing task ${taskId}. Equipment ${task.equipment_id}. Raw Interval: ${rawInterval}, Used: ${intervalDays}`,
-              );
-
               const nextDue = parseDateKey(
                 formatDateKeyInTimezone(new Date(), clubTimezone),
               );
               nextDue.setDate(nextDue.getDate() + intervalDays);
-
-              console.log(
-                `[Maintenance] Next Due Initial: ${nextDue.toISOString()}`,
-              );
 
               // Ensure nextDue is at least tomorrow
               const tomorrow = new Date();
@@ -228,7 +217,6 @@ export async function PATCH(
               }
 
               const nextDueStr = formatDateKeyInTimezone(nextDue, clubTimezone);
-              console.log(`[Maintenance] Next Due String: ${nextDueStr}`);
 
               // Find shift for assigned user if any AND user is active
               let finalDate = nextDueStr;
@@ -267,9 +255,6 @@ export async function PATCH(
                 const isActive = (userActiveRes.rowCount || 0) > 0;
 
                 if (isActive) {
-                  console.log(
-                    `[Maintenance] Checking shifts for active user ${finalAssignedUserId} starting from ${nextDueStr}`,
-                  );
                   // Simple shift lookup - get next working day >= nextDueStr
                   const shiftRes = await query(
                     `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
@@ -280,16 +265,9 @@ export async function PATCH(
                   );
                   if (shiftRes.rowCount && shiftRes.rowCount > 0) {
                     finalDate = String(shiftRes.rows[0].date);
-                    console.log(`[Maintenance] Found shift: ${finalDate}`);
                   } else {
-                    console.log(
-                      `[Maintenance] No shift found, keeping ${finalDate}`,
-                    );
                   }
                 } else {
-                  console.log(
-                    `[Maintenance] User ${finalAssignedUserId} is inactive, unassigning next task`,
-                  );
                   finalAssignedUserId = null;
                 }
               }
@@ -316,9 +294,6 @@ export async function PATCH(
                   finalAssignedUserId,
                   userId,
                 ],
-              );
-              console.log(
-                `[Maintenance] Created task: ${insertRes.rows[0]?.id || "CONFLICT"}`,
               );
             }
           }

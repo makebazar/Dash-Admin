@@ -58,15 +58,6 @@ export async function PATCH(
       is_active,
       show_in_schedule,
     } = await request.json();
-    console.log("[API] Updating employee:", {
-      employeeId,
-      full_name,
-      role_id,
-      phone_number,
-      dismissed_at,
-      is_active,
-      show_in_schedule,
-    });
 
     // Verify employee belongs to this club
     const employeeCheck = await query(
@@ -143,10 +134,6 @@ export async function PATCH(
     if (userUpdates.length > 0) {
       userValues.push(employeeId);
       const queryText = `UPDATE users SET ${userUpdates.join(", ")} WHERE id = $${userValues.length}`;
-      console.log("[API] Executing user update:", {
-        queryText,
-        values: userValues,
-      });
       await query(queryText, userValues);
     }
 
@@ -199,10 +186,6 @@ export async function PATCH(
       empValues.push(clubId);
       empValues.push(employeeId);
       const queryText = `UPDATE club_employees SET ${empUpdates.join(", ")} WHERE club_id = $${empValues.length - 1} AND user_id = $${empValues.length}`;
-      console.log("[API] Executing club_employee update:", {
-        queryText,
-        values: empValues,
-      });
       await query(queryText, empValues);
     }
 
