@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageViewer } from "@/components/ui/image-viewer";
+import { QRCode } from "@/components/qr/QRCode";
 import {
   cn,
   optimizeFileBeforeUpload,
@@ -603,20 +604,27 @@ export default function MaintenanceTerminalPage() {
   };
 
   if (blockDesktopAccess && isDesktop) {
+    const terminalUrl = `${window.location.origin}/employee/terminal/maintenance/${sessionId}?clubId=${clubId}`;
+
     return (
       <div className="h-screen bg-zinc-950 flex flex-col items-center justify-center p-8 text-center">
         <div className="h-20 w-20 rounded-3xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mb-8 shadow-2xl">
           <Monitor className="h-10 w-10" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight mb-4 text-white">
+        <h1 className="text-2xl font-bold tracking-tight mb-4 text-white uppercase italic">
           Доступ ограничен
         </h1>
-        <p className="text-zinc-500 max-w-sm mb-8 leading-relaxed">
-          Этот терминал предназначен только для мобильных устройств. Пожалуйста,
-          откройте страницу со своего смартфона для проведения обслуживания.
+        <p className="text-zinc-500 max-w-sm mb-8 leading-relaxed font-medium">
+          Этот терминал предназначен только для мобильных устройств.
+          Отсканируйте QR-код ниже, чтобы продолжить обслуживание со смартфона.
         </p>
-        <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl text-xs font-mono text-zinc-600 uppercase tracking-widest">
-          Mobile only interface
+
+        <div className="bg-white p-5 rounded-[2rem] flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.1)] border-4 border-zinc-900 mb-8 animate-in zoom-in-95 duration-500">
+          <QRCode value={terminalUrl} size={180} />
+        </div>
+
+        <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl text-[10px] font-mono text-zinc-600 uppercase tracking-[0.2em] font-bold">
+          Mobile interface required
         </div>
       </div>
     );
