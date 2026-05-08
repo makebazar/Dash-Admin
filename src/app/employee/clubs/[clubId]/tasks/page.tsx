@@ -180,12 +180,14 @@ function EmployeeTasksContent() {
 
         if (sessionsRes.ok && Array.isArray(sessionsData)) {
           const activeSession = sessionsData.find(
-            (s) => s.status !== "COMPLETED",
+            (s) => s.status !== "COMPLETED" && parseInt(s.task_count || "0") > 0
           );
           if (activeSession) {
             setSessionId(activeSession.id);
           } else {
             setSessionId(null);
+          }
+        }
           }
         }
 
