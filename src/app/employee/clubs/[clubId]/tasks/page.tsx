@@ -44,6 +44,7 @@ interface MaintenanceTask {
   last_cleaned_at?: string;
   verification_status?: string;
   rejection_reason?: string;
+  verified_by_name?: string;
   session_id?: string;
   latest_rejection?: {
     note: string;
@@ -72,6 +73,7 @@ const normalizeTask = (task: any): MaintenanceTask => ({
     ? normalizeStatus(task.verification_status)
     : task?.verification_status,
   session_id: task?.session_id,
+  verified_by_name: task?.verified_by_name,
 });
 
 function EmployeeTasksContent() {
@@ -667,6 +669,7 @@ function EmployeeTasksContent() {
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[9px] font-black text-rose-500/60 uppercase tracking-widest">
                         {task.latest_rejection?.rejected_by_name ||
+                          task.verified_by_name ||
                           "Управляющий"}
                       </span>
                       <p className="text-[12px] text-rose-500/90 font-bold leading-tight italic">

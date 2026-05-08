@@ -27,6 +27,7 @@ export async function GET(
                 et.icon as equipment_icon,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
+                u_v.full_name as verified_by_name,
                 -- Per-type settings or general club defaults
                 COALESCE(s.require_photo_before, gs.require_photo_before, FALSE) as require_photo_before,
                 COALESCE(s.min_photos_before, gs.min_photos_before, 0) as min_photos_before,
@@ -55,6 +56,7 @@ export async function GET(
              JOIN equipment e ON mt.equipment_id = e.id
              JOIN equipment_types et ON e.type = et.code
              LEFT JOIN club_workstations w ON e.workstation_id = w.id
+             LEFT JOIN users u_v ON mt.verified_by = u_v.id
              LEFT JOIN club_maintenance_settings gs ON gs.club_id = mt.club_id
              LEFT JOIN club_equipment_type_maintenance_settings s ON s.club_id = mt.club_id AND s.equipment_type_code = e.type
              LEFT JOIN club_equipment_instructions ei ON ei.club_id = mt.club_id AND ei.equipment_type_code = e.type

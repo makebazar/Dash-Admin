@@ -47,6 +47,7 @@ interface Task {
   require_comment_mode: "ALWAYS" | "ON_ISSUE" | "NEVER";
   instructions?: string;
   status?: string;
+  verified_by_name?: string;
   latest_rejection?: {
     note: string;
     photos: string[];
@@ -739,6 +740,7 @@ export default function MaintenanceTerminalPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">
                     {currentTask.latest_rejection.rejected_by_name ||
+                      currentTask.verified_by_name ||
                       "Управляющий"}
                   </span>
                 </div>
@@ -841,6 +843,9 @@ export default function MaintenanceTerminalPage() {
                       <div className="text-[10px] text-zinc-500 font-mono font-bold mt-1">
                         Локация: {task.workstation_name || "СКЛАД"} //{" "}
                         {task.workstation_zone || "Н/Д"}
+                      </div>
+                      <div className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mt-0.5 opacity-70">
+                        {task.equipment_type_name}
                       </div>
                     </div>
                   </div>
