@@ -19,6 +19,7 @@ export type EmployeeAccessSettings = {
   schedule_enabled: boolean;
   requests_enabled: boolean;
   workstations_view_enabled: boolean;
+  assignments_enabled: boolean;
 };
 
 type AccessError = Error & { status?: number };
@@ -65,6 +66,7 @@ export function normalizeEmployeeAccessSettings(
     schedule_enabled: source.schedule_enabled !== false,
     requests_enabled: source.requests_enabled !== false,
     workstations_view_enabled: source.workstations_view_enabled !== false,
+    assignments_enabled: source.assignments_enabled !== false,
   };
 }
 

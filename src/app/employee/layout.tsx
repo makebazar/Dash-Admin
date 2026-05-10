@@ -19,6 +19,7 @@ import {
   BookOpen,
   Headphones,
   Gamepad2,
+  Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -290,6 +291,11 @@ export default function EmployeeLayout({
                         href: `/employee/clubs/${club.id}/tasks`,
                         icon: Brush,
                         label: "Обслуживание",
+                      },
+                      {
+                        href: `/employee/clubs/${club.id}/assignments`,
+                        icon: Briefcase,
+                        label: "Поручения",
                       },
                       {
                         href: `/employee/clubs/${club.id}/calibration`,

@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Trophy,
   Brush,
+  Briefcase,
   ClipboardCheck,
   Monitor,
   AlertCircle,
@@ -243,6 +244,7 @@ export default function EmployeeClubPage({
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [pendingTasksCount, setPendingTasksCount] = useState(0);
   const [reworkTasksCount, setReworkTasksCount] = useState(0);
+  const [assignmentsCount, setAssignmentsCount] = useState(0);
   const [clubTasks, setClubTasks] = useState<any[]>([]);
   const [isUpdatingTask, setIsUpdatingTask] = useState<string | null>(null);
   const [isClubTaskConfirmOpen, setIsClubTaskConfirmOpen] = useState(false);
@@ -807,6 +809,7 @@ export default function EmployeeClubPage({
           : fetch(`/api/clubs/${id}/tasks?skip_replenishment=true`).then((r) =>
               r.json(),
             ),
+        fetch(`/api/clubs/${id}/employee-tasks`).then((r) => r.json()),
       ]);
 
       const [
@@ -818,7 +821,19 @@ export default function EmployeeClubPage({
         reworkData,
         ratingData,
         tasksJson,
+        assignmentsData,
       ] = results;
+
+      // Assignments
+      if (assignmentsData?.tasks) {
+        const activeAssignments = assignmentsData.tasks.filter(
+          (t: any) =>
+            t.status === "OPEN" ||
+            t.status === "IN_PROGRESS" ||
+            t.status === "REVIEW",
+        );
+        setAssignmentsCount(activeAssignments.length);
+      }
 
       // Shift
       if (shiftData.shift) {
@@ -1778,6 +1793,49 @@ export default function EmployeeClubPage({
               </div>
             </section>
           ) : null}
+
+          {/* Assignments Overview */}
+          {employeeAccess?.settings?.assignments_enabled && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                  Поручения
+                </h2>
+                <Link
+                  href={`/employee/clubs/${clubId}/assignments`}
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Все задачи →
+                </Link>
+              </div>
+              <Link
+                href={`/employee/clubs/${clubId}/assignments`}
+                className="block"
+              >
+                <div className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">
+                      Личные поручения
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {assignmentsCount > 0
+                        ? `${assignmentsCount} задачи требуют внимания`
+                        : "Нет активных поручений"}
+                    </p>
+                  </div>
+                  {assignmentsCount > 0 ? (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                      <Briefcase className="h-4 w-4" />
+                    </div>
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                      <Briefcase className="h-4 w-4" />
+                    </div>
+                  )}
+                </div>
+              </Link>
+            </section>
+          )}
 
           {/* Maintenance Tasks Overview */}
           <section className="space-y-4">

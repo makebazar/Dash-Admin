@@ -139,6 +139,18 @@ export function ClubSidebarContent({
       visible: !isExpiredForOwnerUi && hasModuleAccess("employees"),
     },
     {
+      href: `/clubs/${clubId}/assignments`,
+      label: "Поручения",
+      icon: (
+        <Briefcase
+          className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")}
+        />
+      ),
+      visible:
+        !isExpiredForOwnerUi &&
+        (hasModuleAccess("assignments") || isFullAccess),
+    },
+    {
       href: `/clubs/${clubId}/salaries`,
       label: "Зарплаты",
       icon: (
