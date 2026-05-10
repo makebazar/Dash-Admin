@@ -115,8 +115,13 @@ export default function HandoverTerminalPage() {
         setCountdown((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
-            // Final action
+            // Final action: Try multiple ways to close the window
             window.close();
+            // Hack for mobile browsers/webviews
+            setTimeout(() => {
+              window.open("", "_self", "");
+              window.close();
+            }, 100);
             return 0;
           }
           return prev - 1;
@@ -163,106 +168,121 @@ export default function HandoverTerminalPage() {
   };
 
   // Fetch initial data
-  const fetchData = useCallback(async () => {
-    if (!clubId || !shiftId) return;
-    setIsLoading(true);
-    try {
-      const [rowsRes, warehousesRes, sourceCandidatesRes] = await Promise.all([
-        getShiftZoneSnapshotDraftTerminal(clubId, shiftId, snapshotType),
-        getShiftAccountabilityWarehousesTerminal(clubId, shiftId),
-        snapshotType === "OPEN"
-          ? getHandoverSourceCandidatesTerminal(clubId, shiftId)
-          : Promise.resolve({ ok: true as const, data: [] }),
-      ]);
-
-      if (!rowsRes.ok) throw new Error(rowsRes.error);
-      if (!warehousesRes.ok) throw new Error(warehousesRes.error);
-      if (!sourceCandidatesRes.ok) throw new Error(sourceCandidatesRes.error);
-
-      const rows = rowsRes.data;
-      const availableWarehouses = warehousesRes.data;
-      const sourceCandidates = sourceCandidatesRes.data;
-
-      // Check if already finished
-      const alreadyFinished =
-        rows.length > 0 && rows.every((i) => i.saved_counted_quantity !== null);
-      if (alreadyFinished) {
-        setIsFinished(true);
-        setStep("SUCCESS");
-        setIsLoading(false);
-        return;
-      }
-
-      let nextItems = rows;
-      let nextSelectedSourceShiftId =
-        sourceCandidates?.find((candidate: any) => !candidate.is_self_handover)
-          ?.shift_id ||
-        sourceCandidates?.[0]?.shift_id ||
-        "";
-
-      // Restore from localStorage
+  const fetchData = useCallback(
+    async (silent = false) => {
+      if (!clubId || !shiftId) return;
+      if (!silent) setIsLoading(true);
       try {
-        const savedDraftRaw = localStorage.getItem(draftStorageKey);
-        if (savedDraftRaw) {
-          const savedDraft = JSON.parse(savedDraftRaw);
-          if (Array.isArray(savedDraft.items)) {
-            const savedData = new Map<string, { qty: any; confirmed: boolean }>(
-              savedDraft.items.map((item: any) => [
-                `${item.warehouse_id}:${item.product_id}`,
-                {
-                  qty: item.counted_quantity,
-                  confirmed: !!item.confirmed,
-                },
-              ]),
-            );
-            nextItems = rows.map((item: any) => {
-              const key = `${item.warehouse_id}:${item.product_id}`;
-              const saved = savedData.get(key);
-              return {
-                ...item,
-                counted_quantity: saved
-                  ? saved.qty === null
-                    ? null
-                    : Number(saved.qty)
-                  : item.counted_quantity,
-                confirmed: saved ? saved.confirmed : !!item.confirmed,
-              };
-            });
-          }
-          if (savedDraft.selected_handover_source_shift_id) {
-            nextSelectedSourceShiftId =
-              savedDraft.selected_handover_source_shift_id;
-          }
+        const [rowsRes, warehousesRes, sourceCandidatesRes] = await Promise.all(
+          [
+            getShiftZoneSnapshotDraftTerminal(clubId, shiftId, snapshotType),
+            getShiftAccountabilityWarehousesTerminal(clubId, shiftId),
+            snapshotType === "OPEN"
+              ? getHandoverSourceCandidatesTerminal(clubId, shiftId)
+              : Promise.resolve({ ok: true as const, data: [] }),
+          ],
+        );
+
+        if (!rowsRes.ok) throw new Error(rowsRes.error);
+        if (!warehousesRes.ok) throw new Error(warehousesRes.error);
+        if (!sourceCandidatesRes.ok) throw new Error(sourceCandidatesRes.error);
+
+        const rows = rowsRes.data;
+        const availableWarehouses = warehousesRes.data;
+        const sourceCandidates = sourceCandidatesRes.data;
+
+        // Check if already finished
+        const alreadyFinished =
+          rows.length > 0 &&
+          rows.every((i) => i.saved_counted_quantity !== null);
+        if (alreadyFinished) {
+          setIsFinished(true);
+          setStep("SUCCESS");
+          if (!silent) setIsLoading(false);
+          return;
         }
-      } catch (e) {
-        console.error("Failed to restore draft", e);
-      }
 
-      if (snapshotType === "CLOSE" && blindCloseMode) {
-        nextItems = nextItems.map((item: any) => ({
-          ...item,
-          counted_quantity:
-            item.saved_counted_quantity === null ? null : item.counted_quantity,
-        }));
-      }
+        let nextItems = rows;
+        let nextSelectedSourceShiftId =
+          sourceCandidates?.find(
+            (candidate: any) => !candidate.is_self_handover,
+          )?.shift_id ||
+          sourceCandidates?.[0]?.shift_id ||
+          "";
 
-      setItems(nextItems);
-      setWarehouses(availableWarehouses);
-      setHandoverSourceCandidates(sourceCandidates);
-      setSelectedSourceShiftId(nextSelectedSourceShiftId);
+        // Restore from localStorage
+        try {
+          const savedDraftRaw = localStorage.getItem(draftStorageKey);
+          if (savedDraftRaw) {
+            const savedDraft = JSON.parse(savedDraftRaw);
+            if (Array.isArray(savedDraft.items)) {
+              const savedData = new Map<
+                string,
+                { qty: any; confirmed: boolean }
+              >(
+                savedDraft.items.map((item: any) => [
+                  `${item.warehouse_id}:${item.product_id}`,
+                  {
+                    qty: item.counted_quantity,
+                    confirmed: !!item.confirmed,
+                  },
+                ]),
+              );
+              nextItems = rows.map((item: any) => {
+                const key = `${item.warehouse_id}:${item.product_id}`;
+                const saved = savedData.get(key);
+                return {
+                  ...item,
+                  counted_quantity: saved
+                    ? saved.qty === null
+                      ? null
+                      : Number(saved.qty)
+                    : item.counted_quantity,
+                  confirmed: saved ? saved.confirmed : !!item.confirmed,
+                };
+              });
+            }
+            if (savedDraft.selected_handover_source_shift_id) {
+              nextSelectedSourceShiftId =
+                savedDraft.selected_handover_source_shift_id;
+            }
+          }
+        } catch (e) {
+          console.error("Failed to restore draft", e);
+        }
 
-      // If it's CLOSE or no source candidates, skip SETUP
-      if (snapshotType === "CLOSE" || sourceCandidates.length === 0) {
-        setStep("COUNTING");
-        window.history.replaceState({ step: "COUNTING" }, "");
+        if (snapshotType === "CLOSE" && blindCloseMode) {
+          nextItems = nextItems.map((item: any) => ({
+            ...item,
+            counted_quantity:
+              item.saved_counted_quantity === null
+                ? null
+                : item.counted_quantity,
+          }));
+        }
+
+        setItems(nextItems);
+        setWarehouses(availableWarehouses);
+        setHandoverSourceCandidates(sourceCandidates);
+        setSelectedSourceShiftId(nextSelectedSourceShiftId);
+
+        // If it's CLOSE or no source candidates, skip SETUP
+        if (
+          step === "SETUP" &&
+          (snapshotType === "CLOSE" || sourceCandidates.length === 0)
+        ) {
+          setStep("COUNTING");
+          window.history.replaceState({ step: "COUNTING" }, "");
+        }
+      } catch (error) {
+        console.error(error);
+        if (!silent) alert("Ошибка загрузки данных");
+      } finally {
+        if (!silent) setIsLoading(false);
       }
-    } catch (error) {
-      console.error(error);
-      alert("Ошибка загрузки данных");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [clubId, shiftId, snapshotType, blindCloseMode, draftStorageKey]);
+    },
+    [clubId, shiftId, snapshotType, blindCloseMode, draftStorageKey, step],
+  );
 
   useEffect(() => {
     fetchData();
@@ -273,7 +293,7 @@ export default function HandoverTerminalPage() {
     if (!isDesktop || step === "SUCCESS" || isLoading) return;
 
     const interval = setInterval(() => {
-      fetchData();
+      fetchData(true);
     }, 3000);
 
     return () => clearInterval(interval);
@@ -498,10 +518,11 @@ export default function HandoverTerminalPage() {
               );
 
               if (!finalizeRes.ok) {
-                const errorText = await finalizeRes.text();
+                const errorData = await finalizeRes.json().catch(() => ({}));
+                const errorText = errorData.error || (await finalizeRes.text());
                 console.error("Failed to finalize shift:", errorText);
                 alert(
-                  "Ошибка при завершении смены. Пожалуйста, обратитесь к администратору.",
+                  `Ошибка при завершении смены: ${errorText}. Пожалуйста, обратитесь к администратору.`,
                 );
                 setIsSubmitting(false);
                 return;
@@ -585,11 +606,31 @@ export default function HandoverTerminalPage() {
               </p>
             </div>
             <div className="inline-flex items-center gap-3 px-6 py-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 font-mono text-sm">
-              <Clock className="h-4 w-4" />
-              Закрытие через {countdown} сек...
+              {countdown > 0 ? (
+                <>
+                  <Clock className="h-4 w-4" />
+                  Закрытие через {countdown} сек...
+                </>
+              ) : (
+                <span className="text-emerald-500 font-bold">Готово</span>
+              )}
             </div>
+
+            {countdown === 0 && (
+              <Button
+                variant="outline"
+                className="w-full max-w-xs h-14 rounded-2xl border-zinc-800 bg-zinc-900 text-white font-bold animate-in fade-in zoom-in duration-300"
+                onClick={() => {
+                  window.open("", "_self");
+                  window.close();
+                }}
+              >
+                Закрыть вкладку вручную
+              </Button>
+            )}
+
             <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">
-              Вы также можете закрыть вкладку вручную
+              Если вкладка не закрылась автоматически, нажмите кнопку выше
             </p>
           </div>
         </div>

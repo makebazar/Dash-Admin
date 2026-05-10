@@ -70,8 +70,13 @@ export function normalizeEmployeeAccessSettings(
 
 export async function getEmployeeRoleAccess(
   clubId: string,
+  userIdOverride?: string,
 ): Promise<EmployeeRoleAccess> {
-  const userId = (await cookies()).get("session_user_id")?.value;
+  let userId = userIdOverride;
+  if (!userId) {
+    userId = (await cookies()).get("session_user_id")?.value;
+  }
+
   if (!userId) {
     const error = new Error("Unauthorized") as AccessError;
     error.status = 401;
@@ -108,22 +113,14 @@ export async function getEmployeeRoleAccess(
   const accessRes = await query(
     `
         WITH membership AS (
-            SELECT 1 as ok
-            WHERE (
-                EXISTS (
-                    SELECT 1
-                    FROM club_employees ce
-                    WHERE ce.club_id = $2
-                      AND ce.user_id = $1
-                      AND ce.dismissed_at IS NULL
-                )
-                OR EXISTS (
-                    SELECT 1
-                    FROM clubs c
-                    WHERE c.id = $2
-                      AND c.owner_id = $1
-                )
-            )
+            SELECT 1 as ok FROM users u
+            WHERE u.id = $1
+              AND (
+                EXISTS (SELECT 1 FROM club_employees ce WHERE ce.club_id = $2 AND ce.user_id = $1 AND ce.dismissed_at IS NULL)
+                OR EXISTS (SELECT 1 FROM club_employee_roles cer WHERE cer.club_id = $2 AND cer.user_id = $1)
+                OR EXISTS (SELECT 1 FROM clubs c WHERE c.id = $2 AND c.owner_id = $1)
+                OR u.role_id = (SELECT id FROM roles WHERE name = 'Администратор системы')
+              )
         ),
         is_owner AS (
             SELECT 1 as ok

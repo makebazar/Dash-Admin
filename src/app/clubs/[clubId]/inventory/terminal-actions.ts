@@ -7,12 +7,18 @@ import {
   type ShiftZoneSnapshotType,
   type HandoverSourceCandidate,
   type ShiftZoneSnapshotDraftItem,
+  applyWarehouseStockDelta,
+  logStockMovement,
+  syncProductsCurrentStock,
+  ensurePreviousShiftClosureCompleted,
+  findAcceptedFromShift,
 } from "./actions";
 
 import {
   normalizeInventorySettings,
   getShiftZoneLabel,
 } from "@/lib/inventory-settings";
+import { revalidatePath } from "next/cache";
 
 /**
  * Validates that the shift exists and belongs to the specified club.
@@ -404,27 +410,105 @@ export async function saveShiftZoneSnapshotTerminal(
         throw new Error("Нет зон для сохранения приемки/сдачи");
       }
 
+      const touchedProductIds = new Set<number>();
       const snapshotReferenceTime = new Date().toISOString();
+
+      if (snapshotType === "OPEN") {
+        await ensurePreviousShiftClosureCompleted(
+          client,
+          clubId,
+          shiftId,
+          new Date(shift.check_in).toISOString(),
+        );
+      }
+
+      const acceptedFrom =
+        snapshotType === "OPEN"
+          ? await findAcceptedFromShift(
+              client,
+              clubId,
+              shiftId,
+              shift.user_id ? String(shift.user_id) : null,
+              snapshotReferenceTime,
+              options?.accepted_from_shift_id || null,
+            )
+          : {
+              accepted_from_shift_id: null as string | null,
+              accepted_from_employee_id: null as string | null,
+            };
+
+      const shouldSyncStock =
+        snapshotType === "OPEN" || snapshotType === "CLOSE";
 
       for (const zone of normalizedPayload) {
         // Create or update snapshot
         const snapRes = await client.query(
-          `INSERT INTO shift_zone_snapshots
-               (club_id, shift_id, warehouse_id, snapshot_type, created_at, employee_id)
-               VALUES ($1, $2, $3, $4, $5, $6)
-               ON CONFLICT (shift_id, warehouse_id, snapshot_type)
-               DO UPDATE SET created_at = EXCLUDED.created_at
-               RETURNING id`,
+          `INSERT INTO shift_zone_snapshots (
+                    club_id,
+                    shift_id,
+                    employee_id,
+                    warehouse_id,
+                    snapshot_type,
+                    accepted_from_shift_id,
+                    accepted_from_employee_id
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (shift_id, warehouse_id, snapshot_type)
+                DO UPDATE SET
+                    employee_id = EXCLUDED.employee_id,
+                    accepted_from_shift_id = EXCLUDED.accepted_from_shift_id,
+                    accepted_from_employee_id = EXCLUDED.accepted_from_employee_id,
+                    created_at = NOW()
+                RETURNING id`,
           [
             clubId,
             shiftId,
+            shift.user_id,
             zone.warehouse_id,
             snapshotType,
-            snapshotReferenceTime,
-            shift.user_id,
+            acceptedFrom.accepted_from_shift_id,
+            acceptedFrom.accepted_from_employee_id,
           ],
         );
         const snapshotId = snapRes.rows[0].id;
+
+        if (shouldSyncStock) {
+          const existingAdjustmentRes = await client.query(
+            `
+                    SELECT id, product_id, change_amount
+                    FROM warehouse_stock_movements
+                    WHERE club_id = $1
+                      AND warehouse_id = $2
+                      AND related_entity_type = 'SHIFT_ZONE_SNAPSHOT'
+                      AND related_entity_id = $3
+                    ORDER BY id
+                    `,
+            [clubId, zone.warehouse_id, snapshotId],
+          );
+
+          for (const movement of existingAdjustmentRes.rows) {
+            await applyWarehouseStockDelta(
+              client,
+              zone.warehouse_id,
+              Number(movement.product_id),
+              -Number(movement.change_amount || 0),
+            );
+            touchedProductIds.add(Number(movement.product_id));
+          }
+
+          if (existingAdjustmentRes.rowCount) {
+            await client.query(
+              `
+                        DELETE FROM warehouse_stock_movements
+                        WHERE club_id = $1
+                          AND warehouse_id = $2
+                          AND related_entity_type = 'SHIFT_ZONE_SNAPSHOT'
+                          AND related_entity_id = $3
+                        `,
+              [clubId, zone.warehouse_id, snapshotId],
+            );
+          }
+        }
 
         // Remove old items for this snapshot to prevent duplicates
         await client.query(
@@ -432,7 +516,35 @@ export async function saveShiftZoneSnapshotTerminal(
           [snapshotId],
         );
 
+        if (zone.items.length === 0) continue;
+
+        const productIds = zone.items.map((item) => item.product_id);
+        const productRes = await client.query(
+          `
+                SELECT
+                    p.id,
+                    COALESCE(ws.quantity, 0) as system_quantity
+                FROM warehouse_products p
+                LEFT JOIN warehouse_stock ws
+                    ON ws.warehouse_id = $2
+                   AND ws.product_id = p.id
+                WHERE p.club_id = $1
+                  AND p.id = ANY($3)
+                `,
+          [clubId, zone.warehouse_id, productIds],
+        );
+
+        const systemMap = new Map<number, number>(
+          productRes.rows.map((row: any) => [
+            Number(row.id),
+            Number(row.system_quantity || 0),
+          ]),
+        );
+
         for (const item of zone.items) {
+          const systemQuantity = systemMap.get(item.product_id) || 0;
+          touchedProductIds.add(item.product_id);
+
           await client.query(
             `INSERT INTO shift_zone_snapshot_items (snapshot_id, product_id, counted_quantity, system_quantity)
                    VALUES ($1, $2, $3, $4)`,
@@ -440,21 +552,50 @@ export async function saveShiftZoneSnapshotTerminal(
               snapshotId,
               item.product_id,
               item.counted_quantity,
-              item.system_quantity,
+              systemQuantity,
             ],
           );
+
+          if (shouldSyncStock) {
+            const stockDelta = item.counted_quantity - systemQuantity;
+            if (stockDelta !== 0) {
+              const { previousStock, newStock } =
+                await applyWarehouseStockDelta(
+                  client,
+                  zone.warehouse_id,
+                  item.product_id,
+                  stockDelta,
+                );
+
+              await logStockMovement(
+                client,
+                clubId,
+                shift.user_id ? String(shift.user_id) : null,
+                item.product_id,
+                stockDelta,
+                previousStock,
+                newStock,
+                stockDelta > 0 ? "INVENTORY_GAIN" : "INVENTORY_LOSS",
+                stockDelta > 0
+                  ? `${snapshotType === "OPEN" ? "Приемка остатков" : "Сдача остатков"} #${snapshotId}: найден излишек`
+                  : `${snapshotType === "OPEN" ? "Приемка остатков" : "Сдача остатков"} #${snapshotId}: подтверждена недостача`,
+                "SHIFT_ZONE_SNAPSHOT",
+                snapshotId,
+                shiftId,
+                zone.warehouse_id,
+                null,
+              );
+            }
+          }
         }
       }
 
-      if (snapshotType === "OPEN" && options?.accepted_from_shift_id) {
-        await client.query(
-          `UPDATE shift_zone_snapshots SET accepted_from_shift_id = $1
-           WHERE shift_id = $2 AND club_id = $3 AND snapshot_type = 'OPEN'`,
-          [options.accepted_from_shift_id, shiftId, clubId],
-        );
-      }
+      await syncProductsCurrentStock(client, clubId, touchedProductIds);
 
       await client.query("COMMIT");
+      revalidatePath(`/employee/clubs/${clubId}`);
+      revalidatePath(`/clubs/${clubId}/shifts/${shiftId}`);
+      revalidatePath(`/clubs/${clubId}/inventory`);
       return { ok: true as const };
     } catch (e) {
       await client.query("ROLLBACK");

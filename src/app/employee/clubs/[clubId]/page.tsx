@@ -480,6 +480,28 @@ export default function EmployeeClubPage({
     hasShiftAccountability,
   ]);
 
+  useEffect(() => {
+    if (!clubId || !activeShift?.id) return;
+
+    const interval = setInterval(() => {
+      fetchShiftAccountabilityStatus(clubId).then((status) => {
+        setHasShiftAccountability(status.enabled && status.ready);
+      });
+
+      // We can also re-check for open drafts via existing logic
+      // For now, let's just trigger a re-check of the state
+      if (canUseShiftZoneHandover) {
+        fetchHasOpenZoneSnapshot(clubId, activeShift.id)
+          .then((hasOpenSnapshot) => {
+            setHasPendingZoneStartAcceptance(!hasOpenSnapshot);
+          })
+          .catch(() => {});
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [clubId, activeShift?.id, canUseShiftZoneHandover]);
+
   const maintenanceComponent = useMemo(() => {
     if (kpiData?.hidden || !kpiData?.maintenance) return null;
     return (

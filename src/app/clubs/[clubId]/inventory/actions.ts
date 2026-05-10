@@ -3541,7 +3541,7 @@ export async function deleteProcurementList(listId: number, clubId: string) {
 }
 
 // --- HELPER: Stock Movement Logging ---
-async function logStockMovement(
+export async function logStockMovement(
   client: any,
   clubId: string,
   userId: string | null,
@@ -3631,7 +3631,7 @@ async function assertProductsBelongToClub(
     );
 }
 
-async function syncProductsCurrentStock(
+export async function syncProductsCurrentStock(
   client: any,
   clubId: string,
   productIds: Iterable<number>,
@@ -3659,7 +3659,7 @@ async function syncProductsCurrentStock(
   );
 }
 
-async function findAcceptedFromShift(
+export async function findAcceptedFromShift(
   client: any,
   clubId: string,
   currentShiftId: string,
@@ -3728,7 +3728,7 @@ async function findAcceptedFromShift(
   };
 }
 
-async function ensurePreviousShiftClosureCompleted(
+export async function ensurePreviousShiftClosureCompleted(
   client: any,
   clubId: string,
   currentShiftId: string,
@@ -3762,7 +3762,7 @@ async function ensurePreviousShiftClosureCompleted(
   );
 }
 
-async function applyWarehouseStockDelta(
+export async function applyWarehouseStockDelta(
   client: any,
   warehouseId: number,
   productId: number,

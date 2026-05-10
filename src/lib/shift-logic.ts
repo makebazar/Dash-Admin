@@ -195,7 +195,7 @@ export async function executeShiftClose(
                   ? "FRI"
                   : "SAT";
 
-    const roleAccess = await getEmployeeRoleAccess(String(clubId));
+    const roleAccess = await getEmployeeRoleAccess(String(clubId), userId);
     if (roleAccess.settings.shift_end_mode === "NO_REPORT") {
       reportData = {};
       templateId = null;
