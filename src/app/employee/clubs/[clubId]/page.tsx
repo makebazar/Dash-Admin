@@ -988,6 +988,18 @@ export default function EmployeeClubPage({
                 `pending_shift_close_data:${clubId}`,
                 JSON.stringify({}),
               );
+
+              // Save to database draft for multi-device flow (QR code)
+              try {
+                await fetch(`/api/employee/shifts/${activeShift.id}/draft`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({}),
+                });
+              } catch (e) {
+                console.error("Failed to save shift draft to database", e);
+              }
+
               const url = `/employee/terminal/handover/CLOSE/${activeShift.id}?clubId=${clubId}${Boolean(normalizedInventorySettings.blind_inventory_enabled) ? "&blind=true" : ""}`;
               window.open(url, isMobile ? "_self" : "_blank");
               return;
@@ -1010,6 +1022,18 @@ export default function EmployeeClubPage({
               `pending_shift_close_data:${clubId}`,
               JSON.stringify({}),
             );
+
+            // Save to database draft for multi-device flow (QR code)
+            try {
+              await fetch(`/api/employee/shifts/${activeShift.id}/draft`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+              });
+            } catch (e) {
+              console.error("Failed to save shift draft to database", e);
+            }
+
             const url = `/employee/terminal/handover/CLOSE/${activeShift.id}?clubId=${clubId}${Boolean(normalizedInventorySettings.blind_inventory_enabled) ? "&blind=true" : ""}`;
             window.open(url, isMobile ? "_self" : "_blank");
             return;
@@ -1111,8 +1135,12 @@ export default function EmployeeClubPage({
 
     setIsActionLoading(true);
     try {
-      const { checklistResponses, checklistId, ...cleanReportData } =
-        data || {};
+      const {
+        checklistResponses,
+        checklistId,
+        templateId: dataTemplateId,
+        ...cleanReportData
+      } = data || {};
 
       if (checklistId && checklistResponses && currentUserId) {
         const evalRes = await fetch(`/api/clubs/${clubId}/evaluations`, {
@@ -1146,7 +1174,7 @@ export default function EmployeeClubPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reportData: cleanReportData,
-          templateId: reportTemplate?.id,
+          templateId: dataTemplateId || reportTemplate?.id,
         }),
       });
 

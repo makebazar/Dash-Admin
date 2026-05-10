@@ -88,7 +88,7 @@ function shouldTranscodeVideo(
 }
 
 async function runFfmpeg(args: string[]) {
-  const ffmpegBinaryPath =
+  let ffmpegBinaryPath =
     process.env.FFMPEG_BIN ||
     path.join(
       process.cwd(),
@@ -100,7 +100,8 @@ async function runFfmpeg(args: string[]) {
   try {
     await fs.access(ffmpegBinaryPath);
   } catch {
-    throw new Error("FFmpeg binary is not available");
+    // If static binary or FFMPEG_BIN is not found, fallback to system PATH
+    ffmpegBinaryPath = "ffmpeg";
   }
 
   await new Promise<void>((resolve, reject) => {

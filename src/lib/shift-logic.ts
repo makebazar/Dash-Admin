@@ -73,11 +73,13 @@ export async function executeShiftClose(
         const {
           checklistResponses: draftChecklistResponses,
           checklistId: draftChecklistId,
+          templateId: draftTemplateId,
           ...cleanReportData
-        } = draftData;
+        } = draftData as any;
         reportData = cleanReportData;
         if (!checklistId) checklistId = draftChecklistId;
         if (!checklistResponses) checklistResponses = draftChecklistResponses;
+        if (!templateId) templateId = draftTemplateId;
       }
     }
 

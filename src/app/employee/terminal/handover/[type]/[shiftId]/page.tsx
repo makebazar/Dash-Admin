@@ -117,10 +117,6 @@ export default function HandoverTerminalPage() {
             clearInterval(timer);
             // Final action
             window.close();
-            // Fallback for browser restrictions
-            if (clubId) {
-              window.location.href = `/employee/clubs/${clubId}`;
-            }
             return 0;
           }
           return prev - 1;
@@ -271,6 +267,17 @@ export default function HandoverTerminalPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Polling for completion (especially for desktop QR view)
+  useEffect(() => {
+    if (!isDesktop || step === "SUCCESS" || isLoading) return;
+
+    const interval = setInterval(() => {
+      fetchData();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [isDesktop, step, isLoading, fetchData]);
 
   // Save to localStorage
   useEffect(() => {

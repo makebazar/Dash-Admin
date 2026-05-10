@@ -1046,6 +1046,7 @@ export function ShiftClosingWizard({
       ...reportData,
       checklistResponses,
       checklistId: requiredChecklist?.id,
+      templateId: reportTemplate?.id,
     });
   };
 
