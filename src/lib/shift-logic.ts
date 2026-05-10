@@ -69,18 +69,33 @@ export async function executeShiftClose(
     // Use draft data if direct data is missing (multi-device flow)
     const draftData = shiftCheck.rows[0].close_draft_data;
     if (draftData && typeof draftData === "object") {
+      const parsedDraft = draftData as any;
+
+      // If reportData is missing in request, use the one from draft
       if (!reportData || Object.keys(reportData).length === 0) {
         const {
           checklistResponses: draftChecklistResponses,
           checklistId: draftChecklistId,
           templateId: draftTemplateId,
           ...cleanReportData
-        } = draftData as any;
+        } = parsedDraft;
+
         reportData = cleanReportData;
         if (!checklistId) checklistId = draftChecklistId;
         if (!checklistResponses) checklistResponses = draftChecklistResponses;
         if (!templateId) templateId = draftTemplateId;
+      } else {
+        // If reportData exists in request, still try to fill missing IDs from draft
+        if (!checklistId) checklistId = parsedDraft.checklistId;
+        if (!checklistResponses)
+          checklistResponses = parsedDraft.checklistResponses;
+        if (!templateId) templateId = parsedDraft.templateId;
       }
+    }
+
+    // Ensure reportData is an object to avoid "reportData is required" error
+    if (!reportData || typeof reportData !== "object") {
+      reportData = {};
     }
 
     const clubId = shiftCheck.rows[0].club_id;

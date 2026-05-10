@@ -116,12 +116,24 @@ export default function HandoverTerminalPage() {
           if (prev <= 1) {
             clearInterval(timer);
             // Final action: Try multiple ways to close the window
-            window.close();
-            // Hack for mobile browsers/webviews
-            setTimeout(() => {
-              window.open("", "_self", "");
+            try {
               window.close();
+            } catch (e) {}
+
+            // Hack for mobile browsers/webviews (multiple attempts)
+            setTimeout(() => {
+              try {
+                window.open("", "_self", "");
+                window.close();
+              } catch (e) {}
             }, 100);
+
+            setTimeout(() => {
+              try {
+                window.open("about:blank", "_self").close();
+              } catch (e) {}
+            }, 200);
+
             return 0;
           }
           return prev - 1;

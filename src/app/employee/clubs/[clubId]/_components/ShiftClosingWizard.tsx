@@ -823,9 +823,11 @@ export function ShiftClosingWizard({
     };
   }, [isOpen]);
 
+  const hasRestoredRef = useRef(false);
+
   // Load persisted state
   useEffect(() => {
-    if (isOpen && activeShiftId) {
+    if (isOpen && activeShiftId && !hasRestoredRef.current) {
       const saved = localStorage.getItem(persistenceKey);
       if (saved) {
         try {
@@ -855,6 +857,11 @@ export function ShiftClosingWizard({
           console.error("Failed to parse saved state", e);
         }
       }
+      hasRestoredRef.current = true;
+    }
+
+    if (!isOpen) {
+      hasRestoredRef.current = false;
     }
   }, [
     isOpen,
