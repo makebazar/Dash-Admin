@@ -1232,6 +1232,62 @@ export default function EmployeeClubPage({
       const hasShiftZones =
         accountabilityStatus.enabled && accountabilityStatus.ready;
       setHasShiftAccountability(hasShiftZones);
+
+      // 1. Always perform an immediate 'Hot Save' to the database shifts table
+      setIsActionLoading(true);
+      try {
+        const {
+          checklistResponses,
+          checklistId,
+          templateId: dataTemplateId,
+          ...cleanReportData
+        } = data || {};
+
+        // Save checklist if exists
+        if (checklistId && checklistResponses && currentUserId) {
+          await fetch(`/api/clubs/${clubId}/evaluations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              template_id: checklistId,
+              employee_id: currentUserId,
+              target_user_id: currentUserId,
+              shift_id: activeShift?.id,
+              responses: Object.entries(checklistResponses).map(
+                ([k, v]: any) => ({
+                  item_id: parseInt(k),
+                  score: v.score,
+                  comment: v.comment,
+                  selected_workstations: v.selected_workstations,
+                }),
+              ),
+            }),
+          });
+        }
+
+        // Save report data to shift (Partial Update)
+        await fetch(`/api/employee/shifts/${activeShift?.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reportData: cleanReportData,
+            templateId: dataTemplateId || reportTemplate?.id,
+            partial: true, // Tell backend not to set status=CLOSED yet
+          }),
+        });
+
+        // Also save as draft for terminal redundancy
+        await fetch(`/api/employee/shifts/${activeShift?.id}/draft`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+      } catch (e) {
+        console.error("Immediate shift update failed", e);
+      } finally {
+        setIsActionLoading(false);
+      }
+
       if (activeShift?.id && hasShiftZones) {
         // Save to localStorage for single-device flow
         localStorage.setItem(
@@ -1239,27 +1295,20 @@ export default function EmployeeClubPage({
           JSON.stringify(data),
         );
 
-        // Save to database draft for multi-device flow (QR code)
-        try {
-          await fetch(`/api/employee/shifts/${activeShift.id}/draft`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-          });
-        } catch (e) {
-          console.error("Failed to save shift draft to database", e);
-        }
-
         setIsReportModalOpen(false);
         const url = `/employee/terminal/handover/CLOSE/${activeShift.id}?clubId=${clubId}${Boolean(normalizedInventorySettings.blind_inventory_enabled) ? "&blind=true" : ""}`;
         window.open(url, isMobile ? "_self" : "_blank");
         return;
       }
+
+      // If no handover required, finalize normally
       await finalizeShiftClose(data);
     },
     [
       activeShift?.id,
       clubId,
+      currentUserId,
+      reportTemplate?.id,
       finalizeShiftClose,
       normalizedInventorySettings.blind_inventory_enabled,
     ],

@@ -6,6 +6,7 @@ import {
   useCallback,
   useTransition,
   useMemo,
+  useRef,
 } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -179,6 +180,8 @@ export default function HandoverTerminalPage() {
     setStep(newStep);
   };
 
+  const hasFetchedRef = useRef(false);
+
   // Fetch initial data
   const fetchData = useCallback(
     async (silent = false) => {
@@ -199,14 +202,14 @@ export default function HandoverTerminalPage() {
         if (!warehousesRes.ok) throw new Error(warehousesRes.error);
         if (!sourceCandidatesRes.ok) throw new Error(sourceCandidatesRes.error);
 
-        const rows = rowsRes.data;
+        const serverRows = rowsRes.data;
         const availableWarehouses = warehousesRes.data;
         const sourceCandidates = sourceCandidatesRes.data;
 
         // Check if already finished
         const alreadyFinished =
-          rows.length > 0 &&
-          rows.every((i) => i.saved_counted_quantity !== null);
+          serverRows.length > 0 &&
+          serverRows.every((i) => i.saved_counted_quantity !== null);
         if (alreadyFinished) {
           setIsFinished(true);
           setStep("SUCCESS");
@@ -214,7 +217,7 @@ export default function HandoverTerminalPage() {
           return;
         }
 
-        let nextItems = rows;
+        let nextItems = [...serverRows];
         let nextSelectedSourceShiftId =
           sourceCandidates?.find(
             (candidate: any) => !candidate.is_self_handover,
@@ -222,37 +225,51 @@ export default function HandoverTerminalPage() {
           sourceCandidates?.[0]?.shift_id ||
           "";
 
-        // Restore from localStorage
+        // Restore from localStorage and MERGE
         try {
           const savedDraftRaw = localStorage.getItem(draftStorageKey);
           if (savedDraftRaw) {
             const savedDraft = JSON.parse(savedDraftRaw);
             if (Array.isArray(savedDraft.items)) {
-              const savedData = new Map<
-                string,
-                { qty: any; confirmed: boolean }
-              >(
+              const savedItemsMap = new Map<string, any>(
                 savedDraft.items.map((item: any) => [
                   `${item.warehouse_id}:${item.product_id}`,
-                  {
-                    qty: item.counted_quantity,
-                    confirmed: !!item.confirmed,
-                  },
+                  item,
                 ]),
               );
-              nextItems = rows.map((item: any) => {
+
+              // 1. Update existing server items with saved counts
+              nextItems = serverRows.map((item: any) => {
                 const key = `${item.warehouse_id}:${item.product_id}`;
-                const saved = savedData.get(key);
-                return {
-                  ...item,
-                  counted_quantity: saved
-                    ? saved.qty === null
-                      ? null
-                      : Number(saved.qty)
-                    : item.counted_quantity,
-                  confirmed: saved ? saved.confirmed : !!item.confirmed,
-                };
+                const saved = savedItemsMap.get(key);
+                if (saved) {
+                  savedItemsMap.delete(key); // Mark as processed
+                  return {
+                    ...item,
+                    counted_quantity:
+                      saved.counted_quantity === null
+                        ? null
+                        : Number(saved.counted_quantity),
+                    confirmed: !!saved.confirmed,
+                  };
+                }
+                return item;
               });
+
+              // 2. Append items that were added LOCALLY but aren't on server yet
+              for (const [key, saved] of Array.from(savedItemsMap.entries())) {
+                // Only append if it's a valid added item (check if we have basic info)
+                if (saved.product_name) {
+                  nextItems.push({
+                    ...saved,
+                    counted_quantity:
+                      saved.counted_quantity === null
+                        ? null
+                        : Number(saved.counted_quantity),
+                    confirmed: !!saved.confirmed,
+                  });
+                }
+              }
             }
             if (savedDraft.selected_handover_source_shift_id) {
               nextSelectedSourceShiftId =
@@ -278,26 +295,28 @@ export default function HandoverTerminalPage() {
         setHandoverSourceCandidates(sourceCandidates);
         setSelectedSourceShiftId(nextSelectedSourceShiftId);
 
-        // If it's CLOSE or no source candidates, skip SETUP
-        if (
-          step === "SETUP" &&
-          (snapshotType === "CLOSE" || sourceCandidates.length === 0)
-        ) {
-          setStep("COUNTING");
-          window.history.replaceState({ step: "COUNTING" }, "");
+        // One-time auto-skip logic
+        if (!hasFetchedRef.current) {
+          if (snapshotType === "CLOSE" || sourceCandidates.length === 0) {
+            setStep("COUNTING");
+            window.history.replaceState({ step: "COUNTING" }, "");
+          }
         }
       } catch (error) {
         console.error(error);
         if (!silent) alert("Ошибка загрузки данных");
       } finally {
         if (!silent) setIsLoading(false);
+        hasFetchedRef.current = true;
       }
     },
-    [clubId, shiftId, snapshotType, blindCloseMode, draftStorageKey, step],
+    [clubId, shiftId, snapshotType, blindCloseMode, draftStorageKey],
   );
 
   useEffect(() => {
-    fetchData();
+    if (!hasFetchedRef.current) {
+      fetchData();
+    }
   }, [fetchData]);
 
   // Polling for completion (especially for desktop QR view)
@@ -366,7 +385,9 @@ export default function HandoverTerminalPage() {
 
   const stats = useMemo(() => {
     const total = items.length;
-    const counted = items.filter((i) => i.confirmed).length;
+    const counted = items.filter(
+      (i) => i.confirmed || i.counted_quantity !== null,
+    ).length;
     return {
       total,
       counted,
@@ -377,15 +398,25 @@ export default function HandoverTerminalPage() {
   const updateQuantity = (
     warehouseId: number,
     productId: number,
-    val: number | null,
+    rawVal: any,
   ) => {
+    let val: number | null = null;
+    if (rawVal !== null && rawVal !== "" && rawVal !== undefined) {
+      const parsed =
+        typeof rawVal === "number"
+          ? rawVal
+          : parseFloat(String(rawVal).replace(",", "."));
+      if (!isNaN(parsed)) {
+        val = Math.max(0, Math.trunc(parsed));
+      }
+    }
+
     setItems((prev) =>
       prev.map((item) =>
         item.warehouse_id === warehouseId && item.product_id === productId
           ? {
               ...item,
-              counted_quantity:
-                val === null ? null : Math.max(0, Math.trunc(val)),
+              counted_quantity: val,
               confirmed: true,
             }
           : item,
@@ -480,9 +511,7 @@ export default function HandoverTerminalPage() {
           warehouses.map((wh) => ({
             warehouse_id: wh.id,
             items: items
-              .filter(
-                (i) => i.warehouse_id === wh.id && i.counted_quantity !== null,
-              )
+              .filter((i) => i.warehouse_id === wh.id && i.confirmed)
               .map((i) => ({
                 product_id: i.product_id,
                 counted_quantity: Math.max(
@@ -501,33 +530,15 @@ export default function HandoverTerminalPage() {
           localStorage.removeItem(draftStorageKey);
 
           if (snapshotType === "CLOSE") {
-            const pendingCloseKey = `pending_shift_close_data:${clubId}`;
-            const pendingData = localStorage.getItem(pendingCloseKey);
-
-            let requestBody = {};
-            if (pendingData) {
-              try {
-                const parsedData = JSON.parse(pendingData);
-                const { checklistResponses, checklistId, ...cleanReportData } =
-                  parsedData;
-                requestBody = {
-                  reportData: cleanReportData,
-                  checklistId,
-                  checklistResponses,
-                };
-              } catch (e) {
-                console.error("Failed to parse pending data", e);
-              }
-            }
-
             try {
-              // Finalize shift close with data (or empty object if data is in DB draft)
+              // Finalize shift close. Server will use the DB draft or existing shift data
+              // which was "Hot Saved" from the PC wizard.
               const finalizeRes = await fetch(
                 `/api/employee/shifts/${shiftId}/finalize`,
                 {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(requestBody),
+                  body: JSON.stringify({}),
                 },
               );
 
@@ -960,9 +971,7 @@ export default function HandoverTerminalPage() {
                                     updateQuantity(
                                       item.warehouse_id,
                                       item.product_id,
-                                      e.target.value === ""
-                                        ? null
-                                        : Number(e.target.value),
+                                      e.target.value,
                                     )
                                   }
                                 />
@@ -1253,7 +1262,7 @@ export default function HandoverTerminalPage() {
             if (!open) window.history.back();
           }}
         >
-          <DialogContent className="relative h-[100dvh] w-screen max-w-none md:w-full md:max-w-2xl md:h-[85vh] md:rounded-[2rem] md:border md:border-zinc-800 rounded-none border-none bg-zinc-950 p-0 text-zinc-100 selection:bg-emerald-500/30 overflow-hidden flex flex-col [&>button]:hidden">
+          <DialogContent className="fixed inset-0 z-[100] h-[100dvh] w-screen max-w-none border-none bg-zinc-950 p-0 text-zinc-100 selection:bg-emerald-500/30 overflow-hidden flex flex-col [&>button]:hidden translate-x-0 translate-y-0 sm:max-w-none sm:rounded-none">
             <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
               <DialogHeader className="space-y-1 text-left pt-2">
                 <DialogTitle className="text-xl font-black text-white uppercase italic tracking-tight">
@@ -1365,6 +1374,7 @@ export default function HandoverTerminalPage() {
                                       selling_price: Number(
                                         product.selling_price || 0,
                                       ),
+                                      confirmed: true,
                                     },
                                   ]);
 

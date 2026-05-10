@@ -55,7 +55,10 @@ export async function executeShiftClose(
         `);
 
     const shiftCheck = await query(
-      `SELECT id, club_id, check_in, user_id, shift_type, shift_role_id_snapshot, close_draft_data FROM shifts WHERE id = $1 AND user_id = $2 AND check_out IS NULL`,
+      `SELECT id, club_id, check_in, user_id, shift_type, shift_role_id_snapshot,
+              close_draft_data, report_data, template_id, cash_income, card_income,
+              expenses, calculated_salary, salary_breakdown
+       FROM shifts WHERE id = $1 AND user_id = $2 AND check_out IS NULL`,
       [shiftId, userId],
     );
 
@@ -66,8 +69,10 @@ export async function executeShiftClose(
       );
     }
 
+    const currentShiftRow = shiftCheck.rows[0];
+
     // Use draft data if direct data is missing (multi-device flow)
-    const draftData = shiftCheck.rows[0].close_draft_data;
+    const draftData = currentShiftRow.close_draft_data;
     if (draftData && typeof draftData === "object") {
       const parsedDraft = draftData as any;
 
@@ -93,17 +98,19 @@ export async function executeShiftClose(
       }
     }
 
-    // Ensure reportData is an object to avoid "reportData is required" error
-    if (!reportData || typeof reportData !== "object") {
-      reportData = {};
+    // Ensure reportData is an object.
+    // Fallback: If still empty, try to use already saved data from 'Hot Save'
+    if (!reportData || Object.keys(reportData).length === 0) {
+      reportData = currentShiftRow.report_data || {};
+      if (!templateId) templateId = currentShiftRow.template_id;
     }
 
-    const clubId = shiftCheck.rows[0].club_id;
-    const checkIn = new Date(shiftCheck.rows[0].check_in);
-    const shiftUserId = shiftCheck.rows[0].user_id;
-    const shiftType = shiftCheck.rows[0].shift_type || "DAY";
-    const shiftRoleId = shiftCheck.rows[0].shift_role_id_snapshot
-      ? Number(shiftCheck.rows[0].shift_role_id_snapshot)
+    const clubId = currentShiftRow.club_id;
+    const checkIn = new Date(currentShiftRow.check_in);
+    const shiftUserId = currentShiftRow.user_id;
+    const shiftType = currentShiftRow.shift_type || "DAY";
+    const shiftRoleId = currentShiftRow.shift_role_id_snapshot
+      ? Number(currentShiftRow.shift_role_id_snapshot)
       : null;
 
     // Process Checklist if provided
@@ -378,11 +385,13 @@ export async function executeShiftClose(
       salaryBreakdown = calculation.breakdown;
     }
 
+    const isPartial = body?.partial === true;
+
     // End shift and save report
     await query(
       `UPDATE shifts
-       SET check_out = NOW(),
-           status = 'CLOSED',
+       SET check_out = CASE WHEN $14 = TRUE THEN check_out ELSE NOW() END,
+           status = CASE WHEN $14 = TRUE THEN status ELSE 'CLOSED' END,
            total_hours = $8,
            report_data = $1,
            template_id = $2,
@@ -404,13 +413,13 @@ export async function executeShiftClose(
         expenses,
         comment,
         shiftId,
-        // check_out handled by NOW()
-        totalHours.toFixed(2), // $8 total_hours
-        calculatedSalary, // $9
-        JSON.stringify(salaryBreakdown), // $10
-        reportMode, // $11
-        roleAccess.roleId, // $12
-        roleAccess.roleName, // $13
+        totalHours.toFixed(2),
+        calculatedSalary,
+        JSON.stringify(salaryBreakdown),
+        reportMode,
+        roleAccess.roleId,
+        roleAccess.roleName,
+        isPartial,
       ],
     );
 

@@ -441,7 +441,7 @@ export async function saveShiftZoneSnapshotTerminal(
         snapshotType === "OPEN" || snapshotType === "CLOSE";
 
       for (const zone of normalizedPayload) {
-        // Create or update snapshot
+        // 1. Create or update snapshot
         const snapRes = await client.query(
           `INSERT INTO shift_zone_snapshots (
                     club_id,
@@ -470,9 +470,21 @@ export async function saveShiftZoneSnapshotTerminal(
             acceptedFrom.accepted_from_employee_id,
           ],
         );
-        const snapshotId = snapRes.rows[0].id;
+        const snapshotId = Number(snapRes.rows[0].id);
 
         if (shouldSyncStock) {
+          // 2. Lock the stock rows we are about to modify
+          const productIds = zone.items.map((item) => item.product_id);
+          if (productIds.length > 0) {
+            await client.query(
+              `SELECT 1 FROM warehouse_stock
+               WHERE warehouse_id = $1 AND product_id = ANY($2)
+               FOR UPDATE`,
+              [zone.warehouse_id, productIds],
+            );
+          }
+
+          // 3. Revert old movements
           const existingAdjustmentRes = await client.query(
             `
                     SELECT id, product_id, change_amount
@@ -510,7 +522,7 @@ export async function saveShiftZoneSnapshotTerminal(
           }
         }
 
-        // Remove old items for this snapshot to prevent duplicates
+        // 4. Remove old items for this snapshot
         await client.query(
           `DELETE FROM shift_zone_snapshot_items WHERE snapshot_id = $1`,
           [snapshotId],
@@ -542,36 +554,41 @@ export async function saveShiftZoneSnapshotTerminal(
         );
 
         for (const item of zone.items) {
-          const systemQuantity = systemMap.get(item.product_id) || 0;
-          touchedProductIds.add(item.product_id);
+          const pid = Number(item.product_id);
+          const systemQuantity = Number(systemMap.get(pid) || 0);
+          const countedQuantity = Number(item.counted_quantity || 0);
+          touchedProductIds.add(pid);
 
           await client.query(
             `INSERT INTO shift_zone_snapshot_items (snapshot_id, product_id, counted_quantity, system_quantity)
                    VALUES ($1, $2, $3, $4)`,
-            [
-              snapshotId,
-              item.product_id,
-              item.counted_quantity,
-              systemQuantity,
-            ],
+            [snapshotId, pid, countedQuantity, systemQuantity],
           );
 
           if (shouldSyncStock) {
-            const stockDelta = item.counted_quantity - systemQuantity;
+            const stockDelta = countedQuantity - systemQuantity;
+            console.log(
+              `[Handover Sync] PID:${pid} WH:${zone.warehouse_id} Counted:${countedQuantity} System:${systemQuantity} Delta:${stockDelta}`,
+            );
+
             if (stockDelta !== 0) {
               const { previousStock, newStock } =
                 await applyWarehouseStockDelta(
                   client,
                   zone.warehouse_id,
-                  item.product_id,
+                  pid,
                   stockDelta,
                 );
+
+              console.log(
+                `[Handover Sync] Result: PID:${pid} Old:${previousStock} New:${newStock}`,
+              );
 
               await logStockMovement(
                 client,
                 clubId,
                 shift.user_id ? String(shift.user_id) : null,
-                item.product_id,
+                pid,
                 stockDelta,
                 previousStock,
                 newStock,
@@ -596,6 +613,8 @@ export async function saveShiftZoneSnapshotTerminal(
       revalidatePath(`/employee/clubs/${clubId}`);
       revalidatePath(`/clubs/${clubId}/shifts/${shiftId}`);
       revalidatePath(`/clubs/${clubId}/inventory`);
+      revalidatePath(`/clubs/${clubId}/shifts`);
+      revalidatePath("/", "layout");
       return { ok: true as const };
     } catch (e) {
       await client.query("ROLLBACK");
