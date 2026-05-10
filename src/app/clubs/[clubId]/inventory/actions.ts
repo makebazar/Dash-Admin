@@ -6,7 +6,10 @@ import { logOperation } from "@/lib/logger";
 
 import { cookies } from "next/headers";
 import { notifyInventoryClub } from "@/lib/inventory-events";
-import { normalizeInventorySettings } from "@/lib/inventory-settings";
+import {
+  normalizeInventorySettings,
+  getShiftZoneLabel,
+} from "@/lib/inventory-settings";
 import type { InventorySettings as NormalizedInventorySettings } from "@/lib/inventory-settings";
 import { hasColumn } from "@/lib/db-compat";
 import { resolveEquipmentStateForPersistence } from "@/lib/equipment-status";
@@ -119,6 +122,7 @@ export type ShiftZoneSnapshotDraftItem = {
   shift_zone_label: string;
   product_id: number;
   product_name: string;
+  category_name?: string | null;
   barcode?: string | null;
   barcodes?: string[] | null;
   counted_quantity: number | null;
@@ -359,23 +363,6 @@ function normalizeShiftZoneKey(
   )
     return raw;
   return null;
-}
-
-function getShiftZoneLabel(
-  zoneKey: "BAR" | "FRIDGE" | "SHOWCASE" | "BACKROOM",
-) {
-  switch (zoneKey) {
-    case "BAR":
-      return "Бар";
-    case "FRIDGE":
-      return "Холодильник";
-    case "SHOWCASE":
-      return "Витрина";
-    case "BACKROOM":
-      return "Подсобка";
-    default:
-      return zoneKey;
-  }
 }
 
 import { getClubApiAccess, hasModuleAccess } from "@/lib/club-api-access";
@@ -1095,6 +1082,8 @@ export type HandoverSourceCandidate = {
   check_in: string;
   check_out: string;
   is_self_handover: boolean;
+  shift_type?: "DAY" | "NIGHT" | string;
+  is_counting_finished?: boolean;
 };
 
 export async function getHandoverSourceCandidates(

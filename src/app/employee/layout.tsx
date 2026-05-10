@@ -69,8 +69,10 @@ export default function EmployeeLayout({
   };
 
   useEffect(() => {
-    fetchUserData();
-  }, []);
+    if (!isTerminalRoute) {
+      fetchUserData();
+    }
+  }, [isTerminalRoute]);
 
   // Close mobile menu on route change
   useEffect(() => {
