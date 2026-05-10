@@ -488,12 +488,21 @@ export default function EmployeeClubPage({
         setHasShiftAccountability(status.enabled && status.ready);
       });
 
-      // We can also re-check for open drafts via existing logic
-      // For now, let's just trigger a re-check of the state
       if (canUseShiftZoneHandover) {
         fetchHasOpenZoneSnapshot(clubId, activeShift.id)
           .then((hasOpenSnapshot) => {
             setHasPendingZoneStartAcceptance(!hasOpenSnapshot);
+
+            // If it's already in DB, clear the local draft state so the button disappears
+            if (hasOpenSnapshot) {
+              setHasOpenZoneSnapshotDraft(false);
+              // Optionally clear localStorage too
+              try {
+                window.localStorage.removeItem(
+                  `shift-zone-snapshot:${clubId}:${activeShift.id}:OPEN`,
+                );
+              } catch (e) {}
+            }
           })
           .catch(() => {});
       }

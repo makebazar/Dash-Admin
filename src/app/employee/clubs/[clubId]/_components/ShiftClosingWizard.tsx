@@ -879,6 +879,50 @@ export function ShiftClosingWizard({
     startInventory();
   }, [isOpen, isStartShiftMode, persistenceKey]);
 
+  const autosaveDraftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  // Autosave to database draft for multi-device sync
+  useEffect(() => {
+    if (!isOpen || !activeShiftId || isStartShiftMode) return;
+
+    if (autosaveDraftTimeoutRef.current) {
+      clearTimeout(autosaveDraftTimeoutRef.current);
+    }
+
+    autosaveDraftTimeoutRef.current = setTimeout(() => {
+      const dataToSave = {
+        ...reportData,
+        checklistResponses,
+        checklistId: requiredChecklist?.id,
+        templateId: reportTemplate?.id,
+        step,
+      };
+
+      fetch(`/api/employee/shifts/${activeShiftId}/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dataToSave),
+      }).catch((e) => console.error("Autosave draft failed", e));
+    }, 2000);
+
+    return () => {
+      if (autosaveDraftTimeoutRef.current) {
+        clearTimeout(autosaveDraftTimeoutRef.current);
+      }
+    };
+  }, [
+    reportData,
+    checklistResponses,
+    requiredChecklist?.id,
+    reportTemplate?.id,
+    step,
+    isOpen,
+    activeShiftId,
+    isStartShiftMode,
+  ]);
+
   // Save state on changes
   useEffect(() => {
     if (isOpen && activeShiftId) {

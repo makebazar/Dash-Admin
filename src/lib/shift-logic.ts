@@ -275,13 +275,15 @@ export async function executeShiftClose(
 
     // Helper to sum numeric values from report data (handles numbers, strings, and expense arrays)
     const sumMetric = (val: any) => {
+      if (val === null || val === undefined || val === "") return 0;
       if (Array.isArray(val)) {
         return val.reduce(
-          (sum, item: any) => sum + (Number(item.amount) || 0),
+          (sum, item: any) => sum + (Number(item?.amount) || 0),
           0,
         );
       }
-      return parseFloat(String(val)) || 0;
+      const parsed = parseFloat(String(val).replace(",", "."));
+      return isNaN(parsed) ? 0 : parsed;
     };
 
     // Extract system metrics for separate columns
