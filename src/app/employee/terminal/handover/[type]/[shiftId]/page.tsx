@@ -552,10 +552,6 @@ export default function HandoverTerminalPage() {
                 setIsSubmitting(false);
                 return;
               }
-
-              if (pendingData) {
-                localStorage.removeItem(pendingCloseKey);
-              }
             } catch (e) {
               console.error("Failed to finalize shift close", e);
               alert("Ошибка сети при завершении смены.");
