@@ -1054,7 +1054,28 @@ export function ShiftClosingWizard({
     }
   }, [isOpen]);
 
-  const handleStep1Submit = () => {
+  const saveProgress = async (currentData = reportData, currentStep = step) => {
+    if (!activeShiftId || isStartShiftMode) return;
+    const dataToSave = {
+      ...currentData,
+      checklistResponses,
+      checklistId: requiredChecklist?.id,
+      templateId: reportTemplate?.id,
+      step: currentStep,
+    };
+
+    try {
+      await fetch(`/api/employee/shifts/${activeShiftId}/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dataToSave),
+      });
+    } catch (e) {
+      console.error("Manual progress save failed", e);
+    }
+  };
+
+  const handleStep1Submit = async () => {
     if (stepOneMissingFields.length > 0) {
       notifyInfo(`Заполните обязательные поля отчета`, "Проверьте данные");
       return;
@@ -1076,6 +1097,9 @@ export function ShiftClosingWizard({
       );
       return;
     }
+
+    // Explicitly save progress before moving to next step
+    await saveProgress(reportData, 1);
 
     if (skipInventory && !usesSalesReconciliation) {
       onFinalComplete();
@@ -1533,9 +1557,12 @@ export function ShiftClosingWizard({
     [],
   );
 
-  const handleReconcileNext = () => {
+  const handleReconcileNext = async () => {
     if (!isShiftSalesMode) return;
     const shiftIdStr = String(activeShiftId);
+
+    // Save current report progress
+    await saveProgress(reportData, 2);
 
     startTransition(async () => {
       try {

@@ -480,7 +480,9 @@ export default function HandoverTerminalPage() {
           warehouses.map((wh) => ({
             warehouse_id: wh.id,
             items: items
-              .filter((i) => i.warehouse_id === wh.id)
+              .filter(
+                (i) => i.warehouse_id === wh.id && i.counted_quantity !== null,
+              )
               .map((i) => ({
                 product_id: i.product_id,
                 counted_quantity: Math.max(
