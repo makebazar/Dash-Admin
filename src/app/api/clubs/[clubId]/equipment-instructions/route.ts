@@ -1,124 +1,149 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
-import { hasColumn } from '@/lib/db-compat';
+import { NextResponse } from "next/server";
+import { query } from "@/db";
+import { cookies } from "next/headers";
+import { hasColumn } from "@/lib/db-compat";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 // GET - List all instructions for a club
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        // Verify access
-        const accessCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
+    // Verify access
+    const accessCheck = await query(
+      `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
              UNION
              SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-            [clubId, userId]
-        );
+      [clubId, userId],
+    );
 
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
-
-        const { searchParams } = new URL(request.url);
-        const type = searchParams.get('type');
-
-        if (type) {
-            const result = await query(
-                `SELECT * FROM club_equipment_instructions WHERE club_id = $1 AND equipment_type_code = $2`,
-                [clubId, type]
-            );
-            return NextResponse.json(result.rows[0] || {});
-        }
-
-        const result = await query(
-            `SELECT * FROM club_equipment_instructions WHERE club_id = $1`,
-            [clubId]
-        );
-
-        return NextResponse.json(result.rows);
-    } catch (error) {
-        console.error('Get Instructions Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    if ((accessCheck.rowCount || 0) === 0) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get("type");
+
+    if (type) {
+      const result = await query(
+        `SELECT * FROM club_equipment_instructions WHERE club_id = $1 AND equipment_type_code = $2`,
+        [clubId, type],
+      );
+      return NextResponse.json(result.rows[0] || {});
+    }
+
+    const result = await query(
+      `SELECT * FROM club_equipment_instructions WHERE club_id = $1`,
+      [clubId],
+    );
+
+    return NextResponse.json(result.rows);
+  } catch (error) {
+    console.error("Get Instructions Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }
 
 // POST - Update or Create instruction
 export async function POST(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
-        const body = await request.json();
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
+    const body = await request.json();
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        // Only owners or admins can edit instructions
-        const accessCheck = await query(
-            `SELECT role FROM club_employees WHERE club_id = $1 AND user_id = $2
+    // Only owners or admins can edit instructions
+    const accessCheck = await query(
+      `SELECT role FROM club_employees WHERE club_id = $1 AND user_id = $2
              UNION
              SELECT 'OWNER' as role FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
+      [clubId, userId],
+    );
 
-        if ((accessCheck.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+    if ((accessCheck.rowCount || 0) === 0) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
-        // Check for admin role if not owner (simplified check, assume any employee with access can edit for now, or check specific roles)
-        // For now, allow any authorized employee to edit instructions to keep it simple as requested "we (admins) write"
+    // Check for admin role if not owner (simplified check, assume any employee with access can edit for now, or check specific roles)
+    // For now, allow any authorized employee to edit instructions to keep it simple as requested "we (admins) write"
 
-        const { equipment_type_code, instructions, default_interval_days } = body;
+    const {
+      equipment_type_code,
+      instructions,
+      performance_instructions,
+      default_interval_days,
+    } = body;
 
-        if (!equipment_type_code) {
-            return NextResponse.json({ error: 'Equipment type code is required' }, { status: 400 });
-        }
+    if (!equipment_type_code) {
+      return NextResponse.json(
+        { error: "Equipment type code is required" },
+        { status: 400 },
+      );
+    }
 
-        const result = await query(
-            `INSERT INTO club_equipment_instructions (club_id, equipment_type_code, instructions, updated_by, default_interval_days)
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (club_id, equipment_type_code) 
-             DO UPDATE SET 
+    const result = await query(
+      `INSERT INTO club_equipment_instructions (club_id, equipment_type_code, instructions, performance_instructions, updated_by, default_interval_days)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (club_id, equipment_type_code)
+             DO UPDATE SET
                 instructions = EXCLUDED.instructions,
+                performance_instructions = EXCLUDED.performance_instructions,
                 default_interval_days = EXCLUDED.default_interval_days,
                 updated_at = CURRENT_TIMESTAMP,
                 updated_by = EXCLUDED.updated_by
              RETURNING *`,
-            [clubId, equipment_type_code, instructions, userId, default_interval_days || null]
-        );
+      [
+        clubId,
+        equipment_type_code,
+        instructions,
+        performance_instructions || null,
+        userId,
+        default_interval_days || null,
+      ],
+    );
 
-        // Sync the effective base interval only for equipment without a custom override.
-        if (default_interval_days) {
-            const hasOverrideColumn = await hasColumn('equipment', 'cleaning_interval_override_days');
-            await query(
-                hasOverrideColumn
-                    ? `UPDATE equipment
+    // Sync the effective base interval only for equipment without a custom override.
+    if (default_interval_days) {
+      const hasOverrideColumn = await hasColumn(
+        "equipment",
+        "cleaning_interval_override_days",
+      );
+      await query(
+        hasOverrideColumn
+          ? `UPDATE equipment
                        SET cleaning_interval_days = $1
                        WHERE club_id = $2 AND type = $3 AND cleaning_interval_override_days IS NULL`
-                    : `UPDATE equipment
+          : `UPDATE equipment
                        SET cleaning_interval_days = $1
                        WHERE club_id = $2 AND type = $3`,
-                [default_interval_days, clubId, equipment_type_code]
-            );
-        }
-
-        return NextResponse.json(result.rows[0]);
-    } catch (error) {
-        console.error('Save Instruction Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        [default_interval_days, clubId, equipment_type_code],
+      );
     }
+
+    return NextResponse.json(result.rows[0]);
+  } catch (error) {
+    console.error("Save Instruction Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }

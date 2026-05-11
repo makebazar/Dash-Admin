@@ -13,6 +13,11 @@ async function ensureEquipmentTable() {
         CREATE INDEX IF NOT EXISTS idx_employee_task_equipment_task ON employee_task_equipment(task_id);
         CREATE INDEX IF NOT EXISTS idx_employee_task_equipment_equipment ON employee_task_equipment(equipment_id);
     `);
+
+  // Also ensure performance_data column exists
+  await query(`
+    ALTER TABLE employee_tasks ADD COLUMN IF NOT EXISTS performance_data JSONB;
+  `);
 }
 
 const statusLabels: Record<string, string> = {
@@ -67,6 +72,7 @@ export async function PATCH(
       due_date,
       assigned_to,
       equipment_ids,
+      performance_data,
     } = body;
 
     // Security check: only managers can mark as DONE (for final review) or other terminal statuses if needed
@@ -107,6 +113,10 @@ export async function PATCH(
       updates.push(`report_photos = $${values.length + 1}`);
       values.push(report_photos || null);
     }
+    if (performance_data !== undefined) {
+      updates.push(`performance_data = $${values.length + 1}`);
+      values.push(performance_data ? JSON.stringify(performance_data) : null);
+    }
 
     if (updates.length > 0) {
       await query(
@@ -130,6 +140,30 @@ export async function PATCH(
         await query(
           `INSERT INTO employee_task_equipment (task_id, equipment_id) VALUES ${placeholders}`,
           [taskId, ...equipment_ids],
+        );
+      }
+    }
+
+    // --- Process Performance Data ---
+    if (status === "REVIEW" && performance_data) {
+      // Fetch the equipment associated with this task to log the performance data
+      const eqCheck = await query(
+        `SELECT equipment_id FROM employee_task_equipment WHERE task_id = $1 LIMIT 1`,
+        [taskId],
+      );
+      if (eqCheck.rows.length > 0) {
+        const eqId = eqCheck.rows[0].equipment_id;
+        await query(
+          `INSERT INTO equipment_performance_logs (equipment_id, club_id, recorded_by, metrics_data, notes, employee_task_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            eqId,
+            clubId,
+            roleAccess.userId,
+            JSON.stringify(performance_data),
+            report_text || null,
+            taskId,
+          ],
         );
       }
     }
@@ -232,6 +266,7 @@ export async function GET(
                     'id', e.id,
                     'name', e.name,
                     'identifier', e.identifier,
+                    'type', e.type,
                     'type_name', et.name_ru,
                     'workstation_name', w.name,
                     'workstation_zone', w.zone

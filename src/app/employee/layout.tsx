@@ -55,18 +55,18 @@ export default function EmployeeLayout({
     pathname?.includes("/employee/clubs/") && pathname?.includes("/pos");
   const isTerminalRoute = pathname?.includes("/employee/terminal/");
   const themeVars = {
-    ["--background" as any]: "oklch(0.13 0 0)",
-    ["--card" as any]: "oklch(0.16 0 0)",
-    ["--popover" as any]: "oklch(0.16 0 0)",
-    ["--border" as any]: "oklch(0.22 0 0)",
-    ["--input" as any]: "oklch(0.22 0 0)",
-    ["--muted" as any]: "oklch(0.20 0 0)",
-    ["--accent" as any]: "oklch(0.20 0 0)",
-    ["--sidebar" as any]: "oklch(0.14 0 0)",
-    ["--sidebar-border" as any]: "oklch(0.22 0 0)",
-    ["--sidebar-accent" as any]: "oklch(0.20 0 0)",
-    ["--sidebar-primary" as any]: "oklch(0.85 0 0)",
-    ["--sidebar-primary-foreground" as any]: "oklch(0.14 0 0)",
+    ["--background" as any]: "oklch(0.12 0.01 250)",
+    ["--card" as any]: "oklch(0.22 0.01 250)",
+    ["--popover" as any]: "oklch(0.22 0.01 250)",
+    ["--border" as any]: "oklch(0.30 0.01 250)",
+    ["--input" as any]: "oklch(0.30 0.01 250)",
+    ["--muted" as any]: "oklch(0.25 0.01 250)",
+    ["--accent" as any]: "oklch(0.32 0.01 250)",
+    ["--sidebar" as any]: "oklch(0.10 0.01 250)",
+    ["--sidebar-border" as any]: "oklch(0.25 0.01 250)",
+    ["--sidebar-accent" as any]: "oklch(0.22 0.01 250)",
+    ["--sidebar-primary" as any]: "oklch(0.85 0.01 250)",
+    ["--sidebar-primary-foreground" as any]: "oklch(0.10 0.01 250)",
   };
 
   useEffect(() => {

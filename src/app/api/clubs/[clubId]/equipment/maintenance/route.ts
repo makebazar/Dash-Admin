@@ -396,6 +396,7 @@ export async function POST(
       equipment_ids,
       workstation_ids,
       task_type = "CLEANING",
+      assigned_user_id,
     } = body;
 
     if (!date_from || !date_to) {
@@ -590,23 +591,28 @@ export async function POST(
     const windowStart = parseDate(date_from);
 
     for (const eq of equipmentRows) {
-      const intervalDays = Math.max(1, Number(eq.cleaning_interval_days) || 30);
       const activeTask = activeTaskByEquipment.get(eq.id);
 
-      let nextDue = eq.last_cleaned_at
-        ? new Date(eq.last_cleaned_at)
-        : new Date(windowStart);
+      let nextDue = new Date(windowStart);
 
-      if (eq.last_cleaned_at) {
-        nextDue.setHours(0, 0, 0, 0);
-        nextDue.setDate(nextDue.getDate() + intervalDays);
-      } else {
-        nextDue = new Date(windowStart);
+      if (task_type === "CLEANING") {
+        const intervalDays = Math.max(
+          1,
+          Number(eq.cleaning_interval_days) || 30,
+        );
+        if (eq.last_cleaned_at) {
+          nextDue = new Date(eq.last_cleaned_at);
+          nextDue.setHours(0, 0, 0, 0);
+          nextDue.setDate(nextDue.getDate() + intervalDays);
+        }
       }
 
       const nominalDueDate = formatLocalDate(nextDue);
       let finalDueDate = nominalDueDate;
-      let finalAssignedUserId = eq.assigned_user_id ?? null;
+      let finalAssignedUserId =
+        assigned_user_id !== undefined
+          ? assigned_user_id
+          : (eq.assigned_user_id ?? null);
 
       if (finalAssignedUserId && !activeEmployeeIds.has(finalAssignedUserId)) {
         finalAssignedUserId = null;
@@ -623,7 +629,8 @@ export async function POST(
         }
       }
 
-      const shouldExistInWindow = finalDueDate <= date_to;
+      const shouldExistInWindow =
+        task_type !== "CLEANING" || finalDueDate <= date_to;
 
       if (activeTask) {
         if (activeTask.status === "PENDING") {

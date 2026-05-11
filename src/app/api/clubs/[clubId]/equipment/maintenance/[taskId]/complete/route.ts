@@ -35,6 +35,7 @@ export async function POST(
     const photosAfterRaw = body.photos_after;
     const photos_after = Array.isArray(photosAfterRaw) ? photosAfterRaw : null;
     const notes = body.notes || null;
+    const performance_data = body.performance_data || null;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

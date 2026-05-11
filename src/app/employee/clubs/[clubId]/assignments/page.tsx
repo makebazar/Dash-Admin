@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -107,6 +108,85 @@ export default function EmployeeAssignmentsPage() {
     setIsModalOpen(true);
   };
 
+  const activeTasks = tasks.filter(
+    (t) => t.status !== "DONE" && t.status !== "CANCELLED",
+  );
+  const completedTasks = tasks.filter(
+    (t) => t.status === "DONE" || t.status === "CANCELLED",
+  );
+
+  const TaskCard = ({ task }: { task: Task }) => (
+    <Card
+      key={task.id}
+      className={cn(
+        "rounded-2xl border border-border bg-card shadow-sm active:scale-[0.97] transition-all cursor-pointer overflow-hidden",
+        task.status === "DONE" && "opacity-50 grayscale-[0.5]",
+      )}
+      onClick={() => handleTaskClick(task)}
+    >
+      <CardContent className="p-0">
+        <div className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <Badge
+              className={cn(
+                "text-[10px] font-black uppercase tracking-tighter px-2.5 h-6",
+                statusConfig[task.status].color,
+              )}
+            >
+              {statusConfig[task.status].label}
+            </Badge>
+            <div className="flex items-center gap-1.5">
+              <Calendar className="h-3 w-3 text-muted-foreground" />
+              <span className="text-[10px] font-bold text-muted-foreground">
+                {task.due_date
+                  ? format(new Date(task.due_date), "d MMM", {
+                      locale: ru,
+                    })
+                  : "Без срока"}
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold leading-tight text-foreground">
+              {task.title}
+            </h3>
+            {task.description && (
+              <p className="text-xs font-medium text-muted-foreground line-clamp-2 leading-relaxed">
+                {task.description}
+              </p>
+            )}
+          </div>
+
+          <div className="pt-4 flex items-center justify-between border-t border-border/50">
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center">
+                <User className="h-3 w-3 text-muted-foreground" />
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-tight text-muted-foreground">
+                {task.created_by_name}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {task.comments_count > 0 && (
+                <div className="flex items-center gap-1 text-primary">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span className="text-[11px] font-black">
+                    {task.comments_count}
+                  </span>
+                </div>
+              )}
+              <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-muted-foreground">
+                <ArrowRight className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen bg-background flex flex-col pb-24">
       {/* Header Section */}
@@ -169,79 +249,50 @@ export default function EmployeeAssignmentsPage() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              {tasks.map((task) => (
-                <Card
-                  key={task.id}
-                  className={cn(
-                    "rounded-2xl border border-border bg-card shadow-sm active:scale-[0.97] transition-all cursor-pointer overflow-hidden",
-                    task.status === "DONE" && "opacity-50 grayscale-[0.5]",
-                  )}
-                  onClick={() => handleTaskClick(task)}
+            <Tabs defaultValue="active" className="w-full space-y-6">
+              <TabsList className="grid w-full grid-cols-2 h-12 p-1 bg-muted/50 rounded-xl">
+                <TabsTrigger
+                  value="active"
+                  className="rounded-lg font-bold text-xs uppercase tracking-widest data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 >
-                  <CardContent className="p-0">
-                    <div className="p-5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <Badge
-                          className={cn(
-                            "text-[10px] font-black uppercase tracking-tighter px-2.5 h-6",
-                            statusConfig[task.status].color,
-                          )}
-                        >
-                          {statusConfig[task.status].label}
-                        </Badge>
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-[10px] font-bold text-muted-foreground">
-                            {task.due_date
-                              ? format(new Date(task.due_date), "d MMM", {
-                                  locale: ru,
-                                })
-                              : "Без срока"}
-                          </span>
-                        </div>
-                      </div>
+                  Активные ({activeTasks.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="completed"
+                  className="rounded-lg font-bold text-xs uppercase tracking-widest data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                >
+                  Завершенные
+                </TabsTrigger>
+              </TabsList>
 
-                      <div className="space-y-1">
-                        <h3 className="text-lg font-bold leading-tight text-foreground">
-                          {task.title}
-                        </h3>
-                        {task.description && (
-                          <p className="text-xs font-medium text-muted-foreground line-clamp-2 leading-relaxed">
-                            {task.description}
-                          </p>
-                        )}
-                      </div>
+              <TabsContent value="active" className="space-y-4 mt-0">
+                {activeTasks.length === 0 ? (
+                  <div className="py-12 text-center space-y-2">
+                    <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                      Нет активных задач
+                    </p>
+                  </div>
+                ) : (
+                  activeTasks.map((task) => (
+                    <TaskCard key={task.id} task={task} />
+                  ))
+                )}
+              </TabsContent>
 
-                      <div className="pt-4 flex items-center justify-between border-t border-border/50">
-                        <div className="flex items-center gap-2">
-                          <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center">
-                            <User className="h-3 w-3 text-muted-foreground" />
-                          </div>
-                          <span className="text-[10px] font-black uppercase tracking-tight text-muted-foreground">
-                            {task.created_by_name}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-4">
-                          {task.comments_count > 0 && (
-                            <div className="flex items-center gap-1 text-primary">
-                              <MessageSquare className="h-3.5 w-3.5" />
-                              <span className="text-[11px] font-black">
-                                {task.comments_count}
-                              </span>
-                            </div>
-                          )}
-                          <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-muted-foreground">
-                            <ArrowRight className="h-4 w-4" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+              <TabsContent value="completed" className="space-y-4 mt-0">
+                {completedTasks.length === 0 ? (
+                  <div className="py-12 text-center space-y-2">
+                    <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                      Нет завершенных задач
+                    </p>
+                  </div>
+                ) : (
+                  completedTasks.map((task) => (
+                    <TaskCard key={task.id} task={task} />
+                  ))
+                )}
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </div>

@@ -39,6 +39,14 @@ export async function GET(
                     'ON_ISSUE'
                 ) as require_comment_mode,
                 ei.instructions,
+                ei.performance_instructions,
+                mt.task_type,
+                -- Performance metrics for this type
+                (
+                  SELECT json_agg(m.* ORDER BY m.sort_order ASC, m.name ASC)
+                  FROM club_equipment_performance_metrics m
+                  WHERE m.club_id = mt.club_id AND m.equipment_type_code = e.type AND m.is_active = TRUE
+                ) as performance_metrics,
                 -- Latest rejection data
                 (
                   SELECT json_build_object(

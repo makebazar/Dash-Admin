@@ -46,6 +46,18 @@ interface Task {
   min_photos_after: number;
   require_comment_mode: "ALWAYS" | "ON_ISSUE" | "NEVER";
   instructions?: string;
+  performance_instructions?: string;
+  task_type?:
+    | "CLEANING"
+    | "REPAIR"
+    | "INSPECTION"
+    | "REPLACEMENT"
+    | "PERFORMANCE_CHECK";
+  performance_metrics?: Array<{
+    id: string;
+    name: string;
+    unit: string;
+  }>;
   status?: string;
   verified_by_name?: string;
   latest_rejection?: {
@@ -59,6 +71,7 @@ type Step =
   | "PLAN"
   | "BEFORE"
   | "INFO"
+  | "PERFORMANCE"
   | "AFTER"
   | "REPORT"
   | "SUMMARY"
@@ -124,6 +137,7 @@ export default function MaintenanceTerminalPage() {
         issue_title?: string;
         issue_description?: string;
         status: "OK" | "ISSUE" | "LAUNDRY" | "SKIPPED";
+        performance_data?: Record<string, string>;
       }
     >
   >({});
@@ -196,6 +210,7 @@ export default function MaintenanceTerminalPage() {
                   issue_title: "",
                   issue_description: "",
                   status: "OK",
+                  performance_data: {},
                 };
               }
             });
@@ -212,6 +227,7 @@ export default function MaintenanceTerminalPage() {
               issue_title: "",
               issue_description: "",
               status: "OK",
+              performance_data: {},
             };
           });
           setReports(initialReports);
@@ -352,6 +368,17 @@ export default function MaintenanceTerminalPage() {
       );
     } else if (currentStep === "BEFORE") setCurrentStep("INFO");
     else if (currentStep === "INFO") {
+      if (
+        currentTask?.performance_metrics &&
+        currentTask.performance_metrics.length > 0
+      ) {
+        setCurrentStep("PERFORMANCE");
+      } else if (currentTask?.require_photo_after) {
+        setCurrentStep("AFTER");
+      } else {
+        setCurrentStep("REPORT");
+      }
+    } else if (currentStep === "PERFORMANCE") {
       if (currentTask?.require_photo_after) setCurrentStep("AFTER");
       else setCurrentStep("REPORT");
     } else if (currentStep === "AFTER") setCurrentStep("REPORT");
@@ -381,9 +408,22 @@ export default function MaintenanceTerminalPage() {
       setCurrentStep("REPORT");
     } else if (currentStep === "REPORT") {
       if (currentTask?.require_photo_after) setCurrentStep("AFTER");
+      else if (
+        currentTask?.performance_metrics &&
+        currentTask.performance_metrics.length > 0
+      )
+        setCurrentStep("PERFORMANCE");
       else setCurrentStep("INFO");
-    } else if (currentStep === "AFTER") setCurrentStep("INFO");
-    else if (currentStep === "INFO") {
+    } else if (currentStep === "AFTER") {
+      if (
+        currentTask?.performance_metrics &&
+        currentTask.performance_metrics.length > 0
+      )
+        setCurrentStep("PERFORMANCE");
+      else setCurrentStep("INFO");
+    } else if (currentStep === "PERFORMANCE") {
+      setCurrentStep("INFO");
+    } else if (currentStep === "INFO") {
       if (currentTask?.require_photo_before) setCurrentStep("BEFORE");
       else if (
         currentTask.status === "REWORK" ||
@@ -450,6 +490,7 @@ export default function MaintenanceTerminalPage() {
           status_mode: report.status,
           issue_title: report.issue_title,
           issue_description: report.issue_description,
+          performance_data: report.performance_data,
         });
       }
 
@@ -577,7 +618,14 @@ export default function MaintenanceTerminalPage() {
     if (!currentReport && currentStep !== "PLAN" && currentStep !== "SUMMARY")
       return false;
 
-    if (currentStep === "PLAN") return true;
+    if (currentStep === "INFO") return true;
+    if (currentStep === "PERFORMANCE") {
+      if (!currentTask?.performance_metrics) return true;
+      const data = currentReport?.performance_data || {};
+      return currentTask.performance_metrics.every(
+        (m) => data[m.id] && data[m.id].trim() !== "",
+      );
+    }
     if (currentStep === "SUMMARY") return true;
     if (currentStep === "BEFORE")
       return (
@@ -976,6 +1024,74 @@ export default function MaintenanceTerminalPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {currentStep === "PERFORMANCE" && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold tracking-tight">
+                Замеры производительности
+              </h2>
+              <p className="text-sm text-zinc-500 font-medium">
+                Проведите тесты и зафиксируйте показатели.
+              </p>
+            </div>
+
+            {currentTask.performance_instructions && (
+              <div className="bg-zinc-900/50 rounded-3xl p-6 border border-zinc-800 shadow-inner mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <ClipboardList className="h-4 w-4 text-emerald-500" />
+                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                    Как проверять
+                  </span>
+                </div>
+                <div className="prose prose-invert max-w-none prose-zinc prose-xs">
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: currentTask.performance_instructions,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-4">
+              {currentTask.performance_metrics?.map((metric) => (
+                <div key={metric.id} className="space-y-2">
+                  <div className="flex justify-between items-end px-1">
+                    <Label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                      {metric.name}
+                    </Label>
+                    <span className="text-[10px] font-mono text-zinc-600 font-bold">
+                      {metric.unit}
+                    </span>
+                  </div>
+                  <div className="relative group">
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder={`Введите значение...`}
+                      className="bg-zinc-900 border-zinc-800 rounded-2xl h-14 font-bold text-lg text-emerald-500 focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all text-center"
+                      value={currentReport?.performance_data?.[metric.id] || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setReports((prev) => ({
+                          ...prev,
+                          [currentTask.id]: {
+                            ...prev[currentTask.id],
+                            performance_data: {
+                              ...(prev[currentTask.id].performance_data || {}),
+                              [metric.id]: val,
+                            },
+                          },
+                        }));
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

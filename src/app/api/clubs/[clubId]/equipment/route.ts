@@ -29,6 +29,7 @@ export async function GET(
     const type = searchParams.get("type");
     const search = searchParams.get("search");
     const status = searchParams.get("status");
+    const parentEquipmentId = searchParams.get("parent_equipment_id");
     const includeInactive = searchParams.get("include_inactive") === "true";
 
     // Pagination parameters
@@ -102,6 +103,16 @@ export async function GET(
       }
     }
 
+    if (parentEquipmentId) {
+      if (parentEquipmentId === "none") {
+        whereConditions.push(`e.parent_equipment_id IS NULL`);
+      } else {
+        whereConditions.push(`e.parent_equipment_id = $${paramIndex}`);
+        queryParams.push(parentEquipmentId);
+        paramIndex++;
+      }
+    }
+
     if (type) {
       whereConditions.push(`e.type = $${paramIndex}`);
       queryParams.push(type);
@@ -147,8 +158,8 @@ export async function GET(
                 GROUP BY equipment_id
             )
             SELECT
-                e.id, e.club_id, e.workstation_id, e.type, e.name, e.identifier, e.brand, e.model,
-                e.purchase_date, e.warranty_expires, e.last_cleaned_at,
+                e.id, e.club_id, e.workstation_id, e.parent_equipment_id, e.type, e.name, e.identifier, e.brand, e.model,
+                e.purchase_date, e.warranty_expires, e.purchase_price, e.last_cleaned_at,
                 ${equipmentActiveSql} as is_active,
                 ${equipmentStatusSql} as status,
                 ${effectiveCleaningIntervalSql} as cleaning_interval_days,
@@ -245,8 +256,11 @@ export async function POST(
       model,
       purchase_date,
       warranty_expires,
+      purchase_price,
+      parent_equipment_id,
       receipt_url,
       notes,
+      quantity = 1,
     } = body;
 
     if (!name || !type) {
@@ -255,6 +269,8 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    const requestedQuantity = Math.max(1, Math.min(Number(quantity) || 1, 100));
 
     const clubInstructionResult = await query(
       `SELECT default_interval_days
@@ -287,9 +303,15 @@ export async function POST(
       hasRequestedWorkstation: workstation_id !== undefined,
     });
 
+    const isComponent = !!parent_equipment_id;
+    const finalMaintenanceEnabled = isComponent
+      ? false
+      : body.maintenance_enabled !== false;
+
     const insertColumns = [
       "club_id",
       "workstation_id",
+      "parent_equipment_id",
       "type",
       "name",
       "identifier",
@@ -297,55 +319,75 @@ export async function POST(
       "model",
       "purchase_date",
       "warranty_expires",
+      "purchase_price",
       "receipt_url",
       "cleaning_interval_days",
       "notes",
       "is_active",
-    ];
-    const insertValues = [
-      clubId,
-      resolvedState.workstation_id,
-      type,
-      name,
-      identifier || null,
-      brand || null,
-      model || null,
-      purchase_date || null,
-      warranty_expires || null,
-      receipt_url || null,
-      intervalDays,
-      notes || null,
-      resolvedState.is_active,
+      "maintenance_enabled",
     ];
 
     if (hasEquipmentStatusColumn) {
       insertColumns.push("status");
-      insertValues.push(resolvedState.status || DEFAULT_EQUIPMENT_STATUS);
     }
 
     const placeholders = insertColumns
       .map((_, index) => `$${index + 1}`)
       .join(", ");
 
-    const result = await query(
-      `INSERT INTO equipment (${insertColumns.join(", ")})
-             VALUES (${placeholders})
-             RETURNING *`,
-      insertValues,
-    );
+    const createdItems = [];
 
-    // If workstation changed, record the move
-    if (resolvedState.workstation_id) {
-      await query(
-        `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
-                 VALUES ($1, NULL, $2, $3, 'Initial assignment')`,
-        [result.rows[0].id, resolvedState.workstation_id, userId],
+    for (let i = 0; i < requestedQuantity; i++) {
+      const insertValues = [
+        clubId,
+        resolvedState.workstation_id,
+        parent_equipment_id || null,
+        type,
+        name,
+        // Only the first item gets the identifier if it was provided
+        i === 0 ? identifier || null : null,
+        brand || null,
+        model || null,
+        purchase_date || null,
+        warranty_expires || null,
+        purchase_price || null,
+        receipt_url || null,
+        intervalDays,
+        notes || null,
+        resolvedState.is_active,
+        finalMaintenanceEnabled,
+      ];
+
+      if (hasEquipmentStatusColumn) {
+        insertValues.push(resolvedState.status || DEFAULT_EQUIPMENT_STATUS);
+      }
+
+      const result = await query(
+        `INSERT INTO equipment (${insertColumns.join(", ")})
+                 VALUES (${placeholders})
+                 RETURNING *`,
+        insertValues,
       );
+
+      const created = normalizeEquipmentRecord(result.rows[0]);
+      createdItems.push(created);
+
+      // If workstation changed, record the move
+      if (resolvedState.workstation_id) {
+        await query(
+          `INSERT INTO equipment_moves (equipment_id, from_workstation_id, to_workstation_id, moved_by, reason)
+                     VALUES ($1, NULL, $2, $3, 'Initial assignment')`,
+          [created.id, resolvedState.workstation_id, userId],
+        );
+      }
     }
 
-    return NextResponse.json(normalizeEquipmentRecord(result.rows[0]), {
-      status: 201,
-    });
+    return NextResponse.json(
+      requestedQuantity === 1 ? createdItems[0] : { items: createdItems },
+      {
+        status: 201,
+      },
+    );
   } catch (error: any) {
     console.error("Create Equipment Error:", error);
     const status = typeof error?.status === "number" ? error.status : 500;

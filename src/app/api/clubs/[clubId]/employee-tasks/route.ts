@@ -136,25 +136,34 @@ export async function POST(
       priority,
       due_date,
       equipment_ids,
+      taskType,
     } = body;
 
-    if (!title) {
+    const finalTitle =
+      taskType === "PERFORMANCE_CHECK" ? "Замер производительности ПК" : title;
+    const finalDescription =
+      taskType === "PERFORMANCE_CHECK"
+        ? "Необходимо провести тесты и снять показатели производительности для выбранного оборудования."
+        : description;
+
+    if (!finalTitle) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
 
     const result = await query(
       `INSERT INTO employee_tasks (
-                club_id, title, description, assigned_to, created_by, priority, due_date
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                club_id, title, description, assigned_to, created_by, priority, due_date, task_type
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *`,
       [
         clubId,
-        title,
-        description || null,
+        finalTitle,
+        finalDescription || null,
         assigned_to === "none" ? null : assigned_to || null,
         roleAccess.userId,
         priority || "MEDIUM",
         due_date || null,
+        taskType || "GENERAL",
       ],
     );
 

@@ -44,11 +44,13 @@ interface Employee {
 interface Equipment {
   id: string;
   name: string;
+  type: string;
   identifier: string;
   type_name: string;
   workstation_id: string;
   workstation_name: string;
   workstation_zone: string;
+  parent_equipment_id?: string | null;
 }
 
 interface Workstation {
@@ -93,12 +95,19 @@ export function CreateAssignmentModal({
     priority: "MEDIUM",
     due_date: undefined as Date | undefined,
     equipment_ids: [] as string[],
+    taskType: "GENERAL" as "GENERAL" | "PERFORMANCE_CHECK",
   });
 
   useEffect(() => {
     if (isOpen) {
       fetchData();
       setActiveTab("info");
+      setFormData((prev) => ({
+        ...prev,
+        taskType: "GENERAL",
+        title: "",
+        description: "",
+      }));
     }
   }, [isOpen]);
 
@@ -139,6 +148,10 @@ export function CreateAssignmentModal({
 
   const filteredEquipment = useMemo(() => {
     return equipmentList.filter((eq) => {
+      if (eq.parent_equipment_id) return false;
+      if (formData.taskType === "PERFORMANCE_CHECK" && eq.type !== "PC")
+        return false;
+
       const matchesSearch =
         eq.name.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
         eq.identifier?.toLowerCase().includes(equipmentSearch.toLowerCase());
@@ -151,14 +164,29 @@ export function CreateAssignmentModal({
 
       return matchesSearch && matchesZone && matchesWS;
     });
-  }, [equipmentList, equipmentSearch, selectedZone, selectedWorkstationId]);
+  }, [
+    equipmentList,
+    equipmentSearch,
+    selectedZone,
+    selectedWorkstationId,
+    formData.taskType,
+  ]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!formData.title || isLoading) return;
+    if (isLoading) return;
+    if (formData.taskType === "GENERAL" && !formData.title) return;
+    if (
+      formData.taskType === "PERFORMANCE_CHECK" &&
+      formData.equipment_ids.length === 0
+    ) {
+      alert("Выберите ПК во вкладке Оборудование");
+      return;
+    }
 
     try {
       setIsLoading(true);
+
       const res = await fetch(`/api/clubs/${clubId}/employee-tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -180,9 +208,12 @@ export function CreateAssignmentModal({
           priority: "MEDIUM",
           due_date: undefined,
           equipment_ids: [],
+          taskType: "GENERAL",
         });
         setSelectedZone("all");
         setSelectedWorkstationId("all");
+      } else {
+        alert("Ошибка при создании поручения");
       }
     } catch (error) {
       console.error("Error creating task:", error);
@@ -315,51 +346,94 @@ export function CreateAssignmentModal({
           >
             <div className="space-y-6">
               <div className="space-y-2">
-                <Label
-                  htmlFor="title"
-                  className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500"
-                >
-                  Название поручения
+                <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                  Тип поручения
                 </Label>
-                <Input
-                  id="title"
-                  placeholder="Название задачи..."
-                  required
-                  className={cn(
-                    "rounded-xl h-12 text-sm font-medium transition-all",
-                    isLight
-                      ? "bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:ring-blue-500/20 placeholder:text-slate-400"
-                      : "bg-[#11131a] border-white/10 text-white focus:bg-[#0a0b10] focus:ring-blue-500/20 placeholder:text-slate-600",
-                  )}
-                  value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
+                <Select
+                  value={formData.taskType}
+                  onValueChange={(v: "GENERAL" | "PERFORMANCE_CHECK") =>
+                    setFormData({ ...formData, taskType: v, equipment_ids: [] })
                   }
-                />
+                >
+                  <SelectTrigger
+                    className={cn(
+                      "rounded-xl h-11 text-xs font-bold",
+                      isLight
+                        ? "bg-slate-50 border-slate-200 text-slate-900"
+                        : "bg-[#11131a] border-white/10 text-white",
+                    )}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent
+                    className={cn(
+                      "border-none shadow-xl",
+                      isLight
+                        ? "bg-white text-slate-900"
+                        : "bg-[#11131a] text-white",
+                    )}
+                  >
+                    <SelectItem value="GENERAL">Обычная задача</SelectItem>
+                    <SelectItem value="PERFORMANCE_CHECK">
+                      Замер производительности
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label
-                  htmlFor="description"
-                  className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500"
-                >
-                  Описание
-                </Label>
-                <Textarea
-                  id="description"
-                  placeholder="Подробности задачи..."
-                  className={cn(
-                    "rounded-xl min-h-[120px] text-sm font-medium transition-all resize-none",
-                    isLight
-                      ? "bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:ring-blue-500/20 placeholder:text-slate-400"
-                      : "bg-[#11131a] border-white/10 text-white focus:bg-[#0a0b10] focus:ring-blue-500/20 placeholder:text-slate-600",
-                  )}
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                />
-              </div>
+              {formData.taskType === "GENERAL" && (
+                <>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="title"
+                      className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Название поручения
+                    </Label>
+                    <Input
+                      id="title"
+                      placeholder="Название задачи..."
+                      required
+                      className={cn(
+                        "rounded-xl h-12 text-sm font-medium transition-all",
+                        isLight
+                          ? "bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:ring-blue-500/20 placeholder:text-slate-400"
+                          : "bg-[#11131a] border-white/10 text-white focus:bg-[#0a0b10] focus:ring-blue-500/20 placeholder:text-slate-600",
+                      )}
+                      value={formData.title}
+                      onChange={(e) =>
+                        setFormData({ ...formData, title: e.target.value })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="description"
+                      className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500"
+                    >
+                      Описание
+                    </Label>
+                    <Textarea
+                      id="description"
+                      placeholder="Подробности задачи..."
+                      className={cn(
+                        "rounded-xl min-h-[120px] text-sm font-medium transition-all resize-none",
+                        isLight
+                          ? "bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:ring-blue-500/20 placeholder:text-slate-400"
+                          : "bg-[#11131a] border-white/10 text-white focus:bg-[#0a0b10] focus:ring-blue-500/20 placeholder:text-slate-600",
+                      )}
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          description: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -707,7 +781,12 @@ export function CreateAssignmentModal({
             </Button>
             <Button
               type="button"
-              disabled={isLoading || !formData.title}
+              disabled={
+                isLoading ||
+                (formData.taskType === "GENERAL" && !formData.title) ||
+                (formData.taskType === "PERFORMANCE_CHECK" &&
+                  formData.equipment_ids.length === 0)
+              }
               className="flex-[2] md:flex-initial md:px-12 rounded-xl font-black uppercase text-[11px] tracking-[0.15em] h-12 bg-blue-600 hover:bg-blue-700 text-white border-none shadow-lg shadow-blue-600/20"
               onClick={() => handleSubmit()}
             >

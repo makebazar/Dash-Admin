@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Clock,
@@ -101,6 +102,14 @@ export function AssignmentModal({
   const [pendingPhotos, setPendingPhotos] = useState<string[]>([]);
   const [isManager, setIsManager] = useState(false);
 
+  // Performance metrics state
+  const [performanceMetrics, setPerformanceMetrics] = useState<any[]>([]);
+  const [performanceInstructions, setPerformanceInstructions] =
+    useState<string>("");
+  const [performanceData, setPerformanceData] = useState<
+    Record<string, string>
+  >({});
+
   // Equipment management state
   const [showEquipmentSelector, setShowEquipmentSelector] = useState(false);
   const [allEquipment, setAllEquipment] = useState<Equipment[]>([]);
@@ -119,20 +128,29 @@ export function AssignmentModal({
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [viewerGroup, setViewerGroup] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (isOpen && task) {
-      fetchTaskDetails();
-      fetchComments();
-      fetchPermissions();
-      setReportText(task.report_text || "");
-      setShowReportForm(false);
-      setPendingPhotos([]);
-      setActiveTab("info");
-      setShowEquipmentSelector(false);
-      setSelectedZone("all");
-      setSelectedWorkstationId("all");
+  const fetchPerformanceMetrics = async (type: string) => {
+    try {
+      // Fetch metrics and instructions in parallel
+      const [metricsRes, instrRes] = await Promise.all([
+        fetch(
+          `/api/clubs/${clubId}/equipment/performance/metrics?type=${type}`,
+        ),
+        fetch(`/api/clubs/${clubId}/equipment-instructions?type=${type}`),
+      ]);
+
+      if (metricsRes.ok) {
+        const metrics = await metricsRes.json();
+        setPerformanceMetrics(metrics);
+      }
+
+      if (instrRes.ok) {
+        const instrData = await instrRes.json();
+        setPerformanceInstructions(instrData.performance_instructions || "");
+      }
+    } catch (e) {
+      console.error(e);
     }
-  }, [isOpen, task]);
+  };
 
   const fetchTaskDetails = async () => {
     try {
@@ -140,6 +158,17 @@ export function AssignmentModal({
       const data = await res.json();
       if (res.ok) {
         setCurrentTask(data.task);
+        if (data.task.performance_data) {
+          setPerformanceData(data.task.performance_data);
+        }
+
+        // Fetch metrics if it's a performance check
+        if (
+          data.task.task_type === "PERFORMANCE_CHECK" &&
+          data.task.equipment?.length > 0
+        ) {
+          fetchPerformanceMetrics(data.task.equipment[0].type);
+        }
       }
     } catch (error) {
       console.error("Error fetching task details:", error);
@@ -193,6 +222,22 @@ export function AssignmentModal({
       setIsEquipmentLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen && task) {
+      fetchTaskDetails();
+      fetchComments();
+      fetchPermissions();
+      setReportText(task.report_text || "");
+      setShowReportForm(false);
+      setPendingPhotos([]);
+      setActiveTab("info");
+      setShowEquipmentSelector(false);
+      setSelectedZone("all");
+      setSelectedWorkstationId("all");
+      setPerformanceData({});
+    }
+  }, [isOpen, task]);
 
   useEffect(() => {
     if (showEquipmentSelector && allEquipment.length === 0) {
@@ -324,6 +369,10 @@ export function AssignmentModal({
           body: JSON.stringify({
             status,
             report_text: report,
+            performance_data:
+              displayTask.task_type === "PERFORMANCE_CHECK"
+                ? performanceData
+                : undefined,
           }),
         },
       );
@@ -812,6 +861,74 @@ export function AssignmentModal({
                 </div>
               </section>
 
+              {displayTask.task_type === "PERFORMANCE_CHECK" && (
+                <>
+                  {performanceInstructions && (
+                    <section className="space-y-3">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500">
+                        Инструкция по замеру
+                      </h4>
+                      <div
+                        className={cn(
+                          "border rounded-2xl p-6 text-sm leading-relaxed font-medium max-w-none prose prose-sm",
+                          isLight
+                            ? "bg-blue-50/30 border-blue-500/10 text-slate-600 prose-slate"
+                            : "bg-blue-500/5 border-blue-500/10 text-slate-300 prose-invert",
+                        )}
+                        dangerouslySetInnerHTML={{
+                          __html: performanceInstructions,
+                        }}
+                      />
+                    </section>
+                  )}
+
+                  {performanceMetrics.length > 0 && (
+                    <section className="space-y-3">
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        Показатели производительности
+                      </h4>
+                      <div
+                        className={cn(
+                          "grid grid-cols-1 md:grid-cols-2 gap-4 border rounded-2xl p-6",
+                          isLight
+                            ? "bg-slate-50 border-slate-200"
+                            : "bg-[#11131a] border-white/5",
+                        )}
+                      >
+                        {performanceMetrics.map((metric) => (
+                          <div key={metric.id} className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                              {metric.name}{" "}
+                              {metric.unit ? `(${metric.unit})` : ""}
+                            </Label>
+                            <Input
+                              value={performanceData[metric.id] || ""}
+                              onChange={(e) =>
+                                setPerformanceData((prev) => ({
+                                  ...prev,
+                                  [metric.id]: e.target.value,
+                                }))
+                              }
+                              disabled={
+                                displayTask.status === "DONE" ||
+                                (displayTask.status === "REVIEW" && !isManager)
+                              }
+                              placeholder="Введите значение..."
+                              className={cn(
+                                "h-11 rounded-xl font-bold",
+                                isLight
+                                  ? "bg-white border-slate-200 focus:border-blue-500 text-slate-900"
+                                  : "bg-[#0a0b10] border-white/10 focus:border-blue-500/50 text-white",
+                              )}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </>
+              )}
+
               {displayTask.report_text && !showReportForm && (
                 <section className="space-y-3">
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">
@@ -831,8 +948,13 @@ export function AssignmentModal({
                       <CheckCircle2 className="h-4 w-4" />
                       Сдать отчет
                     </h4>
+
                     <Textarea
-                      placeholder="Опишите, что было сделано..."
+                      placeholder={
+                        displayTask.task_type === "PERFORMANCE_CHECK"
+                          ? "Дополнительные замечания по результатам тестов..."
+                          : "Опишите, что было сделано..."
+                      }
                       className={cn(
                         "min-h-[140px] rounded-xl focus:ring-blue-500/20 placeholder:text-slate-600",
                         isLight
@@ -846,7 +968,11 @@ export function AssignmentModal({
                       <Button
                         className="flex-1 rounded-xl font-black uppercase text-[11px] tracking-[0.15em] h-12 bg-blue-600 hover:bg-blue-50 text-white border-none shadow-lg shadow-blue-600/20"
                         onClick={() => updateStatus("REVIEW", reportText)}
-                        disabled={isUpdatingStatus || !reportText.trim()}
+                        disabled={
+                          isUpdatingStatus ||
+                          (displayTask.task_type !== "PERFORMANCE_CHECK" &&
+                            !reportText.trim())
+                        }
                       >
                         Отправить на проверку
                       </Button>
@@ -939,9 +1065,13 @@ export function AssignmentModal({
                 )}
               >
                 {showReportForm ? (
-                  <div className="space-y-4">
+                  <div className="space-y-4 max-h-[70vh] overflow-y-auto">
                     <Textarea
-                      placeholder="Опишите, что было сделано..."
+                      placeholder={
+                        displayTask.task_type === "PERFORMANCE_CHECK"
+                          ? "Замечания..."
+                          : "Опишите, что было сделано..."
+                      }
                       className={cn(
                         "min-h-[100px] rounded-xl focus:ring-blue-500/20 placeholder:text-slate-600",
                         isLight
@@ -955,7 +1085,11 @@ export function AssignmentModal({
                       <Button
                         className="flex-1 rounded-xl font-black uppercase text-[11px] tracking-[0.15em] h-12 bg-blue-600 hover:bg-blue-50 text-white border-none shadow-lg shadow-blue-600/20"
                         onClick={() => updateStatus("REVIEW", reportText)}
-                        disabled={isUpdatingStatus || !reportText.trim()}
+                        disabled={
+                          isUpdatingStatus ||
+                          (displayTask.task_type !== "PERFORMANCE_CHECK" &&
+                            !reportText.trim())
+                        }
                       >
                         Отправить на проверку
                       </Button>

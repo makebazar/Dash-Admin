@@ -49,6 +49,7 @@ export async function POST(
           status_mode: report.status_mode,
           issue_title: report.issue_title,
           issue_description: report.issue_description,
+          performance_data: report.performance_data,
         });
         results.push({ taskId: report.taskId, success: true });
       } catch (e) {

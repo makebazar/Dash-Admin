@@ -18,6 +18,7 @@ export async function completeMaintenanceTask(params: {
   status_mode?: "OK" | "ISSUE" | "LAUNDRY";
   issue_title?: string | null;
   issue_description?: string | null;
+  performance_data?: Record<string, string>;
 }) {
   const {
     clubId,
@@ -29,6 +30,7 @@ export async function completeMaintenanceTask(params: {
     status_mode = "OK",
     issue_title,
     issue_description,
+    performance_data,
   } = params;
 
   if (status_mode === "SKIPPED") {
@@ -255,6 +257,22 @@ export async function completeMaintenanceTask(params: {
          WHERE id = $1`,
     [equipmentId],
   );
+
+  // Performance Log
+  if (performance_data && Object.keys(performance_data).length > 0) {
+    await query(
+      `INSERT INTO equipment_performance_logs (equipment_id, club_id, recorded_by, metrics_data, notes, maintenance_task_id)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        equipmentId,
+        clubId,
+        userId,
+        JSON.stringify(performance_data),
+        notes || null,
+        taskId,
+      ],
+    );
+  }
 
   // Auto-create next task
   if (kpiBonus?.auto_create_next_task !== false) {

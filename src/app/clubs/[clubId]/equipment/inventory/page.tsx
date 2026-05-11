@@ -12,6 +12,7 @@ import {
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import * as XLSX from "xlsx";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Plus,
   Search,
@@ -101,7 +102,9 @@ interface Equipment {
   open_issues_count?: number;
   status: EquipmentStatus;
   purchase_date?: string;
-  price?: number;
+  purchase_price?: number;
+  parent_equipment_id?: string | null;
+  quantity?: number;
 }
 
 interface EquipmentType {
@@ -187,6 +190,8 @@ const INVENTORY_IMPORT_COLUMNS = [
   "Статус",
   "Дата покупки",
   "Гарантия до",
+  "Цена",
+  "ID Родителя",
   "Интервал чистки (дней)",
   "Обслуживание включено",
   "Примечание",
@@ -205,6 +210,8 @@ const INVENTORY_TEMPLATE_EXAMPLE = {
   Статус: "ACTIVE",
   "Дата покупки": "2026-01-15",
   "Гарантия до": "2027-01-15",
+  Цена: 120000,
+  "ID Родителя": "",
   "Интервал чистки (дней)": 30,
   "Обслуживание включено": "Да",
   Примечание: "Пример строки для импорта",
@@ -224,6 +231,16 @@ const INVENTORY_STATUS_IMPORT_MAP: Record<string, EquipmentStatus> = {
 
 const SELECTION_LIMIT = 50;
 
+const COMPONENT_TYPES = [
+  "CPU",
+  "GPU",
+  "RAM",
+  "MOTHERBOARD",
+  "PSU",
+  "STORAGE",
+  "COOLING",
+];
+
 export default function EquipmentInventory() {
   const { clubId } = useParams();
   const router = useRouter();
@@ -233,6 +250,7 @@ export default function EquipmentInventory() {
   const [types, setTypes] = useState<EquipmentType[]>([]);
   const [workstations, setWorkstations] = useState<Workstation[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [pcs, setPcs] = useState<Equipment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -279,6 +297,9 @@ export default function EquipmentInventory() {
 
   // Dialog states
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [creationMode, setCreationMode] = useState<"equipment" | "component">(
+    "equipment",
+  );
   const [editingEquipment, setEditingEquipment] =
     useState<Partial<Equipment> | null>(null);
 
@@ -360,21 +381,26 @@ export default function EquipmentInventory() {
         params.append("workstation_id", workstationFilter);
       if (statusFilter !== "all") params.append("status", statusFilter);
 
-      const [eqRes, typeRes, wsRes, statsRes, empRes] = await Promise.all([
-        fetch(`/api/clubs/${clubId}/equipment?${params.toString()}`, {
-          cache: "no-store",
-        }),
-        fetch(`/api/equipment-types?clubId=${clubId}`, { cache: "no-store" }),
-        fetch(`/api/clubs/${clubId}/workstations`, { cache: "no-store" }),
-        fetch(`/api/clubs/${clubId}/equipment/stats`, { cache: "no-store" }),
-        fetch(`/api/clubs/${clubId}/employees`, { cache: "no-store" }),
-      ]);
+      const [eqRes, typeRes, wsRes, statsRes, empRes, pcsRes] =
+        await Promise.all([
+          fetch(`/api/clubs/${clubId}/equipment?${params.toString()}`, {
+            cache: "no-store",
+          }),
+          fetch(`/api/equipment-types?clubId=${clubId}`, { cache: "no-store" }),
+          fetch(`/api/clubs/${clubId}/workstations`, { cache: "no-store" }),
+          fetch(`/api/clubs/${clubId}/equipment/stats`, { cache: "no-store" }),
+          fetch(`/api/clubs/${clubId}/employees`, { cache: "no-store" }),
+          fetch(`/api/clubs/${clubId}/equipment?type=PC&limit=1000`, {
+            cache: "no-store",
+          }),
+        ]);
 
       const eqData = await eqRes.json();
       const typeData = await typeRes.json();
       const wsData = await wsRes.json();
       const statsData = await statsRes.json();
       const empData = await empRes.json();
+      const pcsData = await pcsRes.json();
 
       if (eqRes.ok) {
         const enriched = (eqData.equipment || []).map((e: any) => ({
@@ -386,6 +412,7 @@ export default function EquipmentInventory() {
       if (typeRes.ok) setTypes(typeData || []);
       if (wsRes.ok) setWorkstations(wsData || []);
       if (empRes.ok) setEmployees(empData.employees || []);
+      if (pcsRes.ok) setPcs(pcsData.equipment || []);
       if (statsRes.ok) {
         setInventoryStats({
           total: statsData.total || 0,
@@ -438,7 +465,7 @@ export default function EquipmentInventory() {
   }, [activeTab, fetchInterclubTransfers]);
 
   useEffect(() => {
-    if (searchParams.get("action") === "new") {
+    if (searchParams.get("action") === "new" || searchParams.get("parent_id")) {
       handleCreate();
     }
   }, [searchParams]);
@@ -612,8 +639,15 @@ export default function EquipmentInventory() {
   }, [workstationFilter]);
 
   const filteredEquipment = useMemo(() => {
-    if (zoneFilter === "all") return equipment;
-    return equipment.filter((e) => e.workstation_zone === zoneFilter);
+    let base = equipment;
+    if (zoneFilter !== "all") {
+      base = base.filter((e) => e.workstation_zone === zoneFilter);
+    }
+    // Скрываем комплектующие, которые уже установлены в системные блоки,
+    // чтобы не засорять основной список инвентаризации.
+    return base.filter(
+      (e) => !e.parent_equipment_id || !COMPONENT_TYPES.includes(e.type),
+    );
   }, [equipment, zoneFilter]);
 
   const groupedEquipment = useMemo(() => {
@@ -815,12 +849,38 @@ export default function EquipmentInventory() {
   // --- Actions ---
 
   const handleCreate = () => {
-    setEditingEquipment({
-      type: "PC",
-      name: "",
-      is_active: true,
-      status: "STORAGE",
-    });
+    const parentId = searchParams.get("parent_id");
+    const parentPc = pcs.find((p) => p.id === parentId);
+    const cloneFromId = searchParams.get("clone_from");
+    const sourceItem = equipment.find((e) => e.id === cloneFromId);
+
+    if (parentId) {
+      setCreationMode("component");
+    } else if (sourceItem) {
+      const isComp = COMPONENT_TYPES.includes(sourceItem.type);
+      setCreationMode(isComp ? "component" : "equipment");
+    } else {
+      setCreationMode("equipment");
+    }
+
+    if (sourceItem) {
+      setEditingEquipment({
+        ...sourceItem,
+        id: undefined,
+        identifier: "",
+        quantity: 1,
+      });
+    } else {
+      setEditingEquipment({
+        type: parentId ? "CPU" : "PC",
+        name: "",
+        is_active: true,
+        status: "STORAGE",
+        parent_equipment_id: parentId || null,
+        workstation_id: null,
+        quantity: 1,
+      });
+    }
     setIsDialogOpen(true);
   };
 
@@ -899,6 +959,8 @@ export default function EquipmentInventory() {
       Статус: item.status,
       "Дата покупки": item.purchase_date || "",
       "Гарантия до": item.warranty_expires || "",
+      Цена: item.purchase_price || "",
+      "ID Родителя": item.parent_equipment_id || "",
       "Интервал чистки (дней)": item.cleaning_interval_days ?? "",
       "Обслуживание включено":
         item.maintenance_enabled === false ? "Нет" : "Да",
@@ -1074,6 +1136,8 @@ export default function EquipmentInventory() {
           model: String(row["Модель"] || "").trim() || null,
           purchase_date: normalizeImportDate(row["Дата покупки"]),
           warranty_expires: normalizeImportDate(row["Гарантия до"]),
+          purchase_price: Number(row["Цена"] || 0) || null,
+          parent_equipment_id: String(row["ID Родителя"] || "").trim() || null,
           cleaning_interval_days:
             Number(row["Интервал чистки (дней)"] || 0) || undefined,
           maintenance_enabled: parseImportBoolean(row["Обслуживание включено"]),
@@ -2998,6 +3062,30 @@ export default function EquipmentInventory() {
                 Заполните данные для регистрации нового оборудования
               </DialogDescription>
             </DialogHeader>
+
+            <div className="border-b bg-white px-4 pt-4 sm:px-6">
+              <Tabs
+                value={creationMode}
+                onValueChange={(val: any) => {
+                  setCreationMode(val);
+                  setEditingEquipment((prev) => ({
+                    ...prev,
+                    type: val === "component" ? "CPU" : "PC",
+                    status: "STORAGE",
+                    workstation_id: null,
+                    parent_equipment_id:
+                      val === "component" ? prev?.parent_equipment_id : null,
+                  }));
+                }}
+                className="w-full"
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="equipment">Оборудование</TabsTrigger>
+                  <TabsTrigger value="component">Комплектующие</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
             <div className="flex-1 overflow-y-auto bg-white">
               <form
                 id="eq-form"
@@ -3046,11 +3134,17 @@ export default function EquipmentInventory() {
                           <SelectValue placeholder="Выберите тип" />
                         </SelectTrigger>
                         <SelectContent>
-                          {types.map((t) => (
-                            <SelectItem key={t.code} value={t.code}>
-                              {t.name_ru}
-                            </SelectItem>
-                          ))}
+                          {types
+                            .filter((t) =>
+                              creationMode === "component"
+                                ? COMPONENT_TYPES.includes(t.code)
+                                : !COMPONENT_TYPES.includes(t.code),
+                            )
+                            .map((t) => (
+                              <SelectItem key={t.code} value={t.code}>
+                                {t.name_ru}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -3150,6 +3244,35 @@ export default function EquipmentInventory() {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {creationMode === "component" && (
+                      <div className="space-y-2">
+                        <Label>Установлено в (Системный блок)</Label>
+                        <Select
+                          value={
+                            editingEquipment?.parent_equipment_id || "none"
+                          }
+                          onValueChange={(val) =>
+                            setEditingEquipment((prev) => ({
+                              ...prev,
+                              parent_equipment_id: val === "none" ? null : val,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white">
+                            <SelectValue placeholder="Не привязано" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Не привязано</SelectItem>
+                            {pcs.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
 
                   <Separator />
@@ -3160,6 +3283,7 @@ export default function EquipmentInventory() {
                       <Input
                         type="date"
                         value={editingEquipment?.purchase_date || ""}
+                        className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
                         onChange={(e) =>
                           setEditingEquipment((prev) => ({
                             ...prev,
@@ -3173,6 +3297,7 @@ export default function EquipmentInventory() {
                       <Input
                         type="date"
                         value={editingEquipment?.warranty_expires || ""}
+                        className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
                         onChange={(e) =>
                           setEditingEquipment((prev) => ({
                             ...prev,
@@ -3186,15 +3311,48 @@ export default function EquipmentInventory() {
                       <Input
                         type="number"
                         placeholder="0"
-                        value={editingEquipment?.price || ""}
+                        value={editingEquipment?.purchase_price || ""}
+                        className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
                         onChange={(e) =>
                           setEditingEquipment((prev) => ({
                             ...prev,
-                            price: Number(e.target.value),
+                            purchase_price: e.target.value
+                              ? Number(e.target.value)
+                              : undefined,
                           }))
                         }
                       />
                     </div>
+                    {!editingEquipment?.id && (
+                      <div className="space-y-2">
+                        <Label>Количество для создания</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={editingEquipment?.quantity ?? 1}
+                          className="h-12 bg-slate-50/50 border-slate-200 rounded-xl font-medium text-slate-900 focus:bg-white"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "") {
+                              setEditingEquipment((prev) => ({
+                                ...prev,
+                                quantity: "" as any,
+                              }));
+                              return;
+                            }
+                            const num = parseInt(val, 10);
+                            setEditingEquipment((prev) => ({
+                              ...prev,
+                              quantity: isNaN(num) ? 1 : Math.min(100, num),
+                            }));
+                          }}
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          Будет создано несколько одинаковых записей (без SN)
+                        </p>
+                      </div>
+                    )}
                     <div className="space-y-2 sm:col-span-2">
                       <Label>Заметки / Примечания</Label>
                       <Textarea
@@ -3212,134 +3370,143 @@ export default function EquipmentInventory() {
                   </div>
                 </section>
 
-                <section className="space-y-6">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-950">
-                      Обслуживание
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Первичная настройка обслуживания для нового оборудования.
-                    </p>
-                  </div>
-
-                  <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                    <Info className="h-5 w-5 shrink-0 text-blue-500" />
-                    <div className="text-sm text-blue-700">
-                      <p className="font-semibold">Настройка обслуживания</p>
-                      <ul className="mt-1 ml-4 list-disc space-y-1 opacity-80">
-                        <li>
-                          Если ответственный не назначен, задачи на чистку
-                          создаваться не будут.
-                        </li>
-                        <li>
-                          Назначьте конкретного сотрудника или выберите
-                          свободный пул.
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="space-y-0.5">
-                        <Label className="text-base font-bold">
+                {creationMode === "equipment" &&
+                  !editingEquipment?.parent_equipment_id && (
+                    <section className="space-y-6">
+                      <div>
+                        <h3 className="text-base font-semibold text-slate-950">
                           Обслуживание
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Включает напоминания о необходимости чистки
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Первичная настройка обслуживания для нового
+                          оборудования.
                         </p>
                       </div>
-                      <Switch
-                        checked={editingEquipment?.maintenance_enabled}
-                        onCheckedChange={(val) =>
-                          setEditingEquipment((prev) => ({
-                            ...prev,
-                            maintenance_enabled: val,
-                            assigned_user_id: val
-                              ? prev?.assigned_user_id
-                              : null,
-                          }))
-                        }
-                      />
-                    </div>
-
-                    {editingEquipment?.maintenance_enabled && (
-                      <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="space-y-2">
-                          <Label>Ответственный за обслуживание</Label>
-                          <Select
-                            value={
-                              editingEquipment?.assigned_user_id
-                                ? editingEquipment.assigned_user_id
-                                : editingEquipment?.maintenance_enabled
-                                  ? "free_pool"
-                                  : "none"
-                            }
-                            onValueChange={(val) => {
-                              if (val === "free_pool") {
-                                setEditingEquipment((prev) => ({
-                                  ...prev,
-                                  assigned_user_id: null,
-                                  maintenance_enabled: true,
-                                }));
-                                return;
-                              }
-                              const userId = val === "none" ? null : val;
-                              setEditingEquipment((prev) => ({
-                                ...prev,
-                                assigned_user_id: userId,
-                                maintenance_enabled: !!userId,
-                              }));
-                            }}
-                          >
-                            <SelectTrigger className="bg-white">
-                              <SelectValue placeholder="Не назначено" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Не назначено</SelectItem>
-                              <SelectItem value="free_pool">
-                                🤝 Свободный пул
-                              </SelectItem>
-                              {maintenanceResponsibleEmployees.map((emp) => (
-                                <SelectItem key={emp.id} value={emp.id}>
-                                  {emp.full_name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <p className="text-[10px] italic text-muted-foreground">
-                            При выборе сотрудника обслуживание включается
-                            автоматически.
+                      <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                        <Info className="h-5 w-5 shrink-0 text-blue-500" />
+                        <div className="text-sm text-blue-700">
+                          <p className="font-semibold">
+                            Настройка обслуживания
                           </p>
-                        </div>
-
-                        <div className="space-y-2 border-t border-slate-200/50 pt-2">
-                          <Label>Интервал обслуживания</Label>
-                          <div className="rounded-xl border bg-white px-4 py-3">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                              <div>
-                                <p className="text-sm font-medium text-slate-900">
-                                  Будет взят из стандарта типа
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  После сохранения карточки система подставит
-                                  клубный стандарт для выбранного типа
-                                  оборудования.
-                                </p>
-                              </div>
-                              <Link
-                                href={`/clubs/${clubId}/equipment/settings`}
-                                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
-                              >
-                                Открыть настройки
-                              </Link>
-                            </div>
-                          </div>
+                          <ul className="mt-1 ml-4 list-disc space-y-1 opacity-80">
+                            <li>
+                              Если ответственный не назначен, задачи на чистку
+                              создаваться не будут.
+                            </li>
+                            <li>
+                              Назначьте конкретного сотрудника или выберите
+                              свободный пул.
+                            </li>
+                          </ul>
                         </div>
                       </div>
-                    )}
-                  </div>
-                </section>
+
+                      <div className="space-y-4">
+                        <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="space-y-0.5">
+                            <Label className="text-base font-bold">
+                              Обслуживание
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              Включает напоминания о необходимости чистки
+                            </p>
+                          </div>
+                          <Switch
+                            checked={editingEquipment?.maintenance_enabled}
+                            onCheckedChange={(val) =>
+                              setEditingEquipment((prev) => ({
+                                ...prev,
+                                maintenance_enabled: val,
+                                assigned_user_id: val
+                                  ? prev?.assigned_user_id
+                                  : null,
+                              }))
+                            }
+                          />
+                        </div>
+
+                        {editingEquipment?.maintenance_enabled && (
+                          <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="space-y-2">
+                              <Label>Ответственный за обслуживание</Label>
+                              <Select
+                                value={
+                                  editingEquipment?.assigned_user_id
+                                    ? editingEquipment.assigned_user_id
+                                    : editingEquipment?.maintenance_enabled
+                                      ? "free_pool"
+                                      : "none"
+                                }
+                                onValueChange={(val) => {
+                                  if (val === "free_pool") {
+                                    setEditingEquipment((prev) => ({
+                                      ...prev,
+                                      assigned_user_id: null,
+                                      maintenance_enabled: true,
+                                    }));
+                                    return;
+                                  }
+                                  const userId = val === "none" ? null : val;
+                                  setEditingEquipment((prev) => ({
+                                    ...prev,
+                                    assigned_user_id: userId,
+                                    maintenance_enabled: !!userId,
+                                  }));
+                                }}
+                              >
+                                <SelectTrigger className="bg-white">
+                                  <SelectValue placeholder="Не назначено" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">
+                                    Не назначено
+                                  </SelectItem>
+                                  <SelectItem value="free_pool">
+                                    🤝 Свободный пул
+                                  </SelectItem>
+                                  {maintenanceResponsibleEmployees.map(
+                                    (emp) => (
+                                      <SelectItem key={emp.id} value={emp.id}>
+                                        {emp.full_name}
+                                      </SelectItem>
+                                    ),
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <p className="text-[10px] italic text-muted-foreground">
+                                При выборе сотрудника обслуживание включается
+                                автоматически.
+                              </p>
+                            </div>
+
+                            <div className="space-y-2 border-t border-slate-200/50 pt-2">
+                              <Label>Интервал обслуживания</Label>
+                              <div className="rounded-xl border bg-white px-4 py-3">
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <p className="text-sm font-medium text-slate-900">
+                                      Будет взят из стандарта типа
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      После сохранения карточки система
+                                      подставит клубный стандарт для выбранного
+                                      типа оборудования автоматически.
+                                    </p>
+                                  </div>
+                                  <Link
+                                    href={`/clubs/${clubId}/equipment/settings`}
+                                    className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                                  >
+                                    Открыть настройки
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  )}
               </form>
             </div>
 

@@ -1,0 +1,41 @@
+                              <Link
+                                href={`/clubs/${clubId}/equipment/settings`}
+                                className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                              >
+                                Открыть настройки
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+                )}
+              </form>
+            </div>
+
+            <DialogFooter className="flex-col-reverse gap-2 border-t bg-slate-50 p-4 sm:flex-row sm:justify-end sm:p-6">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => setIsDialogOpen(false)}
+                disabled={isSaving}
+              >
+                Отмена
+              </Button>
+              <Button
+                className="w-full sm:w-auto"
+                form="eq-form"
+                disabled={isSaving}
+              >
+                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {editingEquipment?.id ? "Сохранить" : "Создать"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </PageShell>
+  );
+}

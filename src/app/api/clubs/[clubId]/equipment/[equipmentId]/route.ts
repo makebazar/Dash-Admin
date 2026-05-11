@@ -65,10 +65,12 @@ export async function GET(
                 w.name as workstation_name,
                 w.zone as workstation_zone,
                 et.name_ru as type_name,
-                et.icon as type_icon
+                et.icon as type_icon,
+                pe.name as parent_equipment_name
             FROM equipment e
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
             LEFT JOIN equipment_types et ON e.type = et.code
+            LEFT JOIN equipment pe ON e.parent_equipment_id = pe.id
             WHERE e.id = $1 AND e.club_id = $2`,
       [equipmentId, clubId],
     );
@@ -79,6 +81,28 @@ export async function GET(
         { status: 404 },
       );
     }
+
+    const equipment = normalizeEquipmentRecord(result.rows[0]);
+
+    // Get components (children)
+    const componentsResult = await query(
+      `SELECT
+                e.*,
+                et.name_ru as type_name,
+                et.icon as type_icon,
+                COALESCE(ic.open_issues_count, 0)::integer as open_issues_count
+             FROM equipment e
+             LEFT JOIN equipment_types et ON e.type = et.code
+             LEFT JOIN (
+                SELECT equipment_id, COUNT(*) as open_issues_count
+                FROM equipment_issues
+                WHERE status IN ('OPEN', 'IN_PROGRESS')
+                GROUP BY equipment_id
+             ) ic ON e.id = ic.equipment_id
+             WHERE e.parent_equipment_id = $1
+             ORDER BY et.sort_order, e.name`,
+      [equipmentId],
+    );
 
     // Get recent issues
     const issuesResult = await query(
@@ -118,7 +142,10 @@ export async function GET(
     );
 
     return NextResponse.json({
-      ...normalizeEquipmentRecord(result.rows[0]),
+      ...equipment,
+      components: componentsResult.rows.map((row) =>
+        normalizeEquipmentRecord(row),
+      ),
       issues: issuesResult.rows,
       maintenance_tasks: tasksResult.rows,
       movement_history: movesResult.rows,
@@ -234,6 +261,7 @@ export async function PATCH(
 
     const allowedFields = [
       "workstation_id",
+      "parent_equipment_id",
       "type",
       "name",
       "identifier",
@@ -241,6 +269,7 @@ export async function PATCH(
       "model",
       "purchase_date",
       "warranty_expires",
+      "purchase_price",
       "receipt_url",
       "last_cleaned_at",
       "cleaning_interval_days",
@@ -268,10 +297,19 @@ export async function PATCH(
       allowedFields.push("status");
     }
 
+    const parentId =
+      body.parent_equipment_id !== undefined
+        ? body.parent_equipment_id
+        : currentEquipment.rows[0].parent_equipment_id;
+    if (parentId) {
+      body.maintenance_enabled = false;
+    }
+
     // Logic: if assigned_user_id is set to a user or mode explicitly changes, maintenance must be enabled
     if (
-      (body.assigned_user_id && body.assigned_user_id !== "") ||
-      body.assignment_mode
+      !parentId &&
+      ((body.assigned_user_id && body.assigned_user_id !== "") ||
+        body.assignment_mode)
     ) {
       body.maintenance_enabled = true;
     }
