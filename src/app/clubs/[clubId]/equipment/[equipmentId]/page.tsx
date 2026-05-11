@@ -68,7 +68,8 @@ type EquipmentTab =
   | "maintenance"
   | "performance"
   | "history"
-  | "components";
+  | "components"
+  | "files";
 
 interface Equipment {
   id: string;
@@ -96,6 +97,7 @@ interface Equipment {
   parent_equipment_id?: string | null;
   parent_equipment_name?: string | null;
   components?: Equipment[];
+  photos?: string[];
 }
 
 interface EquipmentType {
@@ -149,7 +151,8 @@ export default function EquipmentDetailsPage() {
     return tab === "maintenance" ||
       tab === "history" ||
       tab === "components" ||
-      tab === "performance"
+      tab === "performance" ||
+      tab === "files"
       ? tab
       : "details";
   };
@@ -178,6 +181,76 @@ export default function EquipmentDetailsPage() {
     [],
   );
   const [isLinkingComponent, setIsLinkingComponent] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!uploadRes.ok) throw new Error("Failed to upload photo");
+      const { url } = await uploadRes.json();
+
+      const newPhotos = [...(equipment?.photos || []), url];
+
+      const updateRes = await fetch(
+        `/api/clubs/${clubId}/equipment/${equipmentId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ photos: newPhotos }),
+        },
+      );
+
+      if (updateRes.ok) {
+        setEquipment((prev) => (prev ? { ...prev, photos: newPhotos } : prev));
+      } else {
+        alert("Ошибка при сохранении фото");
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Ошибка при загрузке фото");
+    } finally {
+      setIsUploadingPhoto(false);
+      // Reset input
+      e.target.value = "";
+    }
+  };
+
+  const handleDeletePhoto = async (photoUrl: string) => {
+    if (!confirm("Удалить это фото?")) return;
+
+    const newPhotos = (equipment?.photos || []).filter((p) => p !== photoUrl);
+
+    try {
+      const updateRes = await fetch(
+        `/api/clubs/${clubId}/equipment/${equipmentId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ photos: newPhotos }),
+        },
+      );
+
+      if (updateRes.ok) {
+        setEquipment((prev) => (prev ? { ...prev, photos: newPhotos } : prev));
+      } else {
+        alert("Ошибка при удалении фото");
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Ошибка при удалении фото");
+    }
+  };
 
   const [isAddPerformanceLogOpen, setIsAddPerformanceLogOpen] = useState(false);
   const [manualPerformanceData, setManualPerformanceData] = useState<
@@ -743,6 +816,20 @@ export default function EquipmentDetailsPage() {
                       )}
                   </TabsTrigger>
                 )}
+                <TabsTrigger
+                  value="files"
+                  className="shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-0 py-3 data-[state=active]:border-primary data-[state=active]:shadow-none"
+                >
+                  Файлы
+                  {equipment.photos && equipment.photos.length > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="ml-2 h-5 min-w-5 justify-center px-1 text-[10px]"
+                    >
+                      {equipment.photos.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
               </TabsList>
             </div>
 
@@ -1626,6 +1713,95 @@ export default function EquipmentDetailsPage() {
                       ))
                     )}
                   </div>
+                </TabsContent>
+
+                <TabsContent value="files" className="mt-0 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Файлы и фотографии
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Фотографии оборудования для инвентаризации и контроля
+                        состояния.
+                      </p>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="absolute inset-0 cursor-pointer opacity-0"
+                        onChange={handleUploadPhoto}
+                        disabled={isUploadingPhoto}
+                      />
+                      <Button
+                        size="sm"
+                        disabled={isUploadingPhoto}
+                        type="button"
+                      >
+                        {isUploadingPhoto ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Plus className="mr-2 h-4 w-4" />
+                        )}
+                        Добавить фото
+                      </Button>
+                    </div>
+                  </div>
+
+                  {!equipment.photos || equipment.photos.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-muted py-12 text-center">
+                      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-background shadow-sm">
+                        <Info className="h-6 w-6 text-muted-foreground" />
+                      </div>
+                      <h4 className="font-medium text-foreground">
+                        Нет фотографий
+                      </h4>
+                      <p className="mt-1 max-w-[280px] text-sm text-muted-foreground">
+                        Вы можете загрузить фотографии этого оборудования здесь.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                      {equipment.photos.map((photo, index) => (
+                        <div
+                          key={`equipment-photo-${index}`}
+                          className="group relative aspect-square overflow-hidden rounded-xl border bg-muted"
+                        >
+                          <img
+                            src={photo}
+                            alt={`Фото оборудования ${index + 1}`}
+                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="secondary"
+                              className="h-9 w-9 rounded-full"
+                              onClick={() =>
+                                openHistoryPhotoViewer(
+                                  equipment.photos || [],
+                                  index,
+                                )
+                              }
+                            >
+                              <Info className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="destructive"
+                              className="h-9 w-9 rounded-full"
+                              onClick={() => handleDeletePhoto(photo)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </TabsContent>
               </form>
             </div>

@@ -131,7 +131,7 @@ export default function HandoverTerminalPage() {
 
             setTimeout(() => {
               try {
-                window.open("about:blank", "_self").close();
+                window.open("about:blank", "_self")?.close();
               } catch (e) {}
             }, 200);
 

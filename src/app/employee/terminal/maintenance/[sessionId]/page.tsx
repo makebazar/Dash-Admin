@@ -60,6 +60,7 @@ interface Task {
   }>;
   status?: string;
   verified_by_name?: string;
+  verification_status?: string;
   latest_rejection?: {
     note: string;
     photos: string[];
@@ -889,7 +890,7 @@ export default function MaintenanceTerminalPage() {
                         )}
                       </div>
                       <div className="text-[10px] text-zinc-500 font-mono font-bold mt-1">
-                        Локация: {task.workstation_name || "СКЛАД"} //{" "}
+                        Локация: {task.workstation_name || "СКЛАД"} {"// "}{" "}
                         {task.workstation_zone || "Н/Д"}
                       </div>
                       <div className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mt-0.5 opacity-70">

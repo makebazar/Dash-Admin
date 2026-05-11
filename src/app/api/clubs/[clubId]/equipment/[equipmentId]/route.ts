@@ -291,6 +291,7 @@ export async function PATCH(
       "gpu_thermal_paste_interval_days",
       "gpu_thermal_paste_type",
       "gpu_thermal_paste_note",
+      "photos",
     ];
 
     if (hasEquipmentStatusColumn) {

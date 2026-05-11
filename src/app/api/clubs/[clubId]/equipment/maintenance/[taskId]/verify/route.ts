@@ -63,7 +63,7 @@ export async function POST(
 
     const currentCycle = task.cycle_no || 1;
     let updateQuery = "";
-    let queryParams = [];
+    let queryParams: any[] = [];
 
     if (action === "APPROVE") {
       updateQuery = `

@@ -15,7 +15,7 @@ export async function completeMaintenanceTask(params: {
   photos_before?: string[];
   photos_after?: string[];
   notes?: string | null;
-  status_mode?: "OK" | "ISSUE" | "LAUNDRY";
+  status_mode?: "OK" | "ISSUE" | "LAUNDRY" | "SKIPPED";
   issue_title?: string | null;
   issue_description?: string | null;
   performance_data?: Record<string, string>;
