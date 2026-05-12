@@ -7,9 +7,9 @@ export function middleware(req: NextRequest) {
 
   // 0. WWW TO NON-WWW REDIRECT
   if (host.startsWith("www.")) {
-    const newHost = host.replace(/^www\./, "");
-    const url = new URL(req.nextUrl.href);
-    url.host = newHost;
+    const url = req.nextUrl.clone();
+    url.hostname = host.split(":")[0].replace(/^www\./, "");
+    url.port = ""; // Remove port (especially 3000) for the public redirect
     return NextResponse.redirect(url, 301);
   }
 
