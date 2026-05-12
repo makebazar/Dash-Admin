@@ -158,12 +158,12 @@ export function useSSE(onMessage?: (message: SSEMessage) => void) {
 export function usePOSSSE({
   clubId,
   userId,
-  onMessage,
+  onMessageAction,
   enabled = true,
 }: {
   clubId: string;
   userId: string;
-  onMessage?: (message: SSEMessage) => void;
+  onMessageAction?: (message: SSEMessage) => void;
   enabled?: boolean;
 }) {
   const context = useContext(SSEContext);
@@ -185,7 +185,7 @@ export function usePOSSSE({
       es.onmessage = (event) => {
         try {
           const data: SSEMessage = JSON.parse(event.data);
-          onMessage?.(data);
+          onMessageAction?.(data);
         } catch (e) {
           console.error("[SSE Fallback] Parse error:", e);
         }
@@ -198,16 +198,16 @@ export function usePOSSSE({
       return () => {
         es.close();
       };
-    }, [clubId, userId, enabled, onMessage]);
+    }, [clubId, userId, enabled, onMessageAction]);
 
     return { isConnected, retryCount, reconnect: () => {} };
   }
 
   // Используем общее подключение
   useEffect(() => {
-    if (!onMessage) return;
-    return context.subscribe(onMessage);
-  }, [context, onMessage]);
+    if (!onMessageAction) return;
+    return context.subscribe(onMessageAction);
+  }, [context, onMessageAction]);
 
   return context;
 }
