@@ -102,7 +102,7 @@ export default function EmployeeSchedulePage({ params }: { params: Promise<{ clu
                     <Button variant="ghost" size="icon" className="h-10 w-10 rounded-lg shrink-0 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" onClick={() => handleMonthChange(-1)}>
                         <ChevronLeft className="h-5 w-5" />
                     </Button>
-                    <div className="flex min-w-[160px] items-center justify-center gap-2 px-4 text-center">
+                    <div className="flex min-w-40 items-center justify-center gap-2 px-4 text-center">
                         <span className="text-base font-bold tracking-tight text-foreground capitalize">
                             {monthNames[month - 1]}
                         </span>

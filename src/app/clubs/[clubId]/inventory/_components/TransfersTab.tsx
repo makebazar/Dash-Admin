@@ -306,7 +306,7 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                         {m.change_amount > 0 ? "+" : ""}{m.change_amount} шт
                                     </Badge>
                                 </TableCell>
-                                <TableCell className="py-4 text-xs text-muted-foreground italic max-w-[200px] truncate">
+                                <TableCell className="py-4 text-xs text-muted-foreground italic max-w-50 truncate">
                                     {m.reason ? m.reason.replace(/\s*\(Смена #[a-f0-9-]+\)/g, '') : "—"}
                                 </TableCell>
                                 <TableCell className="py-4 text-right text-xs font-medium">

@@ -181,7 +181,7 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                 <SelectTrigger id="timezone" className="h-11 w-full rounded-xl border-slate-200 bg-white text-sm text-slate-900 shadow-sm hover:bg-slate-50 focus:ring-slate-900">
                                     <SelectValue placeholder="Выберите часовой пояс" />
                                 </SelectTrigger>
-                                <SelectContent className="max-h-[300px] rounded-xl border-slate-200 shadow-lg">
+                                <SelectContent className="max-h-75 rounded-xl border-slate-200 shadow-lg">
                                     {TIMEZONES.map(tz => (
                                         <SelectItem key={tz.value} value={tz.value} className="rounded-lg">
                                             {tz.label}
@@ -220,7 +220,7 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                     <SelectTrigger className="h-11 w-full rounded-xl border-slate-200 bg-white text-sm text-slate-900 shadow-sm hover:bg-slate-50 focus:ring-slate-900">
                                         <SelectValue placeholder="Время" />
                                     </SelectTrigger>
-                                    <SelectContent className="max-h-[300px] rounded-xl border-slate-200 shadow-lg">
+                                    <SelectContent className="max-h-75 rounded-xl border-slate-200 shadow-lg">
                                         {HOURS.map(h => (
                                             <SelectItem key={h} value={h.toString()} className="rounded-lg">
                                                 {formatHour(h)}
@@ -238,7 +238,7 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                     <SelectTrigger className="h-11 w-full rounded-xl border-slate-200 bg-white text-sm text-slate-900 shadow-sm hover:bg-slate-50 focus:ring-slate-900">
                                         <SelectValue placeholder="Время" />
                                     </SelectTrigger>
-                                    <SelectContent className="max-h-[300px] rounded-xl border-slate-200 shadow-lg">
+                                    <SelectContent className="max-h-75 rounded-xl border-slate-200 shadow-lg">
                                         {HOURS.map(h => (
                                             <SelectItem key={h} value={h.toString()} className="rounded-lg">
                                                 {formatHour(h)}

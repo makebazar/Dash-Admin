@@ -209,7 +209,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
-                <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
+                <DialogContent className="max-w-none w-screen h-dvh m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
                     <DialogHeader className="p-4 border-b border-slate-800 flex-row items-center justify-between space-y-0 shrink-0">
                         <div className="space-y-0.5">
                             <DialogTitle className="flex items-center gap-2 text-base">
@@ -386,7 +386,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                 onChange={e => setSearchQuery(e.target.value)}
                             />
                         </div>
-                        <div className="max-h-[300px] overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
+                        <div className="max-h-75 overflow-y-auto space-y-1.5 pr-2 custom-scrollbar">
                             {filteredProducts.map(p => (
                                 <button
                                     key={p.id}

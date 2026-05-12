@@ -312,7 +312,7 @@ export default function KnowledgeBasePage() {
                                     }}
                                 >
                                     <div className="flex items-center gap-2 overflow-hidden">
-                                        <div className="w-4 h-[1px] bg-slate-200" />
+                                        <div className="w-4 h-px bg-slate-200" />
                                         <span className="truncate">{art.title}</span>
                                     </div>
                                     
@@ -648,7 +648,7 @@ export default function KnowledgeBasePage() {
                 </div>
 
                 {selectedArticle && (
-                    <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                    <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-background/80 md:hidden">
                         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-2">
                             <Button
                                 type="button"
@@ -685,7 +685,7 @@ export default function KnowledgeBasePage() {
                 )}
 
                 {selectedCategory && !selectedArticle && (
-                    <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                    <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-background/80 md:hidden">
                         <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px] items-stretch gap-2">
                             <Button
                                 type="button"
@@ -749,7 +749,7 @@ export default function KnowledgeBasePage() {
                 )}
 
                 {isArticleDialogOpen && (
-                    <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+                    <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-background/80 md:hidden">
                         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-2">
                             <Button
                                 type="button"

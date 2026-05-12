@@ -121,7 +121,7 @@ export default function EmployeeKnowledgeBasePage() {
                                 }}
                             >
                                 <div className="flex items-center gap-2 overflow-hidden">
-                                    <div className="w-4 h-[1px] bg-border" />
+                                    <div className="w-4 h-px bg-border" />
                                     <span className="truncate">{art.title}</span>
                                 </div>
                             </div>
@@ -181,7 +181,7 @@ export default function EmployeeKnowledgeBasePage() {
                     {sidebarContent}
                 </div>
 
-                <SheetContent side="left" className="md:hidden p-0 w-[85vw] max-w-[420px] overflow-x-hidden bg-card border-border">
+                <SheetContent side="left" className="md:hidden p-0 w-[85vw] max-w-105 overflow-x-hidden bg-card border-border">
                     <SheetTitle className="sr-only">База знаний</SheetTitle>
                     <div className="h-full bg-card">
                         {sidebarContent}

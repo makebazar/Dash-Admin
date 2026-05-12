@@ -182,7 +182,7 @@ export default function FinanceReports({ clubId }: FinanceReportsProps) {
                                         <TooltipTrigger asChild>
                                             <Info className="h-3 w-3 text-slate-300 cursor-help" />
                                         </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-[200px]">
+                                        <TooltipContent side="top" className="max-w-50">
                                             <strong>ДДС</strong> — показывает движение реальных денег. <strong>Сводка</strong> — общие итоги по категориям.
                                         </TooltipContent>
                                     </Tooltip>

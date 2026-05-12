@@ -285,7 +285,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="w-[95vw] sm:max-w-[500px] p-0 overflow-hidden bg-primary border-slate-800 z-[10000] rounded-3xl border shadow-2xl">
+            <DialogContent className="w-[95vw] sm:max-w-125 p-0 overflow-hidden bg-primary border-slate-800 z-[10000] rounded-3xl border shadow-2xl">
                 <DialogHeader className="p-4 bg-primary/90 backdrop-blur-md sticky top-0 left-0 right-0 z-[10001] flex-row items-center justify-between space-y-0 border-b border-slate-800">
                     <div className="flex items-center gap-3 overflow-hidden mr-2">
                         <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shrink-0" />
@@ -293,7 +293,7 @@ export function BarcodeScanner({ onScan, onClose, isOpen }: BarcodeScannerProps)
                         {cameras.length > 1 ? (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" className="p-0 h-auto hover:bg-transparent text-primary-foreground text-sm font-bold flex items-center gap-1 truncate max-w-[200px]">
+                                    <Button variant="ghost" className="p-0 h-auto hover:bg-transparent text-primary-foreground text-sm font-bold flex items-center gap-1 truncate max-w-50">
                                         <span className="truncate">{cameras.find(c => c.id === currentCameraId)?.label || 'Сканер'}</span>
                                         <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
                                     </Button>

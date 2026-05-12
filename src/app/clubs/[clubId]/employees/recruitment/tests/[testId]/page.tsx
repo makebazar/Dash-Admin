@@ -651,7 +651,7 @@ export default function RecruitmentTestEditPage() {
             </div>
             </div>
             <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/80 p-4 backdrop-blur-xl sm:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
-                <div className="mx-auto flex max-w-[1600px] gap-2">
+                <div className="mx-auto flex max-w-400 gap-2">
                     <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-border text-foreground bg-card font-medium">
                         <Link href={`/clubs/${clubId}/employees/recruitment/templates`}>
                             Назад

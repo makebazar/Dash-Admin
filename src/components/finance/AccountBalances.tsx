@@ -95,7 +95,7 @@ export function AccountBalances({ clubId }: AccountBalancesProps) {
                             </div>
                         </div>
                     </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[200px] p-3">
+                    <TooltipContent side="top" className="max-w-50 p-3">
                         Общая сумма денег на всех активных счетах клуба (наличные + безнал + банк).
                     </TooltipContent>
                 </Tooltip>

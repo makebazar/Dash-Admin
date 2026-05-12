@@ -12,7 +12,7 @@ export async function GET(
 
     // Получить клуб
     const result = await query(
-      `SELECT id, name, address, owner_id, created_at FROM clubs WHERE id = $1`,
+      `SELECT id, name, address, owner_id, promo_settings, created_at FROM clubs WHERE id = $1`,
       [clubId],
     );
 

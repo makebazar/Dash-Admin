@@ -1000,7 +1000,7 @@ export default function MaintenanceSchedule() {
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
-                            <div className="px-3 py-1 text-sm font-bold text-center min-w-[150px]">
+                            <div className="px-3 py-1 text-sm font-bold text-center min-w-37.5">
                                 {monthNames[selectedMonth - 1]} {selectedYear}
                             </div>
                             <Button
@@ -1362,7 +1362,7 @@ export default function MaintenanceSchedule() {
             )}
 
             <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
-                <div className="mx-auto flex max-w-[1600px] gap-2">
+                <div className="mx-auto flex max-w-400 gap-2">
                     <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium">
                         <Link href={`/clubs/${clubId}/equipment`}>
                             <ChevronLeft className="mr-2 h-4 w-4" />

@@ -139,7 +139,7 @@ export default function SchedulePage() {
             >
               <ChevronLeft className="h-5 w-5" />
             </Button>
-            <div className="flex min-w-[160px] items-center justify-center gap-2 px-4 text-center">
+            <div className="flex min-w-40 items-center justify-center gap-2 px-4 text-center">
               <span className="text-lg font-bold tracking-tight text-slate-900 capitalize">
                 {monthNames[month - 1]}
               </span>

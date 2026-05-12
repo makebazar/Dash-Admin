@@ -1115,7 +1115,7 @@ export default function EquipmentDetailsPage() {
                       <h4 className="font-medium text-foreground">
                         Нет комплектующих
                       </h4>
-                      <p className="mt-1 max-w-[280px] text-sm text-muted-foreground">
+                      <p className="mt-1 max-w-70 text-sm text-muted-foreground">
                         Вы можете привязать процессоры, видеокарты и другие
                         детали к этому системному блоку.
                       </p>
@@ -1526,7 +1526,7 @@ export default function EquipmentDetailsPage() {
                                 </td>
                               ))}
                               <td
-                                className="py-4 text-xs text-muted-foreground max-w-[200px] truncate"
+                                className="py-4 text-xs text-muted-foreground max-w-50 truncate"
                                 title={log.notes}
                               >
                                 {log.notes || "—"}
@@ -1615,7 +1615,7 @@ export default function EquipmentDetailsPage() {
                                   key={`${group.label}-${log.id}`}
                                   className="relative pl-12"
                                 >
-                                  <div className="absolute top-0 bottom-0 left-[18px] w-px bg-slate-200" />
+                                  <div className="absolute top-0 bottom-0 left-4.5 w-px bg-slate-200" />
                                   <div
                                     className={cn(
                                       "absolute left-0 top-5 flex h-9 w-9 items-center justify-center rounded-xl border bg-card",
@@ -1675,14 +1675,14 @@ export default function EquipmentDetailsPage() {
                                                           photoIndex,
                                                         )
                                                       }
-                                                      className="relative aspect-[4/3] overflow-hidden rounded-xl border bg-accent"
+                                                      className="relative aspect-4/3 overflow-hidden rounded-xl border bg-accent"
                                                     >
                                                       <img
                                                         src={photo}
                                                         alt={`Фото события ${presentation.title} ${photoIndex + 1}`}
                                                         className="h-full w-full object-cover"
                                                       />
-                                                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-2 py-1 text-left text-[10px] font-medium text-primary-foreground">
+                                                      <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/55 to-transparent px-2 py-1 text-left text-[10px] font-medium text-primary-foreground">
                                                         Открыть
                                                       </div>
                                                     </button>
@@ -1757,7 +1757,7 @@ export default function EquipmentDetailsPage() {
                       <h4 className="font-medium text-foreground">
                         Нет фотографий
                       </h4>
-                      <p className="mt-1 max-w-[280px] text-sm text-muted-foreground">
+                      <p className="mt-1 max-w-70 text-sm text-muted-foreground">
                         Вы можете загрузить фотографии этого оборудования здесь.
                       </p>
                     </div>
@@ -2078,7 +2078,7 @@ export default function EquipmentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-background/80 md:hidden">
         <div className="mx-auto flex max-w-7xl gap-2">
           <Button asChild variant="outline" className="h-11 flex-1">
             <Link href={`/clubs/${clubId}/equipment/inventory`}>

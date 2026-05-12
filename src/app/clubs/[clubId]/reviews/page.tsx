@@ -3315,7 +3315,7 @@ export default function ChecklistsPage({
 
         {photoPreviewUrl && (
           <div
-            className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/90 z-60 flex items-center justify-center p-4"
             onClick={() => setPhotoPreviewUrl(null)}
           >
             <img

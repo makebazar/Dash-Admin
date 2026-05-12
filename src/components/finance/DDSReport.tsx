@@ -95,7 +95,7 @@ export default function DDSReport({ data, formatCurrency }: DDSReportProps) {
                                                             <Info className="h-4 w-4" />
                                                         </div>
                                                     </TooltipTrigger>
-                                                    <TooltipContent side="left" className="max-w-[200px] p-3 leading-relaxed">
+                                                    <TooltipContent side="left" className="max-w-50 p-3 leading-relaxed">
                                                         {idx === 0 ? "Операционка: сколько клуб зарабатывает и тратит на жизнь каждый день." : 
                                                          idx === 1 ? "Инвестиции: траты на «железо» и ремонт, которые окупятся в будущем." : 
                                                          "Финансы: кредиты, личные вложения или вывод прибыли владельцами."}

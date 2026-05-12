@@ -13,7 +13,7 @@ export function TargetCoach({ kpi, formatCurrency }: TargetCoachProps) {
 
     if (!nextThreshold) {
         return (
-            <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white overflow-hidden relative">
+            <Card className="border-0 shadow-lg bg-linear-to-br from-emerald-500 to-teal-600 text-white overflow-hidden relative">
                 <div className="absolute top-0 right-0 p-4 opacity-10">
                     <Zap className="w-24 h-24 rotate-12" />
                 </div>
@@ -33,7 +33,7 @@ export function TargetCoach({ kpi, formatCurrency }: TargetCoachProps) {
     return (
         <Card className="border-0 shadow-2xl bg-slate-900 overflow-hidden relative group">
             {/* Animated background elements */}
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-600/20 via-blue-600/20 to-transparent opacity-50 transition-opacity group-hover:opacity-70 duration-700" />
+            <div className="absolute inset-0 bg-linear-to-br from-purple-600/20 via-blue-600/20 to-transparent opacity-50 transition-opacity group-hover:opacity-70 duration-700" />
             <div className="absolute -top-12 -right-12 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl" />
             <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl" />
 
@@ -51,7 +51,7 @@ export function TargetCoach({ kpi, formatCurrency }: TargetCoachProps) {
                         </div>
 
                         <h2 className="text-3xl font-black text-white tracking-tight leading-none">
-                            Нужно <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">{formatCurrency(nextThreshold.per_shift_to_reach)}</span> <span className="text-slate-400 text-lg font-bold">/ смену</span>
+                            Нужно <span className="text-transparent bg-clip-text bg-linear-to-r from-purple-400 to-blue-400">{formatCurrency(nextThreshold.per_shift_to_reach)}</span> <span className="text-slate-400 text-lg font-bold">/ смену</span>
                         </h2>
 
                         {kpi.current_shift_value > 0 && (
@@ -96,7 +96,7 @@ export function TargetCoach({ kpi, formatCurrency }: TargetCoachProps) {
                     </div>
                     <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
                         <div
-                            className="h-full bg-gradient-to-r from-purple-600 via-blue-500 to-cyan-400 rounded-full shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+                            className="h-full bg-linear-to-r from-purple-600 via-blue-500 to-cyan-400 rounded-full shadow-[0_0_15px_rgba(168,85,247,0.4)]"
                             style={{ width: `${Math.min((kpi.current_value / nextThreshold.monthly_threshold) * 100, 100)}%` }}
                         />
                     </div>

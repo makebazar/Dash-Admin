@@ -302,7 +302,7 @@ export function ShiftExcelImport({ clubId, employees, customFields = [], onSucce
                                                 )}
                                             </TableCell>
                                             <TableCell>{(row['Наличные'] || 0) + (row['Безнал'] || 0)} ₽</TableCell>
-                                            <TableCell className="max-w-[150px] truncate" title={row['Комментарий']}>{row['Комментарий']}</TableCell>
+                                            <TableCell className="max-w-37.5 truncate" title={row['Комментарий']}>{row['Комментарий']}</TableCell>
                                             {customFields.map(f => (
                                                 <TableCell key={f.metric_key}>
                                                     {row.reportData?.[f.metric_key] || 0}

@@ -239,7 +239,7 @@ export default function RecruitmentApplicationsPage() {
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                <div className="space-y-3 max-w-[280px]">
+                                                <div className="space-y-3 max-w-70">
                                                     <div className="inline-flex px-2 py-1 rounded-md bg-slate-100 text-slate-900 text-xs font-bold">
                                                         {a.total_score} баллов
                                                     </div>
@@ -312,7 +312,7 @@ export default function RecruitmentApplicationsPage() {
             </div>
 
             <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-                <DialogContent className="sm:max-w-[400px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
+                <DialogContent className="sm:max-w-100 rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
                     <DialogHeader className="space-y-3">
                         <div className="h-12 w-12 rounded-2xl bg-rose-50 flex items-center justify-center">
                             <Trash2 className="h-6 w-6 text-rose-600" />

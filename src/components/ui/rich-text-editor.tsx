@@ -154,7 +154,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, compac
     }, [editor]);
 
     if (!mounted || !editor) {
-        return <div className="h-[520px] w-full bg-slate-50 animate-pulse rounded-md" />;
+        return <div className="h-130 w-full bg-slate-50 animate-pulse rounded-md" />;
     }
 
     return (

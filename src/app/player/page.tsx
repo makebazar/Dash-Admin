@@ -649,7 +649,7 @@ function DisplayList({
             disabled={disabled || pendingDisplayId === display.id}
             className={cn(
               "group w-full rounded-2xl border px-4 py-4 text-left transition",
-              "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]",
+              "border-white/10 bg-white/2 hover:border-white/20 hover:bg-white/[0.04]",
               selected && "border-white/30 bg-white/[0.07]",
               disabled && "cursor-not-allowed opacity-70"
             )}

@@ -65,7 +65,7 @@ export async function GET() {
 
     // Get owned clubs
     const ownedClubsResult = await query(
-      `SELECT DISTINCT c.id, c.name, c.address, c.created_at, c.inventory_required, c.inventory_settings, c.timezone
+      `SELECT DISTINCT c.id, c.name, c.address, c.created_at, c.inventory_required, c.inventory_settings, c.timezone, c.public_id
              FROM clubs c
              LEFT JOIN club_employees ce ON ce.club_id = c.id
              WHERE c.owner_id = $1
@@ -86,12 +86,13 @@ export async function GET() {
       inventory_required: row.inventory_required,
       inventory_settings: normalizeInventorySettings(row.inventory_settings),
       timezone: row.timezone || "Europe/Moscow",
+      public_id: row.public_id,
     }));
 
     // Get employee clubs with role
     const employeeClubsQuery = `
             SELECT
-                c.id, c.name, c.address, c.inventory_required, c.inventory_settings, c.timezone,
+                c.id, c.name, c.address, c.inventory_required, c.inventory_settings, c.timezone, c.public_id,
                 ce.role as employee_role,
                 r_global.name as global_role_name,
                 r_global.id as global_role_id,
@@ -159,6 +160,7 @@ export async function GET() {
         inventory_required: row.inventory_required,
         inventory_settings: normalizeInventorySettings(row.inventory_settings),
         timezone: row.timezone || "Europe/Moscow",
+        public_id: row.public_id,
         role: role,
         role_id: row.global_role_id,
         can_access_management: canAccessManagement,
@@ -177,6 +179,7 @@ export async function GET() {
             row.inventory_settings,
           ),
           timezone: row.timezone || "Europe/Moscow",
+          public_id: row.public_id,
           role: "Владелец",
           is_owner: true,
           can_access_management: true,

@@ -331,7 +331,7 @@ export function InstructionsTab() {
                 value={content}
                 onChange={setContent}
                 placeholder="Опиши порядок действий, критерии проверки, фото-примеры и важные замечания для сотрудников."
-                className="min-h-[200px]"
+                className="min-h-50"
               />
             </div>
 
@@ -353,7 +353,7 @@ export function InstructionsTab() {
                 value={perfContent}
                 onChange={setPerfContent}
                 placeholder="Например: Запустите FurMark на 5 минут, зафиксируйте пиковую температуру. Или: Запустите бенчмарк в CS2 на настройках High..."
-                className="min-h-[200px]"
+                className="min-h-50"
               />
             </div>
 

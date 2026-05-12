@@ -640,7 +640,7 @@ export function WorkScheduleGrid({
                 <th
                   key={d.dateStr}
                   className={cn(
-                    "p-2 text-center border-r border-border min-w-[40px] transition-colors relative",
+                    "p-2 text-center border-r border-border min-w-10 transition-colors relative",
                     isWeekend && "bg-rose-500/5",
                     d.isOutside && "opacity-40",
                     isToday && "bg-primary/10",

@@ -427,7 +427,7 @@ export function AssignmentModal({
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
         <DialogContent
           className={cn(
-            "max-w-4xl md:max-h-[90vh] w-full h-[100dvh] md:h-auto overflow-hidden flex flex-col p-0 shadow-2xl rounded-none md:rounded-lg",
+            "max-w-4xl md:max-h-[90vh] w-full h-dvh md:h-auto overflow-hidden flex flex-col p-0 shadow-2xl rounded-none md:rounded-lg",
             isLight
               ? "bg-white border-slate-200"
               : "bg-[#0a0b10] border-none md:border md:border-white/5",
@@ -441,7 +441,7 @@ export function AssignmentModal({
                 : "bg-[#11131a] border-white/5",
             )}
           >
-            <div className="flex items-center justify-center md:justify-start min-h-[1.5rem]">
+            <div className="flex items-center justify-center md:justify-start min-h-6">
               <Button
                 variant="ghost"
                 size="icon"
@@ -778,7 +778,7 @@ export function AssignmentModal({
                       "border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center",
                       isLight
                         ? "border-slate-200 bg-slate-50/50"
-                        : "border-white/5 bg-white/[0.02]",
+                        : "border-white/5 bg-white/2",
                     )}
                   >
                     <Monitor className="h-6 w-6 text-slate-500 mb-2 opacity-20" />
@@ -957,7 +957,7 @@ export function AssignmentModal({
                           : "Опишите, что было сделано..."
                       }
                       className={cn(
-                        "min-h-[140px] rounded-xl focus:ring-blue-500/20 placeholder:text-slate-600",
+                        "min-h-35 rounded-xl focus:ring-blue-500/20 placeholder:text-slate-600",
                         isLight
                           ? "bg-white border-slate-200 text-slate-900"
                           : "bg-[#0a0b10] border-white/10 text-white",
@@ -1074,7 +1074,7 @@ export function AssignmentModal({
                           : "Опишите, что было сделано..."
                       }
                       className={cn(
-                        "min-h-[100px] rounded-xl focus:ring-blue-500/20 placeholder:text-slate-600",
+                        "min-h-25 rounded-xl focus:ring-blue-500/20 placeholder:text-slate-600",
                         isLight
                           ? "bg-white border-slate-200 text-slate-900"
                           : "bg-[#0a0b10] border-white/10 text-white",
@@ -1197,7 +1197,7 @@ export function AssignmentModal({
                 </Badge>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-[350px] pb-32 md:pb-6">
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-87.5 pb-32 md:pb-6">
                 {comments.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-600 text-center p-4">
                     <MessageSquare className="h-10 w-10 mb-4 opacity-5" />
@@ -1230,7 +1230,7 @@ export function AssignmentModal({
                       ) : (
                         <div
                           className={cn(
-                            "max-w-[100%] border rounded-2xl p-4 shadow-sm",
+                            "max-w-full border rounded-2xl p-4 shadow-sm",
                             isLight
                               ? "bg-white border-slate-200"
                               : "bg-[#161922] border-white/5",

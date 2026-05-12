@@ -371,7 +371,7 @@ export default function SuperAdminSupportPage() {
           <CardContent>
             {selectedTicket ? (
               <>
-                <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                <div className="max-h-105 space-y-3 overflow-y-auto pr-1">
                   {messages.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-zinc-800 px-4 py-5 text-sm text-zinc-500">
                       Сообщений пока нет
@@ -405,7 +405,7 @@ export default function SuperAdminSupportPage() {
                     id="super-admin-reply"
                     value={reply}
                     onChange={(event) => setReply(event.target.value)}
-                    className="min-h-[120px] border-zinc-800 bg-zinc-950 text-white placeholder:text-zinc-500"
+                    className="min-h-30 border-zinc-800 bg-zinc-950 text-white placeholder:text-zinc-500"
                     placeholder="Напишите ответ, который увидит пользователь в обращении"
                   />
                   <Button type="submit" className="bg-red-500 text-white hover:bg-red-400" disabled={isSending || !reply.trim()}>
@@ -415,7 +415,7 @@ export default function SuperAdminSupportPage() {
                 </form>
               </>
             ) : (
-              <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-zinc-800 text-sm text-zinc-500">
+              <div className="flex min-h-80 items-center justify-center rounded-2xl border border-dashed border-zinc-800 text-sm text-zinc-500">
                 Ничего не выбрано
               </div>
             )}

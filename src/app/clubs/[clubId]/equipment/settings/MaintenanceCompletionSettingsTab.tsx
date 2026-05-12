@@ -468,7 +468,7 @@ export function MaintenanceCompletionSettingsTab({
                           );
                         }}
                       >
-                        <SelectTrigger className="w-[200px] font-bold border-none bg-transparent hover:bg-slate-50">
+                        <SelectTrigger className="w-50 font-bold border-none bg-transparent hover:bg-slate-50">
                           <SelectValue placeholder="Тип" />
                         </SelectTrigger>
                         <SelectContent>

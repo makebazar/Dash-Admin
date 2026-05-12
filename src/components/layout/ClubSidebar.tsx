@@ -24,6 +24,7 @@ import {
   Headphones,
   PanelLeftClose,
   PanelLeftOpen,
+  Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -207,6 +208,15 @@ export function ClubSidebarContent({
         <Tv className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
       ),
       visible: !isExpiredForOwnerUi && hasModuleAccess("signage"),
+    },
+    {
+      href: `/clubs/${clubId}/promo`,
+      label: "Акции",
+      icon: (
+        <Gift className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
+      ),
+      visible:
+        !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
     },
     {
       href: `/clubs/${clubId}/kb`,

@@ -140,7 +140,7 @@ export default function ChecklistSettingsPage({ params }: { params: Promise<{ cl
                 </div>
             </div>
 
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-white/80 md:hidden">
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-white/80 md:hidden">
                 <div className="mx-auto flex max-w-5xl gap-2">
                     <Button asChild variant="outline" size="icon" className="h-12 w-12 shrink-0 rounded-xl border-slate-200">
                         <Link href={`/clubs/${clubId}/settings`}>

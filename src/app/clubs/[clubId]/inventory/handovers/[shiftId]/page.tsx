@@ -360,7 +360,7 @@ export default function InventoryHandoverDetailsPage() {
                                     </span>
                                 </div>
                                 {movement.reason && (
-                                    <span className="text-xs text-slate-600 truncate max-w-[200px] sm:max-w-[300px]">
+                                    <span className="text-xs text-slate-600 truncate max-w-50 sm:max-w-75">
                                         {movement.reason}
                                     </span>
                                 )}
@@ -851,7 +851,7 @@ export default function InventoryHandoverDetailsPage() {
             </div>
 
             <Dialog open={isDetailsOpen} onOpenChange={(open) => !open && closeDetailsDialog()}>
-                <DialogContent className="sm:max-w-[500px] w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] p-0 sm:p-6 overflow-hidden flex flex-col gap-0 border-0 sm:border sm:rounded-xl [&>button]:hidden sm:[&>button]:inline-flex">
+                <DialogContent className="sm:max-w-125 w-full h-dvh sm:h-auto sm:max-h-[90vh] p-0 sm:p-6 overflow-hidden flex flex-col gap-0 border-0 sm:border sm:rounded-xl [&>button]:hidden sm:[&>button]:inline-flex">
                     <div className="sm:hidden flex items-center justify-between p-4 border-b bg-white">
                         <div className="font-black text-lg text-slate-900 truncate pr-4">
                             {detailsTarget ? `${detailsTarget.product_name}` : "Детали"}
@@ -988,7 +988,7 @@ export default function InventoryHandoverDetailsPage() {
             </Dialog>
 
             <Dialog open={isResolutionDialogOpen} onOpenChange={(open) => !open && closeResolutionDialog()}>
-                <DialogContent className="sm:max-w-[560px]">
+                <DialogContent className="sm:max-w-140">
                     <DialogHeader>
                         <DialogTitle>
                             {resolutionType === "SALARY_DEDUCTION"

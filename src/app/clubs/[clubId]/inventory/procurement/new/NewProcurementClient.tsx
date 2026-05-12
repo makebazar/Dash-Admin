@@ -118,7 +118,7 @@ export function NewProcurementClient({ clubId, currentUserId }: NewProcurementCl
                 <Button variant="outline" className="flex-1 bg-slate-50 border-slate-200 h-12" onClick={() => router.push(`/clubs/${clubId}/inventory?tab=procurement`)}>
                     Отмена
                 </Button>
-                <Button onClick={handleGenerate} disabled={isPending} className="flex-[2] bg-blue-600 hover:bg-blue-700 h-12 text-base">
+                <Button onClick={handleGenerate} disabled={isPending} className="flex-2 bg-blue-600 hover:bg-blue-700 h-12 text-base">
                     {isPending ? <RefreshCw className="mr-2 h-5 w-5 animate-spin" /> : <Calculator className="mr-2 h-5 w-5" />}
                     Создать
                 </Button>

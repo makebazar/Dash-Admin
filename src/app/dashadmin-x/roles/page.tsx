@@ -574,7 +574,7 @@ export default function RolesPage() {
               <h3 className="text-lg font-bold text-slate-900">
                 Выберите роль
               </h3>
-              <p className="text-sm text-slate-500 max-w-[280px] mt-1">
+              <p className="text-sm text-slate-500 max-w-70 mt-1">
                 Нажмите на роль из списка слева, чтобы настроить её права
               </p>
             </div>

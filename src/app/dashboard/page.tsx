@@ -569,7 +569,7 @@ export default function DashboardPage() {
 
             {/* Modals remain functionally identical but styled cleaner */}
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                <DialogContent className="sm:max-w-[425px] rounded-2xl p-8 border-slate-200">
+                <DialogContent className="sm:max-w-106.25 rounded-2xl p-8 border-slate-200">
                     <DialogHeader className="mb-6">
                         <DialogTitle className="text-2xl font-bold tracking-tight">Новое пространство</DialogTitle>
                         <DialogDescription className="text-base text-slate-500">
@@ -624,7 +624,7 @@ export default function DashboardPage() {
             </Dialog>
 
             <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-                <DialogContent className="sm:max-w-[425px] rounded-2xl p-8 border-slate-200">
+                <DialogContent className="sm:max-w-106.25 rounded-2xl p-8 border-slate-200">
                     <DialogHeader className="mb-6">
                         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 mb-4">
                             <AlertTriangle className="h-6 w-6 text-red-600" />

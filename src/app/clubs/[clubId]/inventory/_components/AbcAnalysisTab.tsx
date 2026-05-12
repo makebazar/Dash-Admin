@@ -128,7 +128,7 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                     </div>
                 </div>
 
-                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100">
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-card rounded-lg shadow-sm">
                             <PieChart className="h-4 w-4 text-indigo-600" />

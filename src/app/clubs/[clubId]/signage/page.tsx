@@ -321,7 +321,7 @@ export default function ClubSignagePage({
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[200px] rounded-xl p-2">
+                    <DropdownMenuContent align="end" className="w-50 rounded-xl p-2">
                       <DropdownMenuItem asChild className="gap-3 cursor-pointer rounded-lg px-3 py-2 text-[15px]">
                         <Link href={`/clubs/${clubId}/signage/${device.id}`}>
                           <LayoutGrid className="h-4 w-4 text-[#64748B]" strokeWidth={1.5} />
@@ -410,7 +410,7 @@ export default function ClubSignagePage({
           
           <Button
             size="lg"
-            className="h-12 rounded-xl bg-slate-900 text-white hover:bg-slate-800 min-w-[200px] font-medium"
+            className="h-12 rounded-xl bg-slate-900 text-white hover:bg-slate-800 min-w-50 font-medium"
             onClick={handlePairDevice}
             disabled={isPairing || !pairingCode.trim()}
           >
@@ -421,7 +421,7 @@ export default function ClubSignagePage({
       </div>
 
       <Dialog open={Boolean(renameDevice)} onOpenChange={(open) => !open && setRenameDevice(null)}>
-        <DialogContent className="sm:max-w-[425px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
+        <DialogContent className="sm:max-w-106.25 rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
           <DialogHeader className="space-y-3">
             <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center">
               <PencilLine className="h-6 w-6 text-slate-700" />
@@ -528,7 +528,7 @@ export default function ClubSignagePage({
         </DialogContent>
       </Dialog>
       <Dialog open={Boolean(unpairDevice)} onOpenChange={(open) => !open && setUnpairDevice(null)}>
-        <DialogContent className="sm:max-w-[400px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
+        <DialogContent className="sm:max-w-100 rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
           <DialogHeader className="space-y-3">
             <div className="h-12 w-12 rounded-2xl bg-rose-50 flex items-center justify-center">
               <Unplug className="h-6 w-6 text-rose-600" />

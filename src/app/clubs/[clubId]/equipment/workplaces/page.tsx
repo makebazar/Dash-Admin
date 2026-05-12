@@ -894,7 +894,7 @@ export default function WorkplacesPage() {
         </Dialog>
 
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
-          <div className="mx-auto flex max-w-[1600px] gap-2">
+          <div className="mx-auto flex max-w-400 gap-2">
             <Button
               asChild
               variant="outline"

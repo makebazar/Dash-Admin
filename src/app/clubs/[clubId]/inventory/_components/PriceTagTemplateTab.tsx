@@ -522,7 +522,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                             </div>
                         </CardHeader>
                         <CardContent className="p-0">
-                            <div className="divide-y divide-slate-100 max-h-[300px] overflow-y-auto no-scrollbar">
+                            <div className="divide-y divide-slate-100 max-h-75 overflow-y-auto no-scrollbar">
                                 {activeTemplate.elements.map((el) => (
                                     <div 
                                         key={el.id} 
@@ -674,7 +674,7 @@ export function PriceTagTemplateTab({ products, initialSettings, onSave, isPendi
                                 if (p) setPreviewProduct(p)
                             }}
                         >
-                            <SelectTrigger className="h-7 border-none bg-transparent focus:ring-0 text-[10px] font-bold pr-2 min-w-[120px] max-w-[200px] shadow-none">
+                            <SelectTrigger className="h-7 border-none bg-transparent focus:ring-0 text-[10px] font-bold pr-2 min-w-[120px] max-w-50 shadow-none">
                                 <SelectValue placeholder="Выбрать товар" />
                             </SelectTrigger>
                             <SelectContent>

@@ -391,7 +391,7 @@ export default function TransactionList({
                         </Select>
 
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-[150px] rounded-xl border-slate-200">
+                            <SelectTrigger className="w-37.5 rounded-xl border-slate-200">
                                 <SelectValue placeholder="Статус" />
                             </SelectTrigger>
                             <SelectContent className="rounded-xl">
@@ -421,7 +421,7 @@ export default function TransactionList({
                                     <TooltipTrigger asChild>
                                         <Info className="h-3 w-3 text-slate-300 cursor-help" />
                                     </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-[200px]">
+                                    <TooltipContent side="top" className="max-w-50">
                                         Выручка смен попадает сюда автоматически. Включите этот фильтр, чтобы видеть только ручные операции.
                                     </TooltipContent>
                                 </Tooltip>
@@ -547,7 +547,7 @@ export default function TransactionList({
                                                     {transaction.description && (
                                                         <>
                                                             <span className="w-1 h-1 rounded-full bg-slate-300" />
-                                                            <span className="normal-case text-slate-500 italic max-w-[200px] truncate">{transaction.description}</span>
+                                                            <span className="normal-case text-slate-500 italic max-w-50 truncate">{transaction.description}</span>
                                                         </>
                                                     )}
                                                 </div>

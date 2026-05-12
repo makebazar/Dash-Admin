@@ -428,7 +428,7 @@ export default function EmployeeEquipmentPage() {
   }, [workstations, selectedEquipment]);
 
   return (
-    <div className="p-4 md:p-8 space-y-8 max-w-[1600px] mx-auto pb-24">
+    <div className="p-4 md:p-8 space-y-8 max-w-400 mx-auto pb-24">
       {/* Header */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
@@ -661,7 +661,7 @@ export default function EmployeeEquipmentPage() {
 
                         <CardContent className="p-4 flex-1 bg-card">
                           {wsEquipment.length === 0 ? (
-                            <div className="h-full min-h-[100px] flex flex-col items-center justify-center text-center border-2 border-dashed border-border/50 rounded-lg p-4 bg-accent/10">
+                            <div className="h-full min-h-25 flex flex-col items-center justify-center text-center border-2 border-dashed border-border/50 rounded-lg p-4 bg-accent/10">
                               <Monitor className="h-8 w-8 text-muted-foreground/30 mb-2" />
                               <p className="text-xs text-muted-foreground font-medium">
                                 Пусто
@@ -1137,7 +1137,7 @@ export default function EmployeeEquipmentPage() {
                   <SelectTrigger className="h-12 bg-background border-border">
                     <SelectValue placeholder="Нажмите для выбора..." />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
+                  <SelectContent className="max-h-75">
                     {availableTargets.map((ws) => (
                       <SelectItem key={ws.id} value={ws.id}>
                         {ws.name} ({ws.zone})
@@ -1204,7 +1204,7 @@ export default function EmployeeEquipmentPage() {
                   }
                   value={moveReason}
                   onChange={(e) => setMoveReason(e.target.value)}
-                  className="min-h-[100px] text-base p-4 bg-background border-border"
+                  className="min-h-25 text-base p-4 bg-background border-border"
                 />
               </div>
             </div>
@@ -1260,7 +1260,7 @@ export default function EmployeeEquipmentPage() {
                 placeholder="Опишите детали, как воспроизвести..."
                 value={issueDescription}
                 onChange={(e) => setIssueDescription(e.target.value)}
-                className="min-h-[100px] bg-background border-border"
+                className="min-h-25 bg-background border-border"
               />
             </div>
           </div>

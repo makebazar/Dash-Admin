@@ -62,6 +62,7 @@ import { EmployeeWriteOffWizard } from "./_components/EmployeeWriteOffWizard";
 import { EmployeeTransferWizard } from "./_components/EmployeeTransferWizard";
 import { EmployeeRequestWizard } from "./_components/EmployeeRequestWizard";
 import { EmployeeSignageControlCard } from "./_components/EmployeeSignageControlCard";
+import { EmployeePromoControlCard } from "./_components/EmployeePromoControlCard";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type ShiftAccountabilityStatusResponse = {
@@ -82,7 +83,12 @@ interface ClubInfo {
   id: number;
   name: string;
   role: string;
+  public_id?: string;
   timezone?: string;
+  promo_settings?: {
+    is_promo_active?: boolean;
+    ticket_price?: number;
+  };
   inventory_settings?: {
     employee_default_metric_key?: string;
     employee_allowed_warehouse_ids?: number[];
@@ -259,6 +265,7 @@ export default function EmployeeClubPage({
   const [isTransferWizardOpen, setIsTransferWizardOpen] = useState(false);
   const [isRequestWizardOpen, setIsRequestWizardOpen] = useState(false);
   const [unreadRequestsCount, setUnreadRequestsCount] = useState(0);
+  const [promoQueueCount, setPromoQueueCount] = useState(0);
 
   // Live timer
   const [liveSeconds, setLiveSeconds] = useState(0);
@@ -810,6 +817,7 @@ export default function EmployeeClubPage({
               r.json(),
             ),
         fetch(`/api/clubs/${id}/employee-tasks`).then((r) => r.json()),
+        fetch(`/api/promo/admin/queue?clubId=${id}`).then((r) => r.json()),
       ]);
 
       const [
@@ -822,7 +830,16 @@ export default function EmployeeClubPage({
         ratingData,
         tasksJson,
         assignmentsData,
+        promoData,
       ] = results;
+
+      // Promo Queue
+      if (promoData?.queue) {
+        const pendingCount = promoData.queue.filter(
+          (item: any) => item.status === "pending",
+        ).length;
+        setPromoQueueCount(pendingCount);
+      }
 
       // Assignments
       if (assignmentsData?.tasks) {
@@ -1373,723 +1390,798 @@ export default function EmployeeClubPage({
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 py-8 md:px-8 md:py-12 space-y-12 relative z-0">
-      {/* Rework Alert Notification */}
-      {reworkTasksCount > 0 && (
-        <Link
-          href={`/employee/clubs/${clubId}/tasks?verification_status=REJECTED`}
-          className="block group"
-        >
-          <div className="flex items-center justify-between rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 transition-colors hover:bg-rose-500/20">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-500/20 text-rose-500">
-                <AlertCircle className="h-4 w-4" />
-              </div>
-              <div className="space-y-1 pr-4">
-                <p className="font-bold text-sm text-rose-500">
-                  Доработка ({reworkTasksCount})
-                </p>
-                <p className="text-xs text-rose-400/80 leading-relaxed max-w-2xl">
-                  Ваша работа не прошла проверку. Руководитель или система
-                  контроля вернули задачи на исправление. Пожалуйста, исправьте
-                  недочеты, чтобы не потерять бонус за эффективность.
-                </p>
-              </div>
-            </div>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-500/10 text-rose-500 opacity-50 group-hover:opacity-100 transition-opacity shrink-0">
-              <ChevronRight className="h-4 w-4" />
-            </div>
-          </div>
-        </Link>
-      )}
-
-      <div className="grid gap-12 lg:grid-cols-[1fr_320px]">
-        {/* Main Content */}
-        <div className="space-y-10">
-          {/* Shift Control */}
-          <section className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                Смена
-              </h2>
-              {activeShift && (
-                <div className="flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                    Активна
-                  </span>
+    <SSEProvider clubId={clubId} userId={currentUserId}>
+      <div className="w-full max-w-5xl mx-auto px-4 py-8 md:px-8 md:py-12 space-y-12 relative z-0">
+        {/* Rework Alert Notification */}
+        {reworkTasksCount > 0 && (
+          <Link
+            href={`/employee/clubs/${clubId}/tasks?verification_status=REJECTED`}
+            className="block group"
+          >
+            <div className="flex items-center justify-between rounded-xl bg-rose-500/10 border border-rose-500/20 p-4 transition-colors hover:bg-rose-500/20">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-500/20 text-rose-500">
+                  <AlertCircle className="h-4 w-4" />
                 </div>
-              )}
-            </div>
-
-            {activeShift ? (
-              <div className="space-y-8 rounded-xl border bg-card p-6">
-                <div className="flex flex-col items-center justify-center py-4">
-                  <div className="flex items-baseline gap-1 font-mono tracking-tighter">
-                    <span className="text-6xl md:text-7xl font-bold text-foreground">
-                      {liveDisplay.split(":")[0]}
-                    </span>
-                    <span className="text-3xl md:text-5xl text-muted-foreground/30">
-                      :
-                    </span>
-                    <span className="text-6xl md:text-7xl font-bold text-foreground">
-                      {liveDisplay.split(":")[1]}
-                    </span>
-                    <span className="text-3xl md:text-5xl text-muted-foreground/30">
-                      :
-                    </span>
-                    <span className="text-3xl md:text-5xl font-medium text-muted-foreground">
-                      {liveDisplay.split(":")[2]}
-                    </span>
-                  </div>
-                  <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>
-                      Начало в{" "}
-                      {new Date(activeShift.check_in).toLocaleTimeString(
-                        "ru-RU",
-                        { hour: "2-digit", minute: "2-digit" },
-                      )}
-                    </span>
-                    <span className="w-1 h-1 rounded-full bg-border" />
-                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                      +{formatCurrency(currentEarnings)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid gap-3">
-                  {isBarBlockedByStartAcceptance && (
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-600 dark:text-amber-400">
-                      Завершите приемку остатков. Касса и складские действия
-                      заблокированы.
-                    </div>
-                  )}
-                  {(hasOpenZoneSnapshotDraft ||
-                    hasPendingZoneStartAcceptance) &&
-                    activeShift?.id && (
-                      <Button
-                        variant="outline"
-                        className="w-full h-11 text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 hover:text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:hover:bg-amber-900/50 dark:text-amber-400"
-                        onClick={() => {
-                          const url = `/employee/terminal/handover/OPEN/${activeShift.id}?clubId=${clubId}`;
-                          window.open(url, isMobile ? "_self" : "_blank");
-                        }}
-                      >
-                        {hasPendingZoneStartAcceptance &&
-                        !hasOpenZoneSnapshotDraft
-                          ? "Начать приемку остатков"
-                          : "Вернуться к приемке"}
-                      </Button>
-                    )}
-
-                  <Button
-                    variant="default"
-                    className="w-full h-12 text-sm font-semibold shadow-none"
-                    onClick={handleEndShiftClick}
-                    disabled={isActionLoading || !isEmployeeAccessLoaded}
-                  >
-                    {isActionLoading && !isReportModalOpen ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    Завершить смену
-                  </Button>
-                </div>
-
-                {/* Utilities */}
-                <div className="pt-2">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {isSuppliesEnabled && (
-                      <Button
-                        variant="outline"
-                        className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
-                        onClick={() => setIsSupplyWizardOpen(true)}
-                        disabled={isBarBlockedByStartAcceptance}
-                      >
-                        Поставка
-                      </Button>
-                    )}
-                    {isCashboxEnabled && (
-                      <Button
-                        variant="outline"
-                        className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
-                        onClick={() =>
-                          window.open(
-                            `/employee/clubs/${clubId}/pos`,
-                            "_blank",
-                            "noopener,noreferrer",
-                          )
-                        }
-                        disabled={isBarBlockedByStartAcceptance}
-                      >
-                        Касса
-                      </Button>
-                    )}
-                    {canUseEmployeeWriteOff && (
-                      <Button
-                        variant="outline"
-                        className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
-                        onClick={() => setIsWriteOffWizardOpen(true)}
-                        disabled={isBarBlockedByStartAcceptance}
-                      >
-                        Списание
-                      </Button>
-                    )}
-                    {canUseEmployeeTransfer && (
-                      <Button
-                        variant="outline"
-                        className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
-                        onClick={() => setIsTransferWizardOpen(true)}
-                        disabled={isBarBlockedByStartAcceptance}
-                      >
-                        Перемещение
-                      </Button>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    className="w-full mt-2 h-10 text-xs text-muted-foreground border border-transparent hover:bg-accent hover:border-border hover:text-foreground transition-all"
-                    onClick={() => setIsRequestWizardOpen(true)}
-                  >
-                    Связаться с руководством
-                    {unreadRequestsCount > 0 && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-2 h-4 px-1 text-[9px] bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
-                      >
-                        {unreadRequestsCount}
-                      </Badge>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="py-12 space-y-6 flex flex-col items-center justify-center rounded-xl border bg-card">
-                <div className="text-center space-y-1">
-                  <h3 className="text-base font-medium text-foreground">
-                    Смена закрыта
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Начните смену для учёта рабочего времени
+                <div className="space-y-1 pr-4">
+                  <p className="font-bold text-sm text-rose-500">
+                    Доработка ({reworkTasksCount})
+                  </p>
+                  <p className="text-xs text-rose-400/80 leading-relaxed max-w-2xl">
+                    Ваша работа не прошла проверку. Руководитель или система
+                    контроля вернули задачи на исправление. Пожалуйста,
+                    исправьте недочеты, чтобы не потерять бонус за
+                    эффективность.
                   </p>
                 </div>
+              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-500/10 text-rose-500 opacity-50 group-hover:opacity-100 transition-opacity shrink-0">
+                <ChevronRight className="h-4 w-4" />
+              </div>
+            </div>
+          </Link>
+        )}
 
-                {availableShiftRoles.length > 1 ? (
-                  <div className="w-full max-w-[320px] px-6">
-                    <Select
-                      value={
-                        selectedShiftRoleId ? String(selectedShiftRoleId) : ""
-                      }
-                      onValueChange={(v) =>
-                        updateSelectedShiftRole(parseInt(v))
-                      }
-                    >
-                      <SelectTrigger className="h-11 rounded-xl bg-background">
-                        <SelectValue placeholder="Выберите роль" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableShiftRoles.map((r) => (
-                          <SelectItem key={r.id} value={String(r.id)}>
-                            {r.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+        <div className="grid gap-12 lg:grid-cols-[1fr_320px]">
+          {/* Main Content */}
+          <div className="space-y-10">
+            {/* Shift Control */}
+            <section className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                  Смена
+                </h2>
+                {activeShift && (
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      Активна
+                    </span>
                   </div>
-                ) : null}
+                )}
+              </div>
 
-                <Button
-                  className="h-11 px-8 shadow-none"
-                  onClick={handleStartShift}
-                  disabled={isActionLoading || !canStartShift}
-                >
-                  {isActionLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {activeShift ? (
+                <div className="space-y-8 rounded-xl border bg-card p-6">
+                  <div className="flex flex-col items-center justify-center py-4">
+                    <div className="flex items-baseline gap-1 font-mono tracking-tighter">
+                      <span className="text-6xl md:text-7xl font-bold text-foreground">
+                        {liveDisplay.split(":")[0]}
+                      </span>
+                      <span className="text-3xl md:text-5xl text-muted-foreground/30">
+                        :
+                      </span>
+                      <span className="text-6xl md:text-7xl font-bold text-foreground">
+                        {liveDisplay.split(":")[1]}
+                      </span>
+                      <span className="text-3xl md:text-5xl text-muted-foreground/30">
+                        :
+                      </span>
+                      <span className="text-3xl md:text-5xl font-medium text-muted-foreground">
+                        {liveDisplay.split(":")[2]}
+                      </span>
+                    </div>
+                    <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>
+                        Начало в{" "}
+                        {new Date(activeShift.check_in).toLocaleTimeString(
+                          "ru-RU",
+                          { hour: "2-digit", minute: "2-digit" },
+                        )}
+                      </span>
+                      <span className="w-1 h-1 rounded-full bg-border" />
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                        +{formatCurrency(currentEarnings)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3">
+                    {isBarBlockedByStartAcceptance && (
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-600 dark:text-amber-400">
+                        Завершите приемку остатков. Касса и складские действия
+                        заблокированы.
+                      </div>
+                    )}
+                    {(hasOpenZoneSnapshotDraft ||
+                      hasPendingZoneStartAcceptance) &&
+                      activeShift?.id && (
+                        <Button
+                          variant="outline"
+                          className="w-full h-11 text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 hover:text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:hover:bg-amber-900/50 dark:text-amber-400"
+                          onClick={() => {
+                            const url = `/employee/terminal/handover/OPEN/${activeShift.id}?clubId=${clubId}`;
+                            window.open(url, isMobile ? "_self" : "_blank");
+                          }}
+                        >
+                          {hasPendingZoneStartAcceptance &&
+                          !hasOpenZoneSnapshotDraft
+                            ? "Начать приемку остатков"
+                            : "Вернуться к приемке"}
+                        </Button>
+                      )}
+
+                    <Button
+                      variant="default"
+                      className="w-full h-12 text-sm font-semibold shadow-none"
+                      onClick={handleEndShiftClick}
+                      disabled={isActionLoading || !isEmployeeAccessLoaded}
+                    >
+                      {isActionLoading && !isReportModalOpen ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Завершить смену
+                    </Button>
+                  </div>
+
+                  {/* Utilities */}
+                  <div className="pt-2">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {isSuppliesEnabled && (
+                        <Button
+                          variant="outline"
+                          className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
+                          onClick={() => setIsSupplyWizardOpen(true)}
+                          disabled={isBarBlockedByStartAcceptance}
+                        >
+                          Поставка
+                        </Button>
+                      )}
+                      {isCashboxEnabled && (
+                        <Button
+                          variant="outline"
+                          className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
+                          onClick={() =>
+                            window.open(
+                              `/employee/clubs/${clubId}/pos`,
+                              "_blank",
+                              "noopener,noreferrer",
+                            )
+                          }
+                          disabled={isBarBlockedByStartAcceptance}
+                        >
+                          Касса
+                        </Button>
+                      )}
+                      {canUseEmployeeWriteOff && (
+                        <Button
+                          variant="outline"
+                          className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
+                          onClick={() => setIsWriteOffWizardOpen(true)}
+                          disabled={isBarBlockedByStartAcceptance}
+                        >
+                          Списание
+                        </Button>
+                      )}
+                      {canUseEmployeeTransfer && (
+                        <Button
+                          variant="outline"
+                          className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
+                          onClick={() => setIsTransferWizardOpen(true)}
+                          disabled={isBarBlockedByStartAcceptance}
+                        >
+                          Перемещение
+                        </Button>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      className="w-full mt-2 h-10 text-xs text-muted-foreground border border-transparent hover:bg-accent hover:border-border hover:text-foreground transition-all"
+                      onClick={() => setIsRequestWizardOpen(true)}
+                    >
+                      Связаться с руководством
+                      {unreadRequestsCount > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="ml-2 h-4 px-1 text-[9px] bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+                        >
+                          {unreadRequestsCount}
+                        </Badge>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12 space-y-6 flex flex-col items-center justify-center rounded-xl border bg-card">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-base font-medium text-foreground">
+                      Смена закрыта
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Начните смену для учёта рабочего времени
+                    </p>
+                  </div>
+
+                  {availableShiftRoles.length > 1 ? (
+                    <div className="w-full max-w-[320px] px-6">
+                      <Select
+                        value={
+                          selectedShiftRoleId ? String(selectedShiftRoleId) : ""
+                        }
+                        onValueChange={(v) =>
+                          updateSelectedShiftRole(parseInt(v))
+                        }
+                      >
+                        <SelectTrigger className="h-11 rounded-xl bg-background">
+                          <SelectValue placeholder="Выберите роль" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableShiftRoles.map((r) => (
+                            <SelectItem key={r.id} value={String(r.id)}>
+                              {r.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   ) : null}
-                  Начать смену
-                </Button>
-              </div>
+
+                  <Button
+                    className="h-11 px-8 shadow-none"
+                    onClick={handleStartShift}
+                    disabled={isActionLoading || !canStartShift}
+                  >
+                    {isActionLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Начать смену
+                  </Button>
+                </div>
+              )}
+            </section>
+            {activeShift && (
+              <EmployeeSignageControlCard
+                clubId={clubId}
+                enabled={Boolean(activeShift)}
+              />
             )}
-          </section>
-
-          {activeShift && (
-            <EmployeeSignageControlCard
-              clubId={clubId}
-              enabled={Boolean(activeShift)}
-            />
-          )}
-
-          {activeShift &&
-          clubTasks.some((t: any) => t?.type === "EQUIPMENT_TRANSFER") ? (
-            <section className="space-y-4">
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                Оборудование к приёмке
-              </h2>
-              <div className="grid gap-3">
-                {clubTasks
-                  .filter((t: any) => t?.type === "EQUIPMENT_TRANSFER")
-                  .map((task: any) => (
-                    <div
-                      key={task.id}
-                      className="group flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-                    >
-                      <div className="space-y-1.5 min-w-0">
-                        <h3 className="truncate text-sm font-semibold text-slate-900">
-                          {String(task.title || "").replace(
-                            "Оборудование из клуба: ",
-                            "",
-                          )}
-                        </h3>
-                        <div className="space-y-1 text-xs text-slate-600">
-                          <div>
-                            Приедет из:{" "}
-                            <span className="font-semibold text-slate-900">
-                              {task.transfer_source_club_name || "—"}
-                            </span>
-                          </div>
-                          <div>
-                            Позиции:{" "}
-                            <span className="font-semibold text-slate-900">
-                              {Number(task.transfer_item_count || 0)} шт
-                            </span>
-                          </div>
-                          {task.transfer_created_by_name ? (
-                            <div>
-                              Создал:{" "}
-                              <span className="font-semibold text-slate-900">
-                                {task.transfer_created_by_name}
-                              </span>
-                            </div>
-                          ) : null}
-                          {task.transfer_comment || task.description ? (
-                            <div className="whitespace-pre-wrap">
-                              <span className="font-semibold text-slate-900">
-                                Комментарий:
-                              </span>{" "}
-                              {task.transfer_comment || task.description}
-                            </div>
-                          ) : null}
-                          {Array.isArray(task.transfer_items) &&
-                          task.transfer_items.length > 0 ? (
-                            <div className="space-y-0.5 pt-1">
-                              {task.transfer_items
-                                .slice(0, 6)
-                                .map((item: any) => (
-                                  <div
-                                    key={item.equipment_id}
-                                    className="truncate"
-                                  >
-                                    {item.equipment_name} →{" "}
-                                    {item.target_workstation_name
-                                      ? item.target_workstation_name
-                                      : "Склад"}
-                                  </div>
-                                ))}
-                              {task.transfer_items.length > 6 ? (
-                                <div className="text-slate-500">
-                                  и ещё {task.transfer_items.length - 6}...
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="h-8 shrink-0 bg-slate-900 text-xs text-white shadow-none hover:bg-slate-800"
-                        onClick={() => handleCompleteClubTask(task)}
-                        disabled={isUpdatingTask === String(task.id)}
+            {activeShift && club?.promo_settings?.is_promo_active !== false && (
+              <EmployeePromoControlCard
+                clubId={clubId}
+                userId={currentUserId}
+                clubCode={club?.public_id}
+                enabled={Boolean(activeShift)}
+              />
+            )}{" "}
+            {activeShift &&
+            clubTasks.some((t: any) => t?.type === "EQUIPMENT_TRANSFER") ? (
+              <section className="space-y-4">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                  Оборудование к приёмке
+                </h2>
+                <div className="grid gap-3">
+                  {clubTasks
+                    .filter((t: any) => t?.type === "EQUIPMENT_TRANSFER")
+                    .map((task: any) => (
+                      <div
+                        key={task.id}
+                        className="group flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                       >
-                        {isUpdatingTask === String(task.id) ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          "Выполнено"
-                        )}
-                      </Button>
-                    </div>
-                  ))}
-              </div>
-            </section>
-          ) : null}
-
-          {clubTasks.some((t: any) => t?.type === "RESTOCK") ? (
-            <section className="space-y-4">
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                Пополнение склада
-              </h2>
-              <div className="grid gap-3">
-                {clubTasks
-                  .filter((t: any) => t?.type === "RESTOCK")
-                  .map((task: any) => (
-                    <div
-                      key={task.id}
-                      className="group flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-                    >
-                      <div className="space-y-1.5 min-w-0">
-                        <h3 className="truncate text-sm font-semibold text-slate-900">
-                          {String(task.title || "").replace("Пополнить: ", "")}
-                        </h3>
-                        <div className="space-y-1 text-xs text-slate-600">
-                          {task.target_warehouse_name ? (
+                        <div className="space-y-1.5 min-w-0">
+                          <h3 className="truncate text-sm font-semibold text-slate-900">
+                            {String(task.title || "").replace(
+                              "Оборудование из клуба: ",
+                              "",
+                            )}
+                          </h3>
+                          <div className="space-y-1 text-xs text-slate-600">
                             <div>
-                              Текущий остаток в {task.target_warehouse_name}:{" "}
+                              Приедет из:{" "}
                               <span className="font-semibold text-slate-900">
-                                {Number(task.current_target_stock || 0)} шт
+                                {task.transfer_source_club_name || "—"}
                               </span>
                             </div>
-                          ) : null}
-                          {task.suggested_restock_quantity !== undefined &&
-                          task.suggested_restock_quantity !== null ? (
                             <div>
-                              Доставить до{" "}
+                              Позиции:{" "}
                               <span className="font-semibold text-slate-900">
-                                {Number(task.current_target_stock || 0) +
-                                  Number(
-                                    task.suggested_restock_quantity || 0,
-                                  )}{" "}
-                                шт
+                                {Number(task.transfer_item_count || 0)} шт
                               </span>
                             </div>
-                          ) : null}
-                          {task.source_warehouse_name ? (
-                            <div>
-                              Взять из:{" "}
-                              <span className="font-semibold text-slate-900">
-                                {task.source_warehouse_name}
-                              </span>
-                              {task.current_source_stock !== undefined &&
-                              task.current_source_stock !== null ? (
-                                <span className="text-slate-500">
-                                  , доступно{" "}
-                                  {Number(task.current_source_stock || 0)} шт
+                            {task.transfer_created_by_name ? (
+                              <div>
+                                Создал:{" "}
+                                <span className="font-semibold text-slate-900">
+                                  {task.transfer_created_by_name}
                                 </span>
-                              ) : null}
-                            </div>
-                          ) : null}
-                          {!task.source_warehouse_name &&
-                          !task.target_warehouse_name ? (
-                            <div>{task.description}</div>
-                          ) : null}
+                              </div>
+                            ) : null}
+                            {task.transfer_comment || task.description ? (
+                              <div className="whitespace-pre-wrap">
+                                <span className="font-semibold text-slate-900">
+                                  Комментарий:
+                                </span>{" "}
+                                {task.transfer_comment || task.description}
+                              </div>
+                            ) : null}
+                            {Array.isArray(task.transfer_items) &&
+                            task.transfer_items.length > 0 ? (
+                              <div className="space-y-0.5 pt-1">
+                                {task.transfer_items
+                                  .slice(0, 6)
+                                  .map((item: any) => (
+                                    <div
+                                      key={item.equipment_id}
+                                      className="truncate"
+                                    >
+                                      {item.equipment_name} →{" "}
+                                      {item.target_workstation_name
+                                        ? item.target_workstation_name
+                                        : "Склад"}
+                                    </div>
+                                  ))}
+                                {task.transfer_items.length > 6 ? (
+                                  <div className="text-slate-500">
+                                    и ещё {task.transfer_items.length - 6}...
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 shrink-0 bg-slate-900 text-xs text-white shadow-none hover:bg-slate-800"
+                          onClick={() => handleCompleteClubTask(task)}
+                          disabled={isUpdatingTask === String(task.id)}
+                        >
+                          {isUpdatingTask === String(task.id) ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            "Выполнено"
+                          )}
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="h-8 shrink-0 bg-slate-900 text-xs text-white shadow-none hover:bg-slate-800"
-                        onClick={() => handleCompleteClubTask(task)}
-                        disabled={isUpdatingTask === String(task.id)}
+                    ))}
+                </div>
+              </section>
+            ) : null}
+            {clubTasks.some((t: any) => t?.type === "RESTOCK") ? (
+              <section className="space-y-4">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                  Пополнение склада
+                </h2>
+                <div className="grid gap-3">
+                  {clubTasks
+                    .filter((t: any) => t?.type === "RESTOCK")
+                    .map((task: any) => (
+                      <div
+                        key={task.id}
+                        className="group flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                       >
-                        {isUpdatingTask === String(task.id) ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          "Выполнено"
-                        )}
-                      </Button>
+                        <div className="space-y-1.5 min-w-0">
+                          <h3 className="truncate text-sm font-semibold text-slate-900">
+                            {String(task.title || "").replace(
+                              "Пополнить: ",
+                              "",
+                            )}
+                          </h3>
+                          <div className="space-y-1 text-xs text-slate-600">
+                            {task.target_warehouse_name ? (
+                              <div>
+                                Текущий остаток в {task.target_warehouse_name}:{" "}
+                                <span className="font-semibold text-slate-900">
+                                  {Number(task.current_target_stock || 0)} шт
+                                </span>
+                              </div>
+                            ) : null}
+                            {task.suggested_restock_quantity !== undefined &&
+                            task.suggested_restock_quantity !== null ? (
+                              <div>
+                                Доставить до{" "}
+                                <span className="font-semibold text-slate-900">
+                                  {Number(task.current_target_stock || 0) +
+                                    Number(
+                                      task.suggested_restock_quantity || 0,
+                                    )}{" "}
+                                  шт
+                                </span>
+                              </div>
+                            ) : null}
+                            {task.source_warehouse_name ? (
+                              <div>
+                                Взять из:{" "}
+                                <span className="font-semibold text-slate-900">
+                                  {task.source_warehouse_name}
+                                </span>
+                                {task.current_source_stock !== undefined &&
+                                task.current_source_stock !== null ? (
+                                  <span className="text-slate-500">
+                                    , доступно{" "}
+                                    {Number(task.current_source_stock || 0)} шт
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            {!task.source_warehouse_name &&
+                            !task.target_warehouse_name ? (
+                              <div>{task.description}</div>
+                            ) : null}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 shrink-0 bg-slate-900 text-xs text-white shadow-none hover:bg-slate-800"
+                          onClick={() => handleCompleteClubTask(task)}
+                          disabled={isUpdatingTask === String(task.id)}
+                        >
+                          {isUpdatingTask === String(task.id) ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            "Выполнено"
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              </section>
+            ) : null}
+            {/* Assignments Overview */}
+            {employeeAccess?.settings?.assignments_enabled && (
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                    Поручения
+                  </h2>
+                  <Link
+                    href={`/employee/clubs/${clubId}/assignments`}
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Все задачи →
+                  </Link>
+                </div>
+                <Link
+                  href={`/employee/clubs/${clubId}/assignments`}
+                  className="block"
+                >
+                  <div className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-foreground">
+                        Личные поручения
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {assignmentsCount > 0
+                          ? `${assignmentsCount} задачи требуют внимания`
+                          : "Нет активных поручений"}
+                      </p>
                     </div>
-                  ))}
-              </div>
-            </section>
-          ) : null}
-
-          {/* Assignments Overview */}
-          {employeeAccess?.settings?.assignments_enabled && (
+                    {assignmentsCount > 0 ? (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                        <Briefcase className="h-4 w-4" />
+                      </div>
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                        <Briefcase className="h-4 w-4" />
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              </section>
+            )}
+            {/* Maintenance Tasks Overview */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                  Поручения
+                  Обслуживание
                 </h2>
                 <Link
-                  href={`/employee/clubs/${clubId}/assignments`}
+                  href={`/employee/clubs/${clubId}/tasks`}
                   className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Все задачи →
                 </Link>
               </div>
-              <Link
-                href={`/employee/clubs/${clubId}/assignments`}
-                className="block"
-              >
+              <Link href={`/employee/clubs/${clubId}/tasks`} className="block">
                 <div className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-foreground">
-                      Личные поручения
+                      Задачи на смену
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {assignmentsCount > 0
-                        ? `${assignmentsCount} задачи требуют внимания`
-                        : "Нет активных поручений"}
+                      {pendingTasksCount > 0
+                        ? `${pendingTasksCount} требуют внимания`
+                        : "Всё оборудование чистое"}
                     </p>
                   </div>
-                  {assignmentsCount > 0 ? (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-                      <Briefcase className="h-4 w-4" />
+                  {pendingTasksCount > 0 ? (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+                      <Brush className="h-4 w-4" />
                     </div>
                   ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                      <Briefcase className="h-4 w-4" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
+                      <ClipboardCheck className="h-4 w-4" />
                     </div>
                   )}
                 </div>
               </Link>
             </section>
-          )}
+          </div>
 
-          {/* Maintenance Tasks Overview */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                Обслуживание
+          {/* Sidebar (Stats & Leaderboard) */}
+          <div className="space-y-8 lg:border-l lg:pl-8">
+            {/* Salary Estimate */}
+            <section className="space-y-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                Зарплата за месяц
               </h2>
-              <Link
-                href={`/employee/clubs/${clubId}/tasks`}
-                className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Все задачи →
-              </Link>
-            </div>
-            <Link href={`/employee/clubs/${clubId}/tasks`} className="block">
-              <div className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
-                    Задачи на смену
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {pendingTasksCount > 0
-                      ? `${pendingTasksCount} требуют внимания`
-                      : "Всё оборудование чистое"}
-                  </p>
-                </div>
-                {pendingTasksCount > 0 ? (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-                    <Brush className="h-4 w-4" />
-                  </div>
-                ) : (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
-                    <ClipboardCheck className="h-4 w-4" />
-                  </div>
-                )}
+              <div className="space-y-1">
+                <p className="text-4xl font-bold tracking-tight text-foreground">
+                  {formatCurrency(stats?.month_earnings || 0)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Ориентировочный расчет
+                </p>
               </div>
-            </Link>
-          </section>
-        </div>
 
-        {/* Sidebar (Stats & Leaderboard) */}
-        <div className="space-y-8 lg:border-l lg:pl-8">
-          {/* Salary Estimate */}
-          <section className="space-y-4">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Зарплата за месяц
-            </h2>
-            <div className="space-y-1">
-              <p className="text-4xl font-bold tracking-tight text-foreground">
-                {formatCurrency(stats?.month_earnings || 0)}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Ориентировочный расчет
-              </p>
-            </div>
-
-            {stats?.breakdown && (
-              <div className="pt-4 space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">
-                    Ставка (
-                    {stats.total_hours?.toFixed(1) ||
-                      (stats.today_hours + stats.week_hours)?.toFixed(1)}{" "}
-                    ч)
-                  </span>
-                  <span className="font-medium text-foreground">
-                    {formatCurrency(stats.breakdown.base_salary)}
-                  </span>
-                </div>
-                {stats.breakdown.shift_bonuses > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Бонусы смен</span>
-                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                      +{formatCurrency(stats.breakdown.shift_bonuses)}
-                    </span>
-                  </div>
-                )}
-                {stats.breakdown.revenue_kpi_breakdown
-                  ?.filter((b: any) => !b.is_virtual)
-                  .map((bonus: any, idx: number) => (
-                    <div
-                      key={`real-${idx}`}
-                      className="flex justify-between text-xs"
-                    >
-                      <span className="text-muted-foreground">
-                        {bonus.name}
-                      </span>
-                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                        +{formatCurrency(bonus.amount)}
-                      </span>
-                    </div>
-                  ))}
-                {stats.breakdown.checklist_bonuses > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Чек-листы</span>
-                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                      +{formatCurrency(stats.breakdown.checklist_bonuses)}
-                    </span>
-                  </div>
-                )}
-                {stats.breakdown.maintenance_bonuses > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Обслуживание</span>
-                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                      +{formatCurrency(stats.breakdown.maintenance_bonuses)}
-                    </span>
-                  </div>
-                )}
-                {stats.breakdown.leaderboard_bonuses
-                  ?.filter((b: any) => !b.is_virtual)
-                  .map((bonus: any, idx: number) => (
-                    <div
-                      key={`lead-${idx}`}
-                      className="flex justify-between text-xs"
-                    >
-                      <span className="text-muted-foreground">Рейтинг</span>
-                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                        +{formatCurrency(bonus.amount)}
-                      </span>
-                    </div>
-                  ))}
-                {(stats.breakdown.maintenance_penalty || 0) > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Штраф</span>
-                    <span className="font-medium text-rose-600 dark:text-rose-400">
-                      -
-                      {formatCurrency(stats.breakdown.maintenance_penalty || 0)}
-                    </span>
-                  </div>
-                )}
-                {(stats.breakdown.bar_deductions || 0) > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Бар в счет ЗП</span>
-                    <span className="font-medium text-rose-600 dark:text-rose-400">
-                      -{formatCurrency(stats.breakdown.bar_deductions || 0)}
-                    </span>
-                  </div>
-                )}
-                {(stats.breakdown.zone_deductions || 0) > 0 && (
+              {stats?.breakdown && (
+                <div className="pt-4 space-y-2">
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">
-                      Списание по недостаче
+                      Ставка (
+                      {stats.total_hours?.toFixed(1) ||
+                        (stats.today_hours + stats.week_hours)?.toFixed(1)}{" "}
+                      ч)
                     </span>
-                    <span className="font-medium text-rose-600 dark:text-rose-400">
-                      -{formatCurrency(stats.breakdown.zone_deductions || 0)}
+                    <span className="font-medium text-foreground">
+                      {formatCurrency(stats.breakdown.base_salary)}
                     </span>
                   </div>
-                )}
-              </div>
-            )}
-          </section>
-
-          {/* Leaderboard */}
-          {stats?.leaderboard && (
-            <section className="space-y-4 pt-6 border-t">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                  Рейтинг
-                </h2>
-                {stats.leaderboard.is_frozen && (
-                  <Badge variant="outline" className="text-[9px] uppercase">
-                    Заморожен
-                  </Badge>
-                )}
-              </div>
-
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold tracking-tight text-foreground">
-                  {stats.leaderboard.score.toFixed(1)}
-                </span>
-                <span className="text-sm text-muted-foreground">/ 10</span>
-                <Badge variant="secondary" className="ml-auto bg-accent">
-                  #{stats.leaderboard.rank} из{" "}
-                  {stats.leaderboard.total_participants}
-                </Badge>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                {stats.leaderboard.top.map((item) => (
-                  <div
-                    key={item.user_id}
-                    className={cn(
-                      "flex items-center justify-between text-sm py-1.5 px-2 rounded",
-                      item.rank === stats.leaderboard?.rank
-                        ? "bg-accent/50 font-medium text-foreground"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="w-4 text-xs font-semibold">
-                        {item.rank}
+                  {stats.breakdown.shift_bonuses > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Бонусы смен</span>
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                        +{formatCurrency(stats.breakdown.shift_bonuses)}
                       </span>
-                      <span>{item.full_name}</span>
                     </div>
-                    <span className="font-semibold text-foreground">
-                      {item.score.toFixed(1)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  )}
+                  {stats.breakdown.revenue_kpi_breakdown
+                    ?.filter((b: any) => !b.is_virtual)
+                    .map((bonus: any, idx: number) => (
+                      <div
+                        key={`real-${idx}`}
+                        className="flex justify-between text-xs"
+                      >
+                        <span className="text-muted-foreground">
+                          {bonus.name}
+                        </span>
+                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                          +{formatCurrency(bonus.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  {stats.breakdown.checklist_bonuses > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Чек-листы</span>
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                        +{formatCurrency(stats.breakdown.checklist_bonuses)}
+                      </span>
+                    </div>
+                  )}
+                  {stats.breakdown.maintenance_bonuses > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Обслуживание
+                      </span>
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                        +{formatCurrency(stats.breakdown.maintenance_bonuses)}
+                      </span>
+                    </div>
+                  )}
+                  {stats.breakdown.leaderboard_bonuses
+                    ?.filter((b: any) => !b.is_virtual)
+                    .map((bonus: any, idx: number) => (
+                      <div
+                        key={`lead-${idx}`}
+                        className="flex justify-between text-xs"
+                      >
+                        <span className="text-muted-foreground">Рейтинг</span>
+                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                          +{formatCurrency(bonus.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  {(stats.breakdown.maintenance_penalty || 0) > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Штраф</span>
+                      <span className="font-medium text-rose-600 dark:text-rose-400">
+                        -
+                        {formatCurrency(
+                          stats.breakdown.maintenance_penalty || 0,
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {(stats.breakdown.bar_deductions || 0) > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Бар в счет ЗП
+                      </span>
+                      <span className="font-medium text-rose-600 dark:text-rose-400">
+                        -{formatCurrency(stats.breakdown.bar_deductions || 0)}
+                      </span>
+                    </div>
+                  )}
+                  {(stats.breakdown.zone_deductions || 0) > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Списание по недостаче
+                      </span>
+                      <span className="font-medium text-rose-600 dark:text-rose-400">
+                        -{formatCurrency(stats.breakdown.zone_deductions || 0)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
-          )}
-        </div>
-      </div>
 
-      {(kpiComponents || checklistComponents || maintenanceComponent) && (
-        <section className="space-y-6 pt-10 mt-10 border-t">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">
-            Показатели (KPI)
-          </h2>
-          <div className="space-y-8">
-            {kpiComponents}
-            <div className="grid gap-6 lg:grid-cols-1">
-              {maintenanceComponent}
-              {checklistComponents}
-            </div>
+            {/* Leaderboard */}
+            {stats?.leaderboard && (
+              <section className="space-y-4 pt-6 border-t">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                    Рейтинг
+                  </h2>
+                  {stats.leaderboard.is_frozen && (
+                    <Badge variant="outline" className="text-[9px] uppercase">
+                      Заморожен
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold tracking-tight text-foreground">
+                    {stats.leaderboard.score.toFixed(1)}
+                  </span>
+                  <span className="text-sm text-muted-foreground">/ 10</span>
+                  <Badge variant="secondary" className="ml-auto bg-accent">
+                    #{stats.leaderboard.rank} из{" "}
+                    {stats.leaderboard.total_participants}
+                  </Badge>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  {stats.leaderboard.top.map((item) => (
+                    <div
+                      key={item.user_id}
+                      className={cn(
+                        "flex items-center justify-between text-sm py-1.5 px-2 rounded",
+                        item.rank === stats.leaderboard?.rank
+                          ? "bg-accent/50 font-medium text-foreground"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-4 text-xs font-semibold">
+                          {item.rank}
+                        </span>
+                        <span>{item.full_name}</span>
+                      </div>
+                      <span className="font-semibold text-foreground">
+                        {item.score.toFixed(1)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
-        </section>
-      )}
+        </div>
 
-      {(!kpiData ||
-        (!kpiData.hidden &&
-          !kpiData.kpi?.length &&
-          !kpiData.checklist?.length &&
-          !kpiData.maintenance)) && (
-        <section className="pt-10 mt-10 border-t">
-          <p className="text-sm text-muted-foreground text-center py-8">
-            KPI показатели пока не назначены
-          </p>
-        </section>
-      )}
+        {(kpiComponents || checklistComponents || maintenanceComponent) && (
+          <section className="space-y-6 pt-10 mt-10 border-t">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              Показатели (KPI)
+            </h2>
+            <div className="space-y-8">
+              {kpiComponents}
+              <div className="grid gap-6 lg:grid-cols-1">
+                {maintenanceComponent}
+                {checklistComponents}
+              </div>
+            </div>
+          </section>
+        )}
 
-      {/* Modals and Wizards */}
-      {canUseEmployeeChecklists && isHandoverOpen && handoverTemplate && (
-        <ShiftOpeningWizard
-          isOpen={isHandoverOpen}
-          onClose={() => setIsHandoverOpen(false)}
-          onComplete={async (
-            checklistResponses: Record<
-              number,
-              { score: number; comment: string; photo_urls?: string[] }
-            >,
-            targetShiftId?: string,
-            selectedUserId?: string | null,
-          ) => {
-            try {
-              const targetMode =
-                handoverTemplate?.settings?.target_mode === "SELF"
-                  ? "SELF"
-                  : "SHIFT";
-              if (targetMode === "SELF") {
-                setIsHandoverOpen(false);
-                const newShiftId = await executeStartShift();
-                if (!newShiftId) return;
+        {(!kpiData ||
+          (!kpiData.hidden &&
+            !kpiData.kpi?.length &&
+            !kpiData.checklist?.length &&
+            !kpiData.maintenance)) && (
+          <section className="pt-10 mt-10 border-t">
+            <p className="text-sm text-muted-foreground text-center py-8">
+              KPI показатели пока не назначены
+            </p>
+          </section>
+        )}
+
+        {/* Modals and Wizards */}
+        {canUseEmployeeChecklists && isHandoverOpen && handoverTemplate && (
+          <ShiftOpeningWizard
+            isOpen={isHandoverOpen}
+            onClose={() => setIsHandoverOpen(false)}
+            onComplete={async (
+              checklistResponses: Record<
+                number,
+                { score: number; comment: string; photo_urls?: string[] }
+              >,
+              targetShiftId?: string,
+              selectedUserId?: string | null,
+            ) => {
+              try {
+                const targetMode =
+                  handoverTemplate?.settings?.target_mode === "SELF"
+                    ? "SELF"
+                    : "SHIFT";
+                if (targetMode === "SELF") {
+                  setIsHandoverOpen(false);
+                  const newShiftId = await executeStartShift();
+                  if (!newShiftId) return;
+
+                  const evalRes = await fetch(
+                    `/api/clubs/${clubId}/evaluations`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        template_id: handoverTemplate.id,
+                        employee_id: currentUserId,
+                        target_user_id: currentUserId,
+                        shift_id: newShiftId,
+                        responses: Object.entries(checklistResponses).map(
+                          ([k, v]: any) => ({
+                            item_id: parseInt(k),
+                            score: v.score,
+                            comment: v.comment,
+                            photo_urls: v.photo_urls,
+                            selected_workstations: v.selected_workstations,
+                          }),
+                        ),
+                      }),
+                    },
+                  );
+                  if (!evalRes.ok) {
+                    const err = await evalRes.json().catch(() => ({}));
+                    alert(
+                      err.error || "Не удалось сохранить результат чеклиста",
+                    );
+                  }
+                  return;
+                }
+
+                let targetUserId = selectedUserId || null;
+                const effectiveShiftId = targetShiftId || null;
+
+                if (!targetUserId && targetShiftId) {
+                  const shiftRes = await fetch(
+                    `/api/clubs/${clubId}/shifts/${targetShiftId}`,
+                  );
+                  if (shiftRes.ok) {
+                    const shiftData = await shiftRes.json();
+                    targetUserId =
+                      shiftData?.shift?.user_id || shiftData?.user_id || null;
+                  }
+                } else if (!targetUserId) {
+                  const recentRes = await fetch(
+                    `/api/clubs/${clubId}/shifts/recent`,
+                  );
+                  const recentData = await recentRes.json();
+                  const lastShift = (recentData?.shifts || []).find(
+                    (s: any) => s.status === "CLOSED",
+                  );
+                  if (lastShift) targetUserId = lastShift.user_id;
+                }
+
+                if (!targetUserId) {
+                  alert(
+                    "Не удалось определить сотрудника предыдущей смены. Попробуйте выбрать смену вручную.",
+                  );
+                  return;
+                }
 
                 const evalRes = await fetch(
                   `/api/clubs/${clubId}/evaluations`,
@@ -2098,9 +2190,9 @@ export default function EmployeeClubPage({
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                       template_id: handoverTemplate.id,
-                      employee_id: currentUserId,
-                      target_user_id: currentUserId,
-                      shift_id: newShiftId,
+                      employee_id: targetUserId,
+                      target_user_id: targetUserId,
+                      shift_id: effectiveShiftId,
                       responses: Object.entries(checklistResponses).map(
                         ([k, v]: any) => ({
                           item_id: parseInt(k),
@@ -2113,80 +2205,23 @@ export default function EmployeeClubPage({
                     }),
                   },
                 );
+
                 if (!evalRes.ok) {
                   const err = await evalRes.json().catch(() => ({}));
                   alert(err.error || "Не удалось сохранить результат чеклиста");
+                  return;
                 }
-                return;
+              } catch (e) {
+                console.error(e);
               }
+              setIsHandoverOpen(false);
+              await executeStartShift();
+            }}
+            checklistTemplate={handoverTemplate}
+          />
+        )}
 
-              let targetUserId = selectedUserId || null;
-              const effectiveShiftId = targetShiftId || null;
-
-              if (!targetUserId && targetShiftId) {
-                const shiftRes = await fetch(
-                  `/api/clubs/${clubId}/shifts/${targetShiftId}`,
-                );
-                if (shiftRes.ok) {
-                  const shiftData = await shiftRes.json();
-                  targetUserId =
-                    shiftData?.shift?.user_id || shiftData?.user_id || null;
-                }
-              } else if (!targetUserId) {
-                const recentRes = await fetch(
-                  `/api/clubs/${clubId}/shifts/recent`,
-                );
-                const recentData = await recentRes.json();
-                const lastShift = (recentData?.shifts || []).find(
-                  (s: any) => s.status === "CLOSED",
-                );
-                if (lastShift) targetUserId = lastShift.user_id;
-              }
-
-              if (!targetUserId) {
-                alert(
-                  "Не удалось определить сотрудника предыдущей смены. Попробуйте выбрать смену вручную.",
-                );
-                return;
-              }
-
-              const evalRes = await fetch(`/api/clubs/${clubId}/evaluations`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  template_id: handoverTemplate.id,
-                  employee_id: targetUserId,
-                  target_user_id: targetUserId,
-                  shift_id: effectiveShiftId,
-                  responses: Object.entries(checklistResponses).map(
-                    ([k, v]: any) => ({
-                      item_id: parseInt(k),
-                      score: v.score,
-                      comment: v.comment,
-                      photo_urls: v.photo_urls,
-                      selected_workstations: v.selected_workstations,
-                    }),
-                  ),
-                }),
-              });
-
-              if (!evalRes.ok) {
-                const err = await evalRes.json().catch(() => ({}));
-                alert(err.error || "Не удалось сохранить результат чеклиста");
-                return;
-              }
-            } catch (e) {
-              console.error(e);
-            }
-            setIsHandoverOpen(false);
-            await executeStartShift();
-          }}
-          checklistTemplate={handoverTemplate}
-        />
-      )}
-
-      {canUseShiftReport && activeShift && club && (
-        <SSEProvider clubId={clubId} userId={currentUserId}>
+        {canUseShiftReport && activeShift && club && (
           <ShiftClosingWizard
             isOpen={isReportModalOpen}
             onClose={() => setIsReportModalOpen(false)}
@@ -2219,146 +2254,147 @@ export default function EmployeeClubPage({
               inventory_timing: normalizedInventorySettings.inventory_timing,
             }}
           />
-        </SSEProvider>
-      )}
+        )}
+        <EmployeeSupplyWizard
+          isOpen={isSupplyWizardOpen}
+          onClose={() => setIsSupplyWizardOpen(false)}
+          clubId={clubId}
+          userId={currentUserId}
+          activeShiftId={activeShift?.id?.toString()}
+        />
 
-      <EmployeeSupplyWizard
-        isOpen={isSupplyWizardOpen}
-        onClose={() => setIsSupplyWizardOpen(false)}
-        clubId={clubId}
-        userId={currentUserId}
-        activeShiftId={activeShift?.id?.toString()}
-      />
+        <EmployeeWriteOffWizard
+          isOpen={isWriteOffWizardOpen}
+          onClose={() => setIsWriteOffWizardOpen(false)}
+          clubId={clubId}
+          userId={currentUserId}
+          activeShiftId={activeShift?.id?.toString()}
+        />
 
-      <EmployeeWriteOffWizard
-        isOpen={isWriteOffWizardOpen}
-        onClose={() => setIsWriteOffWizardOpen(false)}
-        clubId={clubId}
-        userId={currentUserId}
-        activeShiftId={activeShift?.id?.toString()}
-      />
+        <EmployeeTransferWizard
+          isOpen={isTransferWizardOpen}
+          onClose={() => setIsTransferWizardOpen(false)}
+          clubId={clubId}
+          userId={currentUserId}
+          activeShiftId={activeShift?.id?.toString()}
+        />
 
-      <EmployeeTransferWizard
-        isOpen={isTransferWizardOpen}
-        onClose={() => setIsTransferWizardOpen(false)}
-        clubId={clubId}
-        userId={currentUserId}
-        activeShiftId={activeShift?.id?.toString()}
-      />
+        <EmployeeRequestWizard
+          isOpen={isRequestWizardOpen}
+          onClose={() => setIsRequestWizardOpen(false)}
+          clubId={clubId}
+          userId={currentUserId}
+        />
 
-      <EmployeeRequestWizard
-        isOpen={isRequestWizardOpen}
-        onClose={() => setIsRequestWizardOpen(false)}
-        clubId={clubId}
-        userId={currentUserId}
-      />
-
-      <Dialog
-        open={isClubTaskConfirmOpen}
-        onOpenChange={setIsClubTaskConfirmOpen}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {pendingClubTaskConfirm?.title || "Подтвердите действие"}
-            </DialogTitle>
-            <DialogDescription>
-              {pendingClubTaskConfirm?.description || ""}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setIsClubTaskConfirmOpen(false);
-                setPendingClubTaskConfirm(null);
-              }}
-              disabled={Boolean(isUpdatingTask)}
-            >
-              Отмена
-            </Button>
-            <Button
-              type="button"
-              onClick={async () => {
-                const id = pendingClubTaskConfirm?.taskId
-                  ? String(pendingClubTaskConfirm.taskId)
-                  : "";
-                if (!id) return;
-                setIsClubTaskConfirmOpen(false);
-                setPendingClubTaskConfirm(null);
-                await executeCompleteClubTask(id);
-              }}
-              disabled={
-                Boolean(isUpdatingTask) || !pendingClubTaskConfirm?.taskId
-              }
-              className="bg-slate-900 text-white hover:bg-slate-800"
-            >
-              {isUpdatingTask ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              ОК
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {canUseShiftReport && (
         <Dialog
-          open={isIndicatorsModalOpen}
-          onOpenChange={setIsIndicatorsModalOpen}
+          open={isClubTaskConfirmOpen}
+          onOpenChange={setIsClubTaskConfirmOpen}
         >
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Промежуточные показатели</DialogTitle>
+              <DialogTitle>
+                {pendingClubTaskConfirm?.title || "Подтвердите действие"}
+              </DialogTitle>
               <DialogDescription>
-                Внесите текущие данные, чтобы увидеть обновленный прогноз KPI
+                {pendingClubTaskConfirm?.description || ""}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
-              {reportTemplate?.schema?.map((field: any, idx: number) => (
-                <div key={idx} className="space-y-2">
-                  <Label>{field.custom_label}</Label>
-                  <Input
-                    type={
-                      field.metric_key.includes("comment") ? "text" : "number"
-                    }
-                    placeholder="Текущее значение"
-                    onChange={(e) =>
-                      setReportData({
-                        ...reportData,
-                        [field.metric_key]: e.target.value,
-                      })
-                    }
-                    defaultValue={
-                      activeShift
-                        ? typeof activeShift.report_data === "string"
-                          ? JSON.parse(activeShift.report_data || "{}")[
-                              field.metric_key
-                            ]
-                          : (activeShift.report_data as any)?.[field.metric_key]
-                        : ""
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:gap-0">
               <Button
-                onClick={() => submitUpdateIndicators(reportData)}
-                disabled={isActionLoading}
-                className="w-full"
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsClubTaskConfirmOpen(false);
+                  setPendingClubTaskConfirm(null);
+                }}
+                disabled={Boolean(isUpdatingTask)}
               >
-                {isActionLoading && (
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                onClick={async () => {
+                  const id = pendingClubTaskConfirm?.taskId
+                    ? String(pendingClubTaskConfirm.taskId)
+                    : "";
+                  if (!id) return;
+                  setIsClubTaskConfirmOpen(false);
+                  setPendingClubTaskConfirm(null);
+                  await executeCompleteClubTask(id);
+                }}
+                disabled={
+                  Boolean(isUpdatingTask) || !pendingClubTaskConfirm?.taskId
+                }
+                className="bg-slate-900 text-white hover:bg-slate-800"
+              >
+                {isUpdatingTask ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Обновить показатели
+                ) : null}
+                ОК
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      )}
-    </div>
+
+        {canUseShiftReport && (
+          <Dialog
+            open={isIndicatorsModalOpen}
+            onOpenChange={setIsIndicatorsModalOpen}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Промежуточные показатели</DialogTitle>
+                <DialogDescription>
+                  Внесите текущие данные, чтобы увидеть обновленный прогноз KPI
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
+                {reportTemplate?.schema?.map((field: any, idx: number) => (
+                  <div key={idx} className="space-y-2">
+                    <Label>{field.custom_label}</Label>
+                    <Input
+                      type={
+                        field.metric_key.includes("comment") ? "text" : "number"
+                      }
+                      placeholder="Текущее значение"
+                      onChange={(e) =>
+                        setReportData({
+                          ...reportData,
+                          [field.metric_key]: e.target.value,
+                        })
+                      }
+                      defaultValue={
+                        activeShift
+                          ? typeof activeShift.report_data === "string"
+                            ? JSON.parse(activeShift.report_data || "{}")[
+                                field.metric_key
+                              ]
+                            : (activeShift.report_data as any)?.[
+                                field.metric_key
+                              ]
+                          : ""
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => submitUpdateIndicators(reportData)}
+                  disabled={isActionLoading}
+                  className="w-full"
+                >
+                  {isActionLoading && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Обновить показатели
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+    </SSEProvider>
   );
 }
 

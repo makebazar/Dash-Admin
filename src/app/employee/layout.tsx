@@ -133,7 +133,7 @@ export default function EmployeeLayout({
   if (isPosRoute || isTerminalRoute) {
     return (
       <div
-        className="dark min-h-[100dvh] bg-background text-foreground"
+        className="dark min-h-dvh bg-background text-foreground"
         style={themeVars}
       >
         {children}
@@ -143,7 +143,7 @@ export default function EmployeeLayout({
 
   return (
     <div
-      className="dark flex min-h-[100dvh] bg-background text-foreground relative flex-col selection:bg-white/10"
+      className="dark flex min-h-dvh bg-background text-foreground relative flex-col selection:bg-white/10"
       style={themeVars}
     >
       {/* Minimalist Dark Header */}
@@ -246,7 +246,7 @@ export default function EmployeeLayout({
               isMobileMenuOpen
                 ? "translate-x-0"
                 : "-translate-x-full md:translate-x-0",
-              hasExpiredSubscription && "top-[88px]",
+              hasExpiredSubscription && "top-22",
             )}
           >
             <div className="flex h-full flex-col">

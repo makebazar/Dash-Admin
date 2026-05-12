@@ -239,7 +239,7 @@ export function CreateAssignmentModal({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          "max-w-4xl md:max-h-[90vh] w-full h-[100dvh] md:h-auto overflow-hidden flex flex-col p-0 shadow-2xl rounded-none md:rounded-lg",
+          "max-w-4xl md:max-h-[90vh] w-full h-dvh md:h-auto overflow-hidden flex flex-col p-0 shadow-2xl rounded-none md:rounded-lg",
           " [&>button]:hidden md:[&>button]:inline-flex",
           isLight
             ? "bg-white border-slate-200"
@@ -254,7 +254,7 @@ export function CreateAssignmentModal({
               : "bg-[#11131a] border-white/5",
           )}
         >
-          <div className="flex items-center justify-center md:justify-start min-h-[1.5rem]">
+          <div className="flex items-center justify-center md:justify-start min-h-6">
             <Button
               variant="ghost"
               size="icon"
@@ -418,7 +418,7 @@ export function CreateAssignmentModal({
                       id="description"
                       placeholder="Подробности задачи..."
                       className={cn(
-                        "rounded-xl min-h-[120px] text-sm font-medium transition-all resize-none",
+                        "rounded-xl min-h-30 text-sm font-medium transition-all resize-none",
                         isLight
                           ? "bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:ring-blue-500/20 placeholder:text-slate-400"
                           : "bg-[#11131a] border-white/10 text-white focus:bg-[#0a0b10] focus:ring-blue-500/20 placeholder:text-slate-600",
@@ -644,7 +644,7 @@ export function CreateAssignmentModal({
 
                 <div
                   className={cn(
-                    "border rounded-xl overflow-hidden max-h-[300px] md:max-h-[350px] overflow-y-auto custom-scrollbar transition-all shadow-sm",
+                    "border rounded-xl overflow-hidden max-h-75 md:max-h-87.5 overflow-y-auto custom-scrollbar transition-all shadow-sm",
                     isLight
                       ? "bg-white border-slate-200"
                       : "bg-[#11131a] border-white/5",
@@ -713,7 +713,7 @@ export function CreateAssignmentModal({
                               </div>
                             </div>
                             {isSelected && (
-                              <Check className="h-4 w-4 text-blue-500 stroke-[3]" />
+                              <Check className="h-4 w-4 text-blue-500 stroke-3" />
                             )}
                           </div>
                         );
@@ -787,7 +787,7 @@ export function CreateAssignmentModal({
                 (formData.taskType === "PERFORMANCE_CHECK" &&
                   formData.equipment_ids.length === 0)
               }
-              className="flex-[2] md:flex-initial md:px-12 rounded-xl font-black uppercase text-[11px] tracking-[0.15em] h-12 bg-blue-600 hover:bg-blue-700 text-white border-none shadow-lg shadow-blue-600/20"
+              className="flex-2 md:flex-initial md:px-12 rounded-xl font-black uppercase text-[11px] tracking-[0.15em] h-12 bg-blue-600 hover:bg-blue-700 text-white border-none shadow-lg shadow-blue-600/20"
               onClick={() => handleSubmit()}
             >
               {isLoading ? (

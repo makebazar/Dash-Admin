@@ -207,7 +207,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
     return (
         <>
             <Dialog open={isOpen} onOpenChange={handleClose}>
-                <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
+                <DialogContent className="max-w-none w-screen h-dvh m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
                     <DialogHeader className="p-4 border-b border-slate-800 flex-row items-center justify-between space-y-0 shrink-0">
                         <div className="space-y-0.5">
                             <DialogTitle className="flex items-center gap-2 text-base">
@@ -406,7 +406,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                     <div className="max-h-[200px] overflow-y-auto">
                                         {items.map(item => (
                                             <div key={item.product_id} className="p-3 border-b border-slate-800/50 flex justify-between items-center text-sm">
-                                                <span className="text-slate-300 truncate max-w-[200px]">{item.name}</span>
+                                                <span className="text-slate-300 truncate max-w-50">{item.name}</span>
                                                 <span className="font-bold text-primary-foreground">{item.quantity} шт</span>
                                             </div>
                                         ))}
@@ -484,7 +484,7 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                             )}
                                             onClick={() => setSelectedProductId(p.id.toString())}
                                         >
-                                            <span className="truncate max-w-[200px]">{p.name}</span>
+                                            <span className="truncate max-w-50">{p.name}</span>
                                             <span className="text-[10px] opacity-50 font-bold">{stock} шт</span>
                                         </button>
                                     )

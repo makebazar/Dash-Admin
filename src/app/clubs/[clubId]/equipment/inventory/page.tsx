@@ -1508,7 +1508,7 @@ export default function EquipmentInventory() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[48px]" />
+                      <TableHead className="w-12" />
                       <TableHead>Дата</TableHead>
                       <TableHead>Направление</TableHead>
                       <TableHead>Клуб</TableHead>
@@ -2127,7 +2127,7 @@ export default function EquipmentInventory() {
                     {!isGrouped && (
                       <TableHeader className="bg-slate-50/50">
                         <TableRow>
-                          <TableHead className="w-[40px]">
+                          <TableHead className="w-10">
                             <input
                               type="checkbox"
                               className="rounded border-gray-300"
@@ -2142,7 +2142,7 @@ export default function EquipmentInventory() {
                               onChange={handleSelectAll}
                             />
                           </TableHead>
-                          <TableHead className="w-[300px]">
+                          <TableHead className="w-75">
                             Оборудование
                           </TableHead>
                           <TableHead>Идентификация</TableHead>
@@ -2194,7 +2194,7 @@ export default function EquipmentInventory() {
                                 onClick={() => toggleGroup(groupId)}
                               >
                                 <TableCell
-                                  className="w-[40px]"
+                                  className="w-10"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <input
@@ -2596,7 +2596,7 @@ export default function EquipmentInventory() {
           )}
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-background/80 md:hidden">
           <div className="mx-auto flex max-w-7xl gap-2">
             <Button asChild variant="outline" className="h-11 flex-1">
               <Link href={`/clubs/${clubId}/equipment`}>
@@ -2608,7 +2608,7 @@ export default function EquipmentInventory() {
         </div>
 
         <Dialog open={isCloneDialogOpen} onOpenChange={setIsCloneDialogOpen}>
-          <DialogContent className="sm:max-w-[720px]">
+          <DialogContent className="sm:max-w-180">
             <DialogHeader>
               <DialogTitle>Копировать наполнение места</DialogTitle>
               <DialogDescription>
@@ -2665,7 +2665,7 @@ export default function EquipmentInventory() {
                     </PopoverTrigger>
                     <PopoverContent
                       portalled={false}
-                      className="w-[340px] p-0 z-[60]"
+                      className="w-85 p-0 z-60"
                       align="start"
                     >
                       <div className="border-b p-2">
@@ -2678,7 +2678,7 @@ export default function EquipmentInventory() {
                           }
                         />
                       </div>
-                      <div className="max-h-[300px] overflow-y-auto p-1">
+                      <div className="max-h-75 overflow-y-auto p-1">
                         {sortedWorkstations
                           .filter((ws) => ws.id !== cloneSourceWorkstationId)
                           .filter((ws) =>
@@ -2746,7 +2746,7 @@ export default function EquipmentInventory() {
           open={isImportExportDialogOpen}
           onOpenChange={setIsImportExportDialogOpen}
         >
-          <DialogContent className="sm:max-w-[640px]">
+          <DialogContent className="sm:max-w-160">
             <DialogHeader>
               <DialogTitle>Импорт и экспорт инвентаря</DialogTitle>
               <DialogDescription>
@@ -2872,7 +2872,7 @@ export default function EquipmentInventory() {
           open={isInterclubDialogOpen}
           onOpenChange={setIsInterclubDialogOpen}
         >
-          <DialogContent className="sm:max-w-[840px]">
+          <DialogContent className="sm:max-w-210">
             <DialogHeader>
               <DialogTitle>Межклубное перемещение</DialogTitle>
               <DialogDescription>
@@ -2916,7 +2916,7 @@ export default function EquipmentInventory() {
                   <Textarea
                     value={interclubComment}
                     onChange={(e) => setInterclubComment(e.target.value)}
-                    className="min-h-[48px] bg-slate-50 border-slate-200"
+                    className="min-h-12 bg-slate-50 border-slate-200"
                     placeholder="Комментарий для принимающей стороны"
                   />
                 </div>
@@ -2926,7 +2926,7 @@ export default function EquipmentInventory() {
                 <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Куда поставить
                 </Label>
-                <div className="max-h-[420px] overflow-y-auto space-y-2 rounded-xl border bg-white p-3">
+                <div className="max-h-105 overflow-y-auto space-y-2 rounded-xl border bg-white p-3">
                   {selectedEquipment.map((eq) => {
                     const targetClub = interclubTargets.find(
                       (c) => String(c.id) === interclubTargetClubId,
@@ -3012,7 +3012,7 @@ export default function EquipmentInventory() {
           open={isInterclubConfirmOpen}
           onOpenChange={setIsInterclubConfirmOpen}
         >
-          <DialogContent className="sm:max-w-[560px]">
+          <DialogContent className="sm:max-w-140">
             <DialogHeader>
               <DialogTitle>Подтвердите действие</DialogTitle>
               <DialogDescription>
@@ -3055,7 +3055,7 @@ export default function EquipmentInventory() {
 
         {/* Create Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="flex max-h-[90vh] w-[calc(100vw-1rem)] max-w-[700px] flex-col gap-0 overflow-hidden p-0">
+          <DialogContent className="flex max-h-[90vh] w-[calc(100vw-1rem)] max-w-175 flex-col gap-0 overflow-hidden p-0">
             <DialogHeader className="border-b bg-slate-50 p-4 pb-2 sm:p-6">
               <DialogTitle className="text-xl">Новое оборудование</DialogTitle>
               <DialogDescription>

@@ -218,7 +218,7 @@ export default function EmployeeAssignmentsPage() {
               <p className="font-black text-lg uppercase tracking-tight text-foreground">
                 Задач пока нет
               </p>
-              <p className="text-xs font-medium text-muted-foreground max-w-[200px] mx-auto leading-relaxed">
+              <p className="text-xs font-medium text-muted-foreground max-w-50 mx-auto leading-relaxed">
                 Когда вам назначат поручение, оно появится в этом списке
               </p>
             </div>

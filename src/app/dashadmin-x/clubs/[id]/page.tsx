@@ -683,7 +683,7 @@ export default function ClubDetailPage({
               </div>
             </div>
 
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+            <div className="space-y-2 max-h-75 overflow-y-auto pr-1 custom-scrollbar">
               {availableUsers
                 .filter((u) => {
                   const isAlreadyMember =

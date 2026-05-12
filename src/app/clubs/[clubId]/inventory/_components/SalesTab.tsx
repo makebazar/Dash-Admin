@@ -542,7 +542,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                             <Link className="h-3.5 w-3.5" />
                                                                         </Button>
                                                                     </DropdownMenuTrigger>
-                                                                    <DropdownMenuContent align="end" className="w-64 max-h-[300px] overflow-y-auto">
+                                                                    <DropdownMenuContent align="end" className="w-64 max-h-75 overflow-y-auto">
                                                                         <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="text-red-600 focus:text-red-700 focus:bg-red-50">
                                                                             <Unlink className="h-4 w-4 mr-2" /> Отвязать от смены
                                                                         </DropdownMenuItem>
@@ -667,7 +667,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                                                                 <Link className="h-4 w-4" />
                                                                             </Button>
                                                                         </DropdownMenuTrigger>
-                                                                        <DropdownMenuContent align="end" className="w-64 max-h-[300px] overflow-y-auto">
+                                                                        <DropdownMenuContent align="end" className="w-64 max-h-75 overflow-y-auto">
                                                                             <DropdownMenuItem onClick={() => handleAssignShift(sale.id, null)} className="text-rose-600 focus:text-rose-700 focus:bg-rose-50">
                                                                                 <Unlink className="h-4 w-4 mr-2" /> Отвязать от смены
                                                                             </DropdownMenuItem>
@@ -722,7 +722,7 @@ export function SalesTab({ sales, shifts, clubId, warehouses, products, currentU
                                 <SelectTrigger>
                                     <SelectValue placeholder="Выберите товар" />
                                 </SelectTrigger>
-                                <SelectContent className="max-h-[300px]">
+                                <SelectContent className="max-h-75">
                                     {products.map(p => (
                                         <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>
                                     ))}

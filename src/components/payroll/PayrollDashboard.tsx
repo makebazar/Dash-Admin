@@ -874,7 +874,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                     Выполнено: <span className="font-bold text-slate-900">{ms.current_value}</span> из <span className="font-bold text-slate-900">{ms.target_value}</span> • Эффективность: <span className="font-bold text-slate-900">{Number(ms.efficiency || 0).toFixed(0)}%</span>
                                                 </div>
                                             </div>
-                                            <div className="text-right flex-shrink-0">
+                                            <div className="text-right shrink-0">
                                                 <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Начислено</div>
                                                 <div className="text-lg font-black text-indigo-700 whitespace-nowrap">+{formatCurrency(ms.bonus_amount || 0)}</div>
                                             </div>
@@ -1096,7 +1096,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                     </div>
                     <div className="flex w-full items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white p-2 md:w-auto md:gap-3 shadow-sm">
                         <Button variant="ghost" size="icon" onClick={() => navigateMonth(-1)} className="h-10 w-10 rounded-xl md:h-8 md:w-8 md:rounded-md"><ChevronLeft className="h-4 w-4" /></Button>
-                        <div className="min-w-0 flex-1 text-center text-xl font-semibold tracking-[-0.03em] text-slate-900 md:min-w-[160px] md:flex-none md:text-lg md:font-medium md:tracking-normal">
+                        <div className="min-w-0 flex-1 text-center text-xl font-semibold tracking-[-0.03em] text-slate-900 md:min-w-40 md:flex-none md:text-lg md:font-medium md:tracking-normal">
                             {monthNames[selectedMonth - 1]} <span className="text-muted-foreground">{selectedYear}</span>
                         </div>
                         <Button variant="ghost" size="icon" onClick={() => navigateMonth(1)} className="h-10 w-10 rounded-xl md:h-8 md:w-8 md:rounded-md"><ChevronRight className="h-4 w-4" /></Button>
@@ -1882,7 +1882,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
             )}
 
             {confirmingDeleteId && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-60">
                     <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl p-8 max-w-sm w-full mx-4 animate-in zoom-in duration-200">
                         <div className="flex items-center gap-3 text-destructive mb-4">
                             <div className="p-2 bg-destructive/10 rounded-full">

@@ -584,7 +584,7 @@ export default function HandoverTerminalPage() {
     const terminalUrl = `${window.location.origin}/employee/terminal/handover/${type}/${shiftId}?clubId=${clubId}${blindCloseMode ? "&blind=true" : ""}`;
 
     return (
-      <div className="h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center font-sans">
+      <div className="h-dvh bg-zinc-950 flex flex-col items-center justify-center p-8 text-center font-sans">
         <div className="h-20 w-20 rounded-3xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mb-8 shadow-2xl">
           <Monitor className="h-10 w-10" />
         </div>
@@ -610,8 +610,8 @@ export default function HandoverTerminalPage() {
 
   if (step === "SUCCESS") {
     return (
-      <div className="min-h-[100dvh] bg-black flex justify-center">
-        <div className="w-full max-w-2xl bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-8 text-center font-sans border-x border-zinc-900 h-[100dvh] shadow-2xl relative">
+      <div className="min-h-dvh bg-black flex justify-center">
+        <div className="w-full max-w-2xl bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-8 text-center font-sans border-x border-zinc-900 h-dvh shadow-2xl relative">
           <div className="space-y-8 animate-in fade-in zoom-in duration-500">
             <div className="h-24 w-24 rounded-[2.5rem] bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 mx-auto shadow-2xl shadow-emerald-500/10">
               <CheckCircle2 className="h-12 w-12" />
@@ -660,8 +660,8 @@ export default function HandoverTerminalPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-black flex justify-center">
-      <div className="w-full max-w-2xl bg-zinc-950 text-zinc-100 flex flex-col font-sans h-[100dvh] overflow-hidden relative border-x border-zinc-900 shadow-2xl">
+    <div className="min-h-dvh bg-black flex justify-center">
+      <div className="w-full max-w-2xl bg-zinc-950 text-zinc-100 flex flex-col font-sans h-dvh overflow-hidden relative border-x border-zinc-900 shadow-2xl">
         {/* Header */}
         <div className="p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/80 backdrop-blur-xl sticky top-0 z-30">
           <div className="flex items-center gap-4">
@@ -687,7 +687,7 @@ export default function HandoverTerminalPage() {
               </div>
             </div>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-right min-w-[80px]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-right min-w-20">
             <div className="text-[9px] font-bold text-zinc-500 uppercase leading-none mb-0.5 tracking-tight">
               Прогресс
             </div>
@@ -872,7 +872,7 @@ export default function HandoverTerminalPage() {
                         >
                           <div className="flex flex-col gap-2.5">
                             <div className="min-w-0">
-                              <div className="text-sm font-bold text-white leading-tight line-clamp-2 min-h-[1.25rem]">
+                              <div className="text-sm font-bold text-white leading-tight line-clamp-2 min-h-5">
                                 {item.product_name}
                               </div>
                               <div className="flex items-center justify-between mt-1.5">
@@ -931,7 +931,7 @@ export default function HandoverTerminalPage() {
                             </div>
 
                             <div className="flex items-center gap-2 pt-2.5 border-t border-zinc-800/50">
-                              <div className="flex-shrink-0 min-w-[55px] h-10 flex flex-col justify-center">
+                              <div className="shrink-0 min-w-13.75 h-10 flex flex-col justify-center">
                                 <div className="text-[11px] font-black text-emerald-500 tracking-tighter leading-none">
                                   {Number(
                                     item.selling_price || 0,
@@ -943,7 +943,7 @@ export default function HandoverTerminalPage() {
                                 </div>
                               </div>
 
-                              <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-2xl p-0.5 shadow-inner flex-grow min-w-[100px] h-10 overflow-hidden">
+                              <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-2xl p-0.5 shadow-inner grow min-w-25 h-10 overflow-hidden">
                                 <button
                                   className="w-10 h-full flex items-center justify-center text-zinc-500 active:text-white active:scale-90 transition-transform shrink-0"
                                   onClick={() =>
@@ -959,7 +959,7 @@ export default function HandoverTerminalPage() {
                                 <input
                                   type="number"
                                   className={cn(
-                                    "flex-grow bg-transparent text-center text-sm font-black text-emerald-500 focus:outline-none transition-transform min-w-0 w-full px-1",
+                                    "grow bg-transparent text-center text-sm font-black text-emerald-500 focus:outline-none transition-transform min-w-0 w-full px-1",
                                     isScanned && "animate-bump",
                                   )}
                                   value={item.counted_quantity ?? ""}
@@ -1258,7 +1258,7 @@ export default function HandoverTerminalPage() {
             if (!open) window.history.back();
           }}
         >
-          <DialogContent className="fixed inset-0 z-[100] h-[100dvh] w-screen max-w-none border-none bg-zinc-950 p-0 text-zinc-100 selection:bg-emerald-500/30 overflow-hidden flex flex-col [&>button]:hidden translate-x-0 translate-y-0 sm:max-w-none sm:rounded-none">
+          <DialogContent className="fixed inset-0 z-100 h-dvh w-screen max-w-none border-none bg-zinc-950 p-0 text-zinc-100 selection:bg-emerald-500/30 overflow-hidden flex flex-col [&>button]:hidden translate-x-0 translate-y-0 sm:max-w-none sm:rounded-none">
             <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
               <DialogHeader className="space-y-1 text-left pt-2">
                 <DialogTitle className="text-xl font-black text-white uppercase italic tracking-tight">

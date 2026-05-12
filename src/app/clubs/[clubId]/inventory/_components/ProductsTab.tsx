@@ -430,7 +430,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
             {/* Toolbar */}
             <PageToolbar>
                 <ToolbarGroup className="w-full md:w-auto">
-                    <div className="flex-1 min-w-[200px]">
+                    <div className="flex-1 min-w-50">
                         <SearchInput 
                             placeholder="Поиск товара..." 
                             value={search}
@@ -489,7 +489,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                 <Table>
                     <TableHeader className="bg-slate-50/50">
                         <TableRow className="hover:bg-transparent">
-                            <TableHead className="w-[40px]">
+                            <TableHead className="w-10">
                                 <input 
                                     type="checkbox"
                                     className="rounded border-slate-300"
@@ -1368,7 +1368,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                             </TableCell>
                                             <TableCell>{log.new_stock}</TableCell>
                                             <TableCell className="text-xs text-muted-foreground">{log.user_name || 'Система'}</TableCell>
-                                            <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={log.reason}>
+                                            <TableCell className="text-xs text-muted-foreground max-w-50 truncate" title={log.reason}>
                                                 {log.reason || '-'}
                                             </TableCell>
                                         </TableRow>

@@ -1110,7 +1110,7 @@ export default function ShiftDetailsPage() {
                                                 <FileText className="h-5 w-5 text-slate-400" />
                                                 Комментарий
                                             </h3>
-                                            <div className="min-h-[100px] rounded-2xl border border-slate-200 bg-white p-5 text-slate-700 leading-relaxed">
+                                            <div className="min-h-25 rounded-2xl border border-slate-200 bg-white p-5 text-slate-700 leading-relaxed">
                                                 {shift.report_comment ? <p className="whitespace-pre-wrap">{shift.report_comment}</p> : <span className="italic text-slate-400">Комментарий отсутствует</span>}
                                             </div>
                                         </div>
@@ -1119,7 +1119,7 @@ export default function ShiftDetailsPage() {
                                                 <Edit className="h-5 w-5 text-slate-400" />
                                                 Заметки владельца
                                             </h3>
-                                            <div className="min-h-[100px] rounded-2xl border border-blue-100 bg-blue-50/50 p-5 text-slate-700 leading-relaxed">
+                                            <div className="min-h-25 rounded-2xl border border-blue-100 bg-blue-50/50 p-5 text-slate-700 leading-relaxed">
                                                 {shift.owner_notes ? <p className="whitespace-pre-wrap">{shift.owner_notes}</p> : <span className="italic text-slate-400">Заметок нет</span>}
                                             </div>
                                         </div>
@@ -1268,17 +1268,17 @@ export default function ShiftDetailsPage() {
                                                                         </div>
                                                                     </div>
                                                                 </div>
-                                                                <div className="ml-3 flex w-[150px] flex-none flex-col gap-2 text-left sm:w-[190px]">
+                                                                <div className="ml-3 flex w-37.5 flex-none flex-col gap-2 text-left sm:w-47.5">
                                                                     <div className="flex w-full items-baseline gap-3">
-                                                                        <span className="w-[74px] shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">Расчет</span>
+                                                                        <span className="w-18.5 shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">Расчет</span>
                                                                         <span className="whitespace-nowrap text-sm font-black leading-none text-blue-600 tabular-nums">{calculated.toLocaleString()} ₽</span>
                                                                     </div>
                                                                     <div className="flex w-full items-baseline gap-3">
-                                                                        <span className="w-[74px] shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">Факт</span>
+                                                                        <span className="w-18.5 shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">Факт</span>
                                                                         <span className="whitespace-nowrap text-sm font-black leading-none text-slate-700 tabular-nums">{reported.toLocaleString()} ₽</span>
                                                                     </div>
                                                                     <div className="flex w-full items-baseline gap-3">
-                                                                        <span className="w-[74px] shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">Разница</span>
+                                                                        <span className="w-18.5 shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">Разница</span>
                                                                         <span className={cn("whitespace-nowrap text-sm font-black leading-none tabular-nums", diff === 0 ? "text-green-500" : diff > 0 ? "text-green-600" : "text-red-500")}>
                                                                             {diff > 0 ? "+" : ""}{diff.toLocaleString()} ₽
                                                                         </span>
@@ -1553,7 +1553,7 @@ export default function ShiftDetailsPage() {
                 </div>
 
                 <Dialog open={isZoneResolutionDialogOpen} onOpenChange={(open) => !open && closeZoneResolutionDialog()}>
-                    <DialogContent className="sm:max-w-[560px] p-6 rounded-3xl border-slate-200 shadow-xl">
+                    <DialogContent className="sm:max-w-140 p-6 rounded-3xl border-slate-200 shadow-xl">
                         <DialogHeader>
                             <DialogTitle className="text-xl font-bold">
                                 {zoneResolutionType === "SALARY_DEDUCTION"

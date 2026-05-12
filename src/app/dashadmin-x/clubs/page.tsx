@@ -279,7 +279,7 @@ export default function ClubsPageX() {
               className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm"
             >
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[800px]">
+                <table className="w-full text-left border-collapse min-w-200">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/30">
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">

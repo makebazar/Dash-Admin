@@ -132,7 +132,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-[300px] p-0">
+                            <PopoverContent className="w-75 p-0">
                                 <Command>
                                     <CommandInput placeholder="Поиск поставщика..." onValueChange={(val) => setSupplierName(val)} />
                                     <CommandList>
@@ -384,7 +384,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                 <Button variant="outline" className="flex-1 bg-slate-50 border-slate-200" onClick={() => router.push(`/clubs/${clubId}/inventory?tab=supplies`)}>
                     Отмена
                 </Button>
-                <Button onClick={handleSubmit} disabled={isPending || items.length === 0 || !supplierName} className="flex-[2] bg-blue-600 hover:bg-blue-700">
+                <Button onClick={handleSubmit} disabled={isPending || items.length === 0 || !supplierName} className="flex-2 bg-blue-600 hover:bg-blue-700">
                     {isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Package className="mr-2 h-4 w-4" />}
                     {supplyStatus === 'DRAFT' ? 'Черновик' : 'Оформить'}
                 </Button>

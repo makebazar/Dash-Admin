@@ -305,7 +305,7 @@ export default function FinancePage() {
                         </Link>
                         <Button 
                             onClick={() => { setActiveTab('transactions'); setTimeout(() => setTransactionDialogOpen(true), 100); }}
-                            className="flex-[2] sm:flex-none rounded-xl bg-slate-900 text-white shadow-sm hover:bg-slate-800 font-medium h-12 px-6"
+                            className="flex-2 sm:flex-none rounded-xl bg-slate-900 text-white shadow-sm hover:bg-slate-800 font-medium h-12 px-6"
                         >
                             <Plus className="h-4 w-4 mr-2" />
                             Новая операция
@@ -353,7 +353,7 @@ export default function FinancePage() {
                                         <TooltipTrigger>
                                             <TrendingUp className="h-4 w-4 text-emerald-500 cursor-help" />
                                         </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-[200px] p-3 leading-relaxed">
+                                        <TooltipContent side="top" className="max-w-50 p-3 leading-relaxed">
                                             Сумма всех поступлений за выбранный месяц: выручка от смен, продажи на баре и прочие доходы.
                                         </TooltipContent>
                                     </UITooltip>
@@ -379,7 +379,7 @@ export default function FinancePage() {
                                         <TooltipTrigger>
                                             <TrendingDown className="h-4 w-4 text-rose-500 cursor-help" />
                                         </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-[200px] p-3 leading-relaxed">
+                                        <TooltipContent side="top" className="max-w-50 p-3 leading-relaxed">
                                             Все выплаты: зарплаты, закупка товаров, аренда и коммуналка. Показывает реальный отток денег.
                                         </TooltipContent>
                                     </UITooltip>
@@ -405,7 +405,7 @@ export default function FinancePage() {
                                         <TooltipTrigger>
                                             <DollarSign className="h-4 w-4 text-blue-500 cursor-help" />
                                         </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-[200px] p-3 leading-relaxed">
+                                        <TooltipContent side="top" className="max-w-50 p-3 leading-relaxed">
                                             Остаток после вычета всех расходов из доходов. Если число отрицательное — клуб работает в убыток.
                                         </TooltipContent>
                                     </UITooltip>
@@ -431,7 +431,7 @@ export default function FinancePage() {
                                         <TooltipTrigger>
                                             <Percent className="h-4 w-4 opacity-80 cursor-help" />
                                         </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-[200px] p-3 leading-relaxed bg-slate-900 text-white">
+                                        <TooltipContent side="top" className="max-w-50 p-3 leading-relaxed bg-slate-900 text-white">
                                             Процент прибыли от выручки. Показывает эффективность бизнеса. Хороший показатель для клуба — от 20%.
                                         </TooltipContent>
                                     </UITooltip>
@@ -529,7 +529,7 @@ export default function FinancePage() {
                                             <TooltipTrigger>
                                                 <Info className="h-4 w-4 text-slate-400" />
                                             </TooltipTrigger>
-                                            <TooltipContent className="max-w-[200px]">
+                                            <TooltipContent className="max-w-50">
                                                 Общий баланс по всем активным счетам клуба
                                             </TooltipContent>
                                         </UITooltip>
@@ -642,7 +642,7 @@ export default function FinancePage() {
                                             <TooltipTrigger>
                                                 <Info className="h-3.5 w-3.5 text-slate-300" />
                                             </TooltipTrigger>
-                                            <TooltipContent className="max-w-[200px]">
+                                            <TooltipContent className="max-w-50">
                                                 Топ-5 категорий, на которые клуб тратит больше всего денег в этом месяце.
                                             </TooltipContent>
                                         </UITooltip>

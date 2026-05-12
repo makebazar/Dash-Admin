@@ -559,7 +559,7 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                                     <TooltipTrigger asChild>
                                                         <Info className="h-3 w-3 text-slate-300 cursor-help" />
                                                     </TooltipTrigger>
-                                                    <TooltipContent side="top" className="max-w-[300px] p-3 leading-relaxed">
+                                                    <TooltipContent side="top" className="max-w-75 p-3 leading-relaxed">
                                                         <p><strong>🏃 Операционная</strong>: Всё, что нужно для ежедневной работы (выручка, зп, аренда).</p>
                                                         <p className="mt-2"><strong>🏗️ Инвестиционная</strong>: Траты на развитие, которые будут работать долго (новые ПК, ремонт).</p>
                                                         <p className="mt-2"><strong>🏦 Финансовая</strong>: Кредиты, вложения владельцев и выплата прибыли.</p>
@@ -816,7 +816,7 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                                                         <TooltipTrigger asChild>
                                                             <Info className="h-3 w-3 text-slate-300 cursor-help" />
                                                         </TooltipTrigger>
-                                                        <TooltipContent side="top" className="max-w-[200px]">
+                                                        <TooltipContent side="top" className="max-w-50">
                                                             Используйте для платежей, сумма которых меняется каждый месяц (электричество, вода). При оплате система попросит ввести текущие показания.
                                                         </TooltipContent>
                                                     </Tooltip>

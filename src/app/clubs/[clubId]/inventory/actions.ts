@@ -5029,6 +5029,7 @@ export async function createShiftReceipt(
     notes?: string;
     warehouse_id?: number;
     salary_target_user_id?: string;
+    promo_player_id?: string;
   },
 ) {
   await assertUserCanAccessClub(clubId, userId);
@@ -5037,10 +5038,15 @@ export async function createShiftReceipt(
   const client = await import("@/db").then((m) => m.getClient());
   try {
     await client.query("BEGIN");
-    const inventorySettings = await getClubInventorySettingsInternal(
-      client,
-      clubId,
+    const clubRes = await client.query(
+      `SELECT promo_settings, inventory_settings FROM clubs WHERE id = $1`,
+      [clubId],
     );
+    const promoSettings = clubRes.rows[0]?.promo_settings || {};
+    const inventorySettings = normalizeInventorySettings(
+      clubRes.rows[0]?.inventory_settings || {},
+    );
+
     if (
       !inventorySettings.stock_enabled ||
       !inventorySettings.cashbox_enabled
@@ -5256,9 +5262,9 @@ export async function createShiftReceipt(
             INSERT INTO shift_receipts (
                 club_id, shift_id, created_by, warehouse_id,
                 payment_type, cash_amount, card_amount, total_amount, notes, committed_at,
-                salary_target_user_id, salary_target_shift_id, counts_in_revenue
+                salary_target_user_id, salary_target_shift_id, counts_in_revenue, promo_player_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12, $13)
             RETURNING id
             `,
       [
@@ -5274,6 +5280,7 @@ export async function createShiftReceipt(
         salaryTargetUserId,
         salaryTargetShiftId,
         countsInRevenue,
+        data.promo_player_id || null,
       ],
     );
     const receiptId = Number(receiptRes.rows[0].id);
@@ -5362,6 +5369,29 @@ export async function createShiftReceipt(
       );
     }
 
+    // Award Promotional Tickets if player is linked
+    if (data.promo_player_id && promoSettings.bar_accrual_enabled !== false) {
+      const { calculateTicketsForBarAmount } =
+        await import("@/lib/promo-accrual");
+      const ticketsToAward = calculateTicketsForBarAmount(
+        itemsTotal,
+        promoSettings,
+      );
+
+      if (ticketsToAward > 0) {
+        const expiryHours = promoSettings.ticket_expiry_hours || 24;
+        const expiryDate = new Date();
+        expiryDate.setHours(expiryDate.getHours() + expiryHours);
+
+        await client.query(
+          `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
+           SELECT $1, $2, 'available', 'pos_sale', $3
+           FROM generate_series(1, $4)`,
+          [data.promo_player_id, clubId, expiryDate, ticketsToAward],
+        );
+      }
+    }
+
     await client.query("COMMIT");
 
     // Check if sales triggered new replenishment needs
@@ -5404,6 +5434,7 @@ export async function createShiftReceiptSafe(
     notes?: string;
     warehouse_id?: number;
     salary_target_user_id?: string;
+    promo_player_id?: string;
   },
 ) {
   try {
@@ -5441,11 +5472,151 @@ function getActionErrorMessage(error: unknown, fallback: string) {
     }
   }
 
-  if (typeof error === "string" && error.trim()) {
-    return error.trim();
-  }
-
   return fallback;
+}
+
+export async function getPromoQueue(clubId: string, userId: string) {
+  await assertUserCanAccessClub(clubId, userId);
+  const result = await query(
+    `SELECT q.id, p.full_name as player_name, p.phone_number as player_phone,
+            COALESCE(pr.name, 'Вывод бонусов: ' || q.withdraw_amount || ' ₽') as prize_name,
+            COALESCE(pr.type, 'withdraw') as prize_type,
+            q.withdraw_amount,
+            q.status, q.created_at
+     FROM promo_prize_queue q
+     JOIN promo_players p ON q.player_id = p.id
+     LEFT JOIN promo_prizes pr ON q.prize_id = pr.id
+     WHERE q.club_id = $1 AND q.status = 'pending'
+     ORDER BY q.created_at DESC`,
+    [clubId],
+  );
+  return result.rows;
+}
+
+export async function claimPromoItemSafe(
+  clubId: string,
+  userId: string,
+  itemId: number,
+) {
+  try {
+    await assertUserCanAccessClub(clubId, userId);
+    const queueRes = await query(
+      `UPDATE promo_prize_queue
+             SET status = 'claimed', claimed_at = NOW(), claimed_by_admin_id = $1
+             WHERE id = $2 AND club_id = $3
+             RETURNING id`,
+      [userId, itemId, clubId],
+    );
+
+    if (queueRes.rowCount && queueRes.rowCount > 0) {
+      await query(`SELECT pg_notify('promo_queue_updates', $1)`, [clubId]);
+
+      // Also notify via SSE for instant UI updates in cashbox
+      const { notifyInventoryClub } = await import("@/lib/inventory-events");
+      notifyInventoryClub(clubId, {
+        type: "PROMO_QUEUE_UPDATED",
+        timestamp: Date.now(),
+      });
+    }
+
+    return { ok: true as const };
+  } catch (error: any) {
+    return {
+      ok: false as const,
+      error: getActionErrorMessage(error, "Ошибка выдачи приза"),
+    };
+  }
+}
+
+export async function topupPlayerBalanceSafe(
+  clubId: string,
+  userId: string,
+  data: {
+    player_id: string;
+    amount: number;
+    payment_type: "cash" | "card" | "other";
+    notes?: string;
+  },
+) {
+  const client = await getClient();
+  try {
+    await assertUserCanAccessClub(clubId, userId);
+    await client.query("BEGIN");
+
+    // 1. Resolve player and ensure balance record exists
+    const balanceRes = await client.query(
+      `INSERT INTO promo_player_balances (player_id, club_id, bonus_balance)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (player_id, club_id)
+         DO UPDATE SET
+            bonus_balance = promo_player_balances.bonus_balance + $3,
+            updated_at = NOW()
+         RETURNING bonus_balance`,
+      [data.player_id, clubId, data.amount],
+    );
+
+    // 2. Log transaction in promo_history
+    await client.query(
+      `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+         VALUES ($1, $2, 'TOPUP', $3)`,
+      [
+        data.player_id,
+        clubId,
+        JSON.stringify({
+          amount: data.amount,
+          payment_type: data.payment_type,
+          notes: data.notes,
+          processed_by: userId,
+        }),
+      ],
+    );
+
+    // 3. Issue tickets if configured
+    const clubRes = await client.query(
+      `SELECT promo_settings FROM clubs WHERE id = $1`,
+      [clubId],
+    );
+    const promoSettings = clubRes.rows[0]?.promo_settings || {};
+
+    if (promoSettings.topup_accrual_enabled !== false) {
+      const { calculateTicketsForAmount } = await import("@/lib/promo-accrual");
+      const ticketsToAward = calculateTicketsForAmount(
+        data.amount,
+        promoSettings,
+      );
+
+      if (ticketsToAward > 0) {
+        const expiryHours = promoSettings.ticket_expiry_hours || 24;
+        const expiryDate = new Date();
+        expiryDate.setHours(expiryDate.getHours() + expiryHours);
+
+        await client.query(
+          `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
+              SELECT $1, $2, 'available', 'topup', $3
+              FROM generate_series(1, $4)`,
+          [data.player_id, clubId, expiryDate, ticketsToAward],
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+
+    // Notify player via SSE if they are connected
+    // (Note: promo-player-stream would handle this if implemented)
+
+    return {
+      success: true,
+      newBalance: Number(balanceRes.rows[0].bonus_balance),
+    };
+  } catch (error: any) {
+    await client.query("ROLLBACK");
+    return {
+      ok: false as const,
+      error: getActionErrorMessage(error, "Ошибка пополнения баланса"),
+    };
+  } finally {
+    client.release();
+  }
 }
 
 export async function voidShiftReceiptSafe(

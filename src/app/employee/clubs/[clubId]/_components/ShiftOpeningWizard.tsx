@@ -657,7 +657,7 @@ export function ShiftOpeningWizard({
                         </Button>
                         <Button 
                             onClick={handleNext} 
-                            className="flex-[2] bg-purple-600 hover:bg-purple-700 text-primary-foreground font-bold"
+                            className="flex-2 bg-purple-600 hover:bg-purple-700 text-primary-foreground font-bold"
                         >
                             {currentStep === totalSteps - 1 ? 'Завершить' : 'Далее'}
                             {currentStep < totalSteps - 1 && <ArrowRight className="ml-2 h-4 w-4" />}

@@ -164,7 +164,7 @@ export default function AssignEquipmentDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="left-0 top-0 flex h-screen w-screen max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none border-0 p-0 [&>button]:hidden sm:left-1/2 sm:top-1/2 sm:h-[80vh] sm:w-[calc(100vw-1rem)] sm:max-w-[720px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border">
+            <DialogContent className="left-0 top-0 flex h-screen w-screen max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden rounded-none border-0 p-0 [&>button]:hidden sm:left-1/2 sm:top-1/2 sm:h-[80vh] sm:w-[calc(100vw-1rem)] sm:max-w-180 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border">
                 <DialogHeader className="border-b bg-muted p-4 pt-[calc(1rem+env(safe-area-inset-top))] sm:p-6">
                     <div className="space-y-3">
                         <div>
@@ -232,7 +232,7 @@ export default function AssignEquipmentDialog({
                     )}
                 </div>
 
-                <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:hidden">
+                <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-background/80 sm:hidden">
                     <Button variant="outline" className="h-11 w-full" onClick={() => onOpenChange(false)}>
                         Закрыть
                     </Button>

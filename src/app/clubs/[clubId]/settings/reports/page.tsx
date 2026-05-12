@@ -550,7 +550,7 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                                                 <Plus className="h-5 w-5 text-purple-600" />
                                             </div>
                                             <h3 className="text-sm font-medium text-slate-900">Отчет пока пуст</h3>
-                                            <p className="mt-1.5 text-xs text-slate-500 max-w-[200px] leading-relaxed">
+                                            <p className="mt-1.5 text-xs text-slate-500 max-w-50 leading-relaxed">
                                                 Добавьте метрики из библиотеки справа, чтобы начать
                                             </p>
                                         </div>
@@ -778,7 +778,7 @@ export default function ReportBuilderPage({ params }: { params: Promise<{ clubId
                 }
             `}</style>
 
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-white/80 md:hidden">
+            <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-white/80 md:hidden">
                 <div className="mx-auto flex max-w-6xl gap-2">
                     <Button onClick={handleSave} disabled={isSaving || !hasUnsavedChanges} className="h-12 flex-1 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-medium">
                         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}

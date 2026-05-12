@@ -107,7 +107,7 @@ export function PaymentModal({ isOpen, onClose, payment, accounts, onConfirm }: 
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-106.25">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <span>{payment.category_icon || '💰'}</span>

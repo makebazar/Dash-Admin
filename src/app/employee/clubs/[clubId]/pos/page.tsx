@@ -52,7 +52,7 @@ export default function EmployeePosPage() {
 
     if (isLoading || !clubId || !userId) {
         return (
-            <div className="min-h-[100dvh] bg-background text-foreground flex items-center justify-center">
+            <div className="min-h-dvh bg-background text-foreground flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3 text-muted-foreground">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     <p className="text-sm font-medium">Загрузка кассы...</p>
@@ -63,7 +63,7 @@ export default function EmployeePosPage() {
 
     if (isBlockedByAcceptance) {
         return (
-            <div className="min-h-[100dvh] bg-background text-foreground flex items-center justify-center p-6 text-center">
+            <div className="min-h-dvh bg-background text-foreground flex items-center justify-center p-6 text-center">
                 <div className="max-w-md space-y-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-6 shadow-sm">
                     <div className="text-lg font-bold text-amber-500">Бар временно заблокирован</div>
                     <div className="text-sm text-muted-foreground">
@@ -76,7 +76,7 @@ export default function EmployeePosPage() {
 
     if (!isCashboxEnabled) {
         return (
-            <div className="min-h-[100dvh] bg-background text-foreground flex items-center justify-center p-6 text-center">
+            <div className="min-h-dvh bg-background text-foreground flex items-center justify-center p-6 text-center">
                 <div className="max-w-md space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
                     <div className="text-lg font-bold text-foreground">Касса отключена</div>
                     <div className="text-sm text-muted-foreground">

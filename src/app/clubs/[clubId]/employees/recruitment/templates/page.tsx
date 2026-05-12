@@ -330,7 +330,7 @@ export default function RecruitmentTemplatesPage() {
             </div>
 
             <Dialog open={Boolean(qrValue)} onOpenChange={(o) => !o && setQrValue("")}>
-                <DialogContent className="sm:max-w-[400px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-8">
+                <DialogContent className="sm:max-w-100 rounded-3xl border border-slate-200 shadow-2xl bg-white p-8">
                     <DialogHeader className="mb-6">
                         <DialogTitle className="text-2xl font-bold text-center text-slate-900">QR-код анкеты</DialogTitle>
                     </DialogHeader>
@@ -344,7 +344,7 @@ export default function RecruitmentTemplatesPage() {
             </Dialog>
 
             <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-                <DialogContent className="sm:max-w-[400px] rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
+                <DialogContent className="sm:max-w-100 rounded-3xl border border-slate-200 shadow-2xl bg-white p-6">
                     <DialogHeader className="space-y-3">
                         <div className="h-12 w-12 rounded-2xl bg-rose-50 flex items-center justify-center">
                             <Trash2 className="h-6 w-6 text-rose-600" />

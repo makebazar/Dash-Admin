@@ -859,7 +859,7 @@ export function ActiveInventory({
         onClose={() => setIsScannerOpen(false)}
       />
       {/* Header */}
-      <div className="rounded-2xl border bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
+      <div className="rounded-2xl border bg-linear-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-4">
             <div className="flex items-start gap-3">
@@ -1111,7 +1111,7 @@ export function ActiveInventory({
                       Ожидалось
                     </TableHead>
                   )}
-                  <TableHead className="text-right w-[150px]">
+                  <TableHead className="text-right w-37.5">
                     Фактический остаток
                   </TableHead>
                   {isClosed && (
@@ -1625,7 +1625,7 @@ export function ActiveInventory({
                 <SelectTrigger>
                   <SelectValue placeholder="Выберите товар" />
                 </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
+                <SelectContent className="max-h-75">
                   {allProducts.map((p) => (
                     <SelectItem key={p.id} value={p.id.toString()}>
                       {p.name}
@@ -1653,7 +1653,7 @@ export function ActiveInventory({
 
       {/* Close Dialog */}
       <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>
-        <DialogContent className="max-w-[500px]">
+        <DialogContent className="max-w-125">
           <DialogHeader>
             <DialogTitle>Завершение инвентаризации</DialogTitle>
             <DialogDescription>
@@ -1727,7 +1727,7 @@ export function ActiveInventory({
                                     Неучт.
                                   </Badge>
                                 )}
-                                <span className="truncate max-w-[150px]">
+                                <span className="truncate max-w-37.5">
                                   {s.name}
                                 </span>
                               </div>
@@ -1936,7 +1936,7 @@ export function ActiveInventory({
                 <SelectTrigger>
                   <SelectValue placeholder="Выберите товар" />
                 </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
+                <SelectContent className="max-h-75">
                   {allProducts.map((p) => (
                     <SelectItem key={p.id} value={p.id.toString()}>
                       {p.name}

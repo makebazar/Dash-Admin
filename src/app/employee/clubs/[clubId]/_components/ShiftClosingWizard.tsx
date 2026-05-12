@@ -1882,7 +1882,7 @@ export function ShiftClosingWizard({
   if (!isOpen || !isPortalReady) return null;
 
   return createPortal(
-    <div className="fixed inset-0 h-[100dvh] bg-slate-950 text-primary-foreground flex flex-col z-[9999] overflow-hidden overscroll-none">
+    <div className="fixed inset-0 h-dvh bg-slate-950 text-primary-foreground flex flex-col z-9999 overflow-hidden overscroll-none">
       <header className="px-4 py-4 border-b border-slate-800 bg-primary/50 backdrop-blur-md sticky top-0 z-50">
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4">
@@ -2245,7 +2245,7 @@ export function ShiftClosingWizard({
                     <Plus className="h-3 w-3 mr-1" /> Добавить вручную
                   </Button>
                 </div>
-                <div className="max-h-[320px] overflow-y-auto">
+                <div className="max-h-80 overflow-y-auto">
                   {salesPreview.length === 0 ? (
                     <div className="p-10 text-center text-muted-foreground text-sm">
                       Продаж не зафиксировано
@@ -2520,7 +2520,7 @@ export function ShiftClosingWizard({
                         {shortageDiscrepancyItems.length}
                       </Badge>
                     </div>
-                    <div className="max-h-[240px] overflow-y-auto p-3 space-y-2">
+                    <div className="max-h-60 overflow-y-auto p-3 space-y-2">
                       {shortageDiscrepancyItems.length === 0 ? (
                         <div className="rounded-xl bg-slate-950/40 px-3 py-4 text-xs text-muted-foreground/70">
                           Недостач нет
@@ -2574,7 +2574,7 @@ export function ShiftClosingWizard({
                         {excessDiscrepancyItems.length}
                       </Badge>
                     </div>
-                    <div className="max-h-[240px] overflow-y-auto p-3 space-y-2">
+                    <div className="max-h-60 overflow-y-auto p-3 space-y-2">
                       {excessDiscrepancyItems.length === 0 ? (
                         <div className="rounded-xl bg-slate-950/40 px-3 py-4 text-xs text-muted-foreground/70">
                           Излишков нет
@@ -2627,7 +2627,7 @@ export function ShiftClosingWizard({
                   количество. Система не позволит закрыть смену, пока вы их не
                   проверите.
                 </p>
-                <div className="bg-slate-950/50 rounded-xl p-3 max-h-[150px] overflow-y-auto space-y-2">
+                <div className="bg-slate-950/50 rounded-xl p-3 max-h-37.5 overflow-y-auto space-y-2">
                   {forgottenItems.map((item) => (
                     <div
                       key={item.id}
@@ -2683,7 +2683,7 @@ export function ShiftClosingWizard({
                     </Button>
                   )}
                 </div>
-                <div className="max-h-[300px] overflow-y-auto">
+                <div className="max-h-75 overflow-y-auto">
                   {salesPreview.length === 0 ? (
                     <div className="p-10 text-center text-muted-foreground text-sm">
                       Продаж не зафиксировано
@@ -3028,7 +3028,7 @@ export function ShiftClosingWizard({
               <SelectTrigger className="bg-primary border-slate-800 h-12 rounded-xl">
                 <SelectValue placeholder="Выберите товар..." />
               </SelectTrigger>
-              <SelectContent className="bg-primary border-slate-800 text-primary-foreground max-h-[300px]">
+              <SelectContent className="bg-primary border-slate-800 text-primary-foreground max-h-75">
                 {allProducts.map((p) => (
                   <SelectItem key={p.id} value={p.id.toString()}>
                     {p.name}
@@ -3080,7 +3080,7 @@ export function ShiftClosingWizard({
                 <SelectTrigger className="bg-primary border-slate-800 h-12 rounded-xl">
                   <SelectValue placeholder="Выберите товар..." />
                 </SelectTrigger>
-                <SelectContent className="bg-primary border-slate-800 text-primary-foreground max-h-[300px]">
+                <SelectContent className="bg-primary border-slate-800 text-primary-foreground max-h-75">
                   {allProducts.map((p) => (
                     <SelectItem key={p.id} value={p.id.toString()}>
                       {p.name}

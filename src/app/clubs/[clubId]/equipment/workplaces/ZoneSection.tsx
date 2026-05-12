@@ -248,7 +248,7 @@ export default memo(function ZoneSection({
               <Card
                 className={cn(
                   "group flex h-full cursor-pointer flex-col overflow-hidden border-border transition-colors hover:border-primary/50",
-                  wsIssueCount > 0 && "border-orange-200 bg-orange-50/[0.04]",
+                  wsIssueCount > 0 && "border-orange-200 bg-orange-50/4",
                 )}
                 style={{
                   contentVisibility: "auto",
@@ -327,7 +327,7 @@ export default memo(function ZoneSection({
 
                 <CardContent className="flex-1 bg-card p-3 sm:p-4">
                   {wsEquipment.length === 0 ? (
-                    <div className="flex h-full min-h-[100px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-border/50 p-4 text-center">
+                    <div className="flex h-full min-h-25 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border/50 p-4 text-center">
                       <Monitor className="mb-2 h-8 w-8 text-slate-200" />
                       <p className="text-xs font-medium text-muted-foreground">
                         Оборудование не назначено
@@ -511,7 +511,7 @@ export default memo(function ZoneSection({
         <DeferredViewportItem>
           <button
             onClick={() => onCreate(zone)}
-            className="group flex min-h-[220px] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border p-6 text-muted-foreground/70 transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary sm:min-h-[250px]"
+            className="group flex min-h-55 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border p-6 text-muted-foreground/70 transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary sm:min-h-62.5"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent transition-colors group-hover:bg-primary/10">
               <Plus className="h-6 w-6" />

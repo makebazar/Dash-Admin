@@ -512,7 +512,7 @@ export default function EmployeeShiftHistoryPage() {
                                     </div>
                                 </TableHead>
                                 {reportFields.map((field: any) => (
-                                    <TableHead key={field.metric_key} className="text-right min-w-[100px] text-xs uppercase tracking-wider text-muted-foreground">{field.custom_label || field.label || field.metric_key}</TableHead>
+                                    <TableHead key={field.metric_key} className="text-right min-w-25 text-xs uppercase tracking-wider text-muted-foreground">{field.custom_label || field.label || field.metric_key}</TableHead>
                                 ))}
                                 <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Статус</TableHead>
                             </TableRow>

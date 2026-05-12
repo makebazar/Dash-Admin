@@ -113,7 +113,7 @@ export default function LegalConsentPage() {
         <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
             <div className="w-full max-w-lg">
                 <div className="mb-8 flex items-center justify-center gap-2">
-                    <div className="w-10 h-10 bg-gradient-to-tr from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
+                    <div className="w-10 h-10 bg-linear-to-tr from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
                         <Zap className="text-white w-6 h-6 fill-current" />
                     </div>
                     <span className="font-bold text-2xl tracking-tight">DashAdmin</span>

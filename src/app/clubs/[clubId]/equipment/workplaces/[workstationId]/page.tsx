@@ -1692,7 +1692,7 @@ export default function WorkstationDetailsPage() {
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className="max-w-[420px] truncate text-sm font-semibold">
+                              <p className="max-w-105 truncate text-sm font-semibold">
                                 {primaryEquipment.name}
                               </p>
                               <Badge
@@ -1750,7 +1750,7 @@ export default function WorkstationDetailsPage() {
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className="max-w-[420px] truncate text-sm font-semibold text-slate-900">
+                                <p className="max-w-105 truncate text-sm font-semibold text-slate-900">
                                   {item.name}
                                 </p>
                                 <Badge
@@ -1802,7 +1802,7 @@ export default function WorkstationDetailsPage() {
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className="max-w-[420px] truncate text-sm font-semibold text-slate-900">
+                                <p className="max-w-105 truncate text-sm font-semibold text-slate-900">
                                   {item.name}
                                 </p>
                                 <Badge
@@ -2448,7 +2448,7 @@ export default function WorkstationDetailsPage() {
                           onClick={() => setHistoryEquipmentFilter(item.id)}
                           title={`${item.name} • ${item.type}`}
                         >
-                          <span className="max-w-[220px] truncate">
+                          <span className="max-w-55 truncate">
                             {item.name}
                           </span>
                         </Button>
@@ -2474,7 +2474,7 @@ export default function WorkstationDetailsPage() {
                     <div className="space-y-6">
                       {groupedHistory.map((group) => (
                         <div key={group.label} className="space-y-3">
-                          <div className="sticky top-0 z-10 -mx-2 rounded-lg bg-background/95 px-2 py-1 text-xs font-semibold uppercase tracking-wider text-slate-500 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+                          <div className="sticky top-0 z-10 -mx-2 rounded-lg bg-background/95 px-2 py-1 text-xs font-semibold uppercase tracking-wider text-slate-500 backdrop-blur supports-backdrop-filter:bg-background/80">
                             {group.label}
                           </div>
 
@@ -2543,14 +2543,14 @@ export default function WorkstationDetailsPage() {
                                                       photoIndex,
                                                     )
                                                   }
-                                                  className="relative aspect-[4/3] overflow-hidden rounded-xl border bg-slate-100"
+                                                  className="relative aspect-4/3 overflow-hidden rounded-xl border bg-slate-100"
                                                 >
                                                   <img
                                                     src={photo}
                                                     alt={`Фото события ${presentation.title} ${photoIndex + 1}`}
                                                     className="h-full w-full object-cover"
                                                   />
-                                                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-2 py-1 text-left text-[10px] font-medium text-white">
+                                                  <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/55 to-transparent px-2 py-1 text-left text-[10px] font-medium text-white">
                                                     Открыть
                                                   </div>
                                                 </button>
@@ -3535,7 +3535,7 @@ export default function WorkstationDetailsPage() {
         </Dialog>
 
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
-          <div className="mx-auto flex max-w-[1600px] gap-2">
+          <div className="mx-auto flex max-w-400 gap-2">
             <Button
               asChild
               variant="outline"

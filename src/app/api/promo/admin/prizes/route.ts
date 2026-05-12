@@ -1,0 +1,120 @@
+import { NextResponse } from "next/server";
+import { query, getClient } from "@/db";
+import { cookies } from "next/headers";
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const clubId = searchParams.get("clubId");
+    const userId = (await cookies()).get("session_user_id")?.value;
+
+    if (!userId || !clubId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const result = await query(
+      `SELECT * FROM promo_prizes WHERE club_id = $1 AND is_active = TRUE ORDER BY probability DESC`,
+      [clubId],
+    );
+
+    return NextResponse.json({ prizes: result.rows });
+  } catch (error) {
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  const client = await getClient();
+  try {
+    const { clubId, prizes } = await request.json();
+    const userId = (await cookies()).get("session_user_id")?.value;
+
+    if (!userId || !clubId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const numericClubId = parseInt(String(clubId), 10);
+    if (isNaN(numericClubId)) {
+      return NextResponse.json({ error: "Invalid Club ID" }, { status: 400 });
+    }
+
+    await client.query("BEGIN");
+
+    // 1. Get existing prize IDs to identify which ones to delete
+    const existingPrizesRes = await client.query(
+      `SELECT id FROM promo_prizes WHERE club_id = $1`,
+      [numericClubId],
+    );
+    const existingIds = existingPrizesRes.rows.map((r) => r.id);
+    const incomingIds = prizes
+      .map((p: any) => p.id)
+      .filter((id: any) => id !== undefined && id !== null);
+
+    // 2. Identify prizes to remove
+    const idsToRemove = existingIds.filter((id) => !incomingIds.includes(id));
+
+    if (idsToRemove.length > 0) {
+      for (const id of idsToRemove) {
+        try {
+          // Try to delete. If it fails (due to foreign keys), just deactivate it.
+          await client.query(`DELETE FROM promo_prizes WHERE id = $1`, [id]);
+        } catch (delError) {
+          await client.query(
+            `UPDATE promo_prizes SET is_active = FALSE WHERE id = $1`,
+            [id],
+          );
+        }
+      }
+    }
+
+    // 3. Upsert incoming prizes
+    for (const prize of prizes) {
+      if (prize.id) {
+        // UPDATE existing prize
+        await client.query(
+          `UPDATE promo_prizes
+           SET name = $1, type = $2, value = $3, probability = $4, daily_limit = $5, is_active = $6, game_slug = $7, win_condition = $8
+           WHERE id = $9 AND club_id = $10`,
+          [
+            prize.name,
+            prize.type,
+            prize.value,
+            prize.probability,
+            prize.daily_limit,
+            prize.is_active,
+            prize.game_slug,
+            prize.win_condition ? JSON.stringify(prize.win_condition) : null,
+            prize.id,
+            numericClubId,
+          ],
+        );
+      } else {
+        // INSERT new prize
+        await client.query(
+          `INSERT INTO promo_prizes (club_id, name, type, value, probability, daily_limit, is_active, game_slug, win_condition)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            numericClubId,
+            prize.name,
+            prize.type,
+            prize.value,
+            prize.probability,
+            prize.daily_limit,
+            prize.is_active,
+            prize.game_slug,
+            prize.win_condition ? JSON.stringify(prize.win_condition) : null,
+          ],
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    if (client) await client.query("ROLLBACK");
+    console.error("Save Prizes Error:", error);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+  } finally {
+    if (client) client.release();
+  }
+}

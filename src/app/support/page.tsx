@@ -269,13 +269,13 @@ export default function SupportPage() {
     <div className="min-h-screen bg-[#050816] text-white">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-20 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-purple-600/20 blur-[120px]" />
-        <div className="absolute right-0 top-1/3 h-[320px] w-[320px] rounded-full bg-blue-500/10 blur-[120px]" />
+        <div className="absolute right-0 top-1/3 h-80 w-[320px] rounded-full bg-blue-500/10 blur-[120px]" />
       </div>
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
         <header className="mb-8 flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/[0.03] px-5 py-4 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
           <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-500 to-blue-500">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-linear-to-tr from-purple-500 to-blue-500">
               <Zap className="h-5 w-5 fill-current text-white" />
             </div>
             <div>
@@ -535,7 +535,7 @@ export default function SupportPage() {
                 <CardContent>
                   {selectedTicket ? (
                     <>
-                      <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+                      <div className="max-h-105 space-y-3 overflow-y-auto pr-1">
                         {messages.length === 0 ? (
                           <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-sm text-white/45">
                             Сообщений пока нет
@@ -569,7 +569,7 @@ export default function SupportPage() {
                           id="support-reply"
                           value={reply}
                           onChange={(event) => setReply(event.target.value)}
-                          className="min-h-[120px] border-white/10 bg-black/20 text-white placeholder:text-white/30"
+                          className="min-h-30 border-white/10 bg-black/20 text-white placeholder:text-white/30"
                           placeholder="Уточните детали, отправьте новую информацию или задайте вопрос"
                         />
                         <Button
@@ -583,7 +583,7 @@ export default function SupportPage() {
                       </form>
                     </>
                   ) : (
-                    <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-dashed border-white/10 text-sm text-white/45">
+                    <div className="flex min-h-80 items-center justify-center rounded-2xl border border-dashed border-white/10 text-sm text-white/45">
                       Создайте обращение или выберите существующее
                     </div>
                   )}

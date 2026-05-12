@@ -707,7 +707,7 @@ export default function MaintenanceTerminalPage() {
             <div className="flex items-center gap-2 mt-1.5">
               <Badge
                 variant="outline"
-                className="bg-zinc-900 border-zinc-700 text-zinc-500 text-[9px] font-mono px-1.5 py-0 h-4 min-w-[40px] flex items-center justify-center"
+                className="bg-zinc-900 border-zinc-700 text-zinc-500 text-[9px] font-mono px-1.5 py-0 h-4 min-w-10 flex items-center justify-center"
               >
                 {currentStep === "PLAN"
                   ? "ОБЗОР"
@@ -726,7 +726,7 @@ export default function MaintenanceTerminalPage() {
           </div>
         </div>
         {currentStep !== "PLAN" && currentStep !== "SUMMARY" && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-right min-w-[80px]">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-right min-w-20">
             <div className="text-[9px] font-bold text-zinc-500 uppercase leading-none mb-0.5 tracking-tight">
               Прогресс
             </div>
@@ -985,7 +985,7 @@ export default function MaintenanceTerminalPage() {
             </div>
             {currentTask.min_photos_before > 0 && (
               <div className="flex items-center justify-center gap-2">
-                <div className="h-[1px] flex-1 bg-zinc-900" />
+                <div className="h-px flex-1 bg-zinc-900" />
                 <div className="px-4 py-1 rounded-full border border-zinc-800 bg-zinc-900 text-[10px] font-mono font-bold text-zinc-500 uppercase">
                   Нужно еще:{" "}
                   {Math.max(
@@ -994,7 +994,7 @@ export default function MaintenanceTerminalPage() {
                       (currentReport?.photos_before.length || 0),
                   )}
                 </div>
-                <div className="h-[1px] flex-1 bg-zinc-900" />
+                <div className="h-px flex-1 bg-zinc-900" />
               </div>
             )}
           </div>
@@ -1272,7 +1272,7 @@ export default function MaintenanceTerminalPage() {
                     <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
                       Заметки
                     </Label>
-                    <div className="h-[1px] flex-1 bg-zinc-900" />
+                    <div className="h-px flex-1 bg-zinc-900" />
                     <span className="text-[9px] font-mono text-zinc-700 uppercase">
                       Опционально
                     </span>
@@ -1299,7 +1299,7 @@ export default function MaintenanceTerminalPage() {
                       <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
                         Заголовок проблемы
                       </Label>
-                      <div className="h-[1px] flex-1 bg-zinc-900" />
+                      <div className="h-px flex-1 bg-zinc-900" />
                       <span className="text-[9px] font-mono text-zinc-700 uppercase">
                         Обязательно
                       </span>
@@ -1328,7 +1328,7 @@ export default function MaintenanceTerminalPage() {
                       <Label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
                         Подробное описание
                       </Label>
-                      <div className="h-[1px] flex-1 bg-zinc-900" />
+                      <div className="h-px flex-1 bg-zinc-900" />
                     </div>
                     <Textarea
                       placeholder="Опишите проблему максимально подробно..."
@@ -1608,7 +1608,7 @@ export default function MaintenanceTerminalPage() {
 
       {/* Confirmation Dialog Overlay */}
       {showSkipConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-[2.5rem] p-8 shadow-2xl space-y-8 animate-in zoom-in-95 duration-300">
             <div className="space-y-4 text-center">
               <div className="h-20 w-20 rounded-[2rem] bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 mx-auto">

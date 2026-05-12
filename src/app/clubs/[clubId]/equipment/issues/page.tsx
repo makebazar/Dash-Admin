@@ -547,7 +547,7 @@ export default function IssuesBoard() {
         </div>
 
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-35">
             <div className="flex items-start justify-between gap-2">
               <p className="text-sm font-medium text-slate-500 leading-tight">
                 Всего инцидентов
@@ -560,7 +560,7 @@ export default function IssuesBoard() {
               {issueStats.total}
             </h3>
           </div>
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-35">
             <div className="flex items-start justify-between gap-2">
               <p className="text-sm font-medium text-slate-500 leading-tight">
                 Открытые
@@ -573,7 +573,7 @@ export default function IssuesBoard() {
               {issueStats.open}
             </h3>
           </div>
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-35">
             <div className="flex items-start justify-between gap-2">
               <p className="text-sm font-medium text-slate-500 leading-tight">
                 В работе
@@ -586,7 +586,7 @@ export default function IssuesBoard() {
               {issueStats.inProgress}
             </h3>
           </div>
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-35">
             <div className="flex items-start justify-between gap-2">
               <p className="text-sm font-medium text-slate-500 leading-tight">
                 Требуют внимания
@@ -599,7 +599,7 @@ export default function IssuesBoard() {
               {issueStats.critical}
             </h3>
           </div>
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-35">
             <div className="flex items-start justify-between gap-2">
               <p className="text-sm font-medium text-slate-500 leading-tight">
                 Без ответственного
@@ -804,7 +804,7 @@ export default function IssuesBoard() {
                                     ) : null}
                                   </div>
                                 </div>
-                                <div className="flex shrink-0 flex-col gap-2 text-left lg:min-w-[180px] lg:text-right">
+                                <div className="flex shrink-0 flex-col gap-2 text-left lg:min-w-45 lg:text-right">
                                   <div className="text-xs text-muted-foreground">
                                     {new Date(
                                       issue.created_at,
@@ -956,7 +956,7 @@ export default function IssuesBoard() {
         </div>
 
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogContent className="sm:max-w-[500px] rounded-3xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-125 rounded-3xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold">
                 Сообщить о неисправности
@@ -1026,7 +1026,7 @@ export default function IssuesBoard() {
                         </div>
                       </div>
 
-                      <div className="max-h-[350px] overflow-y-auto p-1.5 custom-scrollbar space-y-3">
+                      <div className="max-h-87.5 overflow-y-auto p-1.5 custom-scrollbar space-y-3">
                         {(() => {
                           const query = searchTerm.toLowerCase();
 
@@ -1267,7 +1267,7 @@ export default function IssuesBoard() {
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Подробности</Label>
                 <textarea
-                  className="w-full min-h-[100px] resize-none bg-slate-50/50 border-slate-200 border rounded-xl font-medium text-slate-900 focus:bg-white p-4 text-sm transition-all focus:ring-slate-900/5 outline-none"
+                  className="w-full min-h-25 resize-none bg-slate-50/50 border-slate-200 border rounded-xl font-medium text-slate-900 focus:bg-white p-4 text-sm transition-all focus:ring-slate-900/5 outline-none"
                   placeholder="Опишите симптомы..."
                   value={newIssue.description}
                   onChange={(e) =>
@@ -1328,7 +1328,7 @@ export default function IssuesBoard() {
                   disabled={
                     isSaving || !newIssue.equipment_id || !newIssue.title
                   }
-                  className="rounded-xl font-bold bg-rose-600 hover:bg-rose-700 text-white min-w-[140px] h-11 shadow-lg shadow-rose-600/20 transition-all"
+                  className="rounded-xl font-bold bg-rose-600 hover:bg-rose-700 text-white min-w-35 h-11 shadow-lg shadow-rose-600/20 transition-all"
                 >
                   {isSaving ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1342,7 +1342,7 @@ export default function IssuesBoard() {
 
         {/* Mobile Bottom Back Button */}
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
-          <div className="mx-auto flex max-w-[1600px] gap-2">
+          <div className="mx-auto flex max-w-400 gap-2">
             <Button
               asChild
               variant="outline"

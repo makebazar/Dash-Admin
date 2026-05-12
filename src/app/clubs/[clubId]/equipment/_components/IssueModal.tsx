@@ -175,7 +175,7 @@ export function IssueModal({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden flex flex-col md:flex-row h-[100dvh] md:h-[600px] bg-[#0a0b10] border-white/5 rounded-none md:rounded-2xl">
+        <DialogContent className="max-w-4xl p-0 overflow-hidden flex flex-col md:flex-row h-dvh md:h-150 bg-[#0a0b10] border-white/5 rounded-none md:rounded-2xl">
           <div className="flex-1 flex flex-col min-w-0 border-r border-white/5 overflow-hidden">
             {/* Header */}
             <div className="p-6 border-b border-white/5 bg-[#0d0e15] shrink-0">
@@ -251,7 +251,7 @@ export function IssueModal({
                   <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
                     Описание проблемы
                   </h4>
-                  <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 text-sm text-slate-300 leading-relaxed font-medium">
+                  <div className="p-5 rounded-2xl bg-white/2 border border-white/5 text-sm text-slate-300 leading-relaxed font-medium">
                     {issue.description || "Описание отсутствует"}
                   </div>
                 </section>
@@ -329,7 +329,7 @@ export function IssueModal({
                         {comment.content}
                       </div>
                     ) : (
-                      <div className="max-w-[100%] bg-[#161922] border border-white/5 rounded-2xl p-4 shadow-sm">
+                      <div className="max-w-full bg-[#161922] border border-white/5 rounded-2xl p-4 shadow-sm">
                         <div className="flex items-center justify-between gap-6 mb-2">
                           <span className="text-[10px] font-black uppercase tracking-tight text-white/90">
                             {comment.author_name}
@@ -370,7 +370,7 @@ export function IssueModal({
           </div>
 
           {/* Right Side: Chat (Desktop) */}
-          <div className="hidden md:flex w-[380px] flex-col bg-[#0d0e15] overflow-hidden shrink-0">
+          <div className="hidden md:flex w-95 flex-col bg-[#0d0e15] overflow-hidden shrink-0">
             <div className="p-5 border-b border-white/5 flex items-center justify-between bg-[#11131a]">
               <h4 className="text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 text-slate-400">
                 <MessageSquare className="h-4 w-4 opacity-50" />
@@ -406,7 +406,7 @@ export function IssueModal({
                         {comment.content}
                       </div>
                     ) : (
-                      <div className="max-w-[100%] bg-[#161922] border border-white/5 rounded-2xl p-4 shadow-sm">
+                      <div className="max-w-full bg-[#161922] border border-white/5 rounded-2xl p-4 shadow-sm">
                         <div className="flex items-center justify-between gap-6 mb-2">
                           <span className="text-[10px] font-black uppercase tracking-tight text-white/90">
                             {comment.author_name}

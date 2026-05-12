@@ -24,7 +24,7 @@ export function SidebarContent({ clubs, hasEmployeeClubs, handleLogout, onLinkCl
             {/* Logo */}
             <div className="flex h-16 items-center border-b border-border px-6">
                 <Link href="/dashboard" className="flex items-center gap-2" onClick={onLinkClick}>
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-500 to-blue-500">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-tr from-purple-500 to-blue-500">
                         <Building2 className="h-5 w-5 text-primary-foreground" />
                     </div>
                     <span className="text-lg font-semibold">DashAdmin</span>

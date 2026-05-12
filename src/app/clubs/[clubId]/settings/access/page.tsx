@@ -579,7 +579,7 @@ export default function AccessSettingsPage({
               <h3 className="text-lg font-bold text-slate-900">
                 Выберите роль
               </h3>
-              <p className="text-sm text-slate-500 max-w-[280px] mt-1">
+              <p className="text-sm text-slate-500 max-w-70 mt-1">
                 Выберите роль из списка слева, чтобы настроить её права для
                 вашего клуба
               </p>

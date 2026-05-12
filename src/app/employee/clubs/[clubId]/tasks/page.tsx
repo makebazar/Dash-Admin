@@ -521,7 +521,7 @@ function EmployeeTasksContent() {
                           )}
                         >
                           {isSelected && (
-                            <Check className="h-3.5 w-3.5 stroke-[3]" />
+                            <Check className="h-3.5 w-3.5 stroke-3" />
                           )}
                         </div>
                       </div>

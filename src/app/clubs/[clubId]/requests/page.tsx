@@ -235,7 +235,7 @@ export default function RequestsPage({ params }: { params: Promise<{ clubId: str
                                         </div>
                                         <div className="space-y-0.5">
                                             <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{cat.label}</p>
-                                            <CardTitle className="text-sm truncate max-w-[150px]">{req.title}</CardTitle>
+                                            <CardTitle className="text-sm truncate max-w-37.5">{req.title}</CardTitle>
                                         </div>
                                     </div>
                                     {getStatusBadge(req.status)}

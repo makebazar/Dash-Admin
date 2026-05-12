@@ -59,7 +59,7 @@ export default function WorkplaceFormDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[calc(100vw-1rem)] max-w-[425px]">
+            <DialogContent className="w-[calc(100vw-1rem)] max-w-106.25">
                 <DialogHeader>
                     <DialogTitle>{draft?.id ? "Редактировать место" : "Новое рабочее место"}</DialogTitle>
                     <DialogDescription>

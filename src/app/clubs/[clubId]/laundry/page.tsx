@@ -128,7 +128,7 @@ export default function LaundryPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-35">
                     <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium text-slate-500 leading-tight">Всего</p>
                         <div className="rounded-2xl bg-slate-100 p-2.5 text-slate-700 shrink-0">
@@ -137,7 +137,7 @@ export default function LaundryPage() {
                     </div>
                     <h3 className="text-3xl font-bold text-slate-900">{stats.total}</h3>
                 </div>
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-35">
                     <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium text-slate-500 leading-tight">Новые</p>
                         <div className="rounded-2xl bg-amber-50 p-2.5 text-amber-600 shrink-0">
@@ -146,7 +146,7 @@ export default function LaundryPage() {
                     </div>
                     <h3 className="text-3xl font-bold text-amber-600">{stats.newCount}</h3>
                 </div>
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-35">
                     <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium text-slate-500 leading-tight">В стирке</p>
                         <div className="rounded-2xl bg-blue-50 p-2.5 text-blue-600 shrink-0">
@@ -155,7 +155,7 @@ export default function LaundryPage() {
                     </div>
                     <h3 className="text-3xl font-bold text-blue-600">{stats.inLaundryCount}</h3>
                 </div>
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-[140px]">
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6 flex flex-col justify-between h-35">
                     <div className="flex items-start justify-between gap-2">
                         <p className="text-sm font-medium text-slate-500 leading-tight">Готово</p>
                         <div className="rounded-2xl bg-violet-50 p-2.5 text-violet-600 shrink-0">
@@ -315,7 +315,7 @@ export default function LaundryPage() {
 
             {/* Mobile Bottom Back Button */}
             <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
-                <div className="mx-auto flex max-w-[1600px] gap-2">
+                <div className="mx-auto flex max-w-400 gap-2">
                     <Button asChild variant="outline" className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium">
                         <Link href={`/clubs/${clubId}/equipment`}>
                             <ChevronLeft className="mr-2 h-4 w-4" />
@@ -327,7 +327,7 @@ export default function LaundryPage() {
 
             <Dialog open={!!viewingPhotos} onOpenChange={(open) => !open && setViewingPhotos(null)}>
                 <DialogContent className="sm:max-w-3xl p-0 overflow-hidden bg-black/95 border-none rounded-3xl">
-                    <DialogHeader className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/60 to-transparent">
+                    <DialogHeader className="absolute top-0 left-0 right-0 z-10 p-4 bg-linear-to-b from-black/60 to-transparent">
                         <DialogTitle className="text-white">Фотографии</DialogTitle>
                     </DialogHeader>
                     <div className="relative h-[80vh] w-full flex items-center justify-center p-4">

@@ -200,7 +200,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
 
     return (
         <div className="space-y-5">
-            <div className="rounded-2xl border bg-gradient-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
+            <div className="rounded-2xl border bg-linear-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="space-y-2">
                         <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
@@ -496,7 +496,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
 
             {/* New Inventory Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-[560px]">
+                <DialogContent className="sm:max-w-140">
                     <DialogHeader>
                         <DialogTitle>Новая инвентаризация</DialogTitle>
                         <DialogDescription>

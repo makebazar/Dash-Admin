@@ -26,7 +26,7 @@ export function VirtualBalanceCard({
         <Card className={cn(
             "border-0 shadow-xl overflow-hidden relative group",
             hasBalance 
-                ? "bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-600 text-white" 
+                ? "bg-linear-to-br from-indigo-500 via-purple-600 to-pink-600 text-white" 
                 : "bg-white dark:bg-slate-800/50 backdrop-blur",
             className
         )}>

@@ -212,7 +212,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-none w-screen h-[100dvh] m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
+            <DialogContent className="max-w-none w-screen h-dvh m-0 p-0 rounded-none bg-slate-950 border-none text-primary-foreground overflow-hidden flex flex-col fixed inset-0 translate-x-0 translate-y-0 left-0 top-0">
                 <DialogHeader className="px-5 py-4 md:px-6 md:py-5 border-b border-slate-800/80 bg-primary/60 backdrop-blur flex-row items-center justify-between space-y-0 shrink-0">
                     <div className="space-y-0.5">
                         <DialogTitle className="flex items-center gap-2 text-lg md:text-xl font-semibold">
@@ -445,7 +445,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                             placeholder="Опишите детали..."
                                             value={formData.description}
                                             onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                            className="bg-primary border-slate-800 min-h-[120px] rounded-xl resize-none"
+                                            className="bg-primary border-slate-800 min-h-30 rounded-xl resize-none"
                                         />
                                     </div>
 
@@ -521,7 +521,7 @@ export function EmployeeRequestWizard({ isOpen, onClose, clubId, userId }: Emplo
                                         placeholder="Напишите ответ..."
                                         value={newMessage}
                                         onChange={e => setNewMessage(e.target.value)}
-                                        className="min-h-[52px] max-h-[140px] bg-primary border-slate-700 rounded-xl py-3 px-4 text-base resize-none"
+                                        className="min-h-[52px] max-h-35 bg-primary border-slate-700 rounded-xl py-3 px-4 text-base resize-none"
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && !e.shiftKey) {
                                                 e.preventDefault()

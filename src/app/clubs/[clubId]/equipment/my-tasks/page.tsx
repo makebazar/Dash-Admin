@@ -195,7 +195,7 @@ export default function MyMaintenanceTasks() {
                                     isInProgress ? "ring-2 ring-indigo-500 bg-indigo-50/10" : "bg-card"
                                 )}>
                                     <CardContent className="p-0">
-                                        <div className="flex items-stretch min-h-[100px]">
+                                        <div className="flex items-stretch min-h-25">
                                             <div className={cn(
                                                 "w-2 transition-all",
                                                 isOverdue ? "bg-rose-500" : isInProgress ? "bg-indigo-500" : "bg-slate-200 group-hover:bg-slate-300"

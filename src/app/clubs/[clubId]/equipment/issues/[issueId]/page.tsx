@@ -477,7 +477,7 @@ export default function IssueDetailsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-8 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
+    <div className="mx-auto max-w-400 space-y-6 p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:space-y-8 sm:p-6 sm:pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-8 lg:p-8">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -512,7 +512,7 @@ export default function IssueDetailsPage() {
                 handleChangeSeverity(value as Issue["severity"])
               }
             >
-              <SelectTrigger className="w-full bg-card sm:w-[180px]">
+              <SelectTrigger className="w-full bg-card sm:w-45">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -833,7 +833,7 @@ export default function IssueDetailsPage() {
 
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-50/30">
               {comments.length === 0 ? (
-                <div className="flex h-full min-h-[260px] flex-col items-center justify-center text-muted-foreground opacity-50">
+                <div className="flex h-full min-h-65 flex-col items-center justify-center text-muted-foreground opacity-50">
                   <MessageCircle className="mb-2 h-8 w-8" />
                   <p className="text-sm">Нет комментариев</p>
                 </div>
@@ -986,7 +986,7 @@ export default function IssueDetailsPage() {
         </Card>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur supports-backdrop-filter:bg-background/80 md:hidden">
         <div className="mx-auto flex max-w-7xl gap-2">
           <Button asChild variant="outline" className="h-11 flex-1">
             <Link href={`/clubs/${clubId}/equipment/issues`}>

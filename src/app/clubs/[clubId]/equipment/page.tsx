@@ -120,7 +120,7 @@ export default function EquipmentDashboard() {
             {/* Key Signals */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <Link href={`/clubs/${clubId}/equipment/issues`}>
-                    <Card className="group h-full cursor-pointer border-none bg-gradient-to-br from-white to-amber-50/50 shadow-sm transition-all hover:shadow-md">
+                    <Card className="group h-full cursor-pointer border-none bg-linear-to-br from-white to-amber-50/50 shadow-sm transition-all hover:shadow-md">
                         <CardContent className="pt-6">
                             <div className="flex items-center justify-between">
                                 <div className="rounded-lg bg-amber-100 p-2">
@@ -141,7 +141,7 @@ export default function EquipmentDashboard() {
                 </Link>
 
                 <Link href={`/clubs/${clubId}/equipment/maintenance`}>
-                    <Card className="group h-full cursor-pointer border-none bg-gradient-to-br from-white to-rose-50/40 shadow-sm transition-all hover:shadow-md">
+                    <Card className="group h-full cursor-pointer border-none bg-linear-to-br from-white to-rose-50/40 shadow-sm transition-all hover:shadow-md">
                         <CardContent className="pt-6">
                             <div className="flex items-center justify-between">
                                 <div className="rounded-lg bg-rose-100 p-2">

@@ -188,7 +188,7 @@ export default function RevenueTrendChart({
     }, [currentRevenueChartPoints, chartPlotWidth])
 
     return (
-        <div className="min-w-0 overflow-hidden rounded-none border-0 bg-transparent p-0 sm:rounded-3xl sm:border sm:border-border sm:bg-gradient-to-b sm:from-slate-50 sm:to-white sm:p-4">
+        <div className="min-w-0 overflow-hidden rounded-none border-0 bg-transparent p-0 sm:rounded-3xl sm:border sm:border-border sm:bg-linear-to-b sm:from-slate-50 sm:to-white sm:p-4">
             <div className="min-w-0 overflow-x-auto overscroll-x-contain pb-2 [-ms-overflow-style:none] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <svg
                     viewBox={`0 0 ${chartWidth} ${chartHeight}`}

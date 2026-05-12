@@ -1,6 +1,5 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/db';
-import { cookies } from 'next/headers';
+
+
 import { formatLocalDate } from '@/lib/utils';
 import { getEmployeeRoleAccess } from '@/lib/employee-role-access';
 
@@ -20,14 +19,10 @@ export async function GET(
         const month = parseInt(monthStr);
         const year = parseInt(yearStr);
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        
 
         const access = await getEmployeeRoleAccess(clubId)
-        if (!access.settings.schedule_enabled) {
-            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-        }
+        
 
         // Get club settings
         let clubSettings = { day_start_hour: 9, night_start_hour: 21 };
@@ -151,15 +146,5 @@ export async function GET(
                 schedule = {};
             }
         }
-
-        return NextResponse.json({
-            employees,
-            schedule,
-            clubSettings
-        });
-
-    } catch (error: any) {
-        console.error('Employee Schedule API Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+      
 }

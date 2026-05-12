@@ -491,7 +491,7 @@ export default function ClubSignageDeviceEditorPage({
   }
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col bg-white overflow-hidden text-slate-900 font-sans">
+    <div className="flex h-dvh w-full flex-col bg-white overflow-hidden text-slate-900 font-sans">
       {notice && (
         <div className="fixed left-1/2 top-4 z-50 w-[90vw] max-w-sm -translate-x-1/2">
           <div
@@ -687,7 +687,7 @@ export default function ClubSignageDeviceEditorPage({
                                     ) : (
                                       <img src={slide.imageUrl} alt={slide.title || ""} className="h-full w-full object-contain" />
                                     )}
-                                    <div className="absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-black/45 via-black/15 to-transparent" />
+                                    <div className="absolute inset-x-0 top-0 h-10 bg-linear-to-b from-black/45 via-black/15 to-transparent" />
                                     <div className="absolute left-1.5 top-1.5 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-semibold text-slate-700 shadow-sm">
                                       #{index + 1}
                                     </div>
