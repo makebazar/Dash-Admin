@@ -28,7 +28,7 @@ import {
   CreditCard,
   Ticket,
 } from "lucide-react";
-import { useSSE } from "@/hooks/usePOSWebSocket";
+import { useSSE } from "@/hooks/use-pos-web-socket";
 import {
   getPromoQueue,
   claimPromoItemSafe,

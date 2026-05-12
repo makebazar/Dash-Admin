@@ -1,53 +1,54 @@
+import { formatLocalDate } from "@/lib/utils";
+import { getEmployeeRoleAccess } from "@/lib/employee-role-access";
+import { cookies } from "next/headers";
+import { query } from "@/db";
+import { NextResponse } from "next/server";
 
-
-import { formatLocalDate } from '@/lib/utils';
-import { getEmployeeRoleAccess } from '@/lib/employee-role-access';
-
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export async function GET(
-    request: Request,
-    { params }: { params: Promise<{ clubId: string }> }
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> },
 ) {
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId } = await params;
+    const { searchParams } = new URL(request.url);
+    const monthStr =
+      searchParams.get("month") || (new Date().getMonth() + 1).toString();
+    const yearStr =
+      searchParams.get("year") || new Date().getFullYear().toString();
+
+    const month = parseInt(monthStr);
+    const year = parseInt(yearStr);
+
+    const access = await getEmployeeRoleAccess(clubId);
+
+    // Get club settings
+    let clubSettings = { day_start_hour: 9, night_start_hour: 21 };
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        const { clubId } = await params;
-        const { searchParams } = new URL(request.url);
-        const monthStr = searchParams.get('month') || (new Date().getMonth() + 1).toString();
-        const yearStr = searchParams.get('year') || new Date().getFullYear().toString();
+      const clubRes = await query(`SELECT * FROM clubs WHERE id = $1`, [
+        clubId,
+      ]);
+      if (clubRes.rows[0]) {
+        const row = clubRes.rows[0];
+        clubSettings = {
+          day_start_hour: row.day_start_hour ?? 9,
+          night_start_hour: row.night_start_hour ?? 21,
+        };
+      }
+    } catch (e: any) {
+      console.warn("Failed to fetch club settings:", e.message);
+    }
 
-        const month = parseInt(monthStr);
-        const year = parseInt(yearStr);
+    const startDate = formatLocalDate(new Date(year, month - 1, -2));
+    const endOfMonth = formatLocalDate(new Date(year, month, 0));
 
-        
-
-        const access = await getEmployeeRoleAccess(clubId)
-        
-
-        // Get club settings
-        let clubSettings = { day_start_hour: 9, night_start_hour: 21 };
-        try {
-            const clubRes = await query(`SELECT * FROM clubs WHERE id = $1`, [clubId]);
-            if (clubRes.rows[0]) {
-                const row = clubRes.rows[0];
-                clubSettings = {
-                    day_start_hour: row.day_start_hour ?? 9,
-                    night_start_hour: row.night_start_hour ?? 21
-                };
-            }
-        } catch (e: any) {
-            console.warn('Failed to fetch club settings:', e.message);
-        }
-
-        const startOfMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
-        const startDate = formatLocalDate(new Date(year, month - 1, -2));
-        const endOfMonth = formatLocalDate(new Date(year, month, 0));
-
-        // Get employees - Filtered for shift staff
-        let employees = [];
-        try {
-            const employeesRes = await query(
-                `WITH member_rows AS (
+    // Get employees - Filtered for shift staff
+    let employees: any[] = [];
+    try {
+      const employeesRes = await query(
+        `WITH member_rows AS (
                     SELECT
                         ce.user_id,
                         ce.dismissed_at,
@@ -113,38 +114,47 @@ export async function GET(
                     OR COALESCE(dm.club_role, '') = 'Владелец'
                   )
                 ORDER BY dm.dismissed_at ASC NULLS FIRST, dm.display_order ASC, u.full_name ASC`,
-                [clubId, startDate]
-            );
-            employees = employeesRes.rows;
-        } catch (err: any) {
-            throw new Error(`Employee query failed: ${err.message}`);
-        }
+        [clubId, startDate],
+      );
+      employees = employeesRes.rows;
+    } catch (err: any) {
+      throw new Error(`Employee query failed: ${err.message}`);
+    }
 
-        // Get schedule for these employees
-        let schedule = {};
-        if (employees.length > 0) {
-            const employeeIds = employees.map(e => e.id); // Should be UUIDs
-            try {
-                // We need to pass the array of IDs to the query using ANY
-                const scheduleRes = await query(
-                    `SELECT user_id, TO_CHAR(date, 'YYYY-MM-DD') as date, shift_type 
-                     FROM work_schedules 
-                     WHERE club_id = $1 
+    // Get schedule for these employees
+    let schedule: Record<string, Record<string, string>> = {};
+    if (employees.length > 0) {
+      const employeeIds = employees.map((e) => e.id); // Should be UUIDs
+      try {
+        // We need to pass the array of IDs to the query using ANY
+        const scheduleRes = await query(
+          `SELECT user_id, TO_CHAR(date, 'YYYY-MM-DD') as date, shift_type
+                     FROM work_schedules
+                     WHERE club_id = $1
                      AND date >= $2 AND date <= $3
                      AND user_id = ANY($4::uuid[])`,
-                    [clubId, startDate, endOfMonth, employeeIds]
-                );
+          [clubId, startDate, endOfMonth, employeeIds],
+        );
 
-                const scheduleMap: Record<string, Record<string, string>> = {};
-                scheduleRes.rows.forEach(row => {
-                    if (!scheduleMap[row.user_id]) scheduleMap[row.user_id] = {};
-                    scheduleMap[row.user_id][row.date] = row.shift_type;
-                });
-                schedule = scheduleMap;
-            } catch (err: any) {
-                console.error('Failed to fetch schedule:', err);
-                schedule = {};
-            }
-        }
-      
+        const scheduleMap: Record<string, Record<string, string>> = {};
+        scheduleRes.rows.forEach((row: any) => {
+          if (!scheduleMap[row.user_id]) scheduleMap[row.user_id] = {};
+          scheduleMap[row.user_id][row.date] = row.shift_type;
+        });
+        schedule = scheduleMap;
+      } catch (err: any) {
+        console.error("Failed to fetch schedule:", err);
+        schedule = {};
+      }
+    }
+
+    return NextResponse.json({
+      employees,
+      schedule,
+      clubSettings,
+    });
+  } catch (error: any) {
+    console.error("Schedule API error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

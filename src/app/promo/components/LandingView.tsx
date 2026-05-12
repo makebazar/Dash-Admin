@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, Variants } from "framer-motion";
 import { Ticket, ArrowRight, Gamepad2, Gift, Zap, Star } from "lucide-react";
 import Link from "next/link";
 
@@ -11,7 +11,7 @@ interface LandingViewProps {
   action?: string | null;
 }
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -22,7 +22,7 @@ const containerVariants = {
   },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
@@ -33,7 +33,7 @@ const itemVariants = {
 
 export const LandingView = ({ clubId, clubName, action }: LandingViewProps) => {
   return (
-    <div className="relative min-h-[100dvh] bg-[#050505] text-white flex flex-col items-center justify-center p-6 text-center font-sans overflow-hidden">
+    <div className="relative min-h-dvh bg-[#050505] text-white flex flex-col items-center justify-center p-6 text-center font-sans overflow-hidden">
       {/* Dynamic Background */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <motion.div
@@ -42,7 +42,7 @@ export const LandingView = ({ clubId, clubName, action }: LandingViewProps) => {
             opacity: [0.2, 0.15, 0.2],
           }}
           transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-[20%] -left-[10%] w-[300px] h-[300px] sm:w-[500px] sm:h-[500px] bg-orange-600/30 rounded-full blur-[100px]"
+          className="absolute -top-[20%] -left-[10%] w-75 h-75 sm:w-125 sm:h-125 bg-orange-600/30 rounded-full blur-[100px]"
         />
         <motion.div
           animate={{
@@ -55,7 +55,7 @@ export const LandingView = ({ clubId, clubName, action }: LandingViewProps) => {
             ease: "easeInOut",
             delay: 1,
           }}
-          className="absolute top-[60%] -right-[20%] w-[250px] h-[250px] sm:w-[400px] sm:h-[400px] bg-red-600/30 rounded-full blur-[100px]"
+          className="absolute top-[60%] -right-[20%] w-62.5 h-62.5 sm:w-100 sm:h-100 bg-red-600/30 rounded-full blur-[100px]"
         />
       </div>
 

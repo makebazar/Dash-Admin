@@ -504,7 +504,7 @@ export default function MinesGame() {
             {history.map((h, i) => (
               <div
                 key={i}
-                className="flex-shrink-0 bg-white/5 border border-white/5 px-4 py-2 rounded-2xl flex items-center gap-3"
+                className="shrink-0 bg-white/5 border border-white/5 px-4 py-2 rounded-2xl flex items-center gap-3"
               >
                 <span className="text-orange-500 font-black italic text-xs">
                   x{h.multiplier}

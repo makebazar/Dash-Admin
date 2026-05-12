@@ -80,7 +80,12 @@ export async function POST(request: Request) {
     let wonPrize = null;
     let roll = Math.random() * 100;
     let cumulative = 0;
-    let diceResult: { d1: number; d2: number; sum: number } | null = null;
+    let diceResult: {
+      d1: number;
+      d2: number;
+      sum: number;
+      initialForces?: any[];
+    } | null = null;
 
     // 4. Calculate Prize
     if (isCodeCorrect) {

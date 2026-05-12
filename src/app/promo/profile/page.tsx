@@ -325,13 +325,13 @@ export default function PromoProfile() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsAddModalOpen(false)}
-              className="fixed inset-0 bg-black/80 backdrop-blur-md z-[60]"
+              className="fixed inset-0 bg-black/80 backdrop-blur-md z-60"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[340px] bg-[#151515] border border-white/10 rounded-[2.5rem] p-8 z-[70] shadow-2xl"
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-85 bg-[#151515] border border-white/10 rounded-[2.5rem] p-8 z-70 shadow-2xl"
             >
               <div className="flex items-center justify-between mb-8">
                 <div className="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center">

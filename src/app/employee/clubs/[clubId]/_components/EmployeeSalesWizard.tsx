@@ -48,7 +48,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs";
-import { useSSE } from "@/hooks/usePOSWebSocket";
+import { useSSE } from "@/hooks/use-pos-web-socket";
 import {
   createShiftReceiptSafe,
   getProductByBarcode,
@@ -1341,7 +1341,7 @@ export function EmployeeSalesWizard({
                           }
                         }}
                       >
-                        <SelectTrigger className="h-14 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base font-medium text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-[placeholder]:text-zinc-500">
+                        <SelectTrigger className="h-14 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base font-medium text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-placeholder:text-zinc-500">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="rounded-2xl border-zinc-800 bg-zinc-950/98 p-2 text-zinc-100 shadow-2xl shadow-black/60 backdrop-blur-xl">
@@ -1404,7 +1404,7 @@ export function EmployeeSalesWizard({
                             value={salaryTargetUserId}
                             onValueChange={setSalaryTargetUserId}
                           >
-                            <SelectTrigger className="h-14 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-[placeholder]:text-zinc-500">
+                            <SelectTrigger className="h-14 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-placeholder:text-zinc-500">
                               <SelectValue placeholder="Выберите сотрудника..." />
                             </SelectTrigger>
                             <SelectContent className="rounded-2xl border-zinc-800 bg-zinc-950/98 p-2 text-zinc-100 shadow-2xl shadow-black/60 backdrop-blur-xl">

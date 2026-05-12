@@ -48,7 +48,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { getMonthRangeInTimezone } from "@/lib/utils";
-import { SSEProvider } from "@/hooks/usePOSWebSocket";
+import { SSEProvider } from "@/hooks/use-pos-web-socket";
 import {
   KpiOverview,
   ChecklistKpiCard,

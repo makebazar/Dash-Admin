@@ -525,7 +525,7 @@ export default function FlappyDashGame() {
                 <Bird className="w-12 h-12 text-white fill-current" />
               </div>
 
-              <h1 className="text-4xl font-black uppercase italic italic tracking-tighter mb-2">
+              <h1 className="text-4xl font-black uppercase italic tracking-tighter mb-2">
                 Flappy <span className="text-green-500">Dash</span>
               </h1>
               <p className="text-gray-400 text-sm mb-10 max-w-xs uppercase tracking-widest font-bold">

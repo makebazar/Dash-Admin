@@ -232,7 +232,7 @@ export default function AccrualsPage() {
             history.map((item, idx) => (
               <div
                 key={idx}
-                className="p-6 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+                className="p-6 flex items-center justify-between hover:bg-white/2 transition-colors"
               >
                 <div className="flex items-center gap-4">
                   <div

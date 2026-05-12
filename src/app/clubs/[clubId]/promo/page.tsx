@@ -107,6 +107,14 @@ export default function PromotionsPage() {
         is_active?: boolean;
         card_count?: number;
         card_back_style?: string;
+        base_bonus?: number;
+        multiplier_step?: number;
+        max_multiplier?: number;
+        difficulty?: "easy" | "medium" | "hard";
+        min_cashout_reveals?: number;
+        modes?: any[];
+        house_edge?: number;
+        growth_rate?: number;
       }
     >,
     is_promo_active: true,
@@ -1164,10 +1172,14 @@ export default function PromotionsPage() {
                                     ...prev,
                                     game_configs: {
                                       ...prev.game_configs,
-                                      [selectedGameId]: {
-                                        ...(prev.game_configs[selectedGameId] ||
-                                          {}),
-                                        difficulty: level,
+                                      [selectedGameId as string]: {
+                                        ...(prev.game_configs[
+                                          selectedGameId as string
+                                        ] || {}),
+                                        difficulty: level as
+                                          | "easy"
+                                          | "medium"
+                                          | "hard",
                                       },
                                     },
                                   }));
@@ -1375,9 +1387,9 @@ export default function PromotionsPage() {
                                         value={mode.mines}
                                         onChange={(e) => {
                                           const newModes = [
-                                            ...settings.game_configs[
-                                              selectedGameId
-                                            ].modes,
+                                            ...(settings.game_configs[
+                                              selectedGameId as string
+                                            ]?.modes || []),
                                           ];
                                           newModes[idx].mines =
                                             parseInt(e.target.value) || 0;
@@ -1399,7 +1411,7 @@ export default function PromotionsPage() {
                                     </div>
                                   </div>
 
-                                  <div className="h-10 w-[1px] bg-slate-100 hidden md:block" />
+                                  <div className="h-10 w-px bg-slate-100 hidden md:block" />
 
                                   <div>
                                     <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
@@ -1412,9 +1424,9 @@ export default function PromotionsPage() {
                                         value={mode.multiplier_step}
                                         onChange={(e) => {
                                           const newModes = [
-                                            ...settings.game_configs[
-                                              selectedGameId
-                                            ].modes,
+                                            ...(settings.game_configs[
+                                              selectedGameId as string
+                                            ]?.modes || []),
                                           ];
                                           newModes[idx].multiplier_step =
                                             parseFloat(e.target.value) || 0;
@@ -1442,11 +1454,11 @@ export default function PromotionsPage() {
 
                                 <button
                                   onClick={() => {
-                                    const newModes = settings.game_configs[
-                                      selectedGameId
-                                    ].modes.filter(
-                                      (_: any, i: number) => i !== idx,
-                                    );
+                                    const newModes = (
+                                      settings.game_configs[
+                                        selectedGameId as string
+                                      ]?.modes || []
+                                    ).filter((_: any, i: number) => i !== idx);
                                     setSettings({
                                       ...settings,
                                       game_configs: {

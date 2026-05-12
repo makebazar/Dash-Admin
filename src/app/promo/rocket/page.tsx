@@ -528,7 +528,7 @@ export default function RocketGame() {
             >
               <button
                 onClick={() => cashOut()}
-                className="w-full py-6 rounded-[2rem] font-black text-2xl uppercase tracking-tighter shadow-2xl transition-all active:scale-95 bg-orange-500 text-white shadow-[0_0_40px_rgba(249,115,22,0.6)] hover:bg-orange-600"
+                className="w-full py-6 rounded-[2rem] font-black text-2xl uppercase tracking-tighter transition-all active:scale-95 bg-orange-500 text-white shadow-[0_0_40px_rgba(249,115,22,0.6)] hover:bg-orange-600"
               >
                 Забрать{" "}
                 {Math.floor(multiplier * selectedBet * config.base_bonus)} ₽
@@ -544,7 +544,7 @@ export default function RocketGame() {
               {history.map((h, i) => (
                 <div
                   key={i}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-xl border flex items-center gap-2 text-[10px] font-black italic ${h.won ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-red-500/10 border-red-500/20 text-red-500"}`}
+                  className={`shrink-0 px-3 py-1.5 rounded-xl border flex items-center gap-2 text-[10px] font-black italic ${h.won ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-red-500/10 border-red-500/20 text-red-500"}`}
                 >
                   x{h.multiplier}
                 </div>

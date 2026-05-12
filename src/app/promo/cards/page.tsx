@@ -409,7 +409,7 @@ export default function LuckyCardsGame() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center overflow-hidden relative font-sans select-none">
-      <div className="absolute inset-0 bg-gradient-to-b from-purple-900/10 via-transparent to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-b from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
       {/* Top Bar - Compact & Intrusive-free */}
       <GameHeader
@@ -432,7 +432,7 @@ export default function LuckyCardsGame() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-12"
         >
-          <h1 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-orange-500 tracking-tighter uppercase italic leading-none drop-shadow-[0_0_15px_rgba(236,72,153,0.3)]">
+          <h1 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-linear-to-r from-purple-400 via-pink-500 to-orange-500 tracking-tighter uppercase italic leading-none drop-shadow-[0_0_15px_rgba(236,72,153,0.3)]">
             Карты
           </h1>
           <p className="text-gray-400 text-[10px] uppercase tracking-[0.4em] font-bold mt-3">
@@ -442,7 +442,7 @@ export default function LuckyCardsGame() {
 
         {/* Cards Container */}
         <div
-          className="relative w-full max-w-4xl h-[350px] sm:h-[400px] flex justify-center items-center"
+          className="relative w-full max-w-4xl h-87.5 sm:h-100 flex justify-center items-center"
           style={{ perspective: "1200px" }}
         >
           <AnimatePresence>
@@ -547,13 +547,13 @@ export default function LuckyCardsGame() {
                     transformStyle: "preserve-3d",
                   }}
                   onClick={() => handleCardClick(card.id)}
-                  className={`${cardCount === 5 ? "w-20 sm:w-28" : cardCount === 4 ? "w-24 sm:w-32" : "w-28 sm:w-40"} aspect-[2/3] cursor-pointer group`}
+                  className={`${cardCount === 5 ? "w-20 sm:w-28" : cardCount === 4 ? "w-24 sm:w-32" : "w-28 sm:w-40"} aspect-2/3 cursor-pointer group`}
                 >
                   {/* Card Back Face */}
                   <div
                     className={`absolute inset-0 rounded-2xl border-[3px] shadow-2xl flex items-center justify-center backface-hidden overflow-hidden ${gameState !== "playing" ? "opacity-70" : "transition-all"} ${
                       backStyle === "gold"
-                        ? "border-yellow-600/50 bg-gradient-to-br from-amber-900 to-yellow-950 group-hover:border-yellow-400"
+                        ? "border-yellow-600/50 bg-linear-to-br from-amber-900 to-yellow-950 group-hover:border-yellow-400"
                         : backStyle === "neon"
                           ? "border-cyan-500/50 bg-slate-950 group-hover:border-cyan-400 group-hover:shadow-[0_0_20px_rgba(34,211,238,0.4)]"
                           : "border-purple-500/30 bg-[#0f0c1b] group-hover:border-purple-400/60 group-hover:shadow-[0_0_30px_rgba(168,85,247,0.4)]"
@@ -569,34 +569,34 @@ export default function LuckyCardsGame() {
                       <>
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(251,191,36,0.1),transparent)]" />
                         <div className="absolute inset-2 border border-yellow-600/20 rounded-xl bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20" />
-                        <div className="w-14 h-14 rounded-full border-2 border-yellow-600/40 bg-gradient-to-t from-amber-900 to-yellow-700 flex items-center justify-center shadow-lg">
+                        <div className="w-14 h-14 rounded-full border-2 border-yellow-600/40 bg-linear-to-t from-amber-900 to-yellow-700 flex items-center justify-center shadow-lg">
                           <CardIcon className="w-7 h-7 text-yellow-500" />
                         </div>
                       </>
                     ) : backStyle === "neon" ? (
                       <>
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,182,212,0.15),transparent)]" />
-                        <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.05)_1px,transparent_1px)] bg-[size:20px_20px]" />
+                        <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.05)_1px,transparent_1px)] bg-size-[20px_20px]" />
                         <div className="w-14 h-14 rounded-full border border-cyan-500/40 bg-cyan-500/10 backdrop-blur-sm flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.3)]">
                           <CardIcon className="w-7 h-7 text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]" />
                         </div>
                       </>
                     ) : (
                       <>
-                        <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/40 via-purple-500/40 to-pink-500/40 opacity-50 mix-blend-color-dodge animate-pulse" />
-                        <div className="absolute inset-2 border border-purple-500/20 rounded-xl bg-[linear-gradient(45deg,transparent_25%,rgba(168,85,247,0.1)_50%,transparent_75%)] bg-[length:20px_20px]" />
+                        <div className="absolute inset-0 bg-linear-to-tr from-blue-600/40 via-purple-500/40 to-pink-500/40 opacity-50 mix-blend-color-dodge animate-pulse" />
+                        <div className="absolute inset-2 border border-purple-500/20 rounded-xl bg-[linear-gradient(45deg,transparent_25%,rgba(168,85,247,0.1)_50%,transparent_75%)] bg-size-[20px_20px]" />
                         <div className="w-14 h-14 rounded-full border border-purple-400/40 bg-purple-900/40 backdrop-blur-sm flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.5)]">
                           <CardIcon className="w-7 h-7 text-purple-300 drop-shadow-[0_0_5px_rgba(216,180,254,0.8)]" />
                         </div>
                       </>
                     )}
                     {/* Global Shimmer */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
+                    <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]" />
                   </div>
 
                   {/* Front Face */}
                   <div
-                    className={`absolute inset-0 rounded-2xl border-4 border-white/10 bg-gradient-to-br ${card.color} shadow-2xl flex flex-col items-center justify-center ${!isSelected && gameState === "result" ? "opacity-60 grayscale-[30%]" : ""}`}
+                    className={`absolute inset-0 rounded-2xl border-4 border-white/10 bg-linear-to-br ${card.color} shadow-2xl flex flex-col items-center justify-center ${!isSelected && gameState === "result" ? "opacity-60 grayscale-30" : ""}`}
                     style={{
                       backfaceVisibility: "hidden",
                       WebkitBackfaceVisibility: "hidden",
@@ -646,7 +646,7 @@ export default function LuckyCardsGame() {
       </main>
 
       {/* Sticky Bottom Action Button */}
-      <div className="w-full fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/90 to-transparent z-50 flex justify-center pb-8">
+      <div className="w-full fixed bottom-0 left-0 right-0 p-6 bg-linear-to-t from-black via-black/90 to-transparent z-50 flex justify-center pb-8">
         <div className="w-full max-w-sm">
           <button
             onClick={gameState === "result" ? resetBoard : startGameSequence}
@@ -656,7 +656,7 @@ export default function LuckyCardsGame() {
               ${
                 isActionDisabled
                   ? "bg-white/10 text-white/40 cursor-not-allowed"
-                  : "bg-gradient-to-r from-purple-500 to-orange-500 text-white shadow-[0_0_30px_rgba(168,85,247,0.4)]"
+                  : "bg-linear-to-r from-purple-500 to-orange-500 text-white shadow-[0_0_30px_rgba(168,85,247,0.4)]"
               }
             `}
           >
@@ -690,7 +690,7 @@ export default function LuckyCardsGame() {
               <motion.div
                 animate={{ x: ["-100%", "250%"] }}
                 transition={{ repeat: Infinity, duration: 2.5, ease: "linear" }}
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -skew-x-20 pointer-events-none"
+                className="absolute inset-0 bg-linear-to-r from-transparent via-white/40 to-transparent -skew-x-20 pointer-events-none"
               />
             )}
           </button>

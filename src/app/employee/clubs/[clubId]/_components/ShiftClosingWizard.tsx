@@ -33,7 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useSSE } from "@/hooks/usePOSWebSocket";
+import { useSSE } from "@/hooks/use-pos-web-socket";
 import {
   addProductToInventorySafe,
   bulkUpdateInventoryItemsSafe,
