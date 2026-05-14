@@ -17,9 +17,11 @@ import {
   X,
   ArrowRight,
   Wallet,
+  ShoppingCart,
 } from "lucide-react";
 import Link from "next/link";
 import { getPhoneDisplay } from "@/lib/phone-utils";
+import { BottomNav } from "../components/BottomNav";
 
 export default function PromoProfile() {
   const [clubs, setClubs] = useState<any[]>([]);
@@ -151,8 +153,11 @@ export default function PromoProfile() {
             <Trophy className="w-24 h-24 text-white" />
           </div>
           <div className="relative z-10">
-            <h2 className="text-3xl font-black mb-1 uppercase italic tracking-tighter">
+            <h2 className="text-3xl font-black mb-1 uppercase italic tracking-tighter flex items-center gap-3">
               {player?.fullName || "Игрок"}
+              <span className="text-sm bg-white/20 px-3 py-1 rounded-full text-white tracking-widest not-italic">
+                LVL {player?.level?.currentLevel || 1}
+              </span>
             </h2>
             <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-6">
               {player?.phoneNumber
@@ -160,34 +165,55 @@ export default function PromoProfile() {
                 : "..."}
             </p>
 
-            <div className="flex gap-8">
-              <div>
-                <div className="text-[10px] text-white/50 font-black uppercase tracking-widest mb-1">
+            <Link
+              href="/promo/roadmap"
+              className="block w-full bg-black/20 hover:bg-black/30 rounded-2xl p-4 mb-6 transition-colors border border-white/10"
+            >
+              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-white/80 mb-2">
+                <span>
+                  {player?.level?.isMaxLevel ? "МАКС. УРОВЕНЬ" : "ОПЫТ"}
+                </span>
+                <span>
+                  {player?.level?.isMaxLevel
+                    ? `${Math.floor(player?.level?.totalXp || 0)} XP`
+                    : `${Math.floor(player?.level?.progressXp || 0)} / ${player?.level?.targetXp || 0} XP`}
+                </span>
+              </div>
+              <div className="w-full bg-black/50 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-white h-full rounded-full transition-all"
+                  style={{
+                    width: `${player?.level?.isMaxLevel ? 100 : Math.min(100, Math.max(0, ((player?.level?.progressXp || 0) / (player?.level?.targetXp || 1)) * 100))}%`,
+                  }}
+                />
+              </div>
+            </Link>
+
+            <div className="flex gap-4 sm:gap-8">
+              <Link
+                href="/promo/accruals"
+                className="flex-1 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl p-4 transition-colors"
+              >
+                <div className="text-[10px] text-white/70 font-black uppercase tracking-widest mb-1">
                   Билеты
                 </div>
-                <div className="text-xl font-black flex items-center gap-2">
-                  <Ticket className="w-4 h-4 text-white/80" />
+                <div className="text-2xl font-black flex items-center gap-2">
+                  <Ticket className="w-5 h-5 text-white/80" />
                   {player?.activeTickets || 0}
                 </div>
-              </div>
-              <div className="flex-1 flex items-end justify-between">
-                <div>
-                  <div className="text-[10px] text-white/50 font-black uppercase tracking-widest mb-1">
-                    Бонусы
-                  </div>
-                  <div className="text-xl font-black">
-                    {Math.floor(player?.bonusBalance || 0)}
-                  </div>
+              </Link>
+              <Link
+                href="/promo/withdraw"
+                className="flex-1 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl p-4 transition-colors"
+              >
+                <div className="text-[10px] text-white/70 font-black uppercase tracking-widest mb-1">
+                  Бонусы
                 </div>
-                {player?.bonusBalance > 0 && (
-                  <Link
-                    href="/promo/withdraw"
-                    className="bg-black/20 hover:bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2"
-                  >
-                    На аккаунт
-                  </Link>
-                )}
-              </div>
+                <div className="text-2xl font-black flex items-center gap-2">
+                  <Wallet className="w-5 h-5 text-white/80" />
+                  {Math.floor(player?.bonusBalance || 0)}
+                </div>
+              </Link>
             </div>
           </div>
         </div>
@@ -291,30 +317,7 @@ export default function PromoProfile() {
         </div>
       </div>
 
-      {/* Bottom Nav Simulation */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl border border-white/10 rounded-full px-8 py-4 flex items-center gap-10 shadow-2xl z-50">
-        <Link
-          href="/promo"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <Gamepad2 className="w-6 h-6" />
-        </Link>
-        <Link
-          href="/promo/accruals"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <Ticket className="w-6 h-6" />
-        </Link>
-        <Link
-          href="/promo/withdraw"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <Wallet className="w-6 h-6" />
-        </Link>
-        <button className="text-orange-500">
-          <User className="w-6 h-6" />
-        </button>
-      </div>
+      <BottomNav />
 
       {/* Add Club Modal */}
       <AnimatePresence>

@@ -205,6 +205,7 @@ export function SalesTab({
             label: string;
             items: any[];
             isSalary: boolean;
+            isBonus: boolean;
             salaryTargetName: string | null;
             time: string;
             totalAmount: number;
@@ -229,16 +230,18 @@ export function SalesTab({
     sales.forEach((sale) => {
       const shiftId = sale.shift_id_raw;
       const amount = Math.abs(sale.change_amount);
-      const isSalaryDeduction = sale.reason
-        ?.toLowerCase()
-        .includes("в счет зп");
+      const isSalaryDeduction =
+        sale.receipt_payment_type === "salary" ||
+        sale.reason?.toLowerCase().includes("в счет зп");
+      const isBonusPurchase = sale.receipt_payment_type === "bonus";
       const salaryTargetName = sale.salary_target_user_name || null;
       const isReturn = sale.type === "RETURN"; // Returns have type 'RETURN'
       const price = Number(sale.price_at_time || sale.current_price || 0);
       const cost = Number(sale.cost_price_snapshot || 0);
 
       // Расчет выручки
-      const itemRevenue = isSalaryDeduction ? 0 : amount * price;
+      const itemRevenue =
+        isSalaryDeduction || isBonusPurchase ? 0 : amount * price;
       const itemCost = amount * cost;
 
       const targetGroup = shiftId
@@ -274,6 +277,7 @@ export function SalesTab({
           id: receiptId,
           label: isReceipt ? `Чек #${sale.related_entity_id}` : "Без чека",
           isSalary: isSalaryDeduction,
+          isBonus: isBonusPurchase,
           salaryTargetName: salaryTargetName,
           time: sale.created_at,
           items: [],
@@ -660,6 +664,11 @@ export function SalesTab({
                                               : ""}
                                           </Badge>
                                         )}
+                                        {receipt.isBonus && (
+                                          <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[9px] h-4 px-1.5 uppercase font-black">
+                                            За бонусы
+                                          </Badge>
+                                        )}
                                       </div>
                                       <div className="flex items-center gap-4">
                                         <div className="flex items-center gap-1.5">
@@ -687,9 +696,13 @@ export function SalesTab({
                                 </TableRow>
                               )}
                               {receipt.items.map((sale, saleIdx) => {
-                                const isSalaryDeduction = sale.reason
-                                  ?.toLowerCase()
-                                  .includes("в счет зп");
+                                const isSalaryDeduction =
+                                  sale.receipt_payment_type === "salary" ||
+                                  sale.reason
+                                    ?.toLowerCase()
+                                    .includes("в счет зп");
+                                const isBonusPurchase =
+                                  sale.receipt_payment_type === "bonus";
                                 return (
                                   <TableRow
                                     key={`${sale.id}-${saleIdx}`}
@@ -697,6 +710,8 @@ export function SalesTab({
                                       "hover:bg-muted/50 group h-12 transition-colors",
                                       isSalaryDeduction &&
                                         "bg-purple-50/30 hover:bg-purple-50/50",
+                                      isBonusPurchase &&
+                                        "bg-amber-50/30 hover:bg-amber-50/50",
                                     )}
                                   >
                                     <TableCell className="text-center p-0">
@@ -728,6 +743,14 @@ export function SalesTab({
                                             ) && (
                                               <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[9px] h-4 px-1.5 uppercase font-black">
                                                 В счет ЗП
+                                              </Badge>
+                                            )}
+                                          {isBonusPurchase &&
+                                            !receipt.id.startsWith(
+                                              "receipt_",
+                                            ) && (
+                                              <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[9px] h-4 px-1.5 uppercase font-black">
+                                                За бонусы
                                               </Badge>
                                             )}
                                         </div>
@@ -804,11 +827,12 @@ export function SalesTab({
                                       )}
                                     </TableCell>
                                     <TableCell className="text-right font-black text-foreground">
-                                      {(
-                                        Math.abs(sale.change_amount) *
-                                        (sale.price_at_time ||
-                                          sale.current_price ||
-                                          0)
+                                      {(isSalaryDeduction || isBonusPurchase
+                                        ? 0
+                                        : Math.abs(sale.change_amount) *
+                                          (sale.price_at_time ||
+                                            sale.current_price ||
+                                            0)
                                       ).toLocaleString("ru-RU")}{" "}
                                       ₽
                                     </TableCell>
@@ -952,6 +976,11 @@ export function SalesTab({
                                       : ""}
                                   </Badge>
                                 )}
+                                {receipt.isBonus && (
+                                  <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[9px] h-4 px-1.5 uppercase font-black">
+                                    За бонусы
+                                  </Badge>
+                                )}
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-black text-slate-900">
@@ -964,9 +993,13 @@ export function SalesTab({
 
                           <div className="divide-y divide-slate-100">
                             {receipt.items.map((sale, saleIdx) => {
-                              const isSalaryDeduction = sale.reason
-                                ?.toLowerCase()
-                                .includes("в счет зп");
+                              const isSalaryDeduction =
+                                sale.receipt_payment_type === "salary" ||
+                                sale.reason
+                                  ?.toLowerCase()
+                                  .includes("в счет зп");
+                              const isBonusPurchase =
+                                sale.receipt_payment_type === "bonus";
                               return (
                                 <div
                                   key={`${sale.id}-${saleIdx}`}
@@ -974,7 +1007,9 @@ export function SalesTab({
                                     "p-4 flex items-center gap-3 transition-colors group",
                                     isSalaryDeduction
                                       ? "bg-purple-50/40 active:bg-purple-100/50"
-                                      : "active:bg-slate-50",
+                                      : isBonusPurchase
+                                        ? "bg-amber-50/40 active:bg-amber-100/50"
+                                        : "active:bg-slate-50",
                                   )}
                                 >
                                   <div className="flex-none">
@@ -992,12 +1027,20 @@ export function SalesTab({
                                       <h4 className="font-bold text-slate-900 text-sm leading-tight truncate">
                                         {sale.product_name}
                                       </h4>
-                                      {sale.reason
-                                        ?.toLowerCase()
-                                        .includes("в счет зп") &&
+                                      {(sale.receipt_payment_type ===
+                                        "salary" ||
+                                        sale.reason
+                                          ?.toLowerCase()
+                                          .includes("в счет зп")) &&
                                         !receipt.id.startsWith("receipt_") && (
                                           <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[8px] h-3.5 px-1 uppercase font-black">
                                             ЗП
+                                          </Badge>
+                                        )}
+                                      {isBonusPurchase &&
+                                        !receipt.id.startsWith("receipt_") && (
+                                          <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[8px] h-3.5 px-1 uppercase font-black">
+                                            Бонусы
                                           </Badge>
                                         )}
                                     </div>
@@ -1031,11 +1074,12 @@ export function SalesTab({
 
                                   <div className="flex flex-col items-end gap-1 px-2">
                                     <div className="text-sm font-black text-slate-900">
-                                      {(
-                                        Math.abs(sale.change_amount) *
-                                        (sale.price_at_time ||
-                                          sale.current_price ||
-                                          0)
+                                      {(isSalaryDeduction || isBonusPurchase
+                                        ? 0
+                                        : Math.abs(sale.change_amount) *
+                                          (sale.price_at_time ||
+                                            sale.current_price ||
+                                            0)
                                       ).toLocaleString("ru-RU")}{" "}
                                       ₽
                                     </div>

@@ -13,6 +13,7 @@ import {
   Loader2,
   History,
   Ticket,
+  ShoppingCart,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -290,12 +291,18 @@ export default function PromoWithdraw() {
       </div>
 
       {/* Bottom Nav Simulation */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl border border-white/10 rounded-full px-8 py-4 flex items-center gap-10 shadow-2xl z-50">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl border border-white/10 rounded-full px-8 py-4 flex items-center gap-8 sm:gap-10 shadow-2xl z-50">
         <Link
           href="/promo"
           className="text-gray-500 hover:text-white transition-colors"
         >
           <Gamepad2 className="w-6 h-6" />
+        </Link>
+        <Link
+          href="/promo?tab=shop"
+          className="text-gray-500 hover:text-white transition-colors"
+        >
+          <ShoppingCart className="w-6 h-6" />
         </Link>
         <Link
           href="/promo/accruals"

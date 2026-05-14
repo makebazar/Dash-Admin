@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useTransition,
+  useMemo,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,25 +38,167 @@ import { useSSE } from "@/hooks/use-pos-web-socket";
 import {
   getPromoQueue,
   claimPromoItemSafe,
-  topupPlayerBalanceSafe,
+  getClubPromoSettings,
+  bulkAccruePromoSafe,
+  getRecentPromoAccruals,
+  voidPromoAccrualSafe,
 } from "@/app/clubs/[clubId]/inventory/actions";
 import { normalizePhone } from "@/lib/phone-utils";
 import { cn } from "@/lib/utils";
 import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs";
+import { format } from "date-fns";
+import { ru } from "date-fns/locale";
 
 export function EmployeePromoControlCard({
   clubId,
   userId,
   clubCode,
   enabled,
+  timezone = "Europe/Moscow",
 }: {
   clubId: string;
   userId: string;
   clubCode?: string;
   enabled: boolean;
+  timezone?: string;
 }) {
   const [promoQueue, setPromoQueue] = useState<any[]>([]);
+  const [recentAccruals, setRecentAccruals] = useState<any[]>([]);
   const [checkedInPlayers, setCheckedInPlayers] = useState<any[]>([]);
+  const [promoSettings, setPromoSettings] = useState<any>({});
+
+  // ... (activeServiceRules unchanged)
+
+  const activeServiceRules = useMemo(() => {
+    const rules = promoSettings.service_rules || [];
+    if (rules.length === 0) return [];
+
+    // Get current time in club's timezone
+    let clubTime: { day: number; time: number } | null = null;
+    try {
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        hour: "numeric",
+        minute: "numeric",
+        hour12: false,
+        weekday: "short",
+      });
+      const parts = formatter.formatToParts(new Date());
+      const hour = parseInt(parts.find((p) => p.type === "hour")?.value || "0");
+      const minute = parseInt(
+        parts.find((p) => p.type === "minute")?.value || "0",
+      );
+      const weekdayStr = parts.find((p) => p.type === "weekday")?.value;
+      const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      clubTime = {
+        day: weekdays.indexOf(weekdayStr || ""),
+        time: hour * 100 + minute,
+      };
+    } catch (e) {
+      console.error("Failed to calculate club time", e);
+    }
+
+    return rules
+      .filter((rule: any) => rule.is_active)
+      .map((rule: any) => {
+        if (!clubTime) return { ...rule, is_matching_schedule: true };
+
+        const isDayMatch = rule.days.includes(clubTime.day);
+        const [startH, startM] = rule.time_start.split(":").map(Number);
+        const [endH, endM] = rule.time_end.split(":").map(Number);
+        const startTime = startH * 100 + startM;
+        const endTime = endH * 100 + endM;
+
+        let isTimeMatch = false;
+        if (startTime <= endTime) {
+          isTimeMatch = clubTime.time >= startTime && clubTime.time <= endTime;
+        } else {
+          isTimeMatch = clubTime.time >= startTime || clubTime.time <= endTime;
+        }
+
+        return {
+          ...rule,
+          is_matching_schedule: isDayMatch && isTimeMatch,
+        };
+      })
+      .sort((a: any, b: any) => {
+        if (a.is_matching_schedule && !b.is_matching_schedule) return -1;
+        if (!a.is_matching_schedule && b.is_matching_schedule) return 1;
+        return 0;
+      });
+  }, [promoSettings.service_rules, timezone]);
+
+  // Unified Dialog State
+  const [isAccrualDialogOpen, setIsAccrualDialogOpen] = useState(false);
+  const [accrualPlayer, setAccrualPlayer] = useState<any>(null);
+  const [accrualTopupAmount, setAccrualTopupAmount] = useState("");
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [isAccruing, setIsAccruing] = useState(false);
+
+  // Search State
+  const [promoSearchQuery, setPromoSearchQuery] = useState("");
+  const [promoSearchResults, setPromoSearchResults] = useState<any[]>([]);
+  const [isSearchingPromo, setIsSearchingPromo] = useState(false);
+
+  // UI helpers
+  const [isLoading, setIsLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
+  const { confirmAction, showMessage, Dialogs } = useUiDialogs();
+
+  const refresh = useCallback(async () => {
+    if (!enabled || !clubId) return;
+    try {
+      const [queue, settings, history] = await Promise.all([
+        getPromoQueue(clubId, userId),
+        getClubPromoSettings(clubId, userId),
+        getRecentPromoAccruals(clubId),
+      ]);
+      setPromoQueue(queue);
+      setPromoSettings(settings);
+      setRecentAccruals(history);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [clubId, enabled, userId]);
+
+  // Web socket handling
+  const handleWebSocketMessage = useCallback(
+    (message: any) => {
+      if (message.type === "PROMO_QUEUE_UPDATED") {
+        refresh();
+      }
+
+      if (message.type === "PLAYER_CHECKIN" && message.player) {
+        if (message.player.intent && message.player.intent !== "topup") return;
+
+        setCheckedInPlayers((prev) => {
+          const filtered = prev.filter((p) => p.id !== message.player.id);
+          return [
+            { ...message.player, timestamp: Date.now() },
+            ...filtered,
+          ].slice(0, 5);
+        });
+
+        if (isAccrualDialogOpen && !accrualPlayer) {
+          setAccrualPlayer(message.player);
+        }
+
+        showMessage({
+          title: "🔔 Гость подошел",
+          description: `${message.player.full_name} сканировал QR`,
+        });
+      }
+    },
+    [isAccrualDialogOpen, accrualPlayer, refresh, showMessage],
+  );
+
+  useSSE(handleWebSocketMessage);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -79,67 +227,6 @@ export function EmployeePromoControlCard({
     }
   }, [checkedInPlayers, clubId]);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isPending, startTransition] = useTransition();
-  const { confirmAction, showMessage, Dialogs } = useUiDialogs();
-
-  // Topup State
-  const [isTopupDialogOpen, setIsTopupDialogOpen] = useState(false);
-  const [topupPlayer, setTopupPlayer] = useState<any>(null);
-  const [topupAmount, setTopupAmount] = useState("");
-  const [topupPaymentType, setTopupPaymentType] = useState<
-    "cash" | "card" | "other"
-  >("cash");
-  const [promoSearchQuery, setPromoSearchQuery] = useState("");
-  const [promoSearchResults, setPromoSearchResults] = useState<any[]>([]);
-  const [isSearchingPromo, setIsSearchingPromo] = useState(false);
-
-  const refresh = useCallback(async () => {
-    if (!enabled || !clubId) return;
-    try {
-      const queue = await getPromoQueue(clubId, userId);
-      setPromoQueue(queue);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [clubId, enabled, userId]);
-
-  const handleWebSocketMessage = useCallback(
-    (message: any) => {
-      if (message.type === "PROMO_QUEUE_UPDATED") {
-        refresh();
-      }
-
-      if (message.type === "PLAYER_CHECKIN" && message.player) {
-        setCheckedInPlayers((prev) => {
-          const filtered = prev.filter((p) => p.id !== message.player.id);
-          return [
-            { ...message.player, timestamp: Date.now() },
-            ...filtered,
-          ].slice(0, 5);
-        });
-
-        if (isTopupDialogOpen && !topupPlayer) {
-          setTopupPlayer(message.player);
-        }
-
-        showMessage({
-          title: "🔔 Гость подошел",
-          description: `${message.player.full_name} сканировал QR`,
-        });
-      }
-    },
-    [clubId, isTopupDialogOpen, refresh, showMessage, topupPlayer],
-  );
-
-  useSSE(handleWebSocketMessage);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
   const handleClaimItem = async (itemId: number, label: string) => {
     const ok = await confirmAction({
       title: "Выдача",
@@ -160,30 +247,58 @@ export function EmployeePromoControlCard({
     });
   };
 
-  const handleTopupBalance = async () => {
-    if (!topupPlayer || !topupAmount || Number(topupAmount) <= 0) return;
+  const handleBulkAccrue = async () => {
+    if (!accrualPlayer) return;
+    const topupAmount = Number(accrualTopupAmount) || 0;
+    if (topupAmount <= 0 && selectedServiceIds.length === 0) return;
 
-    startTransition(async () => {
-      const result = await topupPlayerBalanceSafe(clubId, userId, {
-        player_id: topupPlayer.id,
-        amount: Number(topupAmount),
-        payment_type: topupPaymentType as any,
+    setIsAccruing(true);
+    try {
+      const res = await bulkAccruePromoSafe(clubId, userId, {
+        player_id: accrualPlayer.id,
+        topup_amount: topupAmount,
+        service_rule_ids: selectedServiceIds,
       });
 
-      if ((result as any).success) {
+      if (res.ok) {
         showMessage({
-          title: "✅ Баланс пополнен",
-          description: `${topupPlayer.full_name}: +${Number(topupAmount).toLocaleString()} ₽`,
+          title: "✅ Начислено",
+          description: "Операции успешно выполнены",
         });
-        setIsTopupDialogOpen(false);
-        setTopupPlayer(null);
-        setTopupAmount("");
+        setIsAccrualDialogOpen(false);
+        setAccrualPlayer(null);
+        setAccrualTopupAmount("");
+        setSelectedServiceIds([]);
         refresh();
       } else {
-        showMessage({
-          title: "Ошибка",
-          description: (result as any).error || "Ошибка пополнения",
-        });
+        showMessage({ title: "Ошибка", description: res.error });
+      }
+    } catch (e) {
+      showMessage({
+        title: "Ошибка",
+        description: "Не удалось выполнить начисление",
+      });
+    } finally {
+      setIsAccruing(false);
+    }
+  };
+
+  const handleVoidAccrual = async (historyId: string, label: string) => {
+    const ok = await confirmAction({
+      title: "Аннулирование",
+      description: `Вы уверены, что хотите отменить начисление: ${label}? Это действие удалит выданные билеты.`,
+      confirmText: "Да, отменить",
+      cancelText: "Нет",
+    });
+    if (!ok) return;
+
+    startTransition(async () => {
+      const res = await voidPromoAccrualSafe(clubId, userId, historyId);
+      if (res.ok) {
+        showMessage({ title: "Отменено", description: "Запись аннулирована" });
+        refresh();
+      } else {
+        showMessage({ title: "Ошибка", description: res.error });
       }
     });
   };
@@ -215,7 +330,7 @@ export function EmployeePromoControlCard({
   if (!enabled) return null;
 
   return (
-    <Card className="overflow-hidden border-border bg-card shadow-sm">
+    <Card className="overflow-hidden border-border bg-card shadow-none">
       <CardContent className="p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
@@ -226,7 +341,7 @@ export function EmployeePromoControlCard({
             {clubCode && (
               <div
                 onClick={() => copyToClipboard(clubCode, "Код клуба")}
-                className="group cursor-pointer flex items-center gap-1.5 px-2.5 h-8 bg-zinc-100 dark:bg-zinc-800 border border-border rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                className="group cursor-pointer flex items-center gap-1.5 px-2.5 h-8 bg-zinc-100 dark:bg-zinc-800 border border-border rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-700"
                 title="Нажмите, чтобы скопировать код для входа"
               >
                 <span className="text-[10px] font-black uppercase tracking-tighter text-muted-foreground group-hover:text-foreground">
@@ -241,11 +356,11 @@ export function EmployeePromoControlCard({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 rounded-xl bg-orange-500/10 border-orange-500/20 text-orange-500 hover:bg-orange-500/20 text-[10px] font-black uppercase"
-              onClick={() => setIsTopupDialogOpen(true)}
+              className="h-8 rounded-xl bg-orange-500/10 border-orange-500/20 text-orange-500 hover:bg-orange-500/20 text-[10px] font-black uppercase shadow-none"
+              onClick={() => setIsAccrualDialogOpen(true)}
             >
               <Wallet className="w-3.5 h-3.5 mr-2" />
-              Пополнить
+              Начислить
             </Button>
           </div>
         </div>
@@ -261,12 +376,12 @@ export function EmployeePromoControlCard({
                 <div key={p.id} className="group relative">
                   <button
                     onClick={() => {
-                      setTopupPlayer(p);
-                      setIsTopupDialogOpen(true);
+                      setAccrualPlayer(p);
+                      setIsAccrualDialogOpen(true);
                     }}
-                    className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-[10px] font-bold transition-all border border-border flex items-center gap-2"
+                    className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-[10px] font-bold border border-border flex items-center gap-2"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     {p.full_name}
                   </button>
                   <button
@@ -275,7 +390,7 @@ export function EmployeePromoControlCard({
                         prev.filter((item) => item.id !== p.id),
                       )
                     }
-                    className="absolute -top-1 -right-1 w-4 h-4 bg-zinc-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-1 -right-1 w-4 h-4 bg-zinc-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100"
                   >
                     <X className="w-2.5 h-2.5" />
                   </button>
@@ -286,17 +401,12 @@ export function EmployeePromoControlCard({
         )}
 
         {/* Promo Queue */}
-        <div className="space-y-3">
-          {isLoading ? (
-            <div className="flex h-10 items-center justify-center">
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+        {promoQueue.length > 0 && (
+          <div className="space-y-3">
+            <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">
+              Очередь выдачи
             </div>
-          ) : promoQueue.length === 0 ? (
-            <div className="text-[10px] text-center py-2 text-muted-foreground italic">
-              Очередь выдачи пуста
-            </div>
-          ) : (
-            promoQueue.map((item) => (
+            {promoQueue.map((item) => (
               <div
                 key={item.id}
                 className="p-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 space-y-3"
@@ -323,7 +433,7 @@ export function EmployeePromoControlCard({
                         "Телефон",
                       )
                     }
-                    className="flex items-center gap-1.5 px-2 py-1 bg-background hover:bg-muted rounded-lg text-[9px] font-bold transition-all border border-border"
+                    className="flex items-center gap-1.5 px-2 py-1 bg-background hover:bg-muted rounded-lg text-[9px] font-bold border border-border"
                   >
                     <Copy className="w-2.5 h-2.5" />
                     {normalizePhone(item.player_phone)}
@@ -333,7 +443,7 @@ export function EmployeePromoControlCard({
                       onClick={() =>
                         copyToClipboard(String(item.withdraw_amount), "Сумма")
                       }
-                      className="flex items-center gap-1.5 px-2 py-1 bg-background hover:bg-muted rounded-lg text-[9px] font-bold transition-all border border-border"
+                      className="flex items-center gap-1.5 px-2 py-1 bg-background hover:bg-muted rounded-lg text-[9px] font-bold border border-border"
                     >
                       <Copy className="w-2.5 h-2.5" />
                       {item.withdraw_amount} ₽
@@ -344,7 +454,7 @@ export function EmployeePromoControlCard({
                 <Button
                   onClick={() => handleClaimItem(item.id, item.prize_name)}
                   disabled={isPending}
-                  className="w-full h-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-[10px]"
+                  className="w-full h-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-[10px] shadow-none"
                 >
                   {isPending ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -356,27 +466,102 @@ export function EmployeePromoControlCard({
                   )}
                 </Button>
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
 
-        {/* Topup Dialog */}
-        <Dialog open={isTopupDialogOpen} onOpenChange={setIsTopupDialogOpen}>
-          <DialogContent className="bg-zinc-950 border-zinc-800 sm:max-w-md rounded-3xl p-6 text-white">
-            <DialogHeader className="mb-4">
-              <div className="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center mb-4">
-                <Wallet className="w-6 h-6 text-orange-500" />
+        {/* Recent Accruals */}
+        {recentAccruals.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-border">
+            <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">
+              Последние начисления
+            </div>
+            <div className="space-y-1 max-h-55 overflow-y-auto pr-1 custom-scrollbar">
+              {recentAccruals.map((h) => {
+                const isVoided = h.game_type.endsWith("_VOIDED");
+                const amount = h.result_data.amount;
+                const ruleName = h.result_data.rule_name;
+                const label = amount ? `${amount} ₽` : ruleName;
+
+                return (
+                  <div
+                    key={h.id}
+                    className={cn(
+                      "flex items-center justify-between p-2 rounded-xl text-[10px] group",
+                      isVoided
+                        ? "bg-zinc-50 dark:bg-zinc-900/50 opacity-50 grayscale"
+                        : "bg-zinc-50/50 dark:bg-zinc-900/30 hover:bg-zinc-100 dark:hover:bg-zinc-800",
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-foreground truncate">
+                          {h.player_name}
+                        </span>
+                        {!isVoided && (
+                          <span className="text-[8px] px-1 bg-orange-500/10 text-orange-500 rounded font-black">
+                            +{h.total_tickets}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <span className="font-medium">{label}</span>
+                        <span>•</span>
+                        <span>
+                          {format(new Date(h.created_at), "HH:mm", {
+                            locale: ru,
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                    {!isVoided && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 rounded-lg opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-red-500 shadow-none"
+                        onClick={() => handleVoidAccrual(h.id, label)}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Unified Accrual Cart Dialog */}
+        <Dialog
+          open={isAccrualDialogOpen}
+          onOpenChange={(open) => {
+            setIsAccrualDialogOpen(open);
+            if (!open) {
+              setAccrualPlayer(null);
+              setAccrualTopupAmount("");
+              setSelectedServiceIds([]);
+            }
+          }}
+        >
+          <DialogContent className="bg-zinc-950 border-zinc-800 sm:max-w-2xl rounded-3xl p-0 overflow-hidden text-white flex flex-col max-h-[90vh] shadow-none">
+            <DialogHeader className="p-6 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center">
+                  <Wallet className="w-5 h-5 text-orange-500" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-black uppercase italic tracking-tight">
+                    Центр <span className="text-orange-500">Начислений</span>
+                  </DialogTitle>
+                  <DialogDescription className="text-zinc-500 text-xs">
+                    Пополнение баланса и выдача билетов за услуги
+                  </DialogDescription>
+                </div>
               </div>
-              <DialogTitle className="text-2xl font-black uppercase italic tracking-tight">
-                Пополнение <span className="text-orange-500">Баланса</span>
-              </DialogTitle>
-              <DialogDescription className="text-zinc-400">
-                Пополните бонусный баланс гостя.
-              </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-6">
-              {!topupPlayer ? (
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+              {!accrualPlayer ? (
                 <div className="space-y-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -387,7 +572,8 @@ export function EmployeePromoControlCard({
                         searchPlayersByPhone(e.target.value);
                       }}
                       placeholder="Поиск по телефону или QR..."
-                      className="h-12 pl-10 bg-zinc-900 border-zinc-800 rounded-xl text-white"
+                      className="h-12 pl-10 bg-zinc-900 border-zinc-800 rounded-xl text-white shadow-none"
+                      autoFocus
                     />
                     {isSearchingPromo && (
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -396,16 +582,16 @@ export function EmployeePromoControlCard({
                     )}
                   </div>
                   {promoSearchResults.length > 0 && (
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden max-h-48 overflow-y-auto">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-none">
                       {promoSearchResults.map((p) => (
                         <button
                           key={p.id}
                           onClick={() => {
-                            setTopupPlayer(p);
+                            setAccrualPlayer(p);
                             setPromoSearchQuery("");
                             setPromoSearchResults([]);
                           }}
-                          className="w-full text-left px-4 py-3 hover:bg-zinc-800 flex items-center justify-between border-b border-zinc-800/50 last:border-0 transition-colors"
+                          className="w-full text-left px-4 py-3 hover:bg-zinc-800 flex items-center justify-between border-b border-zinc-800/50 last:border-0"
                         >
                           <div className="min-w-0">
                             <div className="font-bold text-sm truncate">
@@ -424,7 +610,8 @@ export function EmployeePromoControlCard({
                   )}
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-8">
+                  {/* Selected Player Card */}
                   <div className="flex items-center justify-between bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center">
@@ -432,88 +619,173 @@ export function EmployeePromoControlCard({
                       </div>
                       <div>
                         <div className="font-bold text-sm">
-                          {topupPlayer.full_name}
+                          {accrualPlayer.full_name}
                         </div>
                         <div className="text-[10px] text-zinc-500 font-mono">
-                          {topupPlayer.phone_number}
+                          {accrualPlayer.phone_number}
                         </div>
                       </div>
                     </div>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setTopupPlayer(null)}
+                      size="sm"
+                      className="h-8 rounded-lg text-zinc-400 hover:text-white shadow-none"
+                      onClick={() => setAccrualPlayer(null)}
                     >
                       <X className="w-4 h-4" />
                     </Button>
                   </div>
+
+                  {/* Top-up Section */}
                   <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label className="text-xs font-bold uppercase text-zinc-500">
-                        Сумма (₽)
-                      </Label>
-                      <Input
-                        type="number"
-                        value={topupAmount}
-                        onChange={(e) => setTopupAmount(e.target.value)}
-                        className="h-16 bg-zinc-900 border-zinc-800 rounded-2xl text-3xl font-black text-center text-orange-500"
-                        autoFocus
-                      />
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                      <Banknote className="w-3 h-3" /> Пополнение баланса (₽)
+                    </Label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[500, 1000, 2000, 5000].map((val) => (
+                        <button
+                          key={val}
+                          onClick={() => setAccrualTopupAmount(String(val))}
+                          className={cn(
+                            "py-2 rounded-xl border text-xs font-black",
+                            Number(accrualTopupAmount) === val
+                              ? "bg-orange-500 border-orange-500 text-white"
+                              : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700",
+                          )}
+                        >
+                          {val}
+                        </button>
+                      ))}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => setTopupPaymentType("cash")}
-                        className={cn(
-                          "py-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2",
-                          topupPaymentType === "cash"
-                            ? "border-emerald-500 bg-emerald-500/10 text-emerald-500"
-                            : "border-zinc-800 bg-zinc-900 text-zinc-400",
-                        )}
-                      >
-                        <Banknote className="w-3.5 h-3.5" /> Наличные
-                      </button>
-                      <button
-                        onClick={() => setTopupPaymentType("card")}
-                        className={cn(
-                          "py-3 rounded-xl border font-bold text-xs flex items-center justify-center gap-2",
-                          topupPaymentType === "card"
-                            ? "border-blue-500 bg-blue-500/10 text-blue-500"
-                            : "border-zinc-800 bg-zinc-900 text-zinc-400",
-                        )}
-                      >
-                        <CreditCard className="w-3.5 h-3.5" /> Карта
-                      </button>
+                    <Input
+                      type="number"
+                      value={accrualTopupAmount}
+                      onChange={(e) => setAccrualTopupAmount(e.target.value)}
+                      placeholder="Введите сумму..."
+                      className="h-14 bg-zinc-900 border-zinc-800 rounded-2xl text-2xl font-black text-center text-orange-500 shadow-none"
+                    />
+                  </div>
+
+                  {/* Services Section */}
+                  <div className="space-y-4">
+                    <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                      <Ticket className="w-3 h-3" /> Выбрать услуги
+                    </Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {activeServiceRules.map((rule: any) => {
+                        const isSelected = selectedServiceIds.includes(rule.id);
+                        return (
+                          <button
+                            key={rule.id}
+                            onClick={() => {
+                              setSelectedServiceIds((prev) =>
+                                prev.includes(rule.id)
+                                  ? prev.filter((id) => id !== rule.id)
+                                  : [...prev, rule.id],
+                              );
+                            }}
+                            className={cn(
+                              "flex flex-col items-start p-3 rounded-2xl border text-left relative",
+                              isSelected
+                                ? "bg-orange-500/10 border-orange-500 ring-1 ring-orange-500"
+                                : "bg-zinc-900 border-zinc-800 text-zinc-400",
+                            )}
+                          >
+                            <div className="flex justify-between w-full mb-1">
+                              <span className="font-black uppercase italic text-[11px] leading-tight">
+                                {rule.name}
+                              </span>
+                              <span className="text-orange-500 font-black text-xs">
+                                +{rule.tickets}
+                              </span>
+                            </div>
+                            <span className="text-[8px] font-bold uppercase tracking-widest opacity-60">
+                              {rule.time_start} — {rule.time_end}
+                            </span>
+                            {!rule.is_matching_schedule && (
+                              <Badge
+                                variant="outline"
+                                className="absolute -top-2 -right-1 text-[7px] h-4 bg-zinc-950 border-zinc-800 text-zinc-500 font-black shadow-none"
+                              >
+                                Вне графика
+                              </Badge>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
               )}
             </div>
-            <DialogFooter className="mt-8 gap-3 sm:gap-0">
-              <Button
-                variant="ghost"
-                onClick={() => setIsTopupDialogOpen(false)}
-                className="h-14 rounded-2xl"
-              >
-                Отмена
-              </Button>
-              <Button
-                onClick={handleTopupBalance}
-                disabled={
-                  !topupPlayer ||
-                  !topupAmount ||
-                  Number(topupAmount) <= 0 ||
-                  isPending
-                }
-                className="h-14 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-black text-lg px-8"
-              >
-                {isPending ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  "ПОПОЛНИТЬ"
+
+            {accrualPlayer && (
+              <div className="p-6 border-t border-white/5 bg-zinc-900/50">
+                {/* Preview summary */}
+                {(Number(accrualTopupAmount) > 0 ||
+                  selectedServiceIds.length > 0) && (
+                  <div className="mb-6 flex items-center justify-between p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl">
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-orange-500 opacity-70">
+                        Будет начислено:
+                      </span>
+                      <div className="flex items-center gap-3">
+                        {Number(accrualTopupAmount) > 0 && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm font-black text-white">
+                              {accrualTopupAmount} ₽
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1">
+                          <Ticket className="w-3.5 h-3.5 text-orange-500" />
+                          <span className="text-lg font-black text-orange-500">
+                            +
+                            {(Number(accrualTopupAmount) > 0
+                              ? Math.floor(
+                                  Number(accrualTopupAmount) /
+                                    (promoSettings.topup_amount_step || 100),
+                                ) * (promoSettings.topup_tickets_step || 1)
+                              : 0) +
+                              selectedServiceIds.reduce((acc, id) => {
+                                const rule = activeServiceRules.find(
+                                  (r: any) => r.id === id,
+                                );
+                                return acc + (rule?.tickets || 0);
+                              }, 0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
-              </Button>
-            </DialogFooter>
+
+                <div className="flex gap-3">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setIsAccrualDialogOpen(false)}
+                    className="flex-1 h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-none"
+                  >
+                    Отмена
+                  </Button>
+                  <Button
+                    onClick={handleBulkAccrue}
+                    disabled={
+                      (Number(accrualTopupAmount) <= 0 &&
+                        selectedServiceIds.length === 0) ||
+                      isAccruing
+                    }
+                    className="flex-3 h-14 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-black text-lg shadow-none"
+                  >
+                    {isAccruing ? (
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    ) : (
+                      "ПОДТВЕРДИТЬ"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
         {Dialogs}

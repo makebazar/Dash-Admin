@@ -94,6 +94,27 @@ export async function POST(request: Request) {
       [playerId, clubId, expiryDate, finalTicketsCount],
     );
 
+    // 5. Process Quests (if amount was used)
+    if (mode === "amount" && parseFloat(amount) > 0) {
+      try {
+        const { getClient } = await import("@/db");
+        const { processBalanceTopupEvent } = await import("@/lib/promo-quests");
+        const client = await getClient();
+        try {
+          await processBalanceTopupEvent(
+            client,
+            clubId,
+            playerId,
+            parseFloat(amount),
+          );
+        } finally {
+          client.release();
+        }
+      } catch (e) {
+        console.error("Quest Balance Topup Processing Error:", e);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       ticketsIssued: finalTicketsCount,
@@ -105,5 +126,32 @@ export async function POST(request: Request) {
       { error: "Internal Server Error" },
       { status: 500 },
     );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const playerId = searchParams.get("playerId");
+    const clubId = searchParams.get("clubId");
+    const userId = (await cookies()).get("session_user_id")?.value;
+
+    if (!userId || !clubId || !playerId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Mark all available tickets as 'expired' or just delete them?
+    // Let's mark as 'expired' to keep history, or just delete if they were manual mistakes.
+    // Given the user wants to "edit" the count, we can just delete available ones and let them add new ones.
+    await query(
+      `DELETE FROM promo_tickets
+       WHERE player_id = $1 AND club_id = $2 AND status = 'available'`,
+      [playerId, clubId],
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Reset Tickets Error:", error);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

@@ -1,0 +1,52 @@
+import { NextResponse } from "next/server";
+import { getClient } from "@/db";
+import { cookies } from "next/headers";
+
+export async function POST(request: Request) {
+  const client = await getClient();
+  try {
+    const { questId, photoUrl } = await request.json();
+    const cookieStore = await cookies();
+    const playerId = cookieStore.get("promo_player_id")?.value;
+    const activeClubId = cookieStore.get("promo_active_club_id")?.value;
+
+    if (!playerId || !activeClubId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // 1. Check if quest exists and requires photo
+    const questRes = await client.query(
+      `SELECT requires_photo_verification FROM promo_quests WHERE id = $1 AND club_id = $2`,
+      [questId, activeClubId]
+    );
+
+    if (questRes.rows.length === 0) {
+      return NextResponse.json({ error: "Quest not found" }, { status: 404 });
+    }
+
+    const { requires_photo_verification } = questRes.rows[0];
+
+    if (requires_photo_verification && !photoUrl) {
+      return NextResponse.json({ error: "Photo proof is required" }, { status: 400 });
+    }
+
+    // 2. Insert or Update player quest status to 'pending_verification'
+    await client.query(
+      `INSERT INTO promo_player_quests (player_id, club_id, quest_id, current_progress, status, verification_photo_url, assigned_at)
+       VALUES ($1, $2, $3, 1, 'pending_verification', $4, NOW())
+       ON CONFLICT (player_id, club_id, quest_id, assigned_at)
+       DO UPDATE SET
+         status = 'pending_verification',
+         verification_photo_url = $4,
+         current_progress = 1`,
+      [playerId, activeClubId, questId, photoUrl || null]
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Promo Player Quest Verify Error:", error);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+  } finally {
+    client.release();
+  }
+}

@@ -5,7 +5,7 @@ import { notifyInventoryClub } from "@/lib/inventory-events";
 
 export async function POST(request: Request) {
   try {
-    const { clubId } = await request.json();
+    const { clubId, intent, cart } = await request.json();
     const playerId = (await cookies()).get("promo_player_id")?.value;
 
     if (!playerId) {
@@ -47,6 +47,8 @@ export async function POST(request: Request) {
         id: player.id,
         phone_number: player.phone_number,
         full_name: player.full_name,
+        intent,
+        cart: intent === "bonus_order" ? cart : undefined,
       },
       timestamp: Date.now(),
     });

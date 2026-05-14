@@ -29,6 +29,10 @@ import {
   CreditCard as CardIcon,
   Bird,
   Gamepad2,
+  ShoppingCart,
+  Search,
+  X,
+  Target,
 } from "lucide-react";
 
 type QueueItem = {
@@ -41,6 +45,9 @@ type QueueItem = {
   created_at: string;
 };
 import { motion, AnimatePresence } from "framer-motion";
+import { LevelsTab } from "./_components/LevelsTab";
+import { QuestsTab } from "./_components/QuestsTab";
+import { VerificationTab } from "./_components/VerificationTab";
 
 /**
  * ПАНЕЛЬ УПРАВЛЕНИЯ АКЦИЯМИ (ДЛЯ ВЛАДЕЛЬЦА / УПРАВА)
@@ -55,6 +62,8 @@ type Prize = {
   daily_limit: number;
   is_active: boolean;
   game_slug?: string;
+  min_level?: number;
+  max_level?: number;
   win_condition?: {
     dice_sums?: number[];
     dice_double?: number | "any";
@@ -74,11 +83,24 @@ const GAMES = [
 export default function PromotionsPage() {
   const { clubId } = useParams();
   const [activeTab, setActiveTab] = useState<
-    "queue" | "players" | "history" | "games" | "general"
+    | "queue"
+    | "players"
+    | "history"
+    | "games"
+    | "general"
+    | "services"
+    | "bar"
+    | "levels"
+    | "quests"
+    | "verification"
   >("queue");
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
 
   const [prizes, setPrizes] = useState<Prize[]>([]);
+  const [allProducts, setAllProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
   const [logs, setLogs] = useState<{
@@ -96,6 +118,13 @@ export default function PromotionsPage() {
     ticketCount: "1",
     mode: "amount" as "amount" | "count",
   });
+  const [editingPlayer, setEditingPlayer] = useState<any>(null);
+  const [editForm, setEditForm] = useState({
+    total_xp: 0,
+    bonus_balance: 0,
+    tickets_count: 0,
+  });
+
   const [settings, setSettings] = useState({
     ticket_price: 500,
     ticket_expiry_hours: 24,
@@ -105,6 +134,7 @@ export default function PromotionsPage() {
       {
         tickets_per_play?: number;
         is_active?: boolean;
+        min_level?: number;
         card_count?: number;
         card_back_style?: string;
         base_bonus?: number;
@@ -120,10 +150,100 @@ export default function PromotionsPage() {
     is_promo_active: true,
     domain: "",
     welcome_bonus_tickets: 0,
+    bonus_price_multiplier: 2,
     accrual_rules: [] as any[],
     bar_accrual_rules: [] as any[],
     bar_accrual_enabled: false,
+    bar_items: [] as {
+      id: number;
+      custom_bonus_price?: number | null;
+      is_enabled?: boolean;
+    }[],
+    service_rules: [] as {
+      id: string;
+      name: string;
+      tickets: number;
+      bonus_balance?: number;
+      days: number[];
+      time_start: string;
+      time_end: string;
+      is_active: boolean;
+    }[],
   });
+
+  const handleUpdatePlayerBalance = async () => {
+    if (!editingPlayer) return;
+    setSaving(true);
+    try {
+      // 1. Update XP and Bonus Balance
+      const balanceRes = await fetch(`/api/promo/admin/players`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          playerId: editingPlayer.id,
+          clubId,
+          totalXp: editForm.total_xp,
+          bonusBalance: editForm.bonus_balance,
+        }),
+      });
+
+      // 2. Update Tickets (Delete existing available and issue new ones if count changed)
+      // Note: This is a simplified approach. In a more complex system we might want to track additions/removals.
+      if (editForm.tickets_count !== editingPlayer.tickets_count) {
+        await fetch(
+          `/api/promo/admin/issue-tickets?clubId=${clubId}&playerId=${editingPlayer.id}`,
+          { method: "DELETE" },
+        );
+
+        if (editForm.tickets_count > 0) {
+          await fetch(`/api/promo/admin/issue-tickets`, {
+            method: "POST",
+            body: JSON.stringify({
+              phoneNumber: editingPlayer.phone_number,
+              clubId,
+              mode: "count",
+              ticketCount: editForm.tickets_count,
+            }),
+          });
+        }
+      }
+
+      if (balanceRes.ok) {
+        setEditingPlayer(null);
+        fetchData(true);
+        alert("Данные игрока обновлены");
+      }
+    } catch (err) {
+      alert("Ошибка при обновлении данных");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetPin = async () => {
+    if (!editingPlayer) return;
+    if (!confirm("Вы уверены, что хотите сбросить ПИН-код игрока?")) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/promo/admin/players/reset-pin`, {
+        method: "PATCH",
+        body: JSON.stringify({ playerId: editingPlayer.id }),
+      });
+
+      if (res.ok) {
+        alert(
+          "ПИН-код сброшен. Игрок сможет установить новый при следующем входе.",
+        );
+      } else {
+        alert("Ошибка при сбросе ПИН-кода");
+      }
+    } catch (err) {
+      alert("Ошибка сети");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -167,6 +287,13 @@ export default function PromotionsPage() {
       const pData = await pRes.json();
       setPrizes(pData.prizes || []);
 
+      // Fetch Products for Bar Management (include all for toggle UI)
+      const prodRes = await fetch(
+        `/api/promo/products?clubId=${clubId}&all=true`,
+      );
+      const prodData = await prodRes.json();
+      setAllProducts(prodData.products || []);
+
       // Fetch Queue
       const qRes = await fetch(`/api/promo/admin/queue?clubId=${clubId}`);
       const qData = await qRes.json();
@@ -191,6 +318,15 @@ export default function PromotionsPage() {
       const plData = await plRes.json();
       setPlayers(plData.players || []);
 
+      // Fetch Categories
+      try {
+        const { getCategories } = await import("../inventory/actions");
+        const cats = await getCategories(String(clubId));
+        setCategories(cats || []);
+      } catch (e) {
+        console.error("Failed to fetch categories", e);
+      }
+
       // Fetch Logs
       const lRes = await fetch(`/api/promo/admin/logs?clubId=${clubId}`);
       const lData = await lRes.json();
@@ -203,6 +339,26 @@ export default function PromotionsPage() {
       console.error("Failed to fetch promo data", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleGame = async (gameId: string) => {
+    const isEnabled = settings.enabled_games.includes(gameId);
+    const newEnabled = isEnabled
+      ? settings.enabled_games.filter((id) => id !== gameId)
+      : [...settings.enabled_games, gameId];
+
+    const newSettings = { ...settings, enabled_games: newEnabled };
+    setSettings(newSettings);
+
+    try {
+      await fetch(`/api/clubs/${clubId}/promo-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: newSettings }),
+      });
+    } catch (err) {
+      console.error("Failed to auto-save game toggle", err);
     }
   };
 
@@ -318,19 +474,39 @@ export default function PromotionsPage() {
                 Публичная ссылка для гостей
               </div>
               <div className="text-sm font-bold text-slate-800 truncate">
-                {settings.domain ||
-                  (typeof window !== "undefined"
-                    ? window.location.origin
-                    : "game.mydashadmin.ru")}
+                {settings.domain
+                  ? settings.domain.startsWith("http")
+                    ? settings.domain
+                    : `https://${settings.domain}`
+                  : "https://game.mydashadmin.ru"}
                 /promo?clubId={clubId}
               </div>
             </div>
             <button
               onClick={() => {
-                const base = settings.domain || window.location.origin;
-                const link = base.startsWith("http") ? base : `https://${base}`;
-                navigator.clipboard.writeText(`${link}/promo?clubId=${clubId}`);
-                alert("Ссылка скопирована");
+                const base = settings.domain
+                  ? settings.domain.startsWith("http")
+                    ? settings.domain
+                    : `https://${settings.domain}`
+                  : "https://game.mydashadmin.ru";
+                const url = `${base}/promo?clubId=${clubId}`;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(url);
+                  alert("Ссылка скопирована");
+                } else {
+                  // Fallback for non-secure contexts
+                  const textArea = document.createElement("textarea");
+                  textArea.value = url;
+                  document.body.appendChild(textArea);
+                  textArea.select();
+                  try {
+                    document.execCommand("copy");
+                    alert("Ссылка скопирована");
+                  } catch (err) {
+                    alert("Не удалось скопировать ссылку: " + url);
+                  }
+                  document.body.removeChild(textArea);
+                }
               }}
               className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-black transition-colors"
             >
@@ -338,28 +514,20 @@ export default function PromotionsPage() {
             </button>
           </div>
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm flex flex-col items-center gap-2">
-            <div className="w-24 h-24 bg-slate-100 rounded-lg flex items-center justify-center">
-              <span className="text-[10px] font-black text-slate-400 uppercase text-center px-2">
-                QR Код <br /> для печати
-              </span>
-            </div>
-            <button className="text-[10px] font-black text-orange-500 uppercase tracking-widest hover:underline">
-              Скачать PDF
-            </button>
-          </div>
-        </div>
       </div>
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-slate-100 rounded-2xl w-fit">
+      <div className="flex gap-1 p-1 bg-slate-100 rounded-2xl w-fit flex-wrap">
         {[
-          { id: "queue", label: "Очередь выдачи", icon: Gift },
-          { id: "players", label: "Пользователи", icon: User },
-          { id: "history", label: "История", icon: History },
-          { id: "games", label: "Список игр", icon: Gamepad2 },
-          { id: "general", label: "Общие настройки", icon: Settings },
+          { id: "queue", label: "Очередь выдачи", icon: Clock },
+          { id: "players", label: "Игроки", icon: User },
+          { id: "history", label: "История игр", icon: History },
+          { id: "games", label: "Игры", icon: Gamepad2 },
+          { id: "bar", label: "Бар", icon: ShoppingCart },
+          { id: "services", label: "Услуги и Пакеты", icon: Ticket },
+          { id: "levels", label: "Уровни", icon: Trophy },
+          { id: "quests", label: "Квесты", icon: Target },
+          { id: "verification", label: "Проверка", icon: Clock },
+          { id: "general", label: "Настройки", icon: Settings },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -632,12 +800,44 @@ export default function PromotionsPage() {
                               </td>
                               <td className="px-6 py-4">
                                 {log.prize_name ? (
-                                  <div className="flex items-center gap-1.5 text-emerald-600 font-bold">
-                                    <Trophy className="w-3 h-3" />
+                                  <div
+                                    className={cn(
+                                      "flex items-center gap-1.5 font-bold",
+                                      log.prize_type === "topup"
+                                        ? "text-blue-500"
+                                        : log.prize_type === "bar"
+                                          ? "text-orange-500"
+                                          : log.prize_type === "withdraw"
+                                            ? "text-red-500"
+                                            : "text-emerald-600",
+                                    )}
+                                  >
+                                    {log.prize_type === "topup" && (
+                                      <Plus className="w-3 h-3" />
+                                    )}
+                                    {log.prize_type === "bar" && (
+                                      <ShoppingCart className="w-3 h-3" />
+                                    )}
+                                    {log.prize_type === "withdraw" && (
+                                      <Clock className="w-3 h-3" />
+                                    )}
+                                    {log.prize_type === "quest" && (
+                                      <Target className="w-3 h-3" />
+                                    )}
+                                    {![
+                                      "topup",
+                                      "bar",
+                                      "withdraw",
+                                      "quest",
+                                    ].includes(log.prize_type) && (
+                                      <Trophy className="w-3 h-3" />
+                                    )}
                                     {log.prize_name}
                                   </div>
                                 ) : (
-                                  <span className="text-slate-400">Пусто</span>
+                                  <span className="text-slate-400 font-bold uppercase italic tracking-widest text-[10px]">
+                                    Пусто
+                                  </span>
                                 )}
                               </td>
                               <td className="px-6 py-4 text-[10px] font-medium text-slate-400 text-right">
@@ -832,18 +1032,33 @@ export default function PromotionsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button
-                            onClick={() =>
-                              setIssueForm((prev) => ({
-                                ...prev,
-                                phoneNumber: player.phone_number,
-                                amount: "",
-                              }))
-                            }
-                            className="text-orange-500 font-bold text-xs uppercase tracking-widest hover:underline"
-                          >
-                            Пополнить
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => {
+                                setEditingPlayer(player);
+                                setEditForm({
+                                  total_xp: Number(player.total_xp),
+                                  bonus_balance: Number(player.bonus_balance),
+                                  tickets_count: Number(player.tickets_count),
+                                });
+                              }}
+                              className="text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-orange-500 transition-colors"
+                            >
+                              Редактировать
+                            </button>
+                            <button
+                              onClick={() =>
+                                setIssueForm((prev) => ({
+                                  ...prev,
+                                  phoneNumber: player.phone_number,
+                                  amount: "",
+                                }))
+                              }
+                              className="text-orange-500 font-bold text-xs uppercase tracking-widest hover:underline"
+                            >
+                              Пополнить
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -851,6 +1066,127 @@ export default function PromotionsPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Edit Player Modal */}
+            <AnimatePresence>
+              {editingPlayer && (
+                <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setEditingPlayer(null)}
+                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                    className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+                  >
+                    <div className="p-8">
+                      <div className="flex items-center justify-between mb-8">
+                        <h3 className="text-xl font-black uppercase italic">
+                          Редактировать{" "}
+                          <span className="text-orange-500">баланс</span>
+                        </h3>
+                        <button
+                          onClick={() => setEditingPlayer(null)}
+                          className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 hover:text-black transition-colors"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 mb-6">
+                          <div className="font-bold text-slate-900">
+                            {editingPlayer.full_name}
+                          </div>
+                          <div className="text-xs font-medium text-slate-400">
+                            {editingPlayer.phone_number}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                              Опыт (XP)
+                            </label>
+                            <input
+                              type="number"
+                              value={editForm.total_xp}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  total_xp: Number(e.target.value),
+                                })
+                              }
+                              className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-3 font-bold outline-none focus:border-orange-500"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                              Баланс (₽)
+                            </label>
+                            <input
+                              type="number"
+                              value={editForm.bonus_balance}
+                              onChange={(e) =>
+                                setEditForm({
+                                  ...editForm,
+                                  bonus_balance: Number(e.target.value),
+                                })
+                              }
+                              className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-3 font-bold outline-none focus:border-orange-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                            Количество билетов (шт)
+                          </label>
+                          <input
+                            type="number"
+                            value={editForm.tickets_count}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                tickets_count: Number(e.target.value),
+                              })
+                            }
+                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-3 font-bold outline-none focus:border-orange-500"
+                          />
+                        </div>
+
+                        <div className="pt-2 flex flex-col gap-3">
+                          <button
+                            onClick={handleResetPin}
+                            disabled={saving}
+                            className="w-full py-3 bg-red-50 text-red-600 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-red-100 transition-all active:scale-95 disabled:opacity-50"
+                          >
+                            Сбросить ПИН-код
+                          </button>
+
+                          <button
+                            onClick={handleUpdatePlayerBalance}
+                            disabled={saving}
+                            className="w-full py-4 bg-orange-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all active:scale-95 disabled:opacity-50"
+                          >
+                            {saving ? (
+                              <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                            ) : (
+                              "Сохранить изменения"
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
 
@@ -880,12 +1216,7 @@ export default function PromotionsPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        const newEnabled = isEnabled
-                          ? settings.enabled_games.filter(
-                              (id) => id !== game.id,
-                            )
-                          : [...settings.enabled_games, game.id];
-                        setSettings({ ...settings, enabled_games: newEnabled });
+                        handleToggleGame(game.id);
                       }}
                       className={cn(
                         "w-12 h-6 rounded-full transition-all relative p-1",
@@ -938,13 +1269,47 @@ export default function PromotionsPage() {
                     { className: "w-10 h-10 text-slate-700" },
                   )}
                 </div>
-                <div>
-                  <h2 className="text-3xl font-black uppercase italic text-slate-900">
-                    {GAMES.find((g) => g.id === selectedGameId)?.label}
-                  </h2>
-                  <p className="text-slate-500 font-medium">
-                    Индивидуальные настройки игры
-                  </p>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-3xl font-black uppercase italic text-slate-900">
+                        {GAMES.find((g) => g.id === selectedGameId)?.label}
+                      </h2>
+                      <p className="text-slate-500 font-medium">
+                        Индивидуальные настройки игры
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          Статус
+                        </span>
+                        <span className="text-xs font-bold text-slate-700">
+                          {settings.enabled_games.includes(selectedGameId!)
+                            ? "АКТИВНА"
+                            : "ВЫКЛЮЧЕНА"}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleToggleGame(selectedGameId!)}
+                        className={cn(
+                          "w-12 h-6 rounded-full transition-all relative p-1",
+                          settings.enabled_games.includes(selectedGameId!)
+                            ? "bg-orange-500"
+                            : "bg-slate-200",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                            settings.enabled_games.includes(selectedGameId!)
+                              ? "translate-x-6"
+                              : "translate-x-0",
+                          )}
+                        />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1017,17 +1382,16 @@ export default function PromotionsPage() {
               )}
 
               <div className="space-y-12">
-                {selectedGameId !== "mines" && selectedGameId !== "rocket" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2 block mb-2">
-                      Стоимость одной игры (билетов)
+                      Минимальный уровень аккаунта
                     </label>
                     <input
                       type="number"
-                      placeholder="1"
+                      placeholder="0"
                       value={
-                        settings.game_configs[selectedGameId]
-                          ?.tickets_per_play || ""
+                        settings.game_configs[selectedGameId]?.min_level || ""
                       }
                       onChange={(e) => {
                         const val = parseInt(e.target.value);
@@ -1037,19 +1401,55 @@ export default function PromotionsPage() {
                             ...settings.game_configs,
                             [selectedGameId]: {
                               ...settings.game_configs[selectedGameId],
-                              tickets_per_play: isNaN(val) ? undefined : val,
+                              min_level: isNaN(val) ? undefined : val,
                             },
                           },
                         });
                       }}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-black text-xl outline-none focus:border-orange-500 max-w-xs"
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-black text-xl outline-none focus:border-orange-500"
                     />
                     <p className="text-[10px] text-slate-400 font-medium px-2 mt-2">
-                      Сколько билетов спишется за одну попытку в этой игре. По
-                      умолчанию: 1 билет.
+                      С какого уровня игроку станет доступна эта игра.
                     </p>
                   </div>
-                )}
+
+                  {selectedGameId !== "mines" &&
+                    selectedGameId !== "rocket" && (
+                      <div>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2 block mb-2">
+                          Стоимость одной игры (билетов)
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="1"
+                          value={
+                            settings.game_configs[selectedGameId]
+                              ?.tickets_per_play || ""
+                          }
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            setSettings({
+                              ...settings,
+                              game_configs: {
+                                ...settings.game_configs,
+                                [selectedGameId]: {
+                                  ...settings.game_configs[selectedGameId],
+                                  tickets_per_play: isNaN(val)
+                                    ? undefined
+                                    : val,
+                                },
+                              },
+                            });
+                          }}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-black text-xl outline-none focus:border-orange-500"
+                        />
+                        <p className="text-[10px] text-slate-400 font-medium px-2 mt-2">
+                          Сколько билетов спишется за одну попытку. По
+                          умолчанию: 1 билет.
+                        </p>
+                      </div>
+                    )}
+                </div>
 
                 {selectedGameId === "flappy" && (
                   <div className="space-y-8">
@@ -1750,6 +2150,8 @@ export default function PromotionsPage() {
                                 daily_limit: 0,
                                 is_active: true,
                                 game_slug: selectedGameId,
+                                min_level: 1,
+                                max_level: 999,
                               },
                             ])
                           }
@@ -2099,6 +2501,47 @@ export default function PromotionsPage() {
                                       />
                                     </div>
                                   </div>
+
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                                        Мин. Уровень
+                                      </label>
+                                      <input
+                                        type="number"
+                                        value={prize.min_level || 1}
+                                        onChange={(e) => {
+                                          const newPrizes = [...prizes];
+                                          newPrizes[globalIdx] = {
+                                            ...newPrizes[globalIdx],
+                                            min_level:
+                                              parseInt(e.target.value) || 1,
+                                          };
+                                          setPrizes(newPrizes);
+                                        }}
+                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                                        Макс. Уровень
+                                      </label>
+                                      <input
+                                        type="number"
+                                        value={prize.max_level || 999}
+                                        onChange={(e) => {
+                                          const newPrizes = [...prizes];
+                                          newPrizes[globalIdx] = {
+                                            ...newPrizes[globalIdx],
+                                            max_level:
+                                              parseInt(e.target.value) || 999,
+                                          };
+                                          setPrizes(newPrizes);
+                                        }}
+                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm"
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -2328,6 +2771,549 @@ export default function PromotionsPage() {
           </motion.div>
         )}
 
+        {activeTab === "services" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-8"
+          >
+            <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black uppercase italic text-slate-900">
+                    Услуги и Пакеты
+                  </h2>
+                  <p className="text-slate-500 font-medium">
+                    Настройка дополнительных билетов за покупку конкретных услуг
+                    по расписанию
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    setSettings({
+                      ...settings,
+                      service_rules: [
+                        ...(settings.service_rules || []),
+                        {
+                          id: Math.random().toString(36).substr(2, 9),
+                          name: "Новый пакет",
+                          tickets: 1,
+                          bonus_balance: 0,
+                          days: [1, 2, 3, 4, 5],
+                          time_start: "09:00",
+                          time_end: "21:00",
+                          is_active: true,
+                        },
+                      ],
+                    })
+                  }
+                  className="bg-black text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Добавить услугу
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                {(settings.service_rules || []).map((rule, idx) => (
+                  <div
+                    key={rule.id}
+                    className="bg-slate-50 border border-slate-100 p-6 rounded-[2rem] space-y-4 relative"
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+                      <div className="flex-1 space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                          Название услуги / пакета
+                        </label>
+                        <input
+                          type="text"
+                          value={rule.name}
+                          onChange={(e) => {
+                            const newRules = [...settings.service_rules];
+                            newRules[idx].name = e.target.value;
+                            setSettings({
+                              ...settings,
+                              service_rules: newRules,
+                            });
+                          }}
+                          placeholder="Напр. Пакет Ночь"
+                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold outline-none focus:border-orange-500"
+                        />
+                      </div>
+
+                      <div className="w-32 space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                          Билетов
+                        </label>
+                        <input
+                          type="number"
+                          value={rule.tickets}
+                          onChange={(e) => {
+                            const newRules = [...settings.service_rules];
+                            newRules[idx].tickets =
+                              parseInt(e.target.value) || 0;
+                            setSettings({
+                              ...settings,
+                              service_rules: newRules,
+                            });
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold outline-none focus:border-orange-500 text-center"
+                        />
+                      </div>
+
+                      <div className="w-32 space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                          Бонус Баланс
+                        </label>
+                        <input
+                          type="number"
+                          value={rule.bonus_balance || 0}
+                          onChange={(e) => {
+                            const newRules = [...settings.service_rules];
+                            newRules[idx].bonus_balance =
+                              parseInt(e.target.value) || 0;
+                            setSettings({
+                              ...settings,
+                              service_rules: newRules,
+                            });
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold outline-none focus:border-orange-500 text-center"
+                        />
+                      </div>
+
+                      <div className="flex-1 space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                          Время действия
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={rule.time_start}
+                            onChange={(e) => {
+                              const newRules = [...settings.service_rules];
+                              newRules[idx].time_start = e.target.value;
+                              setSettings({
+                                ...settings,
+                                service_rules: newRules,
+                              });
+                            }}
+                            className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold outline-none focus:border-orange-500"
+                          />
+                          <span className="text-slate-400 font-bold">—</span>
+                          <input
+                            type="time"
+                            value={rule.time_end}
+                            onChange={(e) => {
+                              const newRules = [...settings.service_rules];
+                              newRules[idx].time_end = e.target.value;
+                              setSettings({
+                                ...settings,
+                                service_rules: newRules,
+                              });
+                            }}
+                            className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold outline-none focus:border-orange-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 pt-4 lg:pt-6">
+                        <button
+                          onClick={() => {
+                            const newRules = settings.service_rules.filter(
+                              (_, i) => i !== idx,
+                            );
+                            setSettings({
+                              ...settings,
+                              service_rules: newRules,
+                            });
+                          }}
+                          className="text-slate-300 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                        Дни недели
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"].map(
+                          (dayName, dayIdx) => {
+                            const isSelected = rule.days.includes(dayIdx);
+                            return (
+                              <button
+                                key={dayIdx}
+                                onClick={() => {
+                                  const newRules = [...settings.service_rules];
+                                  const currentDays = newRules[idx].days;
+                                  if (isSelected) {
+                                    newRules[idx].days = currentDays.filter(
+                                      (d) => d !== dayIdx,
+                                    );
+                                  } else {
+                                    newRules[idx].days = [
+                                      ...currentDays,
+                                      dayIdx,
+                                    ];
+                                  }
+                                  setSettings({
+                                    ...settings,
+                                    service_rules: newRules,
+                                  });
+                                }}
+                                className={cn(
+                                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border",
+                                  isSelected
+                                    ? "bg-orange-500 border-orange-600 text-white shadow-lg shadow-orange-500/20"
+                                    : "bg-white border-slate-200 text-slate-400 hover:border-orange-200",
+                                )}
+                              >
+                                {dayName}
+                              </button>
+                            );
+                          },
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {(!settings.service_rules ||
+                  settings.service_rules.length === 0) && (
+                  <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-[2.5rem]">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Ticket className="w-8 h-8 text-slate-200" />
+                    </div>
+                    <p className="text-slate-400 font-medium italic">
+                      У вас пока нет правил для начисления по пакетам и услугам.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end pt-8">
+                <button
+                  onClick={handleSaveAll}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-8 py-3 bg-black text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {saving ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Save className="w-5 h-5" />
+                  )}
+                  СОХРАНИТЬ ПРАВИЛА
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {activeTab === "bar" && (
+          <motion.div
+            key="bar-management"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-8"
+          >
+            <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-black uppercase italic">
+                    Управление <span className="text-orange-500">баром</span>
+                  </h3>
+                  <p className="text-slate-500 text-sm font-medium">
+                    Выберите товары, которые будут доступны для покупки за
+                    бонусы, и настройте их стоимость
+                  </p>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                      Множитель бонусов
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-400">
+                        ₽ ×
+                      </span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={settings.bonus_price_multiplier}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            bonus_price_multiplier: parseFloat(e.target.value),
+                          })
+                        }
+                        className="w-20 bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5 font-black text-sm outline-none focus:border-orange-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Поиск товара..."
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-orange-500 w-64"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bar Items Table */}
+              <div className="border border-slate-100 rounded-3xl overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Видимость
+                      </th>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Товар
+                      </th>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">
+                        Цена на складе (₽)
+                      </th>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">
+                        Цена в бонусах
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {allProducts
+                      .filter(
+                        (p) =>
+                          p.name
+                            .toLowerCase()
+                            .includes(productSearch.toLowerCase()) ||
+                          p.barcode?.includes(productSearch),
+                      )
+                      .map((product) => {
+                        const barConfig = settings.bar_items?.find(
+                          (bi) => bi.id === product.id,
+                        );
+                        const isEnabled = barConfig?.is_enabled ?? false;
+                        const autoPrice = Math.round(
+                          product.selling_price *
+                            settings.bonus_price_multiplier,
+                        );
+                        const isCustom =
+                          barConfig?.custom_bonus_price !== null &&
+                          barConfig?.custom_bonus_price !== undefined;
+
+                        return (
+                          <tr
+                            key={product.id}
+                            className={cn(
+                              "hover:bg-slate-50/50 transition-colors",
+                              !isEnabled && "opacity-60",
+                            )}
+                          >
+                            <td className="px-6 py-4">
+                              <button
+                                onClick={() => {
+                                  const existingItems =
+                                    settings.bar_items || [];
+                                  const existingIdx = existingItems.findIndex(
+                                    (bi) => bi.id === product.id,
+                                  );
+
+                                  let newItems = [...existingItems];
+                                  if (existingIdx !== -1) {
+                                    newItems[existingIdx] = {
+                                      ...newItems[existingIdx],
+                                      is_enabled:
+                                        !newItems[existingIdx].is_enabled,
+                                    };
+                                  } else {
+                                    newItems.push({
+                                      id: product.id,
+                                      is_enabled: true,
+                                      custom_bonus_price: null,
+                                    });
+                                  }
+
+                                  setSettings({
+                                    ...settings,
+                                    bar_items: newItems,
+                                  });
+                                }}
+                                className={cn(
+                                  "w-12 h-6 rounded-full transition-all relative p-1",
+                                  isEnabled ? "bg-orange-500" : "bg-slate-200",
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    "w-4 h-4 bg-white rounded-full shadow-sm transition-all",
+                                    isEnabled
+                                      ? "translate-x-6"
+                                      : "translate-x-0",
+                                  )}
+                                />
+                              </button>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-slate-900">
+                                {product.name}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-medium">
+                                ID: {product.id} • Остаток:{" "}
+                                {product.total_stock} шт.
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-center font-bold text-slate-400">
+                              {product.selling_price} ₽
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-center gap-3">
+                                <div className="relative">
+                                  <input
+                                    type="number"
+                                    disabled={!isEnabled}
+                                    value={
+                                      isCustom
+                                        ? (barConfig?.custom_bonus_price ?? "")
+                                        : autoPrice
+                                    }
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const existingItems =
+                                        settings.bar_items || [];
+                                      const existingIdx =
+                                        existingItems.findIndex(
+                                          (bi) => bi.id === product.id,
+                                        );
+
+                                      let newItems = [...existingItems];
+                                      const newPrice = val
+                                        ? parseInt(val)
+                                        : null;
+
+                                      if (existingIdx !== -1) {
+                                        newItems[existingIdx] = {
+                                          ...newItems[existingIdx],
+                                          custom_bonus_price: newPrice,
+                                        };
+                                      } else {
+                                        newItems.push({
+                                          id: product.id,
+                                          is_enabled: isEnabled,
+                                          custom_bonus_price: newPrice,
+                                        });
+                                      }
+
+                                      setSettings({
+                                        ...settings,
+                                        bar_items: newItems,
+                                      });
+                                    }}
+                                    className={cn(
+                                      "w-28 bg-slate-50 border rounded-xl px-3 py-1.5 font-black text-sm outline-none text-center",
+                                      isCustom
+                                        ? "border-orange-500 text-orange-600"
+                                        : "border-slate-100 text-slate-600",
+                                      !isEnabled && "opacity-30",
+                                    )}
+                                  />
+                                  {isCustom && (
+                                    <button
+                                      onClick={() => {
+                                        const newItems = settings.bar_items.map(
+                                          (bi) =>
+                                            bi.id === product.id
+                                              ? {
+                                                  ...bi,
+                                                  custom_bonus_price: null,
+                                                }
+                                              : bi,
+                                        );
+                                        setSettings({
+                                          ...settings,
+                                          bar_items: newItems,
+                                        });
+                                      }}
+                                      className="absolute -top-2 -right-2 w-5 h-5 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 shadow-sm"
+                                      title="Сбросить к авто-цене"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="text-[10px] font-black text-slate-300 uppercase">
+                                  {isCustom ? "Вручную" : "Авто (×2)"}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <button
+                  onClick={handleSaveAll}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-8 py-3 bg-black text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {saving ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Save className="w-5 h-5" />
+                  )}
+                  СОХРАНИТЬ МЕНЮ БАРА
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {activeTab === "levels" && (
+          <motion.div
+            key="levels"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <LevelsTab clubId={String(clubId)} />
+          </motion.div>
+        )}
+
+        {activeTab === "quests" && (
+          <motion.div
+            key="quests"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <QuestsTab
+              clubId={String(clubId)}
+              products={allProducts}
+              categories={categories}
+              serviceRules={settings.service_rules || []}
+            />
+          </motion.div>
+        )}
+
+        {activeTab === "verification" && (
+          <motion.div
+            key="verification"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <VerificationTab clubId={String(clubId)} />
+          </motion.div>
+        )}
+
         {activeTab === "general" && (
           <motion.div
             key="general-settings"
@@ -2405,6 +3391,7 @@ export default function PromotionsPage() {
               </div>
 
               <div className="space-y-4">
+                {" "}
                 <div className="flex items-center justify-between px-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                     Правила начисления (Гибкие)
@@ -2424,7 +3411,6 @@ export default function PromotionsPage() {
                     + Добавить правило
                   </button>
                 </div>
-
                 <div className="space-y-3">
                   {(settings.accrual_rules || []).map((rule, idx) => (
                     <div
@@ -2655,57 +3641,59 @@ export default function PromotionsPage() {
               </div>
 
               <div className="bg-white border border-slate-200 p-6 rounded-3xl space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                      <Plus className="w-5 h-5 text-blue-500" />
+                      <RefreshCw className="w-5 h-5 text-blue-500" />
                     </div>
                     <h4 className="text-sm font-black uppercase italic">
-                      Статичный QR для ресепшена
+                      Универсальный QR-код (Регистрация + Пополнение)
                     </h4>
                   </div>
-                  <button
-                    onClick={() => {
-                      const base = settings.domain || window.location.origin;
-                      const link = base.startsWith("http")
-                        ? base
-                        : `https://${base}`;
-                      const url = `${link}/promo?clubId=${clubId}&action=checkin`;
-                      window.open(
-                        `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(url)}`,
-                        "_blank",
-                      );
-                    }}
-                    className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
-                  >
-                    Скачать QR для печати
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-                  Разместите этот QR-код на кассе или ресепшене. Когда гость
-                  сканирует его, он автоматически появляется в вашей системе
-                  продаж (кассе) как активный покупатель.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                  Отдельный домен (для PWA)
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="play.yourclub.ru"
-                    value={settings.domain}
-                    onChange={(e) =>
-                      setSettings({ ...settings, domain: e.target.value })
-                    }
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-bold text-lg outline-none focus:border-orange-500"
-                  />
-                  <div className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    .RU / .COM
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const base = settings.domain
+                          ? settings.domain.startsWith("http")
+                            ? settings.domain
+                            : `https://${settings.domain}`
+                          : "https://game.mydashadmin.ru";
+                        const url = `${base}/promo?clubId=${clubId}&action=checkin`;
+                        window.open(
+                          `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&format=svg&qzone=1&data=${encodeURIComponent(url)}`,
+                          "_blank",
+                        );
+                      }}
+                      className="px-4 py-2 bg-slate-100 text-slate-900 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2"
+                    >
+                      Скачать SVG
+                    </button>
+                    <button
+                      onClick={() => {
+                        const base = settings.domain
+                          ? settings.domain.startsWith("http")
+                            ? settings.domain
+                            : `https://${settings.domain}`
+                          : "https://game.mydashadmin.ru";
+                        const url = `${base}/promo?clubId=${clubId}&action=checkin`;
+                        window.open(
+                          `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(url)}`,
+                          "_blank",
+                        );
+                      }}
+                      className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all flex items-center gap-2"
+                    >
+                      Скачать PNG
+                    </button>
                   </div>
                 </div>
+                <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                  Этот QR-код является универсальным. При сканировании новым
+                  гостем откроется страница регистрации, а для уже
+                  зарегистрированных пользователей — их личный кабинет. Также
+                  гость автоматически отобразится в кассе как активный
+                  покупатель для быстрого пополнения.
+                </p>
               </div>
             </div>
 

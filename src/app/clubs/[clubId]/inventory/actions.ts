@@ -4162,6 +4162,7 @@ export async function getSalesAnalytics(clubId: string, limit: number = 500) {
             -- Mark returns
             CASE WHEN sm.type = 'RETURN' THEN true ELSE false END as is_return,
             sm.reason as return_reason,
+            sr.payment_type as receipt_payment_type,
             (SELECT full_name FROM users WHERE id = sr.salary_target_user_id) as salary_target_user_name
         FROM warehouse_stock_movements sm
         JOIN warehouse_products p ON sm.product_id = p.id
@@ -4703,7 +4704,8 @@ export type ShiftReceiptPaymentType =
   | "card"
   | "mixed"
   | "other"
-  | "salary";
+  | "salary"
+  | "bonus";
 
 export type ShiftReceiptItem = {
   id: number;
@@ -5088,7 +5090,8 @@ export async function createShiftReceipt(
 
     let salaryTargetUserId: string | null = null;
     let salaryTargetShiftId: string | null = null;
-    let countsInRevenue = data.payment_type !== "salary";
+    let countsInRevenue =
+      data.payment_type !== "salary" && data.payment_type !== "bonus";
     if (data.payment_type === "salary") {
       if (!inventorySettings.allow_salary_deduction) {
         throw new Error("Продажа в счет ЗП отключена в настройках склада");
@@ -5185,6 +5188,36 @@ export async function createShiftReceipt(
       return acc + Number(i.quantity) * unitPrice;
     }, 0);
 
+    if (data.payment_type === "bonus") {
+      if (!data.promo_player_id) {
+        throw new Error("Для оплаты бонусами нужно выбрать гостя");
+      }
+      const multiplier = Number(promoSettings.bonus_price_multiplier || 2);
+      const totalBonusCost = Math.floor(itemsTotal * multiplier);
+
+      const balanceRes = await client.query(
+        `SELECT bonus_balance FROM promo_player_balances WHERE player_id = $1 AND club_id = $2 FOR UPDATE`,
+        [data.promo_player_id, clubId],
+      );
+
+      if (balanceRes.rowCount === 0) {
+        throw new Error("У игрока нет бонусного счета в этом клубе");
+      }
+
+      const currentBalance = Number(balanceRes.rows[0].bonus_balance || 0);
+
+      if (currentBalance < totalBonusCost) {
+        throw new Error(
+          `Недостаточно бонусов. Требуется: ${totalBonusCost}, доступно: ${Math.floor(currentBalance)}`,
+        );
+      }
+
+      await client.query(
+        `UPDATE promo_player_balances SET bonus_balance = bonus_balance - $1, updated_at = NOW() WHERE player_id = $2 AND club_id = $3`,
+        [totalBonusCost, data.promo_player_id, clubId],
+      );
+    }
+
     let cashAmount = Number(data.cash_amount || 0);
     let cardAmount = Number(data.card_amount || 0);
     if (data.payment_type === "cash") {
@@ -5197,7 +5230,10 @@ export async function createShiftReceipt(
       if (cashAmount + cardAmount === 0) {
         cashAmount = itemsTotal;
       }
-    } else if (data.payment_type === "salary") {
+    } else if (
+      data.payment_type === "salary" ||
+      data.payment_type === "bonus"
+    ) {
       cashAmount = 0;
       cardAmount = 0;
     } else {
@@ -5285,6 +5321,24 @@ export async function createShiftReceipt(
     );
     const receiptId = Number(receiptRes.rows[0].id);
 
+    if (data.payment_type === "bonus" && data.promo_player_id) {
+      const multiplier = Number(promoSettings.bonus_price_multiplier || 2);
+      const totalBonusCost = Math.floor(itemsTotal * multiplier);
+      await client.query(
+        `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+         VALUES ($1, $2, 'BAR_BONUS_PURCHASE', $3)`,
+        [
+          data.promo_player_id,
+          clubId,
+          JSON.stringify({
+            receipt_id: receiptId,
+            bonus_cost: totalBonusCost,
+            items_total: itemsTotal,
+          }),
+        ],
+      );
+    }
+
     for (const item of normalizedItems) {
       if (!item.quantity || item.quantity <= 0) continue;
       const p = priceMap.get(item.product_id);
@@ -5369,27 +5423,46 @@ export async function createShiftReceipt(
       );
     }
 
-    // Award Promotional Tickets if player is linked
-    if (data.promo_player_id && promoSettings.bar_accrual_enabled !== false) {
-      const { calculateTicketsForBarAmount } =
-        await import("@/lib/promo-accrual");
-      const ticketsToAward = calculateTicketsForBarAmount(
-        itemsTotal,
-        promoSettings,
-      );
-
-      if (ticketsToAward > 0) {
-        const expiryHours = promoSettings.ticket_expiry_hours || 24;
-        const expiryDate = new Date();
-        expiryDate.setHours(expiryDate.getHours() + expiryHours);
-
-        await client.query(
-          `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
-           SELECT $1, $2, 'available', 'pos_sale', $3
-           FROM generate_series(1, $4)`,
-          [data.promo_player_id, clubId, expiryDate, ticketsToAward],
+    // Award Promotional Tickets and Process Quests if player is linked
+    if (
+      data.promo_player_id &&
+      data.payment_type !== "bonus" // FIX: No tickets or quests for bonus purchases
+    ) {
+      if (promoSettings.bar_accrual_enabled !== false) {
+        const { calculateTicketsForBarAmount } =
+          await import("@/lib/promo-accrual");
+        const ticketsToAward = calculateTicketsForBarAmount(
+          itemsTotal,
+          promoSettings,
         );
+
+        if (ticketsToAward > 0) {
+          const expiryHours = promoSettings.ticket_expiry_hours || 24;
+          const expiryDate = new Date();
+          expiryDate.setHours(expiryDate.getHours() + expiryHours);
+
+          await client.query(
+            `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
+             SELECT $1, $2, 'available', 'pos_sale', $3
+             FROM generate_series(1, $4)`,
+            [data.promo_player_id, clubId, expiryDate, ticketsToAward],
+          );
+        }
       }
+
+      // Process Quests and XP
+      const { processReceiptEvent } = await import("@/lib/promo-quests");
+      await processReceiptEvent(
+        client,
+        clubId,
+        data.promo_player_id,
+        receiptId,
+        itemsTotal,
+        normalizedItems.map((item) => ({
+          product_id: item.product_id,
+          quantity: item.quantity || 0,
+        })),
+      );
     }
 
     await client.query("COMMIT");
@@ -5475,6 +5548,14 @@ function getActionErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+export async function getClubPromoSettings(clubId: string, userId: string) {
+  await assertUserCanAccessClub(clubId, userId);
+  const result = await query(`SELECT promo_settings FROM clubs WHERE id = $1`, [
+    clubId,
+  ]);
+  return result.rows[0]?.promo_settings || {};
+}
+
 export async function getPromoQueue(clubId: string, userId: string) {
   await assertUserCanAccessClub(clubId, userId);
   const result = await query(
@@ -5486,7 +5567,7 @@ export async function getPromoQueue(clubId: string, userId: string) {
      FROM promo_prize_queue q
      JOIN promo_players p ON q.player_id = p.id
      LEFT JOIN promo_prizes pr ON q.prize_id = pr.id
-     WHERE q.club_id = $1 AND q.status = 'pending'
+     WHERE q.club_id = $1 AND q.status = 'pending' AND q.prize_id IS NULL
      ORDER BY q.created_at DESC`,
     [clubId],
   );
@@ -5528,14 +5609,13 @@ export async function claimPromoItemSafe(
   }
 }
 
-export async function topupPlayerBalanceSafe(
+export async function bulkAccruePromoSafe(
   clubId: string,
   userId: string,
   data: {
     player_id: string;
-    amount: number;
-    payment_type: "cash" | "card" | "other";
-    notes?: string;
+    topup_amount: number;
+    service_rule_ids: string[];
   },
 ) {
   const client = await getClient();
@@ -5543,82 +5623,217 @@ export async function topupPlayerBalanceSafe(
     await assertUserCanAccessClub(clubId, userId);
     await client.query("BEGIN");
 
-    // 1. Resolve player and ensure balance record exists
-    const balanceRes = await client.query(
-      `INSERT INTO promo_player_balances (player_id, club_id, bonus_balance)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (player_id, club_id)
-         DO UPDATE SET
-            bonus_balance = promo_player_balances.bonus_balance + $3,
-            updated_at = NOW()
-         RETURNING bonus_balance`,
-      [data.player_id, clubId, data.amount],
-    );
-
-    // 2. Log transaction in promo_history
-    await client.query(
-      `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
-         VALUES ($1, $2, 'TOPUP', $3)`,
-      [
-        data.player_id,
-        clubId,
-        JSON.stringify({
-          amount: data.amount,
-          payment_type: data.payment_type,
-          notes: data.notes,
-          processed_by: userId,
-        }),
-      ],
-    );
-
-    // 3. Issue tickets if configured
+    // 1. Get promo settings and timezone
     const clubRes = await client.query(
-      `SELECT promo_settings FROM clubs WHERE id = $1`,
+      `SELECT promo_settings, timezone FROM clubs WHERE id = $1`,
       [clubId],
     );
-    const promoSettings = clubRes.rows[0]?.promo_settings || {};
+    const settings = clubRes.rows[0]?.promo_settings || {};
+    const timezone = clubRes.rows[0]?.timezone || "Europe/Moscow";
+    const rules = settings.service_rules || [];
 
-    if (promoSettings.topup_accrual_enabled !== false) {
-      const { calculateTicketsForAmount } = await import("@/lib/promo-accrual");
-      const ticketsToAward = calculateTicketsForAmount(
-        data.amount,
-        promoSettings,
+    // 2. Resolve player balance record
+    await client.query(
+      `INSERT INTO promo_player_balances (player_id, club_id, bonus_balance)
+          VALUES ($1::uuid, $2::int, 0)
+          ON CONFLICT (player_id, club_id)
+          DO UPDATE SET updated_at = NOW()`,
+      [data.player_id, clubId],
+    );
+
+    const historyIds: string[] = [];
+
+    // 3. Handle Topup
+    if (data.topup_amount > 0) {
+      const topupHistoryRes = await client.query(
+        `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+         VALUES ($1::uuid, $2::int, 'TOPUP', $3::jsonb)
+         RETURNING id`,
+        [
+          data.player_id,
+          clubId,
+          JSON.stringify({
+            amount: data.topup_amount,
+            processed_by: userId,
+          }),
+        ],
+      );
+      historyIds.push(topupHistoryRes.rows[0].id);
+
+      if (settings.topup_accrual_enabled !== false) {
+        const { calculateTicketsForAmount } =
+          await import("@/lib/promo-accrual");
+        const ticketsToAward = calculateTicketsForAmount(
+          data.topup_amount,
+          settings,
+        );
+
+        if (ticketsToAward > 0) {
+          const expiryHours = settings.ticket_expiry_hours || 24;
+          const expiryDate = new Date();
+          expiryDate.setHours(expiryDate.getHours() + expiryHours);
+
+          await client.query(
+            `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at, history_id)
+             SELECT $1::uuid, $2::int, 'available', 'topup', $3, $4::uuid
+             FROM generate_series(1, $5)`,
+            [
+              data.player_id,
+              clubId,
+              expiryDate,
+              topupHistoryRes.rows[0].id,
+              ticketsToAward,
+            ],
+          );
+        }
+      }
+
+      // Process Quests for Topup
+      const { processBalanceTopupEvent } = await import("@/lib/promo-quests");
+      await processBalanceTopupEvent(
+        client,
+        clubId,
+        data.player_id,
+        data.topup_amount,
+      );
+    }
+
+    // 4. Handle Service Rules
+    for (const ruleId of data.service_rule_ids) {
+      const rule = rules.find((r: any) => r.id === ruleId);
+      if (!rule) continue;
+
+      const serviceHistoryRes = await client.query(
+        `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+         VALUES ($1::uuid, $2::int, 'SERVICE_AWARD', $3::jsonb)
+         RETURNING id`,
+        [
+          data.player_id,
+          clubId,
+          JSON.stringify({
+            rule_id: rule.id,
+            rule_name: rule.name,
+            tickets: rule.tickets,
+            processed_by: userId,
+          }),
+        ],
+      );
+      historyIds.push(serviceHistoryRes.rows[0].id);
+
+      const expiryHours = settings.ticket_expiry_hours || 24;
+      const expiryDate = new Date();
+      expiryDate.setHours(expiryDate.getHours() + expiryHours);
+
+      await client.query(
+        `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at, history_id)
+         SELECT $1::uuid, $2::int, 'available', 'service_award', $3, $4::uuid
+         FROM generate_series(1, $5)`,
+        [
+          data.player_id,
+          clubId,
+          expiryDate,
+          serviceHistoryRes.rows[0].id,
+          rule.tickets,
+        ],
       );
 
-      if (ticketsToAward > 0) {
-        const expiryHours = promoSettings.ticket_expiry_hours || 24;
-        const expiryDate = new Date();
-        expiryDate.setHours(expiryDate.getHours() + expiryHours);
-
-        await client.query(
-          `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
-              SELECT $1, $2, 'available', 'topup', $3
-              FROM generate_series(1, $4)`,
-          [data.player_id, clubId, expiryDate, ticketsToAward],
-        );
-      }
+      // Process Quests
+      const { processServiceAwardEvent } = await import("@/lib/promo-quests");
+      await processServiceAwardEvent(client, clubId, data.player_id, rule.id);
     }
 
     await client.query("COMMIT");
+    await query(`SELECT pg_notify('promo_queue_updates', $1)`, [clubId]);
 
-    // Notify player via SSE if they are connected
-    // (Note: promo-player-stream would handle this if implemented)
-
-    return {
-      success: true,
-      newBalance: Number(balanceRes.rows[0].bonus_balance),
-    };
+    return { ok: true as const, historyIds };
   } catch (error: any) {
     await client.query("ROLLBACK");
     return {
       ok: false as const,
-      error: getActionErrorMessage(error, "Ошибка пополнения баланса"),
+      error: getActionErrorMessage(error, "Ошибка начисления"),
     };
   } finally {
     client.release();
   }
 }
 
+export async function getRecentPromoAccruals(clubId: string) {
+  const res = await query(
+    `SELECT h.id, h.player_id, p.full_name as player_name, h.game_type, h.result_data, h.created_at,
+            (SELECT COUNT(*) FROM promo_tickets t WHERE t.history_id = h.id AND t.status = 'available') as available_tickets,
+            (SELECT COUNT(*) FROM promo_tickets t WHERE t.history_id = h.id) as total_tickets
+     FROM promo_history h
+     JOIN promo_players p ON h.player_id = p.id
+     WHERE h.club_id = $1 AND h.game_type IN ('TOPUP', 'SERVICE_AWARD')
+     ORDER BY h.created_at DESC
+     LIMIT 20`,
+    [clubId],
+  );
+  return res.rows;
+}
+
+export async function voidPromoAccrualSafe(
+  clubId: string,
+  userId: string,
+  historyId: string,
+) {
+  const client = await getClient();
+  try {
+    await assertUserCanAccessClub(clubId, userId);
+    await client.query("BEGIN");
+
+    // 1. Get history entry
+    const historyRes = await client.query(
+      `SELECT id, player_id, game_type, result_data FROM promo_history WHERE id = $1 AND club_id = $2`,
+      [historyId, clubId],
+    );
+
+    if (historyRes.rowCount === 0) throw new Error("Запись не найдена");
+    const history = historyRes.rows[0];
+
+    // 2. Check if tickets can be voided
+    const ticketStats = await client.query(
+      `SELECT COUNT(*) as total,
+              COUNT(*) FILTER (WHERE status = 'available') as available
+       FROM promo_tickets WHERE history_id = $1`,
+      [historyId],
+    );
+
+    const stats = ticketStats.rows[0];
+    if (
+      Number(stats.total) > 0 &&
+      Number(stats.available) < Number(stats.total)
+    ) {
+      throw new Error("Часть билетов уже использована, отмена невозможна");
+    }
+
+    // 3. Delete tickets
+    await client.query(`DELETE FROM promo_tickets WHERE history_id = $1`, [
+      historyId,
+    ]);
+
+    // 4. Update history entry to mark as voided
+    await client.query(
+      `UPDATE promo_history SET game_type = game_type || '_VOIDED',
+                               result_data = result_data || jsonb_build_object('voided_at', NOW(), 'voided_by', $2::text)
+       WHERE id = $1::uuid`,
+      [historyId, userId],
+    );
+
+    await client.query("COMMIT");
+    await query(`SELECT pg_notify('promo_queue_updates', $1)`, [clubId]);
+
+    return { ok: true as const };
+  } catch (error: any) {
+    await client.query("ROLLBACK");
+    return {
+      ok: false as const,
+      error: getActionErrorMessage(error, "Ошибка отмены"),
+    };
+  } finally {
+    client.release();
+  }
+}
 export async function voidShiftReceiptSafe(
   clubId: string,
   userId: string,
@@ -8542,7 +8757,7 @@ export async function getProductByBarcode(clubId: string, barcode: string) {
                 WHERE ws.product_id = p.id${stockFilter}
             ) as stocks
             FROM warehouse_products p
-            WHERE p.club_id = $1 AND ($2 = ANY(p.barcodes) OR p.barcode = $2) AND p.is_active = true
+            WHERE p.club_id = $1 AND ($2::text = ANY(p.barcodes) OR p.barcode = $2::text) AND p.is_active = true
             `,
       params,
     );

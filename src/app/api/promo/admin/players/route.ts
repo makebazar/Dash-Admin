@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         COALESCE(b.bonus_balance, 0) as bonus_balance,
         (SELECT COUNT(*)::int FROM promo_tickets t WHERE t.player_id = p.id AND t.club_id = $1 AND t.status = 'available' AND (t.expires_at IS NULL OR t.expires_at > NOW())) as tickets_count
        FROM promo_players p
-       LEFT JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $1
+       JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $1
        WHERE 1=1 ${whereClause}
        ORDER BY p.created_at DESC
        LIMIT 50`,
@@ -43,6 +43,29 @@ export async function GET(request: Request) {
     return NextResponse.json({ players: result.rows });
   } catch (error) {
     console.error("Fetch Players Error:", error);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const { playerId, clubId, totalXp, bonusBalance } = await request.json();
+    const userId = (await cookies()).get("session_user_id")?.value;
+
+    if (!userId || !clubId || !playerId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await query(
+      `UPDATE promo_player_balances
+       SET total_xp = $1, bonus_balance = $2, updated_at = NOW()
+       WHERE player_id = $3 AND club_id = $4`,
+      [totalXp, bonusBalance, playerId, clubId],
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Update Player Balance Error:", error);
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }

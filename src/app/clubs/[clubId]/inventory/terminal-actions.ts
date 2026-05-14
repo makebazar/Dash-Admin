@@ -324,7 +324,7 @@ export async function getProductByBarcodeTerminal(
       const res = await client.query(
         `SELECT p.id, p.name, p.barcode, p.barcodes, p.selling_price
          FROM warehouse_products p
-         WHERE p.club_id = $1 AND (p.barcode = $2 OR $2 = ANY(p.barcodes))
+         WHERE p.club_id = $1 AND (p.barcode = $2::text OR $2::text = ANY(p.barcodes))
          AND p.deleted_at IS NULL AND p.is_active = true
          LIMIT 1`,
         [clubId, barcode],

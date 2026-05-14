@@ -16,7 +16,7 @@ DECLARE
     generated_id VARCHAR;
 BEGIN
     LOOP
-        generated_id := 'CLB-' || UPPER(SUBSTRING(MD5(RANDOM()::TEXT || CLOCK_TIMESTAMP()::TEXT) FROM 1 FOR 10));
+        generated_id := (FLOOR(RANDOM() * 9000) + 1000)::TEXT;
         EXIT WHEN NOT EXISTS (SELECT 1 FROM clubs WHERE public_id = generated_id);
     END LOOP;
     RETURN generated_id;

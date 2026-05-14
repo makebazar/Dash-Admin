@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS shift_receipts (
     shift_id UUID NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
     created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     warehouse_id INTEGER NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
-    payment_type VARCHAR(20) NOT NULL CHECK (payment_type IN ('cash', 'card', 'mixed', 'other')),
+    payment_type VARCHAR(20) NOT NULL CHECK (payment_type IN ('cash', 'card', 'mixed', 'other', 'bonus', 'salary')),
     cash_amount DECIMAL(10, 2) DEFAULT 0,
     card_amount DECIMAL(10, 2) DEFAULT 0,
     total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
@@ -32,4 +32,3 @@ CREATE TABLE IF NOT EXISTS shift_receipt_items (
 
 CREATE INDEX IF NOT EXISTS idx_shift_receipt_items_receipt ON shift_receipt_items(receipt_id);
 CREATE INDEX IF NOT EXISTS idx_shift_receipt_items_product ON shift_receipt_items(product_id);
-

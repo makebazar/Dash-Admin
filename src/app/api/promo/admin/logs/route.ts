@@ -36,8 +36,28 @@ export async function GET(request: Request) {
         p.full_name as player_name,
         p.phone_number as player_phone,
         h.game_type,
-        pr.name as prize_name,
-        pr.type as prize_type,
+        COALESCE(
+          pr.name,
+          CASE
+            WHEN h.game_type LIKE 'TOPUP%' THEN 'Пополнение: ' || (h.result_data->>'amount') || ' ₽'
+            WHEN h.game_type LIKE 'SERVICE_AWARD%' THEN COALESCE(h.result_data->>'rule_name', 'Начисление услуг')
+            WHEN h.game_type = 'BAR_BONUS_PURCHASE' THEN 'Покупка в баре: ' || (h.result_data->>'bonus_cost') || ' 🪙'
+            WHEN h.game_type = 'WITHDRAW' THEN 'Вывод: ' || (h.result_data->>'amount') || ' ₽'
+            WHEN h.game_type = 'QUEST_REWARD' THEN 'Награда за квест'
+            ELSE NULL
+          END
+        ) as prize_name,
+        COALESCE(
+          pr.type,
+          CASE
+            WHEN h.game_type LIKE 'TOPUP%' THEN 'topup'
+            WHEN h.game_type LIKE 'SERVICE_AWARD%' THEN 'service'
+            WHEN h.game_type = 'BAR_BONUS_PURCHASE' THEN 'bar'
+            WHEN h.game_type = 'WITHDRAW' THEN 'withdraw'
+            WHEN h.game_type = 'QUEST_REWARD' THEN 'quest'
+            ELSE 'other'
+          END
+        ) as prize_type,
         h.result_data,
         h.created_at
        FROM promo_history h
@@ -56,14 +76,14 @@ export async function GET(request: Request) {
         (SELECT COUNT(*) FROM promo_history WHERE club_id = $1 AND created_at >= CURRENT_DATE) as games_played_today,
         (SELECT COALESCE(SUM(pr.value), 0) FROM promo_history h JOIN promo_prizes pr ON h.prize_id = pr.id WHERE h.club_id = $1 AND h.created_at >= CURRENT_DATE AND pr.type = 'virtual') as prize_money_today
       `,
-      [clubId]
+      [clubId],
     );
 
     return NextResponse.json({
       success: true,
       issuanceLogs: issuanceLogs.rows,
       gameLogs: gameLogs.rows,
-      stats: stats.rows[0]
+      stats: stats.rows[0],
     });
   } catch (error) {
     console.error("Fetch Logs Error:", error);

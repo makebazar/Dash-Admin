@@ -1644,6 +1644,7 @@ export default function EmployeeClubPage({
                 userId={currentUserId}
                 clubCode={club?.public_id}
                 enabled={Boolean(activeShift)}
+                timezone={club?.timezone}
               />
             )}{" "}
             {activeShift &&

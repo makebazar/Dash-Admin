@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
     // 1. Get player and club info
     const playerResult = await client.query(
-      `SELECT p.id, b.club_id FROM promo_players p
+      `SELECT p.id, b.club_id, b.total_xp FROM promo_players p
              JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
              WHERE p.id = $1`,
       [playerId, activeClubId],
@@ -32,13 +32,40 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Check for available tickets
+    // 2. Check for available tickets and game restrictions
     const clubResult = await client.query(
       `SELECT promo_settings FROM clubs WHERE id = $1`,
       [activeClubId],
     );
     const settings = clubResult.rows[0]?.promo_settings || {};
     const gameConfig = settings.game_configs?.[gameType] || {};
+
+    // Check if game is enabled globally
+    if (!(settings.enabled_games || []).includes(gameType)) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        { error: "Game is currently disabled." },
+        { status: 403 },
+      );
+    }
+
+    // Check level requirements
+    const { getPlayerLevelInfo } = await import("@/lib/promo-quests");
+    const totalXp = parseFloat(playerResult.rows[0]?.total_xp || 0);
+    const levelInfo = await getPlayerLevelInfo(client, activeClubId, totalXp);
+    const playerLevel = levelInfo.currentLevel;
+    const minLevel = gameConfig.min_level || 0;
+
+    if (playerLevel < minLevel) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        {
+          error: `This game requires level ${minLevel}. Your level is ${playerLevel}.`,
+        },
+        { status: 403 },
+      );
+    }
+
     const ticketsNeeded = gameConfig.tickets_per_play || 1;
 
     const ticketsResult = await client.query(
@@ -92,8 +119,9 @@ export async function POST(request: Request) {
       const prizesResult = await client.query(
         `SELECT * FROM promo_prizes
          WHERE club_id = $1 AND is_active = TRUE
-         AND game_slug = $2`,
-        [activeClubId, gameType],
+         AND game_slug = $2
+         AND $3 >= min_level AND $3 <= max_level`,
+        [activeClubId, gameType, playerLevel],
       );
 
       const prizes = prizesResult.rows;
@@ -162,7 +190,7 @@ export async function POST(request: Request) {
           if (matches) {
             if (prize.daily_limit > 0) {
               const countResult = await client.query(
-                `SELECT COUNT(*)::int as count FROM promo_prize_queue
+                `SELECT COUNT(*)::int as count FROM promo_history
                            WHERE prize_id = $1 AND created_at >= CURRENT_DATE`,
                 [prize.id],
               );
@@ -177,7 +205,7 @@ export async function POST(request: Request) {
         for (const prize of prizes) {
           if (prize.daily_limit > 0) {
             const countResult = await client.query(
-              `SELECT COUNT(*)::int as count FROM promo_prize_queue
+              `SELECT COUNT(*)::int as count FROM promo_history
                          WHERE prize_id = $1 AND created_at >= CURRENT_DATE`,
               [prize.id],
             );
@@ -215,25 +243,8 @@ export async function POST(request: Request) {
 
     const historyId = historyResult.rows[0].id;
 
-    // 6. If won, add to queue and handle auto-rewards
+    // 6. Handle auto-rewards (Queue insertion removed as per user request: only withdrawals should be in queue)
     if (wonPrize) {
-      const isAutoClaimed = ["bonus", "virtual", "attempt"].includes(
-        wonPrize.type,
-      );
-
-      await client.query(
-        `INSERT INTO promo_prize_queue (history_id, player_id, club_id, prize_id, status, claimed_at)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          historyId,
-          playerId,
-          activeClubId,
-          wonPrize.id,
-          isAutoClaimed ? "claimed" : "pending",
-          isAutoClaimed ? new Date() : null,
-        ],
-      );
-
       if (wonPrize.type === "bonus") {
         await client.query(
           `UPDATE promo_player_balances SET total_xp = total_xp + $1 WHERE player_id = $2 AND club_id = $3`,
@@ -260,19 +271,22 @@ export async function POST(request: Request) {
     }
     await client.query("COMMIT");
 
-    // 7. Notify admin/staff
-    if (wonPrize) {
-      try {
-        const { notifyInventoryClub } = await import("@/lib/inventory-events");
-        notifyInventoryClub(String(activeClubId), {
-          type: "PROMO_QUEUE_UPDATED",
-          timestamp: Date.now(),
-        });
-      } catch (e) {
-        console.error("[SSE] Failed to send promo notification:", e);
-      }
+    // 6.5. Process Quests
+    try {
+      const { processGameEvent } = await import("@/lib/promo-quests");
+      await processGameEvent(
+        client,
+        activeClubId,
+        playerId,
+        gameType,
+        !!wonPrize,
+        ticketsNeeded,
+      );
+    } catch (e) {
+      console.error("Quest Game Processing Error:", e);
     }
 
+    // 7. Notify admin/staff (Removed as per user request: games no longer in queue)
     await query(`SELECT pg_notify('promo_queue_updates', $1)`, [activeClubId]);
 
     return NextResponse.json({

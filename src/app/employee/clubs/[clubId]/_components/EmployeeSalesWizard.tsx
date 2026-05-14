@@ -57,7 +57,7 @@ import {
   getShiftReceipts,
   voidShiftReceiptSafe,
   returnReceiptItemSafe,
-  topupPlayerBalanceSafe,
+  bulkAccruePromoSafe,
   getPromoQueue,
   claimPromoItemSafe,
   type Product,
@@ -92,7 +92,13 @@ export function EmployeeSalesWizard({
     SalarySaleCandidate[]
   >([]);
   const [checkedInPlayers, setCheckedInPlayers] = useState<
-    { id: string; full_name: string; phone_number: string; timestamp: number }[]
+    {
+      id: string;
+      full_name: string;
+      phone_number: string;
+      timestamp: number;
+      cart?: any[];
+    }[]
   >([]);
   const [selectedPromoPlayer, setSelectedPromoPlayer] = useState<{
     id: string;
@@ -103,6 +109,7 @@ export function EmployeeSalesWizard({
   const [promoSearchResults, setPromoSearchResults] = useState<any[]>([]);
   const [promoQueue, setPromoQueue] = useState<any[]>([]);
   const [isSearchingPromo, setIsSearchingPromo] = useState(false);
+  const [bonusMultiplier, setBonusMultiplier] = useState(2);
   const { confirmAction, showMessage, Dialogs } = useUiDialogs();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -212,16 +219,26 @@ export function EmployeeSalesWizard({
 
   const refresh = useCallback(async () => {
     if (!activeShiftId) return;
-    const [p, r, candidates, queue] = await Promise.all([
+    const [p, r, candidates, queue, clubInfoRes] = await Promise.all([
       getProducts(clubId),
       getShiftReceipts(clubId, userId, activeShiftId),
       getSalarySaleCandidates(clubId),
       getPromoQueue(clubId, userId),
+      fetch(`/api/promo/public-info?clubId=${clubId}`).catch(() => null),
     ]);
     setAllProducts(p);
     setReceipts(r);
     setSalarySaleCandidates(candidates);
     setPromoQueue(queue);
+
+    if (clubInfoRes?.ok) {
+      const clubInfo = await clubInfoRes.json();
+      if (clubInfo.club?.promo_settings?.bonus_price_multiplier) {
+        setBonusMultiplier(
+          Number(clubInfo.club.promo_settings.bonus_price_multiplier),
+        );
+      }
+    }
   }, [activeShiftId, clubId, userId]);
 
   // Обработка WebSocket сообщений
@@ -257,6 +274,15 @@ export function EmployeeSalesWizard({
       }
 
       if (message.type === "PLAYER_CHECKIN" && message.player) {
+        // Only show if intent is 'pos' or 'bonus_order'
+        if (
+          message.player.intent &&
+          message.player.intent !== "pos" &&
+          message.player.intent !== "bonus_order"
+        ) {
+          return;
+        }
+
         setCheckedInPlayers((prev) => {
           // Remove if already exists and add to top
           const filtered = prev.filter((p) => p.id !== message.player.id);
@@ -266,6 +292,18 @@ export function EmployeeSalesWizard({
           ].slice(0, 10);
         });
 
+        // Если это заказ за бонусы - уведомляем, что есть заказ
+        if (
+          message.player.intent === "bonus_order" &&
+          message.player.cart &&
+          message.player.cart.length > 0
+        ) {
+          showMessage({
+            title: "Новый заказ за бонусы",
+            description: `У гостя ${message.player.full_name} есть готовая корзина. Нажмите на иконку корзины, чтобы загрузить её.`,
+          });
+        }
+
         // Если открыто окно пополнения - подставляем туда
         if (isTopupDialogOpen) {
           setTopupPlayer((current) => {
@@ -273,12 +311,6 @@ export function EmployeeSalesWizard({
             return current;
           });
         }
-
-        // Авто-выбор для обычного чека, если никто не выбран
-        setSelectedPromoPlayer((current) => {
-          if (!current) return message.player;
-          return current;
-        });
 
         showMessage({
           title: "🔔 Гость подошел",
@@ -408,14 +440,13 @@ export function EmployeeSalesWizard({
     if (!topupPlayer || !topupAmount || Number(topupAmount) <= 0) return;
 
     startTransition(async () => {
-      const result = await topupPlayerBalanceSafe(clubId, userId, {
+      const result = await bulkAccruePromoSafe(clubId, userId, {
         player_id: topupPlayer.id,
-        amount: Number(topupAmount),
-        payment_type: topupPaymentType,
-        notes: topupNotes || undefined,
+        topup_amount: Number(topupAmount),
+        service_rule_ids: [],
       });
 
-      if ((result as any).success) {
+      if ((result as any).ok) {
         showMessage({
           title: "✅ Баланс пополнен",
           description: `${topupPlayer.full_name}: +${Number(topupAmount).toLocaleString()} ₽`,
@@ -831,6 +862,14 @@ export function EmployeeSalesWizard({
         setCardAmount("");
         setCashReceived("");
         setSalaryTargetUserId("");
+
+        // Remove the player from checkedInPlayers list after successful checkout
+        if (selectedPromoPlayer) {
+          setCheckedInPlayers((prev) =>
+            prev.filter((p) => p.id !== selectedPromoPlayer.id),
+          );
+        }
+
         setSelectedPromoPlayer(null);
         await refresh();
         inputRef.current?.focus();
@@ -1381,6 +1420,17 @@ export function EmployeeSalesWizard({
                               <span>В счет ЗП</span>
                             </div>
                           </SelectItem>
+                          {selectedPromoPlayer && (
+                            <SelectItem
+                              value="bonus"
+                              className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-orange-500 focus:border-orange-700/50 focus:bg-orange-500/10 focus:text-orange-400 data-[state=checked]:border-orange-500/50 data-[state=checked]:bg-orange-500/10 data-[state=checked]:text-orange-400"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Gift className="h-4 w-4 text-orange-500" />
+                                <span>Бонусами</span>
+                              </div>
+                            </SelectItem>
+                          )}
                           <SelectItem
                             value="other"
                             className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
@@ -1517,11 +1567,17 @@ export function EmployeeSalesWizard({
                     <Button
                       onClick={finalizeReceipt}
                       disabled={isPending || cart.length === 0}
-                      className="w-full h-16 rounded-2xl font-bold text-lg shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      className={cn(
+                        "w-full h-16 rounded-2xl font-bold text-lg shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]",
+                        paymentType === "bonus" &&
+                          "bg-orange-500 hover:bg-orange-600 text-white",
+                      )}
                       size="lg"
                     >
                       {isPending ? (
                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      ) : paymentType === "bonus" ? (
+                        `Оплатить бонусами (${Math.floor(cartTotal * bonusMultiplier).toLocaleString()} 🪙)`
                       ) : (
                         `Пробить чек (${cartTotal.toLocaleString()} ₽)`
                       )}
@@ -1615,23 +1671,23 @@ export function EmployeeSalesWizard({
 
                 {/* Promo Guest Section */}
                 <section className="flex flex-col gap-3">
-                  <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                    <Ticket className="h-4 w-4 text-orange-500" />
+                  <h2 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] flex items-center gap-2 px-1">
+                    <Ticket className="h-3.5 w-3.5 text-orange-500" />
                     Бонусы и гость
                   </h2>
 
-                  <div className="p-4 rounded-3xl border border-zinc-800/50 bg-zinc-900/30 space-y-4">
+                  <div className="p-4 rounded-[2rem] border border-zinc-800/50 bg-zinc-900/40 backdrop-blur-sm space-y-5">
                     {selectedPromoPlayer && (
-                      <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 p-3 rounded-2xl animate-in zoom-in-95 duration-300">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-orange-500 rounded-xl flex items-center justify-center text-white">
-                            <User className="h-4 w-4" />
+                      <div className="group relative flex items-center justify-between bg-linear-to-br from-orange-500/20 to-orange-600/5 border border-orange-500/30 p-4 rounded-2xl animate-in fade-in zoom-in-95 duration-500">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-orange-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
+                            <User className="h-5 w-5" />
                           </div>
-                          <div>
-                            <div className="font-bold text-orange-500 text-sm">
+                          <div className="flex flex-col">
+                            <div className="font-black text-orange-500 text-base leading-none mb-1">
                               {selectedPromoPlayer.full_name}
                             </div>
-                            <div className="text-[10px] text-orange-500/70 font-mono">
+                            <div className="text-[11px] text-orange-500/60 font-mono tracking-tight">
                               {selectedPromoPlayer.phone_number}
                             </div>
                           </div>
@@ -1639,10 +1695,10 @@ export function EmployeeSalesWizard({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-orange-500 hover:bg-orange-500/20"
+                          className="h-8 w-8 text-orange-500 hover:bg-orange-500/20 rounded-xl transition-colors"
                           onClick={() => setSelectedPromoPlayer(null)}
                         >
-                          <X className="h-3 w-3" />
+                          <X className="h-4 w-4" />
                         </Button>
                       </div>
                     )}
@@ -1650,111 +1706,173 @@ export function EmployeeSalesWizard({
                     <div className="space-y-4">
                       {/* Recent Check-ins */}
                       {checkedInPlayers.length > 0 && (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <div className="flex items-center justify-between px-1">
-                            <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-                              Недавние чекины (через QR)
+                            <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/60">
+                              Недавние чекины
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-4 px-1 text-[8px] uppercase font-bold text-muted-foreground/50 hover:text-destructive"
+                            <button
                               onClick={() => setCheckedInPlayers([])}
+                              className="text-[9px] uppercase font-black text-muted-foreground/40 hover:text-destructive transition-colors"
                             >
                               Очистить
-                            </Button>
+                            </button>
                           </div>
-                          <div className="flex flex-col gap-2">
-                            {checkedInPlayers.map((p) => (
-                              <div
-                                key={p.id}
-                                className="group relative flex items-center w-full"
-                              >
-                                <button
-                                  onClick={() => setSelectedPromoPlayer(p)}
+                          <div className="grid grid-cols-1 gap-2">
+                            {checkedInPlayers.map((p) => {
+                              const isSelected =
+                                selectedPromoPlayer?.id === p.id;
+                              return (
+                                <div
+                                  key={p.id}
                                   className={cn(
-                                    "w-full px-3 py-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-left transition-all border border-zinc-700/50 flex flex-col gap-0.5",
-                                    selectedPromoPlayer?.id === p.id &&
-                                      "bg-orange-500/20 border-orange-500/50",
+                                    "group relative flex items-center gap-2 p-1 rounded-2xl transition-all duration-300",
+                                    isSelected
+                                      ? "bg-orange-500/10 border border-orange-500/20"
+                                      : "bg-zinc-800/40 border border-zinc-800/50 hover:bg-zinc-800/80 hover:border-zinc-700",
                                   )}
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className={cn(
-                                        "w-1.5 h-1.5 rounded-full shrink-0",
-                                        selectedPromoPlayer?.id === p.id
-                                          ? "bg-orange-500"
-                                          : "bg-emerald-500 animate-pulse",
+                                  <button
+                                    onClick={() => setSelectedPromoPlayer(p)}
+                                    className="flex-1 flex items-center gap-3 px-3 py-2 text-left"
+                                  >
+                                    <div className="relative">
+                                      <div
+                                        className={cn(
+                                          "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
+                                          isSelected
+                                            ? "bg-orange-500 text-white"
+                                            : "bg-zinc-900 text-zinc-500 group-hover:text-zinc-300",
+                                        )}
+                                      >
+                                        <User className="h-4 w-4" />
+                                      </div>
+                                      {!isSelected && (
+                                        <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-zinc-900 animate-pulse" />
                                       )}
-                                    />
-                                    <span
-                                      className={cn(
-                                        "text-xs font-bold truncate",
-                                        selectedPromoPlayer?.id === p.id
-                                          ? "text-orange-500"
-                                          : "text-white",
-                                      )}
+                                    </div>
+                                    <div className="flex flex-col min-w-0">
+                                      <div
+                                        className={cn(
+                                          "text-xs font-bold truncate",
+                                          isSelected
+                                            ? "text-orange-500"
+                                            : "text-zinc-200",
+                                        )}
+                                      >
+                                        {p.full_name}
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground/60 font-mono">
+                                        ...{p.phone_number.slice(-4)}
+                                      </div>
+                                    </div>
+                                  </button>
+
+                                  <div className="flex items-center gap-1 pr-1">
+                                    {p.cart && p.cart.length > 0 && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (
+                                            cart.length > 0 &&
+                                            !confirm(
+                                              "В корзине уже есть товары. Заменить их заказом гостя?",
+                                            )
+                                          )
+                                            return;
+
+                                          const newCart = (p.cart || []).map(
+                                            (item: any) => {
+                                              const product = allProducts.find(
+                                                (prod) => prod.id === item.id,
+                                              );
+                                              return {
+                                                product_id: item.id,
+                                                name: item.name,
+                                                quantity: item.quantity,
+                                                selling_price:
+                                                  item.selling_price,
+                                                cost_price:
+                                                  product?.cost_price || 0,
+                                                price: item.selling_price,
+                                              };
+                                            },
+                                          );
+                                          setCart(newCart);
+                                          setPaymentType("bonus");
+                                          setSelectedPromoPlayer(p);
+                                        }}
+                                        className="h-9 w-9 flex items-center justify-center bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 rounded-xl text-orange-500 transition-all"
+                                        title="Загрузить корзину"
+                                      >
+                                        <ShoppingCart className="w-4 h-4" />
+                                      </button>
+                                    )}
+
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeCheckedInPlayer(p.id);
+                                      }}
+                                      className="h-9 w-9 flex items-center justify-center text-zinc-600 hover:text-destructive hover:bg-destructive/10 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
                                     >
-                                      {p.full_name}
-                                    </span>
+                                      <X className="w-4 h-4" />
+                                    </button>
                                   </div>
-                                  <div className="pl-3.5 text-[10px] text-muted-foreground font-mono">
-                                    ...{p.phone_number.slice(-4)}
-                                  </div>
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    removeCheckedInPlayer(p.id);
-                                  }}
-                                  className="absolute top-1/2 -translate-y-1/2 -right-2 w-5 h-5 bg-zinc-700 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-destructive transition-all shadow-lg z-10"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </div>
-                            ))}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
 
                       {/* Search by Phone */}
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <div className="relative group/search">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 group-focus-within/search:text-orange-500 transition-colors" />
                         <Input
                           value={promoSearchQuery}
                           onChange={(e) => {
                             setPromoSearchQuery(e.target.value);
                             searchPlayersByPhone(e.target.value);
                           }}
-                          placeholder="Поиск по телефону..."
-                          className="h-10 pl-9 bg-zinc-950 border-zinc-800 rounded-xl text-sm"
+                          placeholder="Поиск по телефону или имени..."
+                          className="h-12 pl-11 pr-11 bg-zinc-950/50 border-zinc-800/50 focus:border-orange-500/50 focus:ring-orange-500/20 rounded-2xl text-sm transition-all shadow-inner"
                         />
 
                         {isSearchingPromo && (
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                          <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
+                            <Loader2 className="h-4 w-4 animate-spin text-orange-500/50" />
                           </div>
                         )}
 
                         {promoSearchResults.length > 0 &&
                           promoSearchQuery.length >= 4 && (
-                            <div className="absolute z-20 w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden max-h-40 overflow-y-auto">
-                              {promoSearchResults.map((p) => (
-                                <button
-                                  key={p.id}
-                                  onClick={() => {
-                                    setSelectedPromoPlayer(p);
-                                    setPromoSearchQuery("");
-                                    setPromoSearchResults([]);
-                                  }}
-                                  className="w-full text-left px-3 py-2.5 hover:bg-zinc-800 text-sm flex items-center justify-between border-b border-zinc-800/50 last:border-0"
-                                >
-                                  <div className="font-bold">{p.full_name}</div>
-                                  <div className="text-[10px] text-muted-foreground font-mono">
-                                    {p.phone_number}
-                                  </div>
-                                </button>
-                              ))}
+                            <div className="absolute z-30 w-full mt-2 bg-zinc-900 border border-zinc-800 rounded-[1.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-top-2 duration-300">
+                              <div className="max-h-60 overflow-y-auto p-1.5 custom-scrollbar">
+                                {promoSearchResults.map((p) => (
+                                  <button
+                                    key={p.id}
+                                    onClick={() => {
+                                      setSelectedPromoPlayer(p);
+                                      setPromoSearchQuery("");
+                                      setPromoSearchResults([]);
+                                    }}
+                                    className="w-full text-left px-4 py-3 hover:bg-zinc-800/80 rounded-xl transition-colors flex items-center justify-between group/item"
+                                  >
+                                    <div className="flex flex-col">
+                                      <span className="font-bold text-zinc-200 group-hover/item:text-orange-500 transition-colors">
+                                        {p.full_name}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground/60 font-mono tracking-tight">
+                                        {p.phone_number}
+                                      </span>
+                                    </div>
+                                    <div className="w-8 h-8 rounded-lg bg-zinc-950 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-all">
+                                      <User className="h-3.5 w-3.5 text-orange-500" />
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           )}
                       </div>
