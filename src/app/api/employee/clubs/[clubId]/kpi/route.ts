@@ -262,7 +262,7 @@ export async function GET(
                 JOIN equipment e ON mt.equipment_id = e.id
                 LEFT JOIN club_workstations w ON e.workstation_id = w.id
                 LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
-                WHERE (
+                WHERE mt.club_id = $4 AND (
                     (
                         mt.due_date >= $2
                         AND mt.due_date <= $3
@@ -284,8 +284,8 @@ export async function GET(
                             ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
                         END
                     ) = $1 OR mt.completed_by = $1)
-             )
-             SELECT
+                )
+                SELECT
                 COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status != 'CANCELLED' AND (effective_assignee = $1 OR status = 'COMPLETED')) as total_tasks,
                 COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks,
                 COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3 AND due_date < $2) as old_debt_closed_tasks,
@@ -302,17 +302,17 @@ export async function GET(
                 COUNT(*) FILTER (WHERE responsible_user_id_at_completion = $1 AND was_overdue = TRUE AND completed_at >= $2 AND completed_at <= $3) as overdue_completed_tasks,
                 COALESCE(SUM(overdue_days_at_completion) FILTER (WHERE responsible_user_id_at_completion = $1 AND was_overdue = TRUE AND completed_at >= $2 AND completed_at <= $3), 0) as overdue_completed_days,
                 COALESCE(SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3), 0) as bonus
-             FROM scoped_tasks`,
-      [userId, startOfMonthIso, endOfMonthIso],
+                FROM scoped_tasks`,
+      [userId, startOfMonthIso, endOfMonthIso, clubId],
     );
-
     const overdueHistoryRes = await query(
       `SELECT overdue_days_at_completion, was_overdue, bonus_earned, overdue_penalty, due_date
              FROM equipment_maintenance_tasks
              WHERE responsible_user_id_at_completion = $1
+               AND club_id = $4
                AND status = 'COMPLETED'
                AND completed_at >= $2 AND completed_at <= $3`,
-      [userId, startOfMonthIso, endOfMonthIso],
+      [userId, startOfMonthIso, endOfMonthIso, clubId],
     );
 
     // Breakdown by equipment type
@@ -324,23 +324,24 @@ export async function GET(
                 COUNT(*) as task_count,
                 COALESCE(SUM(mt.bonus_earned), 0) as gross_earnings,
                 COALESCE(SUM(CASE WHEN mt.due_date >= $4::date AND mt.due_date <= $5::date THEN mt.overdue_penalty ELSE 0 END), 0) as penalty
-             FROM equipment_maintenance_tasks mt
-             JOIN equipment e ON mt.equipment_id = e.id
-             LEFT JOIN equipment_types et ON e.type = et.code
-             WHERE mt.responsible_user_id_at_completion = $1
-               AND mt.status = 'COMPLETED'
-               AND mt.completed_at >= $2 AND mt.completed_at <= $3
-             GROUP BY e.type, et.name_ru
-             ORDER BY task_count DESC`,
+              FROM equipment_maintenance_tasks mt
+              JOIN equipment e ON mt.equipment_id = e.id
+              LEFT JOIN equipment_types et ON e.type = et.code
+              WHERE mt.responsible_user_id_at_completion = $1
+                AND mt.club_id = $6
+                AND mt.status = 'COMPLETED'
+                AND mt.completed_at >= $2 AND mt.completed_at <= $3
+              GROUP BY e.type, et.name_ru
+              ORDER BY task_count DESC`,
       [
         userId,
         startOfMonthIso,
         endOfMonthIso,
         startOfMonth.toISOString().split("T")[0],
         endOfMonth.toISOString().split("T")[0],
+        clubId,
       ],
     );
-
     // Filter overdue history for penalty calculation to current month only (by due_date)
     const currentMonthOverdueHistory = overdueHistoryRes.rows.filter(
       (t: any) => {
@@ -484,6 +485,116 @@ export async function GET(
       }
     });
 
+    // 2.5 Promo KPI Metrics (Total for month and current shift)
+    try {
+      // 1. Fetch TOTAL for the whole month for this employee (all shifts)
+      const totalPromoRes = await query(
+        `WITH employee_shifts AS (
+            SELECT check_in, COALESCE(check_out, NOW()) as check_out
+            FROM shifts
+            WHERE user_id = $2 AND club_id = $1
+              AND (
+                  (check_in >= $3 AND check_in <= $4 AND status != 'CANCELLED')
+                  OR
+                  (status = 'ACTIVE')
+              )
+        )
+        SELECT
+            (SELECT COUNT(DISTINCT p.id)::int
+             FROM promo_players p
+             JOIN promo_player_balances b ON b.player_id = p.id
+             WHERE b.club_id = $1
+               AND EXISTS (SELECT 1 FROM employee_shifts s WHERE p.created_at BETWEEN s.check_in AND s.check_out)
+            ) as total_new_players,
+            (SELECT COUNT(DISTINCT p.id)::int
+             FROM promo_players p
+             JOIN promo_history h ON h.player_id = p.id
+             WHERE h.club_id = $1 AND h.game_type = 'TOPUP'
+               AND EXISTS (
+                   SELECT 1 FROM employee_shifts s
+                   WHERE p.created_at BETWEEN s.check_in AND s.check_out
+                     AND h.created_at BETWEEN s.check_in AND s.check_out
+               )
+            ) as total_new_paying_players,
+            (SELECT SUM((h.result_data->>'amount')::numeric)::float
+             FROM promo_history h
+             WHERE h.club_id = $1 AND h.game_type = 'TOPUP'
+               AND EXISTS (SELECT 1 FROM employee_shifts s WHERE h.created_at BETWEEN s.check_in AND s.check_out)
+            ) as total_topup_sum,
+            (SELECT COUNT(*)::int
+             FROM promo_history h
+             WHERE h.club_id = $1 AND h.game_type = 'SERVICE_AWARD'
+               AND EXISTS (SELECT 1 FROM employee_shifts s WHERE h.created_at BETWEEN s.check_in AND s.check_out)
+            ) as total_service_count`,
+        [clubId, userId, startOfMonthIso, endOfMonthIso],
+      );
+
+      const totalPromo = totalPromoRes.rows[0] || {};
+
+      monthlyMetrics["promo_new_players"] =
+        (monthlyMetrics["promo_new_players"] || 0) +
+        (totalPromo.total_new_players || 0);
+      monthlyMetrics["promo_new_paying_players"] =
+        (monthlyMetrics["promo_new_paying_players"] || 0) +
+        (totalPromo.total_new_paying_players || 0);
+      monthlyMetrics["promo_topup_total_sum"] =
+        (monthlyMetrics["promo_topup_total_sum"] || 0) +
+        (totalPromo.total_topup_sum || 0);
+      monthlyMetrics["promo_service_count"] =
+        (monthlyMetrics["promo_service_count"] || 0) +
+        (totalPromo.total_service_count || 0);
+
+      // 2. Fetch specifically for ACTIVE shift if exists (for real-time UI)
+      if (activeShift) {
+        const shiftStart = new Date(activeShift.check_in);
+        const shiftEnd = now;
+
+        const [newPlayersRes, payingPlayersRes, topupSumRes, serviceAwardRes] =
+          await Promise.all([
+            query(
+              `SELECT COUNT(DISTINCT p.id)::int as count
+             FROM promo_players p
+             JOIN promo_player_balances b ON b.player_id = p.id
+             WHERE b.club_id = $1 AND p.created_at BETWEEN $2 AND $3`,
+              [clubId, shiftStart, shiftEnd],
+            ),
+            query(
+              `SELECT COUNT(DISTINCT p.id)::int as count
+             FROM promo_players p
+             JOIN promo_history h ON h.player_id = p.id
+             WHERE p.created_at BETWEEN $1 AND $2
+               AND h.game_type = 'TOPUP'
+               AND h.created_at BETWEEN $1 AND $2
+               AND h.club_id = $3`,
+              [shiftStart, shiftEnd, clubId],
+            ),
+            query(
+              `SELECT SUM((result_data->>'amount')::numeric)::float as total
+             FROM promo_history
+             WHERE club_id = $1 AND game_type = 'TOPUP' AND created_at BETWEEN $2 AND $3`,
+              [clubId, shiftStart, shiftEnd],
+            ),
+            query(
+              `SELECT COUNT(*)::int as count
+             FROM promo_history
+             WHERE club_id = $1 AND game_type = 'SERVICE_AWARD' AND created_at BETWEEN $2 AND $3`,
+              [clubId, shiftStart, shiftEnd],
+            ),
+          ]);
+
+        activeShiftMetrics["promo_new_players"] =
+          newPlayersRes.rows[0]?.count || 0;
+        activeShiftMetrics["promo_new_paying_players"] =
+          payingPlayersRes.rows[0]?.count || 0;
+        activeShiftMetrics["promo_topup_total_sum"] =
+          topupSumRes.rows[0]?.total || 0;
+        activeShiftMetrics["promo_service_count"] =
+          serviceAwardRes.rows[0]?.count || 0;
+      }
+    } catch (promoError) {
+      console.error("Error fetching Promo KPI metrics:", promoError);
+    }
+
     // Days in month for projection
     const currentDay = now.getDate();
     const remainingDays = daysInMonth - currentDay;
@@ -573,10 +684,14 @@ export async function GET(
 
           // To REACH: we need to reach the SCALED threshold at the END of the month
           // So we scale the monthly threshold to the TOTAL planned shifts
+          // Fallback: If no shifts are planned (schedule empty), use standard_monthly_shifts to show full target
+          const effectivePlannedShifts =
+            Math.max(planned_shifts, 0) || standard_monthly_shifts;
           const endOfMonthThreshold =
             mode === "SHIFT"
-              ? original_from * planned_shifts
-              : (original_from / standard_monthly_shifts) * planned_shifts;
+              ? original_from * effectivePlannedShifts
+              : (original_from / standard_monthly_shifts) *
+                effectivePlannedShifts;
 
           const totalRemainingToReach = Math.max(
             0,
@@ -648,10 +763,13 @@ export async function GET(
             ? target_per_shift * total_shifts_count
             : (monthly_target / standard_monthly_shifts) * total_shifts_count;
 
+        const effectivePlannedShifts =
+          Math.max(planned_shifts, 0) || standard_monthly_shifts;
         const endOfMonthThreshold =
           mode === "SHIFT"
-            ? target_per_shift * planned_shifts
-            : (monthly_target / standard_monthly_shifts) * planned_shifts;
+            ? target_per_shift * effectivePlannedShifts
+            : (monthly_target / standard_monthly_shifts) *
+              effectivePlannedShifts;
 
         is_met = total_shifts_count > 0 && current_value >= scaled_threshold;
         const totalRemainingToReach = Math.max(
@@ -706,13 +824,9 @@ export async function GET(
         all_thresholds.length > 0
       ) {
         for (let i = all_thresholds.length - 1; i >= 0; i--) {
-          const monthlyThreshold = all_thresholds[i].monthly_threshold;
-          const endOfMonthThreshold =
-            mode === "SHIFT"
-              ? monthlyThreshold * planned_shifts
-              : monthlyThreshold;
+          const thresholdToReach = all_thresholds[i].planned_month_threshold;
 
-          if (projected_total >= endOfMonthThreshold) {
+          if (projected_total >= thresholdToReach) {
             projected_level = i + 1;
             if (bonus.reward_type === "FIXED") {
               projected_bonus = all_thresholds[i].amount;
@@ -747,6 +861,64 @@ export async function GET(
             : metric_key === "total_hours"
               ? activeShiftMetrics.total_hours
               : 0),
+      };
+    });
+
+    // 3.5 Calculate Per Unit (Promo) KPI progress
+    const promoConfigs = (scheme.bonuses || []).filter(
+      (b: any) => b.type === "per_unit",
+    );
+    const promo_progress = promoConfigs.map((bonus: any) => {
+      let current_value = 0;
+      let bonus_amount = 0;
+      const rules = bonus.rules || [];
+      const breakdown: any[] = [];
+
+      if (Array.isArray(rules) && rules.length > 0) {
+        rules.forEach((rule: any) => {
+          const val = monthlyMetrics[rule.source] || 0;
+          current_value += val;
+          let rule_bonus = 0;
+          if (rule.reward_type === "PERCENT") {
+            rule_bonus = val * ((Number(rule.percent) || 0) / 100);
+          } else {
+            rule_bonus = val * (Number(rule.amount) || 0);
+          }
+          bonus_amount += rule_bonus;
+
+          breakdown.push({
+            source: rule.source,
+            value: val,
+            bonus: rule_bonus,
+            rate: Number(rule.amount) || 0,
+            percent: Number(rule.percent) || 0,
+            reward_type: rule.reward_type || "FIXED",
+          });
+        });
+      } else {
+        const metric_key = bonus.source || "promo_new_players";
+        current_value = monthlyMetrics[metric_key] || 0;
+        const amount_promo =
+          Number(bonus.amount_promo) || Number(bonus.amount) || 0;
+        bonus_amount = current_value * amount_promo;
+
+        breakdown.push({
+          source: metric_key,
+          value: current_value,
+          bonus: bonus_amount,
+          rate: amount_promo,
+          reward_type: "FIXED",
+        });
+      }
+
+      return {
+        id: bonus.id || `per-unit-${bonus.source || "rules"}`,
+        type: "promo",
+        name: bonus.name || "Бонус за акции",
+        current_value,
+        bonus_amount,
+        rules,
+        breakdown,
       };
     });
 
@@ -1034,6 +1206,10 @@ export async function GET(
         (sum: number, kpi: any) => sum + kpi.bonus_amount,
         0,
       ) +
+      promo_progress.reduce(
+        (sum: number, kpi: any) => sum + kpi.bonus_amount,
+        0,
+      ) +
       checklist_progress.reduce(
         (sum: number, cp: any) => sum + cp.bonus_amount,
         0,
@@ -1048,6 +1224,7 @@ export async function GET(
 
     return NextResponse.json({
       kpi: kpi_progress,
+      promo: promo_progress,
       checklist: checklist_progress,
       maintenance: maintenance_progress,
       total_kpi_bonus,

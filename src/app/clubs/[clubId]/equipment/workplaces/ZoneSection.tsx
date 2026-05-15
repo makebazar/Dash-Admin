@@ -210,8 +210,10 @@ export default memo(function ZoneSection({
           const wsDisabledMaintenanceCount =
             disabledMaintenanceCountByWorkstationId.get(ws.id) ?? 0;
           const sortedEquipment = [...wsEquipment].sort((a, b) => {
-            const aIndex = EQUIPMENT_TYPE_SORT_ORDER.indexOf(a.type);
-            const bIndex = EQUIPMENT_TYPE_SORT_ORDER.indexOf(b.type);
+            const aType = a.base_type_code || a.type;
+            const bType = b.base_type_code || b.type;
+            const aIndex = EQUIPMENT_TYPE_SORT_ORDER.indexOf(aType);
+            const bIndex = EQUIPMENT_TYPE_SORT_ORDER.indexOf(bType);
             const aRank = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
             const bRank = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
 
@@ -219,7 +221,9 @@ export default memo(function ZoneSection({
             return a.name.localeCompare(b.name, "ru");
           });
 
-          const pcItem = sortedEquipment.find((i) => i.type === "PC");
+          const pcItem = sortedEquipment.find(
+            (i) => i.type === "PC" || i.base_type_code === "PC",
+          );
           const COMPONENT_TYPES = [
             "CPU",
             "GPU",
@@ -231,8 +235,10 @@ export default memo(function ZoneSection({
           ];
           const componentItems = sortedEquipment.filter(
             (i) =>
+              i.id !== pcItem?.id &&
               i.type !== "PC" &&
-              (i.parent_equipment_id === pcItem?.id ||
+              i.base_type_code !== "PC" &&
+              ((pcItem?.id && i.parent_equipment_id === pcItem.id) ||
                 COMPONENT_TYPES.includes(i.type)),
           );
           const peripheralItems = sortedEquipment.filter(

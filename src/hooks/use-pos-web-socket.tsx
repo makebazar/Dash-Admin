@@ -17,7 +17,8 @@ interface SSEMessage {
     | "STOCK_UPDATED"
     | "PING"
     | "CONNECTED"
-    | "PLAYER_CHECKIN";
+    | "PLAYER_CHECKIN"
+    | "SHIFT_SNAPSHOT_CREATED";
   receipt?: any;
   receiptId?: number;
   productId?: number;

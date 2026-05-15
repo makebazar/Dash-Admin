@@ -138,6 +138,7 @@ export async function GET(
             LEFT JOIN users cu_v ON mt.verified_by = cu_v.id
             WHERE e.club_id = $1
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
+              AND e.parent_equipment_id IS NULL
         `;
     const queryParams: any[] = [clubId];
     let paramIndex = 2;
@@ -499,6 +500,7 @@ export async function POST(
             WHERE e.club_id = $1
               AND ${maintenanceEligibleStatusSql}
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
+              AND e.parent_equipment_id IS NULL
         `;
 
     if (equipment_ids && equipment_ids.length > 0) {

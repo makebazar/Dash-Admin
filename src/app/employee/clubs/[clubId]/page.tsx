@@ -14,46 +14,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Clock,
   Loader2,
   LogIn,
   LogOut,
   Wallet,
-  Activity,
-  Calendar,
-  TrendingUp,
-  Target,
-  Zap,
   ChevronRight,
   Trophy,
   Brush,
   Briefcase,
   ClipboardCheck,
-  Monitor,
   AlertCircle,
-  Ban,
-  ArrowRightLeft,
-  MessageSquare,
-  ShoppingCart,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { getMonthRangeInTimezone } from "@/lib/utils";
 import { SSEProvider } from "@/hooks/use-pos-web-socket";
-import {
-  KpiOverview,
-  ChecklistKpiCard,
-  MaintenanceKpiCard,
-} from "@/components/employee/kpi/KpiOverview";
+import { UnifiedKpiCard } from "@/components/employee/kpi/UnifiedKpiCard";
+import { mapKpiToUnifiedProps } from "@/components/employee/kpi/KpiMapper";
+import { SalarySummaryWidget } from "@/components/employee/salary/SalarySummaryWidget";
 import { normalizeInventorySettings } from "@/lib/inventory-settings";
 import { ShiftClosingWizard } from "./_components/ShiftClosingWizard";
 import { ShiftOpeningWizard } from "./_components/ShiftOpeningWizard";
@@ -145,7 +122,8 @@ interface Stats {
     shift_bonuses: number;
     checklist_bonuses: number;
     maintenance_bonuses: number;
-    maintenance_penalty?: number;
+    maintenance_penalty: number;
+    promo_kpi_bonus: number;
     leaderboard_bonuses?: Array<{
       name: string;
       amount: number;
@@ -154,7 +132,7 @@ interface Stats {
       is_virtual: boolean;
     }>;
     revenue_kpi_bonuses: number;
-    bar_deductions?: number;
+    bar_deductions: number;
     zone_deductions?: number;
     revenue_kpi_breakdown?: Array<{
       name: string;
@@ -171,25 +149,6 @@ interface Stats {
       total: number;
     };
   };
-}
-
-interface KPIItem {
-  id: string;
-  name: string;
-  metric_key: string;
-  current_value: number;
-  target_value: number;
-  progress_percent: number;
-  is_met: boolean;
-  current_reward: number;
-  bonus_amount: number;
-}
-
-interface RecentShift {
-  id: number;
-  date: string;
-  hours: number;
-  earnings: number;
 }
 
 async function fetchShiftAccountabilityStatus(
@@ -253,28 +212,13 @@ export default function EmployeeClubPage({
   const [assignmentsCount, setAssignmentsCount] = useState(0);
   const [clubTasks, setClubTasks] = useState<any[]>([]);
   const [isUpdatingTask, setIsUpdatingTask] = useState<string | null>(null);
-  const [isClubTaskConfirmOpen, setIsClubTaskConfirmOpen] = useState(false);
-  const [pendingClubTaskConfirm, setPendingClubTaskConfirm] = useState<
-    any | null
-  >(null);
 
-  // Indicators Modal State
-  const [isIndicatorsModalOpen, setIsIndicatorsModalOpen] = useState(false);
   const [isSupplyWizardOpen, setIsSupplyWizardOpen] = useState(false);
   const [isWriteOffWizardOpen, setIsWriteOffWizardOpen] = useState(false);
   const [isTransferWizardOpen, setIsTransferWizardOpen] = useState(false);
   const [isRequestWizardOpen, setIsRequestWizardOpen] = useState(false);
-  const [unreadRequestsCount, setUnreadRequestsCount] = useState(0);
-  const [promoQueueCount, setPromoQueueCount] = useState(0);
-
-  // Live timer
-  const [liveSeconds, setLiveSeconds] = useState(0);
-
   // Report Modal State
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [startedShiftId, setStartedShiftId] = useState<string | number | null>(
-    null,
-  );
   const [hasShiftAccountability, setHasShiftAccountability] = useState<
     boolean | null
   >(null);
@@ -283,9 +227,10 @@ export default function EmployeeClubPage({
   const [hasPendingZoneStartAcceptance, setHasPendingZoneStartAcceptance] =
     useState(false);
   const [reportTemplate, setReportTemplate] = useState<any>(null);
-  const [reportData, setReportData] = useState<Record<string, any>>({});
 
   const isMobile = useIsMobile();
+
+  const [unreadRequestsCount, setUnreadRequestsCount] = useState(0);
 
   // Checklist State
   const [checklistTemplates, setChecklistTemplates] = useState<any[]>([]);
@@ -294,8 +239,6 @@ export default function EmployeeClubPage({
 
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [employeeAccess, setEmployeeAccess] = useState<any>(null);
-  const [evaluationScore, setEvaluationScore] = useState<number | null>(null);
-  const [isEvaluationsLoading, setIsEvaluationsLoading] = useState(false);
   const [availableShiftRoles, setAvailableShiftRoles] = useState<
     { id: number; name: string }[]
   >([]);
@@ -337,18 +280,6 @@ export default function EmployeeClubPage({
   const canUseEmployeeTransfer =
     isStockEnabled && normalizedInventorySettings.employee_transfer_enabled;
 
-  // Helper functions (должны быть до useMemo)
-  const formatLiveTime = (totalSeconds: number) => {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    return {
-      hours: hours.toString().padStart(2, "0"),
-      minutes: minutes.toString().padStart(2, "0"),
-      seconds: seconds.toString().padStart(2, "0"),
-    };
-  };
-
   const formatCurrency = (amount: number) => {
     return (
       new Intl.NumberFormat("ru-RU", {
@@ -359,38 +290,24 @@ export default function EmployeeClubPage({
     );
   };
 
+  const kpiContext = {
+    formatCurrency,
+    activeShiftId: activeShift?.id || null,
+    remainingShifts: kpiData?.remaining_shifts || 0,
+    plannedShifts: kpiData?.planned_shifts || 0,
+    daysRemaining: kpiData?.days_remaining || 0,
+  };
+
   // Оптимизация: мемоизация KPI компонентов (должен быть до useEffect)
   const kpiComponents = useMemo(() => {
     if (kpiData?.hidden) return null;
     if (!kpiData?.kpi?.length) return null;
     return kpiData.kpi.map((kpi: any, idx: number) => (
       <div key={`kpi-${kpi?.id ?? "unknown"}-${idx}`} className="space-y-4">
-        <div className="flex items-center gap-3 px-1">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">
-            Выручка: {kpi.name}
-          </h2>
-        </div>
-        <KpiOverview
-          kpi={kpi}
-          formatCurrency={formatCurrency}
-          remainingShifts={kpiData.remaining_shifts || 0}
-          shiftsCount={kpiData.shifts_count || 0}
-          completedShiftsCount={kpiData.completed_shifts || 0}
-          plannedShifts={kpiData.planned_shifts || 0}
-          daysRemaining={kpiData.days_remaining || 0}
-          activeShift={activeShift}
-        />
+        <UnifiedKpiCard {...mapKpiToUnifiedProps("revenue", kpi, kpiContext)} />
       </div>
     ));
-  }, [
-    kpiData?.kpi,
-    kpiData?.remaining_shifts,
-    kpiData?.shifts_count,
-    kpiData?.completed_shifts,
-    kpiData?.planned_shifts,
-    kpiData?.days_remaining,
-    activeShift?.id,
-  ]);
+  }, [kpiData?.kpi, kpiData?.hidden, kpiContext]);
 
   const checklistComponents = useMemo(() => {
     if (kpiData?.hidden) return null;
@@ -400,19 +317,22 @@ export default function EmployeeClubPage({
         key={`checklist-${checklist?.id ?? "unknown"}-${idx}`}
         className="space-y-4"
       >
-        <div className="flex items-center gap-3 px-1">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">
-            Чек-лист
-          </h2>
-        </div>
-        <ChecklistKpiCard kpi={checklist} formatCurrency={formatCurrency} />
+        <UnifiedKpiCard
+          {...mapKpiToUnifiedProps("checklist", checklist, kpiContext)}
+        />
       </div>
     ));
-  }, [kpiData?.checklist?.length]);
+  }, [kpiData?.checklist, kpiData?.hidden, kpiContext]);
 
-  const isBarBlockedByStartAcceptance = useMemo(() => {
-    return false;
-  }, []);
+  const promoComponents = useMemo(() => {
+    if (kpiData?.hidden) return null;
+    if (!kpiData?.promo?.length) return null;
+    return kpiData.promo.map((kpi: any, idx: number) => (
+      <div key={`promo-${kpi?.id ?? "unknown"}-${idx}`} className="space-y-4">
+        <UnifiedKpiCard {...mapKpiToUnifiedProps("promo", kpi, kpiContext)} />
+      </div>
+    ));
+  }, [kpiData?.promo, kpiData?.hidden, kpiContext]);
 
   useEffect(() => {
     if (!canUseShiftZoneHandover || !clubId || !activeShift?.id) {
@@ -468,9 +388,6 @@ export default function EmployeeClubPage({
         if (cancelled) return;
         const pendingAcceptance = !hasOpenSnapshot;
         setHasPendingZoneStartAcceptance(pendingAcceptance);
-        if (pendingAcceptance) {
-          setStartedShiftId(activeShift.id);
-        }
       })
       .catch((error) => {
         if (!cancelled) {
@@ -489,81 +406,68 @@ export default function EmployeeClubPage({
     hasShiftAccountability,
   ]);
 
-  useEffect(() => {
-    if (!clubId || !activeShift?.id) return;
-
-    const interval = setInterval(() => {
-      fetchShiftAccountabilityStatus(clubId).then((status) => {
-        setHasShiftAccountability(status.enabled && status.ready);
-      });
-
-      if (canUseShiftZoneHandover) {
-        fetchHasOpenZoneSnapshot(clubId, activeShift.id)
-          .then((hasOpenSnapshot) => {
-            setHasPendingZoneStartAcceptance(!hasOpenSnapshot);
-
-            // If it's already in DB, clear the local draft state so the button disappears
-            if (hasOpenSnapshot) {
-              setHasOpenZoneSnapshotDraft(false);
-              // Optionally clear localStorage too
-              try {
-                window.localStorage.removeItem(
-                  `shift-zone-snapshot:${clubId}:${activeShift.id}:OPEN`,
-                );
-              } catch (e) {}
-            }
-          })
-          .catch(() => {});
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [clubId, activeShift?.id, canUseShiftZoneHandover]);
-
   const maintenanceComponent = useMemo(() => {
     if (kpiData?.hidden || !kpiData?.maintenance) return null;
     return (
       <div className="space-y-4">
-        <div className="flex items-center gap-3 px-1">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">
-            Обслуживание
-          </h2>
-        </div>
-        <MaintenanceKpiCard
-          kpi={kpiData.maintenance}
-          formatCurrency={formatCurrency}
+        <UnifiedKpiCard
+          {...mapKpiToUnifiedProps(
+            "maintenance",
+            kpiData.maintenance,
+            kpiContext,
+          )}
         />
       </div>
     );
-  }, [kpiData?.maintenance]);
+  }, [kpiData?.maintenance, kpiData?.hidden, kpiContext]);
+
+  const [liveSeconds, setLiveSeconds] = useState(0);
+  const [liveDisplay, setLiveDisplay] = useState("00:00:00");
+  const [lastShiftEarnings, setLastShiftEarnings] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
-    // Fetch current user ID
-    fetch("/api/auth/me")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.user) setCurrentUserId(data.user.id);
-        if (Array.isArray(data.employeeClubs)) {
-          setEmployeeClubs(data.employeeClubs);
-        }
-      });
+    let cancelled = false;
 
-    params.then((p) => {
-      setClubId(p.clubId);
-      fetchData(p.clubId);
-    });
+    const init = async () => {
+      try {
+        // 1. Auth & Clubs
+        const authRes = await fetch("/api/auth/me");
+        const authData = await authRes.json();
+        if (cancelled) return;
+
+        if (authData.user) setCurrentUserId(authData.user.id);
+
+        const clubs = Array.isArray(authData.employeeClubs)
+          ? authData.employeeClubs
+          : [];
+        setEmployeeClubs(clubs);
+
+        // 2. Club ID from params
+        const p = await params;
+        if (cancelled) return;
+        setClubId(p.clubId);
+
+        // 3. Set current club info
+        const clubInfo = clubs.find(
+          (c: ClubInfo) => c.id === parseInt(p.clubId),
+        );
+        setClub(clubInfo || null);
+
+        // 4. Fetch main data
+        await fetchData(p.clubId, clubs);
+      } catch (e) {
+        console.error("Initialization error:", e);
+      }
+    };
+
+    init();
+
+    return () => {
+      cancelled = true;
+    };
   }, [params]);
-
-  useEffect(() => {
-    if (!clubId || employeeClubs.length === 0) return;
-    const clubInfo = employeeClubs.find(
-      (c: ClubInfo) => c.id === parseInt(clubId),
-    );
-    setClub(clubInfo || null);
-    if (clubInfo) {
-      fetchData(clubId);
-    }
-  }, [clubId, employeeClubs]);
 
   useEffect(() => {
     if (!clubId) return;
@@ -599,64 +503,13 @@ export default function EmployeeClubPage({
           cache: "no-store",
         });
         if (kpiRes.ok) setKpiData(await kpiRes.json());
+        await fetchData(clubId, employeeClubs);
       } catch (e) {
         console.error(e);
       }
     },
     [clubId],
   );
-
-  useEffect(() => {
-    if (!clubId || !currentUserId || !canUseEmployeeChecklists) return;
-    const fetchEvaluationScore = async () => {
-      setIsEvaluationsLoading(true);
-      try {
-        const res = await fetch(
-          `/api/clubs/${clubId}/evaluations?employee_id=${currentUserId}`,
-        );
-        const data = await res.json();
-        if (res.ok && Array.isArray(data)) {
-          const now = new Date();
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-          const monthlyScores = data
-            .filter((item: any) => {
-              const date = item.evaluation_date || item.created_at;
-              if (!date) return false;
-              const parsed = new Date(date);
-              return parsed >= startOfMonth && parsed < nextMonth;
-            })
-            .map((item: any) => Number(item.total_score))
-            .filter((value: number) => Number.isFinite(value));
-
-          if (monthlyScores.length > 0) {
-            const avg =
-              monthlyScores.reduce(
-                (sum: number, value: number) => sum + value,
-                0,
-              ) / monthlyScores.length;
-            setEvaluationScore(avg);
-          } else {
-            setEvaluationScore(null);
-          }
-        } else {
-          setEvaluationScore(null);
-        }
-      } catch (error) {
-        console.error("Error fetching evaluations", error);
-        setEvaluationScore(null);
-      } finally {
-        setIsEvaluationsLoading(false);
-      }
-    };
-    fetchEvaluationScore();
-  }, [canUseEmployeeChecklists, clubId, currentUserId]);
-
-  useEffect(() => {
-    if (!canUseEmployeeChecklists) {
-      setEvaluationScore(null);
-    }
-  }, [canUseEmployeeChecklists]);
 
   useEffect(() => {
     if (!canUseShiftZoneHandover || !clubId || !currentUserId) {
@@ -706,6 +559,9 @@ export default function EmployeeClubPage({
       fetchUnreadRequests();
     };
     eventSource.addEventListener("update", onUpdate);
+    eventSource.onerror = () => {
+      console.warn("SSE connection lost. Reconnecting...");
+    };
 
     return () => {
       eventSource.removeEventListener("update", onUpdate);
@@ -724,18 +580,18 @@ export default function EmployeeClubPage({
     }
   };
 
-  // Live timer - оптимизировано (без ре-рендера всей страницы)
-  const liveSecondsRef = useRef(0);
-  const [liveDisplay, setLiveDisplay] = useState("00:00:00");
-
   useEffect(() => {
-    if (!activeShift) return;
+    if (!activeShift) {
+      setLiveSeconds(0);
+      setLiveDisplay("00:00:00");
+      return;
+    }
 
     const updateTimer = () => {
       const start = new Date(activeShift.check_in).getTime();
       const now = Date.now();
       const diffSeconds = Math.floor((now - start) / 1000);
-      liveSecondsRef.current = diffSeconds;
+      setLiveSeconds(diffSeconds);
 
       // Форматируем только для отображения
       const hours = Math.floor(diffSeconds / 3600)
@@ -754,10 +610,11 @@ export default function EmployeeClubPage({
     return () => clearInterval(interval);
   }, [activeShift]);
 
-  const fetchData = async (id: string) => {
+  const fetchData = async (id: string, clubsOverride?: ClubInfo[]) => {
     try {
+      const targetClubs = clubsOverride || employeeClubs;
       const clubTimezone =
-        employeeClubs.find((item: ClubInfo) => String(item.id) === id)
+        targetClubs.find((item: ClubInfo) => String(item.id) === id)
           ?.timezone || "Europe/Moscow";
       const { firstDay: monthStart, lastDay: monthEnd } =
         getMonthRangeInTimezone(new Date(), clubTimezone);
@@ -795,7 +652,13 @@ export default function EmployeeClubPage({
       // Оптимизация: выполняем все запросы параллельно
       const results = await Promise.all([
         fetch(`/api/employee/clubs/${id}/active-shift`).then((r) => r.json()),
-        fetch(`/api/employee/clubs/${id}/stats`).then((r) => r.json()),
+        fetch(`/api/employee/clubs/${id}/stats`).then(async (r) => {
+          if (!r.ok) {
+            const err = await r.text();
+            throw new Error(err);
+          }
+          return r.json();
+        }),
         fetch(`/api/employee/clubs/${id}/kpi`).then((r) => r.json()),
         localCanUseShiftReport
           ? fetch(`/api/clubs/${id}/settings/reports`, {
@@ -808,16 +671,14 @@ export default function EmployeeClubPage({
         fetch(
           `/api/clubs/${id}/equipment/maintenance?assigned=me&verification_status=REJECTED`,
         ).then((r) => r.json()),
-        fetch(`/api/employee/clubs/${id}/equipment-rating`).then((r) =>
-          r.json(),
-        ),
         localCanUseInventoryActions
           ? fetch(`/api/clubs/${id}/tasks`).then((r) => r.json())
           : fetch(`/api/clubs/${id}/tasks?skip_replenishment=true`).then((r) =>
               r.json(),
             ),
-        fetch(`/api/clubs/${id}/employee-tasks`).then((r) => r.json()),
-        fetch(`/api/promo/admin/queue?clubId=${id}`).then((r) => r.json()),
+        localSettings.assignments_enabled
+          ? fetch(`/api/clubs/${id}/employee-tasks`).then((r) => r.json())
+          : Promise.resolve({ tasks: [] }),
       ]);
 
       const [
@@ -827,19 +688,9 @@ export default function EmployeeClubPage({
         reportJson,
         tasksData,
         reworkData,
-        ratingData,
         tasksJson,
         assignmentsData,
-        promoData,
       ] = results;
-
-      // Promo Queue
-      if (promoData?.queue) {
-        const pendingCount = promoData.queue.filter(
-          (item: any) => item.status === "pending",
-        ).length;
-        setPromoQueueCount(pendingCount);
-      }
 
       // Assignments
       if (assignmentsData?.tasks) {
@@ -884,11 +735,6 @@ export default function EmployeeClubPage({
       // Rework tasks
       if (reworkData) {
         setReworkTasksCount(reworkData.total || 0);
-      }
-
-      // Rating
-      if (ratingData) {
-        setKpiData((prev: any) => ({ ...prev, equipment_rating: ratingData }));
       }
 
       if (tasksJson?.tasks) {
@@ -965,14 +811,6 @@ export default function EmployeeClubPage({
         }
         setHasShiftAccountability(hasShiftZones);
 
-        if (data.shift_id) {
-          setStartedShiftId(data.shift_id);
-          if (hasShiftZones && canUseShiftZoneHandover) {
-            const url = `/employee/terminal/handover/OPEN/${data.shift_id}?clubId=${clubId}`;
-            window.open(url, isMobile ? "_self" : "_blank");
-          }
-        }
-
         await fetchData(clubId);
         return data.shift_id ? String(data.shift_id) : null;
       } else {
@@ -1036,7 +874,6 @@ export default function EmployeeClubPage({
       const data = await res.json();
       if (data.currentTemplate) {
         setReportTemplate(data.currentTemplate);
-        setReportData({});
         setIsReportModalOpen(true);
       } else {
         if (confirm("Завершить смену?")) {
@@ -1152,42 +989,16 @@ export default function EmployeeClubPage({
       }
       const itemsCount = Number(task.transfer_item_count || 0) || 0;
       const sourceClubName = task.transfer_source_club_name || "клуб-источник";
-      setPendingClubTaskConfirm({
-        taskId,
-        title: "Подтвердите действие",
-        description: `Принять оборудование (${itemsCount} шт.) из клуба «${sourceClubName}» и разместить по местам?`,
-      });
-      setIsClubTaskConfirmOpen(true);
+      if (
+        confirm(
+          `Принять оборудование (${itemsCount} шт.) из клуба «${sourceClubName}» и разместить по местам?`,
+        )
+      ) {
+        await executeCompleteClubTask(taskId);
+      }
       return;
     }
     await executeCompleteClubTask(taskId);
-  };
-
-  const submitUpdateIndicators = async (data: any) => {
-    setIsActionLoading(true);
-    try {
-      const res = await fetch(
-        `/api/employee/shifts/${activeShift?.id}/indicators`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ indicators: data }),
-        },
-      );
-
-      if (res.ok) {
-        setIsIndicatorsModalOpen(false);
-        await fetchData(clubId);
-      } else {
-        const err = await res.json();
-        alert(err.error || "Не удалось обновить показатели");
-      }
-    } catch (error) {
-      console.error("Error updating indicators:", error);
-      alert("Ошибка обновления показателей");
-    } finally {
-      setIsActionLoading(false);
-    }
   };
 
   const submitEndShift = async (data: any) => {
@@ -1242,6 +1053,7 @@ export default function EmployeeClubPage({
       });
 
       if (res.ok) {
+        setLastShiftEarnings(currentEarnings);
         setIsReportModalOpen(false);
         await fetchData(clubId);
       } else {
@@ -1346,10 +1158,10 @@ export default function EmployeeClubPage({
     ],
   );
 
-  const liveTime = formatLiveTime(liveSecondsRef.current);
-  const currentEarnings = stats
-    ? (liveSecondsRef.current / 3600) * stats.hourly_rate
-    : 0;
+  const currentEarnings =
+    activeShift && stats
+      ? (liveSeconds / 3600) * stats.hourly_rate
+      : lastShiftEarnings || 0;
 
   if (isLoading) {
     return (
@@ -1480,12 +1292,6 @@ export default function EmployeeClubPage({
                   </div>
 
                   <div className="grid gap-3">
-                    {isBarBlockedByStartAcceptance && (
-                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-600 dark:text-amber-400">
-                        Завершите приемку остатков. Касса и складские действия
-                        заблокированы.
-                      </div>
-                    )}
                     {(hasOpenZoneSnapshotDraft ||
                       hasPendingZoneStartAcceptance) &&
                       activeShift?.id && (
@@ -1525,7 +1331,6 @@ export default function EmployeeClubPage({
                           variant="outline"
                           className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
                           onClick={() => setIsSupplyWizardOpen(true)}
-                          disabled={isBarBlockedByStartAcceptance}
                         >
                           Поставка
                         </Button>
@@ -1541,7 +1346,6 @@ export default function EmployeeClubPage({
                               "noopener,noreferrer",
                             )
                           }
-                          disabled={isBarBlockedByStartAcceptance}
                         >
                           Касса
                         </Button>
@@ -1551,7 +1355,6 @@ export default function EmployeeClubPage({
                           variant="outline"
                           className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
                           onClick={() => setIsWriteOffWizardOpen(true)}
-                          disabled={isBarBlockedByStartAcceptance}
                         >
                           Списание
                         </Button>
@@ -1561,7 +1364,6 @@ export default function EmployeeClubPage({
                           variant="outline"
                           className="h-10 text-xs shadow-none border-border bg-card hover:bg-accent hover:text-accent-foreground"
                           onClick={() => setIsTransferWizardOpen(true)}
-                          disabled={isBarBlockedByStartAcceptance}
                         >
                           Перемещение
                         </Button>
@@ -1904,121 +1706,12 @@ export default function EmployeeClubPage({
 
           {/* Sidebar (Stats & Leaderboard) */}
           <div className="space-y-8 lg:border-l lg:pl-8">
-            {/* Salary Estimate */}
-            <section className="space-y-4">
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                Зарплата за месяц
-              </h2>
-              <div className="space-y-1">
-                <p className="text-4xl font-bold tracking-tight text-foreground">
-                  {formatCurrency(stats?.month_earnings || 0)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Ориентировочный расчет
-                </p>
-              </div>
-
-              {stats?.breakdown && (
-                <div className="pt-4 space-y-2">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">
-                      Ставка (
-                      {stats.total_hours?.toFixed(1) ||
-                        (stats.today_hours + stats.week_hours)?.toFixed(1)}{" "}
-                      ч)
-                    </span>
-                    <span className="font-medium text-foreground">
-                      {formatCurrency(stats.breakdown.base_salary)}
-                    </span>
-                  </div>
-                  {stats.breakdown.shift_bonuses > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Бонусы смен</span>
-                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                        +{formatCurrency(stats.breakdown.shift_bonuses)}
-                      </span>
-                    </div>
-                  )}
-                  {stats.breakdown.revenue_kpi_breakdown
-                    ?.filter((b: any) => !b.is_virtual)
-                    .map((bonus: any, idx: number) => (
-                      <div
-                        key={`real-${idx}`}
-                        className="flex justify-between text-xs"
-                      >
-                        <span className="text-muted-foreground">
-                          {bonus.name}
-                        </span>
-                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                          +{formatCurrency(bonus.amount)}
-                        </span>
-                      </div>
-                    ))}
-                  {stats.breakdown.checklist_bonuses > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Чек-листы</span>
-                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                        +{formatCurrency(stats.breakdown.checklist_bonuses)}
-                      </span>
-                    </div>
-                  )}
-                  {stats.breakdown.maintenance_bonuses > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">
-                        Обслуживание
-                      </span>
-                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                        +{formatCurrency(stats.breakdown.maintenance_bonuses)}
-                      </span>
-                    </div>
-                  )}
-                  {stats.breakdown.leaderboard_bonuses
-                    ?.filter((b: any) => !b.is_virtual)
-                    .map((bonus: any, idx: number) => (
-                      <div
-                        key={`lead-${idx}`}
-                        className="flex justify-between text-xs"
-                      >
-                        <span className="text-muted-foreground">Рейтинг</span>
-                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                          +{formatCurrency(bonus.amount)}
-                        </span>
-                      </div>
-                    ))}
-                  {(stats.breakdown.maintenance_penalty || 0) > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Штраф</span>
-                      <span className="font-medium text-rose-600 dark:text-rose-400">
-                        -
-                        {formatCurrency(
-                          stats.breakdown.maintenance_penalty || 0,
-                        )}
-                      </span>
-                    </div>
-                  )}
-                  {(stats.breakdown.bar_deductions || 0) > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">
-                        Бар в счет ЗП
-                      </span>
-                      <span className="font-medium text-rose-600 dark:text-rose-400">
-                        -{formatCurrency(stats.breakdown.bar_deductions || 0)}
-                      </span>
-                    </div>
-                  )}
-                  {(stats.breakdown.zone_deductions || 0) > 0 && (
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">
-                        Списание по недостаче
-                      </span>
-                      <span className="font-medium text-rose-600 dark:text-rose-400">
-                        -{formatCurrency(stats.breakdown.zone_deductions || 0)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
+            {stats?.breakdown && (
+              <SalarySummaryWidget
+                stats={stats as any}
+                formatCurrency={formatCurrency}
+              />
+            )}
 
             {/* Leaderboard */}
             {stats?.leaderboard && (
@@ -2080,6 +1773,7 @@ export default function EmployeeClubPage({
             </h2>
             <div className="space-y-8">
               {kpiComponents}
+              {promoComponents}
               <div className="grid gap-6 lg:grid-cols-1">
                 {maintenanceComponent}
                 {checklistComponents}
@@ -2286,137 +1980,7 @@ export default function EmployeeClubPage({
           clubId={clubId}
           userId={currentUserId}
         />
-
-        <Dialog
-          open={isClubTaskConfirmOpen}
-          onOpenChange={setIsClubTaskConfirmOpen}
-        >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                {pendingClubTaskConfirm?.title || "Подтвердите действие"}
-              </DialogTitle>
-              <DialogDescription>
-                {pendingClubTaskConfirm?.description || ""}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setIsClubTaskConfirmOpen(false);
-                  setPendingClubTaskConfirm(null);
-                }}
-                disabled={Boolean(isUpdatingTask)}
-              >
-                Отмена
-              </Button>
-              <Button
-                type="button"
-                onClick={async () => {
-                  const id = pendingClubTaskConfirm?.taskId
-                    ? String(pendingClubTaskConfirm.taskId)
-                    : "";
-                  if (!id) return;
-                  setIsClubTaskConfirmOpen(false);
-                  setPendingClubTaskConfirm(null);
-                  await executeCompleteClubTask(id);
-                }}
-                disabled={
-                  Boolean(isUpdatingTask) || !pendingClubTaskConfirm?.taskId
-                }
-                className="bg-slate-900 text-white hover:bg-slate-800"
-              >
-                {isUpdatingTask ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                ОК
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {canUseShiftReport && (
-          <Dialog
-            open={isIndicatorsModalOpen}
-            onOpenChange={setIsIndicatorsModalOpen}
-          >
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Промежуточные показатели</DialogTitle>
-                <DialogDescription>
-                  Внесите текущие данные, чтобы увидеть обновленный прогноз KPI
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
-                {reportTemplate?.schema?.map((field: any, idx: number) => (
-                  <div key={idx} className="space-y-2">
-                    <Label>{field.custom_label}</Label>
-                    <Input
-                      type={
-                        field.metric_key.includes("comment") ? "text" : "number"
-                      }
-                      placeholder="Текущее значение"
-                      onChange={(e) =>
-                        setReportData({
-                          ...reportData,
-                          [field.metric_key]: e.target.value,
-                        })
-                      }
-                      defaultValue={
-                        activeShift
-                          ? typeof activeShift.report_data === "string"
-                            ? JSON.parse(activeShift.report_data || "{}")[
-                                field.metric_key
-                              ]
-                            : (activeShift.report_data as any)?.[
-                                field.metric_key
-                              ]
-                          : ""
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-              <DialogFooter>
-                <Button
-                  onClick={() => submitUpdateIndicators(reportData)}
-                  disabled={isActionLoading}
-                  className="w-full"
-                >
-                  {isActionLoading && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Обновить показатели
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
       </div>
     </SSEProvider>
-  );
-}
-
-function CoffeeIcon(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M10 2v2" />
-      <path d="M14 2v2" />
-      <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" />
-      <path d="M6 2v2" />
-    </svg>
   );
 }

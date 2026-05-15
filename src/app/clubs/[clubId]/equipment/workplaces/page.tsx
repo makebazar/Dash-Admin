@@ -662,7 +662,8 @@ export default function WorkplacesPage() {
   }, [workstations, selectedWorkstationId]);
 
   const getEquipmentIcon = useCallback(
-    (type: string) => renderEquipmentIcon(type, null, "h-4 w-4"),
+    (type: string, typeIcon?: string | null) =>
+      renderEquipmentIcon(type, typeIcon, "h-4 w-4"),
     [],
   );
 

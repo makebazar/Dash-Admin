@@ -18,6 +18,7 @@ export interface Equipment {
   type: string;
   type_name: string;
   type_icon: string;
+  base_type_code?: string | null;
   identifier?: string | null;
   brand: string | null;
   model: string | null;

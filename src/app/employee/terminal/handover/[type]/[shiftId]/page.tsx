@@ -202,7 +202,10 @@ export default function HandoverTerminalPage() {
         if (!warehousesRes.ok) throw new Error(warehousesRes.error);
         if (!sourceCandidatesRes.ok) throw new Error(sourceCandidatesRes.error);
 
-        const serverRows = rowsRes.data;
+        const serverRows = rowsRes.data.map((item: any) => ({
+          ...item,
+          confirmed: item.saved_counted_quantity !== null,
+        }));
         const availableWarehouses = warehousesRes.data;
         const sourceCandidates = sourceCandidatesRes.data;
 
@@ -385,13 +388,11 @@ export default function HandoverTerminalPage() {
 
   const stats = useMemo(() => {
     const total = items.length;
-    const counted = items.filter(
-      (i) => i.confirmed || i.counted_quantity !== null,
-    ).length;
+    const counted = items.filter((i) => i.confirmed).length;
     return {
       total,
       counted,
-      progress: total === 0 ? 0 : Math.round((counted / total) * 100),
+      progress: total === 0 ? 100 : Math.round((counted / total) * 100),
     };
   }, [items]);
 
