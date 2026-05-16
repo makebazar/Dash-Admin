@@ -726,6 +726,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
       0,
     );
     const deductions = Number(employee.total_bar_purchases || 0);
+    const shortageDeduction = Number(employee.salary_deduction || 0);
     const total = Number(employee.total_accrued || 0);
 
     const instant = Number(employee.breakdown?.instant_payout || 0);
@@ -754,7 +755,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                   {formatCurrency(total)}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 min-w-[260px]">
+              <div className="grid grid-cols-2 gap-2 min-w-65">
                 <div className="rounded-2xl border border-orange-200 bg-orange-50/60 p-3 text-center">
                   <div className="text-[9px] font-black uppercase tracking-widest text-orange-700">
                     В конце смен
@@ -804,6 +805,12 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                     <div className="text-slate-700">Удержания (бар)</div>
                     <div className="font-black text-rose-700 whitespace-nowrap">
                       -{formatCurrency(deductions)}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="text-slate-700">Списание по недостаче</div>
+                    <div className="font-black text-rose-700 whitespace-nowrap">
+                      -{formatCurrency(shortageDeduction)}
                     </div>
                   </div>
                 </div>
@@ -999,14 +1006,20 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                   metricKey.includes("income") ||
                   metricKey.includes("sum") ||
                   metricKey.includes("amount") ||
-                  metricKey.includes("balance");
+                  metricKey.includes("balance") ||
+                  metricKey.includes("bar") ||
+                  metricKey.includes("бар");
 
                 const displayCurrent = isMonetary
                   ? formatCurrency(current)
-                  : String(current);
+                  : new Intl.NumberFormat("ru-RU", {
+                      maximumFractionDigits: 0,
+                    }).format(current);
                 const displayTarget = isMonetary
                   ? formatCurrency(target)
-                  : String(target);
+                  : new Intl.NumberFormat("ru-RU", {
+                      maximumFractionDigits: 0,
+                    }).format(target);
 
                 const metricBreakdown = Array.isArray(k?.metric_breakdown)
                   ? k.metric_breakdown
@@ -1047,7 +1060,9 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                     {getSourceLabel(m.source)}
                                   </div>
                                   <div className="text-[10px] text-slate-500">
-                                    {m.count}{" "}
+                                    {new Intl.NumberFormat("ru-RU", {
+                                      maximumFractionDigits: 0,
+                                    }).format(m.count)}{" "}
                                     {m.source.includes("sum") ? "₽" : "ед."} ×{" "}
                                     {m.reward_type === "PERCENT"
                                       ? `${m.reward_value}%`
@@ -1157,8 +1172,12 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                   <PayrollManagerKpiCard
                     title={ms.name || "KPI Обслуживание"}
                     payoutType={payoutType}
-                    currentValue={ms.current_value}
-                    targetValue={ms.target_value}
+                    currentValue={new Intl.NumberFormat("ru-RU", {
+                      maximumFractionDigits: 0,
+                    }).format(ms.current_value)}
+                    targetValue={new Intl.NumberFormat("ru-RU", {
+                      maximumFractionDigits: 0,
+                    }).format(ms.target_value)}
                     bonusAmount={Number(ms.bonus_amount || 0)}
                     progressPercent={Number(ms.efficiency || 0)}
                     formatCurrency={formatCurrency}
@@ -1183,7 +1202,9 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                       {m.source}
                                     </div>
                                     <div className="text-[10px] text-slate-500">
-                                      {m.count}{" "}
+                                      {new Intl.NumberFormat("ru-RU", {
+                                        maximumFractionDigits: 0,
+                                      }).format(m.count)}{" "}
                                       {m.source.includes("Штраф")
                                         ? "инцид."
                                         : "задач"}
@@ -1214,8 +1235,17 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                           Эффективность
                         </span>
                         Выполнено:{" "}
-                        <span className="font-bold">{ms.current_value}</span> из{" "}
-                        <span className="font-bold">{ms.target_value}</span>
+                        <span className="font-bold">
+                          {new Intl.NumberFormat("ru-RU", {
+                            maximumFractionDigits: 0,
+                          }).format(ms.current_value)}
+                        </span>{" "}
+                        из{" "}
+                        <span className="font-bold">
+                          {new Intl.NumberFormat("ru-RU", {
+                            maximumFractionDigits: 0,
+                          }).format(ms.target_value)}
+                        </span>
                         {" • "}
                         Эффективность:{" "}
                         <span className="font-bold">
@@ -1405,7 +1435,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                       {m.source}
                                     </div>
                                     <div className="text-[10px] text-slate-500">
-                                      Результат: {m.count}%
+                                      Результат: {Math.round(m.count)}%
                                     </div>
                                   </div>
                                 </div>
@@ -2442,7 +2472,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                               {b.name || b.type}
                                                             </div>
                                                             {line && (
-                                                              <div className="text-[11px] text-muted-foreground whitespace-normal break-words leading-snug">
+                                                              <div className="text-[11px] text-muted-foreground whitespace-normal wrap-break-word leading-snug">
                                                                 {line}
                                                               </div>
                                                             )}
@@ -2643,7 +2673,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 className="flex items-start justify-between gap-3"
                                               >
                                                 <div className="min-w-0">
-                                                  <span className="font-bold text-slate-900 break-words">
+                                                  <span className="font-bold text-slate-900 wrap-break-word">
                                                     {item.product_name}
                                                   </span>
                                                   {Number(item.quantity || 1) >

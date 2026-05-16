@@ -77,7 +77,7 @@ export function SalarySummaryWidget({
         </div>
 
         {/* Breakdown List */}
-        <div className="space-y-3 pt-6 border-t border-white/[0.03]">
+        <div className="space-y-3 pt-6 border-t border-white/3">
           {/* Base */}
           <div className="flex justify-between items-center text-sm">
             <span className="text-zinc-500 font-medium">{baseLabel}</span>
@@ -114,10 +114,12 @@ export function SalarySummaryWidget({
 
           {/* Virtual Balance Info (Optional) */}
           {bd.virtual_total && bd.virtual_total > 0 ? (
-            <div className="pt-2 mt-2 border-t border-white/[0.03]">
-              <div className="flex justify-between items-center text-[10px] uppercase tracking-widest text-zinc-500 font-black">
-                <span>На виртуальный баланс</span>
-                <span className="text-sky-400">
+            <div className="pt-2 mt-2 border-t border-white/3">
+              <div className="grid grid-cols-[1fr_auto] items-center text-[9px] uppercase tracking-tighter text-zinc-500 font-black gap-2 w-full overflow-hidden">
+                <span className="whitespace-nowrap truncate">
+                  На виртуальный баланс
+                </span>
+                <span className="text-sky-400 whitespace-nowrap text-right font-black">
                   {formatCurrency(bd.virtual_total)}
                 </span>
               </div>

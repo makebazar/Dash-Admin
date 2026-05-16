@@ -1,36 +1,39 @@
-import { normalizeSignageOrientation, type SignageOrientation } from "@/lib/signage"
+import {
+  normalizeSignageOrientation,
+  type SignageOrientation,
+} from "@/lib/signage";
 
-export type SignageTransition = "none" | "fade" | "slide" | "zoom"
-export type SignageMediaType = "image" | "video"
+export type SignageTransition = "none" | "fade" | "slide" | "zoom";
+export type SignageMediaType = "image" | "video" | "website";
 
 export type SignageSlide = {
-  id: string
-  title: string
-  imageUrl: string
-  mediaType: SignageMediaType
-  transition: SignageTransition
-  durationSec: number
-  order: number
-  startHour: number
-  endHour: number
-  startMinute: number
-  endMinute: number
-  weekdays: number[]
-  enabled: boolean
-}
+  id: string;
+  title: string;
+  imageUrl: string;
+  mediaType: SignageMediaType;
+  transition: SignageTransition;
+  durationSec: number;
+  order: number;
+  startHour: number;
+  endHour: number;
+  startMinute: number;
+  endMinute: number;
+  weekdays: number[];
+  enabled: boolean;
+};
 
 export type SignageLayout = {
-  version: 2
-  mode: "slideshow"
-  background: string
-  transition: SignageTransition
-  slides: SignageSlide[]
-}
+  version: 2;
+  mode: "slideshow";
+  background: string;
+  transition: SignageTransition;
+  slides: SignageSlide[];
+};
 
 export function createDefaultSignageLayout(
-  orientation: SignageOrientation = "landscape"
+  orientation: SignageOrientation = "landscape",
 ): SignageLayout {
-  normalizeSignageOrientation(orientation)
+  normalizeSignageOrientation(orientation);
 
   return {
     version: 2,
@@ -38,21 +41,21 @@ export function createDefaultSignageLayout(
     background: "#050816",
     transition: "fade",
     slides: [],
-  }
+  };
 }
 
 export function normalizeSignageLayout(
   value: unknown,
-  orientation: SignageOrientation = "landscape"
+  orientation: SignageOrientation = "landscape",
 ): SignageLayout {
-  const fallback = createDefaultSignageLayout(orientation)
+  const fallback = createDefaultSignageLayout(orientation);
 
   if (!value || typeof value !== "object") {
-    return fallback
+    return fallback;
   }
 
-  const layout = value as Partial<SignageLayout>
-  const rawSlides = Array.isArray(layout.slides) ? layout.slides : []
+  const layout = value as Partial<SignageLayout>;
+  const rawSlides = Array.isArray(layout.slides) ? layout.slides : [];
 
   return {
     version: 2,
@@ -63,44 +66,65 @@ export function normalizeSignageLayout(
         : fallback.background,
     transition: normalizeSignageTransition(layout.transition),
     slides: rawSlides
-      .map((slide) => normalizeSignageSlide(slide, normalizeSignageTransition(layout.transition)))
+      .map((slide) =>
+        normalizeSignageSlide(
+          slide,
+          normalizeSignageTransition(layout.transition),
+        ),
+      )
       .filter((slide): slide is SignageSlide => slide !== null)
       .sort((a, b) => a.order - b.order),
-  }
+  };
 }
 
 export function normalizeSignageTransition(value: unknown): SignageTransition {
-  return value === "none" || value === "slide" || value === "zoom" ? value : "fade"
+  return value === "none" || value === "slide" || value === "zoom"
+    ? value
+    : "fade";
 }
 
 export function normalizeSignageSlide(
   value: unknown,
-  fallbackTransition: SignageTransition = "fade"
+  fallbackTransition: SignageTransition = "fade",
 ): SignageSlide | null {
-  if (!value || typeof value !== "object") return null
+  if (!value || typeof value !== "object") return null;
 
-  const slide = value as Partial<SignageSlide>
-  const imageUrl = typeof slide.imageUrl === "string" ? slide.imageUrl.trim() : ""
-  if (!imageUrl) return null
+  const slide = value as Partial<SignageSlide>;
+  const imageUrl =
+    typeof slide.imageUrl === "string" ? slide.imageUrl.trim() : "";
+  if (!imageUrl) return null;
 
   return {
     id: typeof slide.id === "string" && slide.id ? slide.id : createSlideId(),
     title: typeof slide.title === "string" ? slide.title : "Фото",
     imageUrl,
     mediaType: normalizeSignageMediaType(slide.mediaType, imageUrl),
-    transition: normalizeSignageTransition(slide.transition ?? fallbackTransition),
-    durationSec: typeof slide.durationSec === "number" ? Math.min(3600, Math.max(0, Math.round(slide.durationSec))) : 8,
+    transition: normalizeSignageTransition(
+      slide.transition ?? fallbackTransition,
+    ),
+    durationSec:
+      typeof slide.durationSec === "number"
+        ? Math.min(3600, Math.max(0, Math.round(slide.durationSec)))
+        : 8,
     order: clampNumber(slide.order, 0, 999, 0),
-    startHour: typeof slide.startHour === "number" ? Math.min(23, Math.max(0, Math.round(slide.startHour))) : 0,
-    endHour: typeof slide.endHour === "number" ? Math.min(23, Math.max(0, Math.round(slide.endHour))) : 0,
+    startHour:
+      typeof slide.startHour === "number"
+        ? Math.min(23, Math.max(0, Math.round(slide.startHour)))
+        : 0,
+    endHour:
+      typeof slide.endHour === "number"
+        ? Math.min(23, Math.max(0, Math.round(slide.endHour)))
+        : 0,
     startMinute: clampNumber(slide.startMinute, 0, 59, 0),
     endMinute: clampNumber(slide.endMinute, 0, 59, 0),
     weekdays: normalizeSignageWeekdays(slide.weekdays),
     enabled: slide.enabled !== false,
-  }
+  };
 }
 
-export function createSignageSlide(partial: Partial<SignageSlide> & { imageUrl: string }): SignageSlide {
+export function createSignageSlide(
+  partial: Partial<SignageSlide> & { imageUrl: string },
+): SignageSlide {
   return normalizeSignageSlide({
     id: partial.id || createSlideId(),
     title: partial.title !== undefined ? partial.title : "Медиа",
@@ -115,21 +139,27 @@ export function createSignageSlide(partial: Partial<SignageSlide> & { imageUrl: 
     endMinute: partial.endMinute ?? 0,
     weekdays: partial.weekdays ?? DEFAULT_SIGNAGE_WEEKDAYS,
     enabled: partial.enabled ?? true,
-  })!
+  })!;
 }
 
 export function getActiveSlides(layout: SignageLayout, atDate = new Date()) {
-  const minutesInDay = atDate.getHours() * 60 + atDate.getMinutes()
-  const weekday = atDate.getDay()
-  const slides = Array.isArray(layout?.slides) ? layout.slides : []
+  const minutesInDay = atDate.getHours() * 60 + atDate.getMinutes();
+  const weekday = atDate.getDay();
+  const slides = Array.isArray(layout?.slides) ? layout.slides : [];
   return slides
     .filter(
       (slide) =>
         slide.enabled &&
-        isTimeInRange(minutesInDay, slide.startHour, slide.startMinute, slide.endHour, slide.endMinute) &&
-        isWeekdayAllowed(weekday, slide.weekdays)
+        isTimeInRange(
+          minutesInDay,
+          slide.startHour,
+          slide.startMinute,
+          slide.endHour,
+          slide.endMinute,
+        ) &&
+        isWeekdayAllowed(weekday, slide.weekdays),
     )
-    .sort((a, b) => a.order - b.order)
+    .sort((a, b) => a.order - b.order);
 }
 
 export function isTimeInRange(
@@ -137,64 +167,95 @@ export function isTimeInRange(
   startHour: number,
   startMinute: number,
   endHour: number,
-  endMinute: number
+  endMinute: number,
 ) {
-  const startTotal = startHour * 60 + startMinute
-  const endTotal = endHour * 60 + endMinute
+  const startTotal = startHour * 60 + startMinute;
+  const endTotal = endHour * 60 + endMinute;
 
-  if (startTotal === endTotal) return true
-  if (startTotal < endTotal) return minutesInDay >= startTotal && minutesInDay < endTotal
-  return minutesInDay >= startTotal || minutesInDay < endTotal
+  if (startTotal === endTotal) return true;
+  if (startTotal < endTotal)
+    return minutesInDay >= startTotal && minutesInDay < endTotal;
+  return minutesInDay >= startTotal || minutesInDay < endTotal;
 }
 
-function clampNumber(value: unknown, min: number, max: number, fallback: number) {
-  const numeric = Number(value)
-  if (!Number.isFinite(numeric)) return fallback
-  return Math.min(max, Math.max(min, Math.round(numeric)))
+function clampNumber(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(numeric)));
 }
 
-const DEFAULT_SIGNAGE_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6]
+const DEFAULT_SIGNAGE_WEEKDAYS = [0, 1, 2, 3, 4, 5, 6];
 
 export function normalizeSignageWeekdays(value: unknown) {
-  if (!Array.isArray(value)) return DEFAULT_SIGNAGE_WEEKDAYS
+  if (!Array.isArray(value)) return DEFAULT_SIGNAGE_WEEKDAYS;
 
   const normalized = Array.from(
     new Set(
       value
         .map((day) => Number(day))
         .filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
-        .sort((a, b) => a - b)
-    )
-  )
+        .sort((a, b) => a - b),
+    ),
+  );
 
-  return normalized.length > 0 ? normalized : DEFAULT_SIGNAGE_WEEKDAYS
+  return normalized.length > 0 ? normalized : DEFAULT_SIGNAGE_WEEKDAYS;
 }
 
 export function isWeekdayAllowed(weekday: number, allowedWeekdays: number[]) {
-  return normalizeSignageWeekdays(allowedWeekdays).includes(weekday)
+  return normalizeSignageWeekdays(allowedWeekdays).includes(weekday);
 }
 
 function createSlideId() {
-  return `slide_${Math.random().toString(36).slice(2, 10)}`
+  return `slide_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function normalizeSignageMediaType(value: unknown, imageUrl = ""): SignageMediaType {
-  if (value === "video" || value === "image") return value
-  return inferSignageMediaTypeFromUrl(imageUrl)
+export function normalizeSignageMediaType(
+  value: unknown,
+  imageUrl = "",
+): SignageMediaType {
+  if (value === "video" || value === "image" || value === "website")
+    return value;
+  return inferSignageMediaTypeFromUrl(imageUrl);
 }
 
-export function inferSignageMediaTypeFromUrl(imageUrl: string): SignageMediaType {
+export function inferSignageMediaTypeFromUrl(
+  imageUrl: string,
+): SignageMediaType {
+  if (!imageUrl) return "image";
+
   try {
-    const parsed = new URL(imageUrl, "https://dashadmin.local")
-    const pathname = parsed.pathname.toLowerCase()
+    const parsed = new URL(imageUrl, "https://dashadmin.local");
+    const pathname = parsed.pathname.toLowerCase();
+
     if (/\.(mp4|webm|mov|m4v|ogg|ogv)$/i.test(pathname)) {
-      return "video"
+      return "video";
+    }
+
+    if (/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(pathname)) {
+      return "image";
+    }
+
+    // Special case for internal promo board or any absolute HTTP(S) URL that isn't a known file extension
+    if (pathname.includes("/promo/board") || imageUrl.startsWith("http")) {
+      return "website";
     }
   } catch {
-    if (/\.(mp4|webm|mov|m4v|ogg|ogv)(\?.*)?$/i.test(imageUrl.toLowerCase())) {
-      return "video"
+    const lowerUrl = imageUrl.toLowerCase();
+    if (/\.(mp4|webm|mov|m4v|ogg|ogv)(\?.*)?$/i.test(lowerUrl)) {
+      return "video";
+    }
+    if (/\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(lowerUrl)) {
+      return "image";
+    }
+    if (lowerUrl.includes("/promo/board") || lowerUrl.startsWith("http")) {
+      return "website";
     }
   }
 
-  return "image"
+  return "image";
 }

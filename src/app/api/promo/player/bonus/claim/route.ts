@@ -32,24 +32,11 @@ export async function POST(request: Request) {
     client = await getClient();
     await client.query("BEGIN");
 
-    // 0. Get club owner (as the creator/assignee for the request)
-    const clubResult = await client.query(
-      `SELECT owner_id FROM clubs WHERE id = $1`,
-      [activeClubId],
-    );
-
-    if (clubResult.rowCount === 0) {
-      await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Club not found" }, { status: 404 });
-    }
-    const ownerId = clubResult.rows[0].owner_id;
-
-    // 1. Get player balance and info
+    // 1. Get player balance
     const balanceResult = await client.query(
-      `SELECT b.bonus_balance, p.full_name, p.phone_number
-       FROM promo_player_balances b
-       JOIN promo_players p ON p.id = b.player_id
-       WHERE b.player_id = $1 AND b.club_id = $2`,
+      `SELECT bonus_balance
+       FROM promo_player_balances
+       WHERE player_id = $1 AND club_id = $2`,
       [playerId, activeClubId],
     );
 
@@ -58,7 +45,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Balance not found" }, { status: 404 });
     }
 
-    const { bonus_balance, full_name, phone_number } = balanceResult.rows[0];
+    const { bonus_balance } = balanceResult.rows[0];
     const currentBalance = parseFloat(bonus_balance);
 
     if (withdrawAmount > currentBalance) {
@@ -75,27 +62,7 @@ export async function POST(request: Request) {
       [playerId, activeClubId, withdrawAmount],
     );
 
-    // 3. Create employee request
-    const title = `Зачисление бонусов: ${withdrawAmount}`;
-    const description = `Игрок ${full_name} (${phone_number}) просит зачислить ${withdrawAmount} бонусов на аккаунт клуба.`;
-
-    const requestRes = await client.query(
-      `INSERT INTO employee_requests (club_id, user_id, category, priority, title, description, is_read_by_employee)
-       VALUES ($1, $2, 'FINANCIAL', 'HIGH', $3, $4, FALSE)
-       RETURNING id`,
-      [activeClubId, ownerId, title, description],
-    );
-
-    const requestId = requestRes.rows[0].id;
-
-    // 3.1 Create initial message for the request
-    await client.query(
-      `INSERT INTO employee_request_messages (request_id, sender_id, message)
-       VALUES ($1, $2, $3)`,
-      [requestId, ownerId, description],
-    );
-
-    // 3.2 Add to promo_prize_queue for visibility in "Очередь выдачи"
+    // 3. Add to promo_prize_queue for visibility in "Очередь выдачи"
     await client.query(
       `INSERT INTO promo_prize_queue (history_id, player_id, club_id, prize_id, status, withdraw_amount)
        VALUES ($1, $2, $3, NULL, 'pending', $4)`,
@@ -112,11 +79,7 @@ export async function POST(request: Request) {
       `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
        VALUES ($1, $2, 'WITHDRAW', $3)
        RETURNING id`,
-      [
-        playerId,
-        activeClubId,
-        JSON.stringify({ amount: withdrawAmount, request_id: requestId }),
-      ],
+      [playerId, activeClubId, JSON.stringify({ amount: withdrawAmount })],
     );
     const historyId = historyRes.rows[0].id;
 
@@ -139,9 +102,6 @@ export async function POST(request: Request) {
       console.error("[SSE] Failed to send promo notification:", e);
     }
 
-    await query(`SELECT pg_notify('employee_requests_updates', $1)`, [
-      activeClubId,
-    ]);
     await query(`SELECT pg_notify('promo_queue_updates', $1)`, [activeClubId]);
 
     return NextResponse.json({

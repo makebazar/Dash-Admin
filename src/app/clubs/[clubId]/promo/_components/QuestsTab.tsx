@@ -214,8 +214,8 @@ export function QuestsTab({
                     className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
                   >
                     <option value="receipt_item">
-                      Покупка конкретного товара в баре
-                    </option>
+                      Покупка товаров / услуг в баре
+                    </option>{" "}
                     <option value="receipt_total">
                       Сумма чека в баре больше чем
                     </option>
@@ -262,6 +262,33 @@ export function QuestsTab({
 
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                    Дополнительное условие: купленная услуга
+                  </label>
+                  <select
+                    value={editingQuest.target_service_id || ""}
+                    onChange={(e) =>
+                      setEditingQuest({
+                        ...editingQuest,
+                        target_service_id: e.target.value,
+                      })
+                    }
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
+                  >
+                    <option value="">-- Не требуется --</option>
+                    {serviceRules.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[9px] text-slate-400 mt-1 italic px-2">
+                    * Квест сработает только если у игрока сегодня куплена эта
+                    услуга (пакет времени).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
                     Минимальный уровень
                   </label>
                   <input
@@ -279,6 +306,40 @@ export function QuestsTab({
                   <p className="text-[10px] text-slate-400 font-medium px-2 mt-1 italic">
                     Квест будет виден гостям только с этого уровня.
                   </p>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                    {editingQuest.trigger_type === "receipt_item" &&
+                    (editingQuest.target_entity_id || "").includes(",")
+                      ? "Сколько КОМПЛЕКТОВ нужно купить?"
+                      : [
+                            "receipt_total",
+                            "total_spent_accumulative",
+                            "balance_topup",
+                          ].includes(editingQuest.trigger_type)
+                        ? "Сумма (₽)"
+                        : "Количество"}
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={Math.floor(Number(editingQuest.target_value || 0))}
+                    onChange={(e) =>
+                      setEditingQuest({
+                        ...editingQuest,
+                        target_value: Math.floor(Number(e.target.value)),
+                      })
+                    }
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
+                  />
+                  {editingQuest.trigger_type === "receipt_item" &&
+                    (editingQuest.target_entity_id || "").includes(",") && (
+                      <p className="text-[9px] text-slate-400 mt-2 italic px-2">
+                        * Например, если нужно купить 2 набора "Кола + Чипсы",
+                        укажите здесь 2.
+                      </p>
+                    )}
                 </div>
 
                 {editingQuest.trigger_type === "manual_verification" && (
@@ -487,21 +548,76 @@ export function QuestsTab({
                     ) : (
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                          Выберите товар
+                          Выберите товары (НУЖНО КУПИТЬ ВСЕ ВМЕСТЕ)
                         </label>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {(editingQuest.target_entity_id || "")
+                            .split(",")
+                            .filter(Boolean)
+                            .map((id: string) => {
+                              const p = products.find(
+                                (prod) => String(prod.id) === String(id),
+                              );
+                              if (!p) return null;
+                              return (
+                                <div
+                                  key={id}
+                                  className="bg-orange-500/10 text-orange-600 border border-orange-500/20 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                                >
+                                  {p.name}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const current = (
+                                        editingQuest.target_entity_id || ""
+                                      )
+                                        .split(",")
+                                        .filter(Boolean);
+                                      setEditingQuest({
+                                        ...editingQuest,
+                                        target_entity_id: current
+                                          .filter((i) => i !== id)
+                                          .join(","),
+                                      });
+                                    }}
+                                    className="hover:text-orange-700 transition-colors"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                        </div>
                         <select
-                          value={editingQuest.target_entity_id}
-                          onChange={(e) =>
-                            setEditingQuest({
-                              ...editingQuest,
-                              target_entity_id: e.target.value,
-                            })
-                          }
+                          value=""
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            const current = (
+                              editingQuest.target_entity_id || ""
+                            )
+                              .split(",")
+                              .filter(Boolean);
+                            if (!current.includes(e.target.value)) {
+                              setEditingQuest({
+                                ...editingQuest,
+                                target_entity_id: [
+                                  ...current,
+                                  e.target.value,
+                                ].join(","),
+                              });
+                            }
+                          }}
                           className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
                         >
-                          <option value="">-- Выберите товар --</option>
+                          <option value="">-- Добавить товар --</option>
                           {products.map((p) => (
-                            <option key={p.id} value={p.id}>
+                            <option
+                              key={p.id}
+                              value={p.id}
+                              disabled={(
+                                editingQuest.target_entity_id || ""
+                              ).includes(String(p.id))}
+                            >
                               {p.name}
                             </option>
                           ))}
@@ -515,51 +631,82 @@ export function QuestsTab({
                 ) && (
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                      Услуга
+                      Услуги (выберите одну или несколько)
                     </label>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {(editingQuest.target_entity_id || "")
+                        .split(",")
+                        .filter(Boolean)
+                        .map((id: string) => {
+                          const s = serviceRules.find(
+                            (rule) => String(rule.id) === String(id),
+                          );
+                          if (!s) return null;
+                          return (
+                            <div
+                              key={id}
+                              className="bg-blue-500/10 text-blue-600 border border-blue-500/20 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                            >
+                              {s.name}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const current = (
+                                    editingQuest.target_entity_id || ""
+                                  )
+                                    .split(",")
+                                    .filter(Boolean);
+                                  setEditingQuest({
+                                    ...editingQuest,
+                                    target_entity_id: current
+                                      .filter((i) => i !== id)
+                                      .join(","),
+                                  });
+                                }}
+                                className="hover:text-blue-700 transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                    </div>
                     <select
-                      value={editingQuest.target_entity_id}
-                      onChange={(e) =>
-                        setEditingQuest({
-                          ...editingQuest,
-                          target_entity_id: e.target.value,
-                        })
-                      }
+                      value=""
+                      onChange={(e) => {
+                        if (!e.target.value) return;
+                        const current = (editingQuest.target_entity_id || "")
+                          .split(",")
+                          .filter(Boolean);
+                        if (!current.includes(e.target.value)) {
+                          setEditingQuest({
+                            ...editingQuest,
+                            target_entity_id: [...current, e.target.value].join(
+                              ",",
+                            ),
+                          });
+                        }
+                      }}
                       className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
                     >
-                      <option value="">-- Все услуги --</option>
+                      <option value="">-- Добавить услугу --</option>
                       {serviceRules.map((s) => (
-                        <option key={s.id} value={s.id}>
+                        <option
+                          key={s.id}
+                          value={s.id}
+                          disabled={(
+                            editingQuest.target_entity_id || ""
+                          ).includes(String(s.id))}
+                        >
                           {s.name}
                         </option>
                       ))}
                     </select>
+                    <p className="text-[9px] text-slate-400 mt-2 italic">
+                      * Оставьте пустым, чтобы квест срабатывал на любые услуги.
+                    </p>
                   </div>
                 )}
-
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                    {[
-                      "receipt_total",
-                      "total_spent_accumulative",
-                      "balance_topup",
-                    ].includes(editingQuest.trigger_type)
-                      ? "Сумма (₽)"
-                      : "Количество"}
-                  </label>
-                  <input
-                    type="number"
-                    step="1"
-                    value={Math.floor(Number(editingQuest.target_value || 0))}
-                    onChange={(e) =>
-                      setEditingQuest({
-                        ...editingQuest,
-                        target_value: Math.floor(Number(e.target.value)),
-                      })
-                    }
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
-                  />
-                </div>
               </div>
 
               <div className="space-y-4">

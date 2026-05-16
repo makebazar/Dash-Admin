@@ -1501,7 +1501,7 @@ export default function MaintenanceSchedule() {
                                     применяется ко всему оборудованию
                                   </div>
                                 </div>
-                                <div className="w-full xl:w-[260px]">
+                                <div className="w-full xl:w-65">
                                   <Select
                                     value={place.assignedUserId || "unassigned"}
                                     onValueChange={(value) =>

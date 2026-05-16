@@ -28,7 +28,7 @@ export async function GET(
         created_at,
         updated_at,
         CASE
-          WHEN last_seen_at IS NOT NULL AND last_seen_at > NOW() - INTERVAL '90 seconds' THEN TRUE
+          WHEN last_seen_at IS NOT NULL AND last_seen_at > NOW() - INTERVAL '150 seconds' THEN TRUE
           ELSE FALSE
         END AS is_online
       FROM club_signage_devices

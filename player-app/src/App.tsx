@@ -1,5 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { createDefaultSignageLayout, getActiveSlides, normalizeSignageLayout } from "./signage-layout"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PromoBoard } from "./PromoBoard";
+import {
+  createDefaultSignageLayout,
+  getActiveSlides,
+  normalizeSignageLayout,
+} from "./signage-layout";
 import type {
   BootstrapPayload,
   DisplayInfo,
@@ -7,8 +12,8 @@ import type {
   RuntimeConfig,
   SignageLayout,
   SignageSlide,
-} from "./types"
-import "./styles.css"
+} from "./types";
+import "./styles.css";
 
 const browserBootstrap = (): BootstrapPayload => ({
   deviceId: "browser-preview-device",
@@ -42,167 +47,204 @@ const browserBootstrap = (): BootstrapPayload => ({
   ],
   version: "browser-preview",
   platform: "browser",
-})
+});
 
 const browserConfig: RuntimeConfig = {
   appName: "DashAdmin экран",
-  serverUrl: "https://www.mydashadmin.ru",
+  serverUrl: "https://mydashadmin.ru",
   isPackaged: false,
-}
+};
 
 function getElectronApi(): ElectronSignageApi | null {
-  if (typeof window === "undefined") return null
-  return window.electronSignage ?? null
+  if (typeof window === "undefined") return null;
+  return window.electronSignage ?? null;
 }
 
 export default function App() {
-  const electronApi = useMemo(() => getElectronApi(), [])
-  const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null)
-  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>(browserConfig)
-  const [pendingDisplayId, setPendingDisplayId] = useState<string | null>(null)
-  const [isReloading, setIsReloading] = useState(false)
-  const [isSetupVisible, setIsSetupVisible] = useState(false)
-  const lastReportedSlideIdRef = useRef<string | null>(null)
+  const electronApi = useMemo(() => getElectronApi(), []);
+  const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
+  const [runtimeConfig, setRuntimeConfig] =
+    useState<RuntimeConfig>(browserConfig);
+  const [pendingDisplayId, setPendingDisplayId] = useState<string | null>(null);
+  const [isReloading, setIsReloading] = useState(false);
+  const [isSetupVisible, setIsSetupVisible] = useState(false);
+  const lastReportedSlideIdRef = useRef<string | null>(null);
   const selectedDisplay =
-    bootstrap?.displays.find((display) => display.id === bootstrap.selectedDisplayId) ?? null
-  const isPortrait = bootstrap?.orientation === "portrait"
-  const canRenderContent = Boolean(bootstrap?.pairedClubId) && Boolean(bootstrap?.fullscreen)
-  const shouldRenderContent = canRenderContent && !isSetupVisible
+    bootstrap?.displays.find(
+      (display) => display.id === bootstrap.selectedDisplayId,
+    ) ?? null;
+  const isPortrait = bootstrap?.orientation === "portrait";
+  const canRenderContent =
+    Boolean(bootstrap?.pairedClubId) && Boolean(bootstrap?.fullscreen);
+  const shouldRenderContent = canRenderContent && !isSetupVisible;
 
   useEffect(() => {
-    let disposed = false
-    let unsubscribe: (() => void) | undefined
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
 
     async function load() {
       if (!electronApi) {
-        setBootstrap(browserBootstrap())
-        return
+        setBootstrap(browserBootstrap());
+        return;
       }
 
       const [config, payload] = await Promise.all([
         electronApi.getRuntimeConfig(),
         electronApi.getBootstrap(),
-      ])
+      ]);
 
-      if (disposed) return
+      if (disposed) return;
 
-      setRuntimeConfig(config)
+      setRuntimeConfig(config);
       setBootstrap({
         ...payload,
-        layoutJson: payload.layoutJson ? normalizeSignageLayout(payload.layoutJson) : null,
-      })
+        layoutJson: payload.layoutJson
+          ? normalizeSignageLayout(payload.layoutJson)
+          : null,
+      });
 
       unsubscribe = electronApi.onBootstrapUpdated((nextPayload) => {
-        if (disposed) return
+        if (disposed) return;
         setBootstrap({
           ...nextPayload,
-          layoutJson: nextPayload.layoutJson ? normalizeSignageLayout(nextPayload.layoutJson) : null,
-        })
-      })
+          layoutJson: nextPayload.layoutJson
+            ? normalizeSignageLayout(nextPayload.layoutJson)
+            : null,
+        });
+      });
 
-      await electronApi.syncRemote()
+      await electronApi.syncRemote();
     }
 
-    void load()
+    void load();
 
     return () => {
-      disposed = true
-      unsubscribe?.()
-    }
-  }, [electronApi])
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, [electronApi]);
 
   useEffect(() => {
-    if (!shouldRenderContent) return
+    if (!shouldRenderContent) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" || event.key === "F10") {
-        event.preventDefault()
-        void openSetup()
+        event.preventDefault();
+        void openSetup();
       }
-    }
+    };
 
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [shouldRenderContent])
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [shouldRenderContent]);
 
   async function handleDisplaySelect(displayId: string) {
-    if (!electronApi) return
+    if (!electronApi) return;
 
     try {
-      setPendingDisplayId(displayId)
-      const payload = await electronApi.selectDisplay(displayId)
+      setPendingDisplayId(displayId);
+      const payload = await electronApi.selectDisplay(displayId);
       setBootstrap({
         ...payload,
-        layoutJson: payload.layoutJson ? normalizeSignageLayout(payload.layoutJson) : null,
-      })
+        layoutJson: payload.layoutJson
+          ? normalizeSignageLayout(payload.layoutJson)
+          : null,
+      });
     } finally {
-      setPendingDisplayId(null)
+      setPendingDisplayId(null);
     }
   }
 
   async function handleFullscreen(enabled: boolean) {
-    if (!electronApi) return
-    const payload = await electronApi.setFullscreen(enabled)
+    if (!electronApi) return;
+    const payload = await electronApi.setFullscreen(enabled);
     setBootstrap({
       ...payload,
-      layoutJson: payload.layoutJson ? normalizeSignageLayout(payload.layoutJson) : null,
-    })
+      layoutJson: payload.layoutJson
+        ? normalizeSignageLayout(payload.layoutJson)
+        : null,
+    });
   }
 
   async function openSetup() {
     if (bootstrap?.fullscreen && electronApi) {
-      const payload = await electronApi.setFullscreen(false)
+      const payload = await electronApi.setFullscreen(false);
       setBootstrap({
         ...payload,
-        layoutJson: payload.layoutJson ? normalizeSignageLayout(payload.layoutJson) : null,
-      })
+        layoutJson: payload.layoutJson
+          ? normalizeSignageLayout(payload.layoutJson)
+          : null,
+      });
     }
 
-    setIsSetupVisible(true)
+    setIsSetupVisible(true);
   }
 
   async function handleReload() {
-    if (!electronApi) return
+    if (!electronApi) return;
 
     try {
-      setIsReloading(true)
-      await electronApi.reloadWindow()
+      setIsReloading(true);
+      await electronApi.reloadWindow();
     } finally {
-      setIsReloading(false)
+      setIsReloading(false);
     }
   }
 
   const handleCurrentSlideChange = useCallback(
     async (slideId: string | null) => {
-      if (!electronApi) return
-      if (lastReportedSlideIdRef.current === slideId) return
+      if (!electronApi) return;
+      if (lastReportedSlideIdRef.current === slideId) return;
 
-      lastReportedSlideIdRef.current = slideId
-      await electronApi.reportCurrentSlide(slideId)
+      lastReportedSlideIdRef.current = slideId;
+      await electronApi.reportCurrentSlide(slideId);
     },
-    [electronApi]
-  )
+    [electronApi],
+  );
 
   if (!bootstrap) {
     return (
       <main className="shell shell-loading">
         <div className="loading-copy">Загрузка проигрывателя...</div>
       </main>
-    )
+    );
   }
 
   if (shouldRenderContent) {
     return (
-      <main className="shell shell-player" onDoubleClick={() => void openSetup()}>
-        <div className={`player-stage-frame ${isPortrait ? "is-portrait" : ""}`}>
+      <main
+        className="shell shell-player"
+        onDoubleClick={() => void openSetup()}
+      >
+        <div
+          className={`player-stage-frame ${isPortrait ? "is-portrait" : ""}`}
+        >
           <SignageStage
             layout={bootstrap.layoutJson || createDefaultSignageLayout()}
             orientation={bootstrap.orientation}
-            forcedSlideId={bootstrap.controlAction === "pause" ? bootstrap.controlSlideId : null}
-            forcedUntil={bootstrap.controlAction === "pause" ? bootstrap.controlUntil : null}
-            jumpSlideId={bootstrap.controlAction === "jump" ? bootstrap.controlSlideId : null}
-            jumpRequestKey={bootstrap.controlAction === "jump" ? bootstrap.controlUpdatedAt : null}
-            onCurrentSlideChange={handleCurrentSlideChange}
+            clubId={bootstrap.pairedClubId || ""}
+            serverUrl={runtimeConfig.serverUrl}
+            forcedSlideId={
+              bootstrap.controlAction === "pause"
+                ? bootstrap.controlSlideId
+                : null
+            }
+            forcedUntil={
+              bootstrap.controlAction === "pause"
+                ? bootstrap.controlUntil
+                : null
+            }
+            jumpSlideId={
+              bootstrap.controlAction === "jump"
+                ? bootstrap.controlSlideId
+                : null
+            }
+            jumpRequestKey={
+              bootstrap.controlAction === "jump"
+                ? bootstrap.controlUpdatedAt
+                : null
+            }
+            onCurrentSlideChangeAction={handleCurrentSlideChange}
           />
         </div>
         <div className="player-overlay">
@@ -215,7 +257,7 @@ export default function App() {
           </button>
         </div>
       </main>
-    )
+    );
   }
 
   return (
@@ -230,14 +272,26 @@ export default function App() {
 
           <div className="header-actions">
             {canRenderContent ? (
-              <button className="action-button action-button-primary" onClick={() => setIsSetupVisible(false)}>
+              <button
+                className="action-button action-button-primary"
+                onClick={() => setIsSetupVisible(false)}
+              >
                 Вернуться к просмотру
               </button>
             ) : null}
-            <button className="action-button" onClick={() => void handleFullscreen(!bootstrap.fullscreen)}>
-              {bootstrap.fullscreen ? "Выйти из полного экрана" : "Полный экран"}
+            <button
+              className="action-button"
+              onClick={() => void handleFullscreen(!bootstrap.fullscreen)}
+            >
+              {bootstrap.fullscreen
+                ? "Выйти из полного экрана"
+                : "Полный экран"}
             </button>
-            <button className="action-button" onClick={handleReload} disabled={!electronApi || isReloading}>
+            <button
+              className="action-button"
+              onClick={handleReload}
+              disabled={!electronApi || isReloading}
+            >
               {isReloading ? "Обновление..." : "Обновить"}
             </button>
           </div>
@@ -247,7 +301,9 @@ export default function App() {
           <div className="pairing-copy">
             <div className="eyebrow">Код подключения</div>
             <div className="pairing-code">{bootstrap.pairingCode}</div>
-            <div className="muted-copy">Введи этот код на сайте, чтобы привязать устройство к клубу.</div>
+            <div className="muted-copy">
+              Введи этот код на сайте, чтобы привязать устройство к клубу.
+            </div>
             <div className="muted-copy">
               {bootstrap.pairedClubName
                 ? `Устройство привязано к клубу: ${bootstrap.pairedClubName}`
@@ -274,12 +330,18 @@ export default function App() {
 
         <div className="setup-footer">
           <span>{selectedDisplay?.label ?? "Экран не выбран"}</span>
-          <span>{bootstrap.contentWidth}x{bootstrap.contentHeight}</span>
-          <span>{bootstrap.orientation === "portrait" ? "Вертикальная ориентация" : "Горизонтальная ориентация"}</span>
+          <span>
+            {bootstrap.contentWidth}x{bootstrap.contentHeight}
+          </span>
+          <span>
+            {bootstrap.orientation === "portrait"
+              ? "Вертикальная ориентация"
+              : "Горизонтальная ориентация"}
+          </span>
         </div>
       </div>
     </main>
-  )
+  );
 }
 
 function DisplayButton({
@@ -289,11 +351,11 @@ function DisplayButton({
   disabled,
   onSelect,
 }: {
-  display: DisplayInfo
-  index: number
-  selected: boolean
-  disabled: boolean
-  onSelect: (displayId: string) => void
+  display: DisplayInfo;
+  index: number;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: (displayId: string) => void;
 }) {
   return (
     <button
@@ -305,192 +367,226 @@ function DisplayButton({
       <div>
         <div className="display-title">
           {display.label || `Экран ${index + 1}`}
-          {display.primary ? <span className="display-primary">основной</span> : null}
+          {display.primary ? (
+            <span className="display-primary">основной</span>
+          ) : null}
         </div>
         <div className="display-meta">
-          {display.bounds.width}x{display.bounds.height} · x:{display.bounds.x} · y:{display.bounds.y}
+          {display.bounds.width}x{display.bounds.height} · x:{display.bounds.x}{" "}
+          · y:{display.bounds.y}
         </div>
       </div>
       <div className={`display-check ${selected ? "is-selected" : ""}`}>✓</div>
     </button>
-  )
+  );
 }
 
 function SignageStage({
   layout,
   orientation,
+  clubId,
+  serverUrl,
   forcedSlideId = null,
   forcedUntil = null,
   jumpSlideId = null,
   jumpRequestKey = null,
-  onCurrentSlideChange,
+  onCurrentSlideChangeAction,
 }: {
-  layout: SignageLayout
-  orientation: "landscape" | "portrait"
-  forcedSlideId?: string | null
-  forcedUntil?: string | null
-  jumpSlideId?: string | null
-  jumpRequestKey?: string | null
-  onCurrentSlideChange?: (slideId: string | null) => void
+  layout: SignageLayout;
+  orientation: "landscape" | "portrait";
+  clubId: number | string;
+  serverUrl: string;
+  forcedSlideId?: string | null;
+  forcedUntil?: string | null;
+  jumpSlideId?: string | null;
+  jumpRequestKey?: string | null;
+  onCurrentSlideChangeAction?: (slideId: string | null) => void;
 }) {
-  const [scheduleNow, setScheduleNow] = useState(() => Date.now())
-  const activeSlides = useMemo(() => getActiveSlides(layout, new Date(scheduleNow)), [layout, scheduleNow])
-  const [index, setIndex] = useState(0)
-  const [transitionTick, setTransitionTick] = useState(0)
-  const [hasMediaError, setHasMediaError] = useState(false)
-  const [controlNow, setControlNow] = useState(() => Date.now())
-  const [visibleSlide, setVisibleSlide] = useState<SignageSlide | null>(null)
-  const [pendingSlide, setPendingSlide] = useState<SignageSlide | null>(null)
-  const [pendingReady, setPendingReady] = useState(false)
+  const [scheduleNow, setScheduleNow] = useState(() => Date.now());
+  const activeSlides = useMemo(
+    () => getActiveSlides(layout, new Date(scheduleNow)),
+    [layout, scheduleNow],
+  );
+  const [index, setIndex] = useState(0);
+  const [transitionTick, setTransitionTick] = useState(0);
+  const [hasMediaError, setHasMediaError] = useState(false);
+  const [controlNow, setControlNow] = useState(() => Date.now());
+  const [visibleSlide, setVisibleSlide] = useState<SignageSlide | null>(null);
+  const [pendingSlide, setPendingSlide] = useState<SignageSlide | null>(null);
+  const [pendingReady, setPendingReady] = useState(false);
   const forcedUntilTimestamp = useMemo(() => {
-    if (!forcedUntil) return null
-    const parsed = new Date(forcedUntil).getTime()
-    return Number.isNaN(parsed) ? null : parsed
-  }, [forcedUntil])
+    if (!forcedUntil) return null;
+    const parsed = new Date(forcedUntil).getTime();
+    return Number.isNaN(parsed) ? null : parsed;
+  }, [forcedUntil]);
   const forcedSlide = useMemo(
-    () => (forcedSlideId ? activeSlides.find((item) => item.id === forcedSlideId) ?? null : null),
-    [activeSlides, forcedSlideId]
-  )
+    () =>
+      forcedSlideId
+        ? (activeSlides.find((item) => item.id === forcedSlideId) ?? null)
+        : null,
+    [activeSlides, forcedSlideId],
+  );
   const isForced =
-    Boolean(forcedSlide) && (forcedUntilTimestamp === null || forcedUntilTimestamp > controlNow)
-  const targetSlide = (isForced ? forcedSlide : null) ?? activeSlides[index] ?? null
-  const hasMultipleSlides = activeSlides.length > 1
+    Boolean(forcedSlide) &&
+    (forcedUntilTimestamp === null || forcedUntilTimestamp > controlNow);
+  const targetSlide =
+    (isForced ? forcedSlide : null) ?? activeSlides[index] ?? null;
+  const hasMultipleSlides = activeSlides.length > 1;
 
   useEffect(() => {
     if (activeSlides.length === 0) {
-      setIndex(0)
-      return
+      setIndex(0);
+      return;
     }
 
     setIndex((current) => {
       if (visibleSlide?.id) {
-        const currentIndex = activeSlides.findIndex((item) => item.id === visibleSlide.id)
-        if (currentIndex >= 0) return currentIndex
+        const currentIndex = activeSlides.findIndex(
+          (item) => item.id === visibleSlide.id,
+        );
+        if (currentIndex >= 0) return currentIndex;
       }
 
-      return Math.min(current, activeSlides.length - 1)
-    })
-  }, [activeSlides, visibleSlide?.id])
+      return Math.min(current, activeSlides.length - 1);
+    });
+  }, [activeSlides, visibleSlide?.id]);
 
   useEffect(() => {
-    setHasMediaError(false)
-  }, [targetSlide?.id, transitionTick])
+    setHasMediaError(false);
+  }, [targetSlide?.id, transitionTick]);
 
   useEffect(() => {
-    onCurrentSlideChange?.(visibleSlide?.id || null)
-  }, [onCurrentSlideChange, visibleSlide?.id])
+    onCurrentSlideChangeAction?.(visibleSlide?.id || null);
+  }, [onCurrentSlideChangeAction, visibleSlide?.id]);
 
   useEffect(() => {
     if (!forcedUntilTimestamp || forcedUntilTimestamp <= Date.now()) {
-      setControlNow(Date.now())
-      return
+      setControlNow(Date.now());
+      return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setControlNow(Date.now())
-    }, Math.max(0, forcedUntilTimestamp - Date.now()) + 25)
+    const timeoutId = window.setTimeout(
+      () => {
+        setControlNow(Date.now());
+      },
+      Math.max(0, forcedUntilTimestamp - Date.now()) + 25,
+    );
 
-    return () => window.clearTimeout(timeoutId)
-  }, [forcedUntilTimestamp])
+    return () => window.clearTimeout(timeoutId);
+  }, [forcedUntilTimestamp]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      setScheduleNow(Date.now())
-    }, 30000)
+      setScheduleNow(Date.now());
+    }, 30000);
 
-    return () => window.clearInterval(intervalId)
-  }, [])
-
-  useEffect(() => {
-    if (!forcedSlide) return
-
-    const nextIndex = activeSlides.findIndex((item) => item.id === forcedSlide.id)
-    if (nextIndex === -1) return
-    setIndex(nextIndex)
-  }, [activeSlides, forcedSlide])
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
-    if (!jumpRequestKey || !jumpSlideId || isForced) return
+    if (!forcedSlide) return;
 
-    const nextIndex = activeSlides.findIndex((item) => item.id === jumpSlideId)
-    if (nextIndex === -1) return
-    setIndex(nextIndex)
-  }, [activeSlides, isForced, jumpRequestKey, jumpSlideId])
+    const nextIndex = activeSlides.findIndex(
+      (item) => item.id === forcedSlide.id,
+    );
+    if (nextIndex === -1) return;
+    setIndex(nextIndex);
+  }, [activeSlides, forcedSlide]);
+
+  useEffect(() => {
+    if (!jumpRequestKey || !jumpSlideId || isForced) return;
+
+    const nextIndex = activeSlides.findIndex((item) => item.id === jumpSlideId);
+    if (nextIndex === -1) return;
+    setIndex(nextIndex);
+  }, [activeSlides, isForced, jumpRequestKey, jumpSlideId]);
 
   useEffect(() => {
     if (!targetSlide) {
-      setVisibleSlide(null)
-      setPendingSlide(null)
-      setPendingReady(false)
-      return
+      setVisibleSlide(null);
+      setPendingSlide(null);
+      setPendingReady(false);
+      return;
     }
 
     setVisibleSlide((current) => {
-      if (!current) return targetSlide
-      return current.id === targetSlide.id ? targetSlide : current
-    })
+      if (!current) return targetSlide;
+      return current.id === targetSlide.id ? targetSlide : current;
+    });
 
     setPendingSlide((current) => {
-      if (visibleSlide?.id === targetSlide.id) return null
-      if (current?.id === targetSlide.id) return current
-      return visibleSlide?.id !== targetSlide.id ? targetSlide : null
-    })
-  }, [targetSlide, visibleSlide?.id])
+      if (visibleSlide?.id === targetSlide.id) return null;
+      if (current?.id === targetSlide.id) return current;
+      return visibleSlide?.id !== targetSlide.id ? targetSlide : null;
+    });
+  }, [targetSlide, visibleSlide?.id]);
 
   useEffect(() => {
-    setPendingReady(false)
-  }, [pendingSlide?.id])
+    setPendingReady(false);
+  }, [pendingSlide?.id]);
 
   const advanceSlide = useCallback(() => {
-    if (isForced || !hasMultipleSlides) return
-    setIndex((current) => (current + 1) % activeSlides.length)
-    setTransitionTick((current) => current + 1)
-  }, [activeSlides.length, hasMultipleSlides, isForced])
+    if (isForced || !hasMultipleSlides) return;
+    setIndex((current) => (current + 1) % activeSlides.length);
+    setTransitionTick((current) => current + 1);
+  }, [activeSlides.length, hasMultipleSlides, isForced]);
 
   const handleMediaError = useCallback(() => {
     if (isForced) {
-      setHasMediaError(true)
-      return
+      setHasMediaError(true);
+      return;
     }
 
     if (hasMultipleSlides) {
-      advanceSlide()
-      return
+      advanceSlide();
+      return;
     }
 
-    setHasMediaError(true)
-  }, [advanceSlide, hasMultipleSlides, isForced])
+    setHasMediaError(true);
+  }, [advanceSlide, hasMultipleSlides, isForced]);
 
   const handlePendingReady = useCallback(() => {
-    setPendingReady(true)
-  }, [])
+    setPendingReady(true);
+  }, []);
 
   useEffect(() => {
-    if (!pendingSlide || !pendingReady) return
+    if (!pendingSlide || !pendingReady) return;
 
     const timeoutId = window.setTimeout(() => {
-      setVisibleSlide(pendingSlide)
-      setPendingSlide(null)
-      setPendingReady(false)
-      setTransitionTick((current) => current + 1)
-    }, 220)
+      setVisibleSlide(pendingSlide);
+      setPendingSlide(null);
+      setPendingReady(false);
+      setTransitionTick((current) => current + 1);
+    }, 220);
 
-    return () => window.clearTimeout(timeoutId)
-  }, [pendingReady, pendingSlide])
+    return () => window.clearTimeout(timeoutId);
+  }, [pendingReady, pendingSlide]);
 
   useEffect(() => {
-    if (isForced || pendingSlide || !visibleSlide || visibleSlide.mediaType === "video" || !hasMultipleSlides) return
-    const timeoutId = window.setTimeout(() => {
-      advanceSlide()
-    }, Math.max(3, visibleSlide.durationSec) * 1000)
-    return () => window.clearTimeout(timeoutId)
-  }, [advanceSlide, hasMultipleSlides, isForced, pendingSlide, visibleSlide])
+    if (
+      isForced ||
+      pendingSlide ||
+      !visibleSlide ||
+      visibleSlide.mediaType === "video" ||
+      !hasMultipleSlides
+    )
+      return;
+    const timeoutId = window.setTimeout(
+      () => {
+        advanceSlide();
+      },
+      Math.max(3, visibleSlide.durationSec) * 1000,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [advanceSlide, hasMultipleSlides, isForced, pendingSlide, visibleSlide]);
 
   if (!visibleSlide || hasMediaError) {
-    const hasAnySlides = layout.slides.length > 0
+    const hasAnySlides = layout.slides.length > 0;
     return (
       <div className="empty-stage">
-        <div className={`empty-card ${orientation === "portrait" ? "is-portrait" : ""}`}>
+        <div
+          className={`empty-card ${orientation === "portrait" ? "is-portrait" : ""}`}
+        >
           <div className="empty-title">
             {hasMediaError
               ? "Не удалось загрузить контент"
@@ -507,7 +603,7 @@ function SignageStage({
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -518,6 +614,9 @@ function SignageStage({
         loop={isForced || !hasMultipleSlides}
         onEnded={advanceSlide}
         onError={handleMediaError}
+        clubId={clubId}
+        serverUrl={serverUrl}
+        orientation={orientation}
       />
       {pendingSlide && pendingSlide.id !== visibleSlide.id ? (
         <SlideFrame
@@ -529,10 +628,13 @@ function SignageStage({
           onReady={handlePendingReady}
           overlay
           revealed={pendingReady}
+          clubId={clubId}
+          serverUrl={serverUrl}
+          orientation={orientation}
         />
       ) : null}
     </div>
-  )
+  );
 }
 
 function SlideFrame({
@@ -543,14 +645,20 @@ function SlideFrame({
   onReady,
   overlay = false,
   revealed = true,
+  clubId,
+  serverUrl,
+  orientation,
 }: {
-  slide: SignageSlide
-  loop: boolean
-  onEnded: () => void
-  onError: () => void
-  onReady?: () => void
-  overlay?: boolean
-  revealed?: boolean
+  slide: SignageSlide;
+  loop: boolean;
+  onEnded: () => void;
+  onError: () => void;
+  onReady?: () => void;
+  overlay?: boolean;
+  revealed?: boolean;
+  clubId: number | string;
+  serverUrl: string;
+  orientation: "landscape" | "portrait";
 }) {
   const className = [
     slide.mediaType === "video" ? "slide-video" : "slide-image",
@@ -560,7 +668,7 @@ function SlideFrame({
     revealed ? "" : "is-hidden",
   ]
     .filter(Boolean)
-    .join(" ")
+    .join(" ");
 
   if (slide.mediaType === "video") {
     return (
@@ -577,7 +685,57 @@ function SlideFrame({
         onLoadedData={onReady}
         onCanPlay={onReady}
       />
-    )
+    );
+  }
+
+  if (slide.mediaType === "website") {
+    // Internal Promo Board check
+    if (slide.imageUrl.includes("/promo/board")) {
+      // Small timeout to simulate loading and trigger onReady
+      setTimeout(() => onReady?.(), 100);
+      return (
+        <div className={className}>
+          <PromoBoard
+            clubId={clubId}
+            serverUrl={serverUrl}
+            isPortrait={orientation === "portrait"}
+          />
+        </div>
+      );
+    }
+
+    const isElectron =
+      typeof window !== "undefined" && !!(window as any).electronSignage;
+
+    if (!isElectron) {
+      return (
+        <iframe
+          className={className}
+          src={slide.imageUrl}
+          onLoad={onReady}
+          onError={onError}
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          style={{ border: "none" }}
+        />
+      );
+    }
+
+    const Webview = "webview" as any;
+    return (
+      <Webview
+        className={className}
+        src={slide.imageUrl}
+        disablewebsecurity="true"
+        allowpopups="true"
+        onLoad={() => onReady?.()}
+        ref={(el: any) => {
+          if (el) {
+            el.addEventListener?.("dom-ready", () => onReady?.());
+            setTimeout(() => onReady?.(), 3000);
+          }
+        }}
+      />
+    );
   }
 
   return (
@@ -588,5 +746,5 @@ function SlideFrame({
       onError={onError}
       onLoad={onReady}
     />
-  )
+  );
 }

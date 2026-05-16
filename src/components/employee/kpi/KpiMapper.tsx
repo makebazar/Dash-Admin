@@ -270,7 +270,7 @@ export function mapKpiToUnifiedProps(
           ? `Цель: ${nextThreshold.from}% → ${formatCurrency(nextThreshold.amount)}`
           : "Макс. балл!",
         icon: ClipboardCheck,
-        mainValue: `${(data.current_value || 0).toFixed(1)}%`,
+        mainValue: `${Math.round(data.current_value || 0)}%`,
         mainLabel: "Средний балл",
         secondaryInfo: `${data.count} ${getCheckWord(data.count)}`,
         stats: [
@@ -318,16 +318,16 @@ export function mapKpiToUnifiedProps(
     case "maintenance": {
       return {
         title: "Обслуживание",
-        subtitle: `План: ${data.total_month_target} задач`,
+        subtitle: `План: ${Math.round(data.total_month_target || 0)} задач`,
         icon: Wrench,
-        mainValue: `${data.completed_month_value || 0} / ${data.total_month_target || 0}`,
+        mainValue: `${Math.round(data.completed_month_value || 0)} / ${Math.round(data.total_month_target || 0)}`,
         mainLabel: "Выполнено задач",
-        secondaryInfo: `${(data.total_month_target || 0) - (data.completed_month_value || 0)} осталось`,
+        secondaryInfo: `${Math.round((data.total_month_target || 0) - (data.completed_month_value || 0))} осталось`,
         stats: [
           { label: "За задачи", value: formatCurrency(data.total_gross || 0) },
           {
             label: "Просрочки",
-            value: (data.overdue_open_tasks || 0) + " шт.",
+            value: Math.round(data.overdue_open_tasks || 0) + " шт.",
             color: data.overdue_open_tasks > 0 ? "rose" : "default",
           },
           {
@@ -422,7 +422,7 @@ export function mapKpiToUnifiedProps(
             value:
               b.source === "promo_topup_total_sum"
                 ? formatCurrency(b.value)
-                : b.value,
+                : Math.round(b.value),
             subValue: "+" + formatCurrency(b.bonus),
           })),
           {

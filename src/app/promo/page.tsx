@@ -111,6 +111,9 @@ const GAMES = [
 ];
 
 export default function PromoLobby() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [player, setPlayer] = React.useState<any>(null);
   const [tickets, setTickets] = React.useState(0);
   const [prizes, setPrizes] = React.useState<any[]>([]);
@@ -119,39 +122,24 @@ export default function PromoLobby() {
   const [showPrizes, setShowPrizes] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [isAuth, setIsAuth] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState<"games" | "shop">(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      return params.get("tab") === "shop" ? "shop" : "games";
-    }
-    return "games";
-  });
 
-  // Sync tab and clubId with URL without reloading
+  const activeTab = searchParams.get("tab") === "shop" ? "shop" : "games";
+
+  // Sync clubId with URL without reloading
   React.useEffect(() => {
     const newUrl = new URL(window.location.href);
-
-    // Sync Tab
-    if (activeTab === "shop") {
-      newUrl.searchParams.set("tab", "shop");
-    } else {
-      newUrl.searchParams.delete("tab");
-    }
 
     // Sync ClubId from player if missing in URL
     if (!newUrl.searchParams.has("clubId") && player?.clubId) {
       newUrl.searchParams.set("clubId", String(player.clubId));
+      window.history.replaceState({}, "", newUrl.toString());
     }
-
-    window.history.replaceState({}, "", newUrl.toString());
-  }, [activeTab, player?.clubId]);
+  }, [player?.clubId, activeTab]);
   const [publicClubInfo, setPublicClubInfo] = React.useState<{
     name: string;
     promo_settings?: any;
     settings?: any;
   } | null>(null);
-  const router = useRouter();
-  const searchParams = useSearchParams();
 
   const urlClubId = searchParams.get("clubId");
   const action = searchParams.get("action");

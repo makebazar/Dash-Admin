@@ -1,19 +1,19 @@
 import type { NextConfig } from "next";
-import dotenv from 'dotenv';
-import path from 'path';
+import dotenv from "dotenv";
+import path from "path";
 
 // Load .env.local BEFORE Next.js starts (critical for DATABASE_URL)
 // This must happen before any other imports or config
-const envLocalPath = path.resolve(process.cwd(), '.env.local');
-const envPath = path.resolve(process.cwd(), '.env');
+const envLocalPath = path.resolve(process.cwd(), ".env.local");
+const envPath = path.resolve(process.cwd(), ".env");
 
 // Load in reverse order: .env first, then .env.local (overrides)
 dotenv.config({ path: envPath, quiet: true });
 dotenv.config({ path: envLocalPath, quiet: true });
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
-  serverExternalPackages: ['ffmpeg-static'],
+  output: "standalone",
+  serverExternalPackages: ["ffmpeg-static"],
   // Disable linting and type checking during build (deploy first, fix later)
   eslint: {
     ignoreDuringBuilds: true,
@@ -32,19 +32,32 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: '/:path*',
+        source: "/promo/board",
         headers: [
           {
-            key: 'Cache-Control',
-            value: 'no-store, must-revalidate',
+            key: "X-Frame-Options",
+            value: "ALLOWALL",
           },
           {
-            key: 'Permissions-Policy',
+            key: "Content-Security-Policy",
+            value: "frame-ancestors *",
+          },
+        ],
+      },
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, must-revalidate",
+          },
+          {
+            key: "Permissions-Policy",
             value: 'hid=(self "https://dualshock-tools.github.io")',
           },
         ],
       },
-    ]
+    ];
   },
 };
 

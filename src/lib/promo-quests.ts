@@ -41,6 +41,29 @@ export async function processReceiptEvent(
   for (const quest of activeQuests) {
     let progressDelta = 0;
 
+    // Composite Check: If the quest requires a service AND a receipt item
+    if (quest.target_service_id) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const serviceRes = await client.query(
+        `SELECT id FROM shift_sales
+         WHERE player_id = $1::uuid
+           AND (rule_id = $2::int OR $2 IS NULL)
+           AND created_at >= $3
+         LIMIT 1`,
+        [
+          playerId,
+          quest.target_service_id ? Number(quest.target_service_id) : null,
+          today,
+        ],
+      );
+
+      if (serviceRes.rowCount === 0) {
+        continue; // Required service not purchased today
+      }
+    }
+
     if (quest.trigger_type === "receipt_total") {
       if (totalAmount >= Number(quest.target_value)) {
         progressDelta = Number(quest.target_value);
@@ -51,19 +74,44 @@ export async function processReceiptEvent(
       quest.trigger_type === "receipt_item" &&
       quest.target_entity_id
     ) {
-      const targetId = Number(quest.target_entity_id);
-
       if (quest.target_entity_id_type === "category") {
+        const targetId = Number(quest.target_entity_id);
         // Any item from this category matches
         const matchingItems = items.filter(
           (i) => productCategories[i.product_id] === targetId,
         );
         progressDelta = matchingItems.reduce((sum, i) => sum + i.quantity, 0);
       } else {
-        // Specific product ID
-        const matchingItem = items.find((i) => i.product_id === targetId);
-        if (matchingItem) {
-          progressDelta = matchingItem.quantity;
+        // Specific product ID(s) - support comma-separated list
+        const targetIds = String(quest.target_entity_id)
+          .split(",")
+          .map((id) => Number(id.trim()))
+          .filter((id) => !isNaN(id));
+
+        if (targetIds.length > 1) {
+          // "AND" Logic: All specified products must be in the receipt
+          const matchingItems = items.filter((i) =>
+            targetIds.includes(i.product_id),
+          );
+
+          const foundProductIds = new Set(
+            matchingItems.map((i) => i.product_id),
+          );
+          const allFound = targetIds.every((tid) => foundProductIds.has(tid));
+
+          if (allFound) {
+            // If all are found, we increment progress by the number of complete sets
+            // e.g., if target is (A, B) and receipt has (2A, 3B), we got 2 sets.
+            const minQty = Math.min(...matchingItems.map((i) => i.quantity));
+            progressDelta = minQty;
+          }
+        } else if (targetIds.length === 1) {
+          // Single product logic
+          const targetId = targetIds[0];
+          const matchingItem = items.find((i) => i.product_id === targetId);
+          if (matchingItem) {
+            progressDelta = matchingItem.quantity;
+          }
         }
       }
     }
@@ -90,9 +138,13 @@ export async function processGameEvent(
   for (const quest of activeQuests) {
     // Check for target game filter if specified
     const isTargetAll =
-      !quest.target_entity_id || quest.target_entity_id === "";
-    const isMatchingGame =
-      isTargetAll || String(quest.target_entity_id) === String(gameType);
+      !quest.target_entity_id || String(quest.target_entity_id).trim() === "";
+    const targetIds = isTargetAll
+      ? []
+      : String(quest.target_entity_id)
+          .split(",")
+          .map((s) => s.trim());
+    const isMatchingGame = isTargetAll || targetIds.includes(String(gameType));
 
     if (!isMatchingGame) continue;
 
@@ -142,9 +194,14 @@ export async function processServiceAwardEvent(
 
   for (const quest of activeQuests) {
     const isTargetAll =
-      !quest.target_entity_id || quest.target_entity_id === "";
+      !quest.target_entity_id || String(quest.target_entity_id).trim() === "";
+    const targetIds = isTargetAll
+      ? []
+      : String(quest.target_entity_id)
+          .split(",")
+          .map((s) => s.trim());
     const isMatchingService =
-      isTargetAll || String(quest.target_entity_id) === String(serviceRuleId);
+      isTargetAll || targetIds.includes(String(serviceRuleId));
 
     if (
       quest.trigger_type === "service_award" ||

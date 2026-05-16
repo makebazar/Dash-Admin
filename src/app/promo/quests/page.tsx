@@ -16,10 +16,12 @@ import {
   Camera,
   Trash2,
   Lock,
+  Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BottomNav } from "../components/BottomNav";
 import { PromoHeader } from "../components/PromoHeader";
+import { cn } from "@/lib/utils";
 
 const DAYS_RU = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 
@@ -164,6 +166,24 @@ export default function QuestsPage() {
                           {quest.description}
                         </p>
 
+                        {quest.required_service_name && (
+                          <div className="mb-4">
+                            <div
+                              className={cn(
+                                "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
+                                quest.is_service_purchased
+                                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                                  : "bg-rose-500/10 border-rose-500/20 text-rose-500 animate-pulse",
+                              )}
+                            >
+                              <Zap className="w-3 h-3" />
+                              {quest.is_service_purchased
+                                ? `АКТИВИРОВАНО: ${quest.required_service_name}`
+                                : `СНАЧАЛА КУПИ: ${quest.required_service_name}`}
+                            </div>
+                          </div>
+                        )}
+
                         {(quest.available_days || quest.time_start) && (
                           <div className="flex flex-wrap gap-2 mb-4">
                             {quest.available_days && (
@@ -186,19 +206,35 @@ export default function QuestsPage() {
                           </div>
                         )}
 
-                        {!isCompleted &&
-                          !isPending &&
+                        {!isLocked &&
                           quest.trigger_type !== "manual_verification" && (
-                            <div className="space-y-2">
-                              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-500">
-                                <span>Прогресс</span>
-                                <span>
-                                  {Math.floor(progress)} / {Math.floor(target)}
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
+                                <span className="flex items-center gap-2">
+                                  {!isCompleted && !isPending && (
+                                    <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                                  )}
+                                  {isCompleted
+                                    ? "Завершено"
+                                    : isPending
+                                      ? "На проверке"
+                                      : "Прогресс"}
+                                </span>
+                                <span className="text-white/80">
+                                  {Math.floor(progress)} / {Math.floor(target)}{" "}
+                                  {quest.quest_unit || "шт."}
                                 </span>
                               </div>
-                              <div className="w-full bg-black/50 rounded-full h-2 overflow-hidden">
+                              <div className="w-full bg-black/40 rounded-full h-3 overflow-hidden border border-white/5">
                                 <div
-                                  className={`h-full rounded-full transition-all ${isCompleted ? "bg-emerald-500" : "bg-orange-500"}`}
+                                  className={cn(
+                                    "h-full rounded-full transition-all duration-500 ease-out",
+                                    isCompleted
+                                      ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                                      : isPending
+                                        ? "bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]"
+                                        : "bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]",
+                                  )}
                                   style={{ width: `${percent}%` }}
                                 />
                               </div>
@@ -212,28 +248,41 @@ export default function QuestsPage() {
                         )}
                       </div>
 
-                      <div className="flex flex-row sm:flex-col gap-3 justify-center min-w-30">
+                      <div className="flex flex-row gap-2 w-full sm:w-auto">
                         {quest.reward_xp > 0 && (
-                          <div className="bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-xl flex items-center justify-center gap-2">
-                            <span className="font-black text-orange-500">
-                              +{Math.floor(quest.reward_xp)} XP
+                          <div className="flex-1 bg-orange-500/10 border border-orange-500/20 p-3 rounded-2xl flex flex-col items-center justify-center gap-1 min-w-17.5]">
+                            <span className="text-base font-black text-orange-500 leading-none whitespace-nowrap">
+                              +{Math.floor(quest.reward_xp)}
+                            </span>
+                            <span className="text-[7px] font-black text-orange-500/50 uppercase tracking-widest">
+                              XP
                             </span>
                           </div>
                         )}
                         {quest.reward_tickets > 0 && (
-                          <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl flex items-center justify-center gap-2">
-                            <span className="font-black text-white">
-                              +{Math.floor(quest.reward_tickets)}
+                          <div className="flex-1 bg-white/5 border border-white/10 p-3 rounded-2xl flex flex-col items-center justify-center gap-1 min-w-17.5]">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                              <span className="text-base font-black text-white leading-none">
+                                +{Math.floor(quest.reward_tickets)}
+                              </span>
+                              <Ticket className="w-4 h-4 text-orange-500" />
+                            </div>
+                            <span className="text-[7px] font-black text-gray-500 uppercase tracking-widest">
+                              Билеты
                             </span>
-                            <Ticket className="w-4 h-4 text-orange-500" />
                           </div>
                         )}
                         {quest.reward_bonus_balance > 0 && (
-                          <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-xl flex items-center justify-center gap-2">
-                            <span className="font-black text-yellow-500">
-                              +{Math.floor(quest.reward_bonus_balance)} ₽
+                          <div className="flex-1 bg-white/5 border border-white/10 p-3 rounded-2xl flex flex-col items-center justify-center gap-1 min-w-17.5]">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                              <span className="text-base font-black text-yellow-500 leading-none">
+                                +{Math.floor(quest.reward_bonus_balance)} ₽
+                              </span>
+                              <Coins className="w-4 h-4 text-yellow-500" />
+                            </div>
+                            <span className="text-[7px] font-black text-gray-500 uppercase tracking-widest">
+                              Бонусы
                             </span>
-                            <Coins className="w-4 h-4 text-yellow-500" />
                           </div>
                         )}
                       </div>
@@ -290,15 +339,14 @@ export default function QuestsPage() {
                             </div>
                           )}
 
-                          {!quest.requires_photo_verification &&
-                            quest.action_button_url && (
-                              <button
-                                onClick={() => handleVerify(quest.id)}
-                                className="w-full bg-orange-500/10 border border-orange-500/20 text-orange-500 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-orange-500 hover:text-white transition-all"
-                              >
-                                Я выполнил задание
-                              </button>
-                            )}
+                          {!quest.requires_photo_verification && (
+                            <button
+                              onClick={() => handleVerify(quest.id)}
+                              className="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase italic tracking-tight shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all"
+                            >
+                              Я ВЫПОЛНИЛ ЗАДАНИЕ
+                            </button>
+                          )}
                         </div>
                       )}
                   </div>

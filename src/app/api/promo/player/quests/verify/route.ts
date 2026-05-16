@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     // 1. Check if quest exists and requires photo
     const questRes = await client.query(
       `SELECT requires_photo_verification FROM promo_quests WHERE id = $1 AND club_id = $2`,
-      [questId, activeClubId]
+      [questId, activeClubId],
     );
 
     if (questRes.rows.length === 0) {
@@ -27,7 +27,10 @@ export async function POST(request: Request) {
     const { requires_photo_verification } = questRes.rows[0];
 
     if (requires_photo_verification && !photoUrl) {
-      return NextResponse.json({ error: "Photo proof is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Photo proof is required" },
+        { status: 400 },
+      );
     }
 
     // 2. Insert or Update player quest status to 'pending_verification'
@@ -39,8 +42,19 @@ export async function POST(request: Request) {
          status = 'pending_verification',
          verification_photo_url = $4,
          current_progress = 1`,
-      [playerId, activeClubId, questId, photoUrl || null]
+      [playerId, activeClubId, questId, photoUrl || null],
     );
+
+    // 3. Notify the club about new verification request
+    try {
+      const { notifyInventoryClub } = await import("@/lib/inventory-events");
+      notifyInventoryClub(String(activeClubId), {
+        type: "PROMO_QUEUE_UPDATED",
+        timestamp: Date.now(),
+      });
+    } catch (sseError) {
+      console.error("SSE Notification Error:", sseError);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

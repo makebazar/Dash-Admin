@@ -42,6 +42,8 @@ import {
   bulkAccruePromoSafe,
   getRecentPromoAccruals,
   voidPromoAccrualSafe,
+  getPendingQuestVerifications,
+  verifyQuestSafe,
 } from "@/app/clubs/[clubId]/inventory/actions";
 import { normalizePhone } from "@/lib/phone-utils";
 import { cn } from "@/lib/utils";
@@ -66,6 +68,7 @@ export function EmployeePromoControlCard({
   const [recentAccruals, setRecentAccruals] = useState<any[]>([]);
   const [checkedInPlayers, setCheckedInPlayers] = useState<any[]>([]);
   const [promoSettings, setPromoSettings] = useState<any>({});
+  const [questRequests, setQuestRequests] = useState<any[]>([]);
 
   // ... (activeServiceRules unchanged)
 
@@ -148,14 +151,16 @@ export function EmployeePromoControlCard({
   const refresh = useCallback(async () => {
     if (!enabled || !clubId) return;
     try {
-      const [queue, settings, history] = await Promise.all([
+      const [queue, settings, history, verifications] = await Promise.all([
         getPromoQueue(clubId, userId),
         getClubPromoSettings(clubId, userId),
         getRecentPromoAccruals(clubId),
+        getPendingQuestVerifications(clubId, userId),
       ]);
       setPromoQueue(queue);
       setPromoSettings(settings);
       setRecentAccruals(history);
+      setQuestRequests(verifications);
     } catch (e) {
       console.error(e);
     } finally {
@@ -303,6 +308,39 @@ export function EmployeePromoControlCard({
     });
   };
 
+  const [processingQuest, setProcessingQuest] = useState<string | null>(null);
+  const handleVerifyQuest = async (
+    requestId: string,
+    action: "approve" | "reject",
+    questTitle: string,
+  ) => {
+    const ok = await confirmAction({
+      title: action === "approve" ? "Подтверждение" : "Отклонение",
+      description: `${action === "approve" ? "Подтвердить" : "Отклонить"} выполнение задания: ${questTitle}?`,
+      confirmText: action === "approve" ? "Да, подтверждаю" : "Да, отклонить",
+      cancelText: "Отмена",
+    });
+    if (!ok) return;
+
+    setProcessingQuest(requestId);
+    try {
+      const res = await verifyQuestSafe(clubId, userId, requestId, action);
+      if (res.ok) {
+        showMessage({ title: "Успешно", description: "Задание обработано" });
+        refresh();
+      } else {
+        showMessage({
+          title: "Ошибка",
+          description: res.error || "Не удалось обработать запрос",
+        });
+      }
+    } catch (e) {
+      showMessage({ title: "Ошибка", description: "Ошибка сети" });
+    } finally {
+      setProcessingQuest(null);
+    }
+  };
+
   const searchPlayersByPhone = async (phone: string) => {
     if (phone.length < 4) {
       setPromoSearchResults([]);
@@ -394,6 +432,74 @@ export function EmployeePromoControlCard({
                   >
                     <X className="w-2.5 h-2.5" />
                   </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quest Verifications */}
+        {questRequests.length > 0 && (
+          <div className="space-y-3">
+            <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1 flex items-center gap-2">
+              <CheckCircle2 className="w-3 h-3 text-orange-500" />
+              Проверка заданий ({questRequests.length})
+            </div>
+            <div className="space-y-2">
+              {questRequests.map((req) => (
+                <div
+                  key={req.id}
+                  className="p-3 rounded-2xl border border-orange-500/20 bg-orange-500/5 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-xs text-orange-600 dark:text-orange-400 truncate">
+                        {req.quest_title}
+                      </div>
+                      <div className="text-[10px] font-bold text-foreground mt-0.5">
+                        {req.player_name || "Гость"}
+                      </div>
+                    </div>
+                    {req.verification_photo_url && (
+                      <div
+                        className="w-10 h-10 rounded-lg overflow-hidden border border-border cursor-pointer hover:scale-110 transition-transform"
+                        onClick={() =>
+                          window.open(req.verification_photo_url, "_blank")
+                        }
+                      >
+                        <img
+                          src={req.verification_photo_url}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() =>
+                        handleVerifyQuest(req.id, "approve", req.quest_title)
+                      }
+                      disabled={!!processingQuest}
+                      className="flex-1 h-8 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-[10px] shadow-none"
+                    >
+                      {processingQuest === req.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        "ОДОБРИТЬ"
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        handleVerifyQuest(req.id, "reject", req.quest_title)
+                      }
+                      disabled={!!processingQuest}
+                      className="h-8 w-8 p-0 rounded-xl text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 shadow-none"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

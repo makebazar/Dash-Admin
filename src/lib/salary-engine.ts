@@ -1616,20 +1616,6 @@ export async function generateMonthlySalaryReport(
         [],
       );
 
-      // Add Maintenance KPI to breakdown
-      const maintBonus = monthlyMetrics["maintenance_bonus"] || 0;
-      const maintConfig = (activeScheme.bonuses || []).find(
-        (b: any) => b.type === "maintenance_kpi",
-      );
-      if (maintBonus > 0 && maintConfig) {
-        shift_bonuses_breakdown.push({
-          name: maintConfig.name || "KPI Обслуживание",
-          amount: maintBonus,
-          payout_type: maintConfig.payout_type || "REAL_MONEY",
-          type: "MAINTENANCE_BONUS",
-        });
-      }
-
       const total_paid = parseFloat(empPayment?.total_paid || "0");
       const total_paid_bonus = parseFloat(empPayment?.total_paid_bonus || "0");
 

@@ -8,7 +8,7 @@ if "%SERVER_URL%"=="" (
     set "SERVER_URL=%DASHADMIN_SERVER_URL%"
 )
 if "%SERVER_URL%"=="" (
-    set "SERVER_URL=https://www.mydashadmin.ru"
+    set "SERVER_URL=https://mydashadmin.ru"
 )
 
 echo [INFO] Starting DashAdmin Agent...

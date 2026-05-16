@@ -1,78 +1,89 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { SignageStage } from "@/components/signage/SignageStage"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SignageStage } from "@/components/signage/SignageStage";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   createDefaultSignageLayout,
   type SignageLayout,
   type SignageSlide,
-} from "@/lib/signage-layout"
-import { cn } from "@/lib/utils"
-import { Check, Monitor, RectangleHorizontal, RectangleVertical, RefreshCw, Tv } from "lucide-react"
+} from "@/lib/signage-layout";
+import { cn } from "@/lib/utils";
+import {
+  Check,
+  Monitor,
+  RectangleHorizontal,
+  RectangleVertical,
+  RefreshCw,
+  Tv,
+} from "lucide-react";
 
 type DisplayInfo = {
-  id: string
-  label: string
+  id: string;
+  label: string;
   bounds: {
-    x: number
-    y: number
-    width: number
-    height: number
-  }
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
   workArea: {
-    x: number
-    y: number
-    width: number
-    height: number
-  }
-  scaleFactor: number
-  rotation: number
-  internal: boolean
-  primary: boolean
-}
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  scaleFactor: number;
+  rotation: number;
+  internal: boolean;
+  primary: boolean;
+};
 
 type BootstrapPayload = {
-  deviceId: string
-  pairingCode: string
-  deviceToken: string | null
-  pairedClubId: number | null
-  pairedClubName: string | null
-  layoutJson: SignageLayout | null
-  currentSlideId: string | null
-  controlAction: "jump" | "pause" | null
-  controlSlideId: string | null
-  controlUntil: string | null
-  controlUpdatedAt: string | null
-  serverUpdatedAt: string | null
-  fullscreen: boolean
-  orientation: "landscape" | "portrait"
-  selectedDisplayId: string | null
-  contentWidth: number
-  contentHeight: number
-  displays: DisplayInfo[]
-  version: string
-  platform: string
-}
+  deviceId: string;
+  pairingCode: string;
+  deviceToken: string | null;
+  pairedClubId: number | null;
+  pairedClubName: string | null;
+  layoutJson: SignageLayout | null;
+  currentSlideId: string | null;
+  controlAction: "jump" | "pause" | null;
+  controlSlideId: string | null;
+  controlUntil: string | null;
+  controlUpdatedAt: string | null;
+  serverUpdatedAt: string | null;
+  fullscreen: boolean;
+  orientation: "landscape" | "portrait";
+  selectedDisplayId: string | null;
+  contentWidth: number;
+  contentHeight: number;
+  displays: DisplayInfo[];
+  version: string;
+  platform: string;
+};
 
 type ElectronSignageApi = {
-  getBootstrap: () => Promise<BootstrapPayload>
-  listDisplays: () => Promise<DisplayInfo[]>
-  selectDisplay: (displayId: string) => Promise<BootstrapPayload>
-  setFullscreen: (enabled: boolean) => Promise<BootstrapPayload>
-  setOrientation: (orientation: "landscape" | "portrait") => Promise<BootstrapPayload>
+  getBootstrap: () => Promise<BootstrapPayload>;
+  listDisplays: () => Promise<DisplayInfo[]>;
+  selectDisplay: (displayId: string) => Promise<BootstrapPayload>;
+  setFullscreen: (enabled: boolean) => Promise<BootstrapPayload>;
+  setOrientation: (
+    orientation: "landscape" | "portrait",
+  ) => Promise<BootstrapPayload>;
   updateServerState: (payload: {
-    deviceToken: string | null
-    pairedClubId: number | null
-    pairedClubName: string | null
-    layoutJson: SignageLayout | null
-    serverUpdatedAt: string | null
-    orientation: "landscape" | "portrait"
-  }) => Promise<void>
-  reloadWindow: () => Promise<boolean>
-  onBootstrapUpdated: (callback: (payload: BootstrapPayload) => void) => () => void
-}
+    deviceToken: string | null;
+    pairedClubId: number | null;
+    pairedClubName: string | null;
+    layoutJson: SignageLayout | null;
+    serverUpdatedAt: string | null;
+    orientation: "landscape" | "portrait";
+  }) => Promise<void>;
+  reloadWindow: () => Promise<boolean>;
+  onBootstrapUpdated: (
+    callback: (payload: BootstrapPayload) => void,
+  ) => () => void;
+};
 
 const browserBootstrap = (): BootstrapPayload => ({
   deviceId: "browser-preview-device",
@@ -116,40 +127,43 @@ const browserBootstrap = (): BootstrapPayload => ({
       primary: true,
     },
   ],
-})
+});
 
 function getElectronApi(): ElectronSignageApi | null {
-  if (typeof window === "undefined") return null
+  if (typeof window === "undefined") return null;
 
-  const candidate = (window as Window & { electronSignage?: ElectronSignageApi }).electronSignage
-  return candidate ?? null
+  const candidate = (
+    window as Window & { electronSignage?: ElectronSignageApi }
+  ).electronSignage;
+  return candidate ?? null;
 }
 
 export default function PlayerPage() {
-  const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null)
-  const [pendingDisplayId, setPendingDisplayId] = useState<string | null>(null)
-  const [isReloading, setIsReloading] = useState(false)
-  const lastReportedSlideIdRef = useRef<string | null>(null)
+  const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
+  const [pendingDisplayId, setPendingDisplayId] = useState<string | null>(null);
+  const [isReloading, setIsReloading] = useState(false);
+  const lastReportedSlideIdRef = useRef<string | null>(null);
 
-  const electronApi = useMemo(() => getElectronApi(), [])
-  const selectedDisplay = bootstrap?.displays.find(
-    (display) => display.id === bootstrap.selectedDisplayId
-  ) ?? null
-  const isPortrait = bootstrap?.orientation === "portrait"
+  const electronApi = useMemo(() => getElectronApi(), []);
+  const selectedDisplay =
+    bootstrap?.displays.find(
+      (display) => display.id === bootstrap.selectedDisplayId,
+    ) ?? null;
+  const isPortrait = bootstrap?.orientation === "portrait";
 
   const applyServerState = useCallback(
     async (serverDevice: {
-      deviceToken: string | null
-      clubId: number | null
-      clubName: string | null
-      layoutJson: SignageLayout | null
-      currentSlideId: string | null
-      controlAction: "jump" | "pause" | null
-      controlSlideId: string | null
-      controlUntil: string | null
-      controlUpdatedAt: string | null
-      serverUpdatedAt: string | null
-      orientation: "landscape" | "portrait"
+      deviceToken: string | null;
+      clubId: number | null;
+      clubName: string | null;
+      layoutJson: SignageLayout | null;
+      currentSlideId: string | null;
+      controlAction: "jump" | "pause" | null;
+      controlSlideId: string | null;
+      controlUntil: string | null;
+      controlUpdatedAt: string | null;
+      serverUpdatedAt: string | null;
+      orientation: "landscape" | "portrait";
     }) => {
       setBootstrap((current) =>
         current
@@ -167,8 +181,8 @@ export default function PlayerPage() {
               serverUpdatedAt: serverDevice.serverUpdatedAt,
               orientation: serverDevice.orientation,
             }
-          : current
-      )
+          : current,
+      );
 
       if (electronApi) {
         await electronApi.updateServerState({
@@ -178,11 +192,11 @@ export default function PlayerPage() {
           layoutJson: serverDevice.layoutJson,
           serverUpdatedAt: serverDevice.serverUpdatedAt,
           orientation: serverDevice.orientation,
-        })
+        });
       }
     },
-    [electronApi]
-  )
+    [electronApi],
+  );
 
   const syncDeviceWithServer = useCallback(
     async (payload: BootstrapPayload) => {
@@ -197,11 +211,11 @@ export default function PlayerPage() {
           orientation: payload.orientation,
           displays: payload.displays,
         }),
-      })
+      });
 
-      const data = await res.json()
+      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data?.error || "Signage bootstrap request failed")
+        throw new Error(data?.error || "Signage bootstrap request failed");
       }
 
       await applyServerState({
@@ -210,66 +224,72 @@ export default function PlayerPage() {
         clubName: data?.device?.clubName || null,
         layoutJson: data?.device?.layoutJson || null,
         currentSlideId: data?.device?.currentSlideId || null,
-        controlAction: data?.device?.controlAction === "pause" ? "pause" : data?.device?.controlAction === "jump" ? "jump" : null,
+        controlAction:
+          data?.device?.controlAction === "pause"
+            ? "pause"
+            : data?.device?.controlAction === "jump"
+              ? "jump"
+              : null,
         controlSlideId: data?.device?.controlSlideId || null,
         controlUntil: data?.device?.controlUntil || null,
         controlUpdatedAt: data?.device?.controlUpdatedAt || null,
         serverUpdatedAt: data?.device?.serverUpdatedAt || null,
-        orientation: data?.device?.orientation === "portrait" ? "portrait" : "landscape",
-      })
+        orientation:
+          data?.device?.orientation === "portrait" ? "portrait" : "landscape",
+      });
     },
-    [applyServerState]
-  )
+    [applyServerState],
+  );
 
   useEffect(() => {
-    let disposed = false
-    let unsubscribe: (() => void) | undefined
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
 
     async function loadBootstrap() {
       if (!electronApi) {
-        setBootstrap(browserBootstrap())
-        return
+        setBootstrap(browserBootstrap());
+        return;
       }
 
-      const payload = await electronApi.getBootstrap()
+      const payload = await electronApi.getBootstrap();
       if (!disposed) {
-        setBootstrap(payload)
+        setBootstrap(payload);
       }
 
       unsubscribe = electronApi.onBootstrapUpdated((nextPayload) => {
         if (!disposed) {
-          setBootstrap(nextPayload)
+          setBootstrap(nextPayload);
         }
-      })
+      });
     }
 
-    loadBootstrap()
+    loadBootstrap();
 
     return () => {
-      disposed = true
-      unsubscribe?.()
-    }
-  }, [electronApi])
+      disposed = true;
+      unsubscribe?.();
+    };
+  }, [electronApi]);
 
   useEffect(() => {
-    if (!electronApi || !bootstrap) return
+    if (!electronApi || !bootstrap) return;
 
-    let cancelled = false
+    let cancelled = false;
 
     const syncDevice = async () => {
       try {
-        await syncDeviceWithServer(bootstrap)
+        await syncDeviceWithServer(bootstrap);
       } catch (error) {
-        if (cancelled) return
-        console.error("Signage bootstrap sync error:", error)
+        if (cancelled) return;
+        console.error("Signage bootstrap sync error:", error);
       }
-    }
+    };
 
-    void syncDevice()
+    void syncDevice();
 
     return () => {
-      cancelled = true
-    }
+      cancelled = true;
+    };
   }, [
     electronApi,
     bootstrap?.deviceId,
@@ -278,41 +298,43 @@ export default function PlayerPage() {
     bootstrap?.selectedDisplayId,
     bootstrap?.orientation,
     syncDeviceWithServer,
-  ])
+  ]);
 
   useEffect(() => {
-    if (!electronApi || !bootstrap?.deviceId) return
+    if (!electronApi || !bootstrap?.deviceId) return;
 
     const params = new URLSearchParams({
       deviceId: bootstrap.deviceId,
-    })
+    });
 
     if (bootstrap.deviceToken) {
-      params.set("deviceToken", bootstrap.deviceToken)
+      params.set("deviceToken", bootstrap.deviceToken);
     } else if (bootstrap.pairingCode) {
-      params.set("pairingCode", bootstrap.pairingCode)
+      params.set("pairingCode", bootstrap.pairingCode);
     }
 
-    const eventSource = new EventSource(`/api/signage/device/stream?${params.toString()}`)
+    const eventSource = new EventSource(
+      `/api/signage/device/stream?${params.toString()}`,
+    );
 
     const syncFromServer = async () => {
       try {
-        await syncDeviceWithServer(bootstrap)
+        await syncDeviceWithServer(bootstrap);
       } catch (error) {
-        console.error("Signage stream sync error:", error)
+        console.error("Signage stream sync error:", error);
       }
-    }
+    };
 
     const handleUpdate = () => {
-      void syncFromServer()
-    }
+      void syncFromServer();
+    };
 
-    eventSource.addEventListener("update", handleUpdate)
+    eventSource.addEventListener("update", handleUpdate);
 
     return () => {
-      eventSource.removeEventListener("update", handleUpdate)
-      eventSource.close()
-    }
+      eventSource.removeEventListener("update", handleUpdate);
+      eventSource.close();
+    };
   }, [
     electronApi,
     bootstrap?.deviceId,
@@ -321,10 +343,10 @@ export default function PlayerPage() {
     bootstrap?.selectedDisplayId,
     bootstrap?.orientation,
     syncDeviceWithServer,
-  ])
+  ]);
 
   useEffect(() => {
-    if (!electronApi || !bootstrap) return
+    if (!electronApi || !bootstrap) return;
 
     const sendHeartbeat = async () => {
       try {
@@ -335,27 +357,27 @@ export default function PlayerPage() {
             deviceId: bootstrap.deviceId,
             deviceToken: bootstrap.deviceToken,
           }),
-        })
+        });
       } catch (error) {
-        console.error("Signage heartbeat error:", error)
+        console.error("Signage heartbeat error:", error);
       }
-    }
+    };
 
-    void sendHeartbeat()
-    const intervalId = window.setInterval(sendHeartbeat, 30000)
+    void sendHeartbeat();
+    const intervalId = window.setInterval(sendHeartbeat, 30000);
 
     return () => {
-      window.clearInterval(intervalId)
-    }
-  }, [electronApi, bootstrap?.deviceId, bootstrap?.deviceToken])
+      window.clearInterval(intervalId);
+    };
+  }, [electronApi, bootstrap?.deviceId, bootstrap?.deviceToken]);
 
   const handleCurrentSlideChange = useCallback(
     async (slide: SignageSlide | null) => {
-      if (!bootstrap?.deviceId || !bootstrap.deviceToken) return
+      if (!bootstrap?.deviceId || !bootstrap.deviceToken) return;
 
-      const nextSlideId = slide?.id || null
-      if (lastReportedSlideIdRef.current === nextSlideId) return
-      lastReportedSlideIdRef.current = nextSlideId
+      const nextSlideId = slide?.id || null;
+      if (lastReportedSlideIdRef.current === nextSlideId) return;
+      lastReportedSlideIdRef.current = nextSlideId;
 
       try {
         await fetch("/api/signage/device/current-slide", {
@@ -366,46 +388,48 @@ export default function PlayerPage() {
             deviceToken: bootstrap.deviceToken,
             currentSlideId: nextSlideId,
           }),
-        })
+        });
       } catch (error) {
-        console.error("Signage current slide sync error:", error)
+        console.error("Signage current slide sync error:", error);
       }
     },
-    [bootstrap?.deviceId, bootstrap?.deviceToken]
-  )
+    [bootstrap?.deviceId, bootstrap?.deviceToken],
+  );
 
   async function handleDisplaySelect(displayId: string) {
-    if (!electronApi) return
+    if (!electronApi) return;
 
     try {
-      setPendingDisplayId(displayId)
-      const payload = await electronApi.selectDisplay(displayId)
-      setBootstrap(payload)
+      setPendingDisplayId(displayId);
+      const payload = await electronApi.selectDisplay(displayId);
+      setBootstrap(payload);
     } finally {
-      setPendingDisplayId(null)
+      setPendingDisplayId(null);
     }
   }
 
   async function handleFullscreen(enabled: boolean) {
-    if (!electronApi) return
-    const payload = await electronApi.setFullscreen(enabled)
-    setBootstrap(payload)
+    if (!electronApi) return;
+    const payload = await electronApi.setFullscreen(enabled);
+    setBootstrap(payload);
   }
 
-  async function handleOrientationChange(orientation: "landscape" | "portrait") {
-    if (!electronApi) return
-    const payload = await electronApi.setOrientation(orientation)
-    setBootstrap(payload)
+  async function handleOrientationChange(
+    orientation: "landscape" | "portrait",
+  ) {
+    if (!electronApi) return;
+    const payload = await electronApi.setOrientation(orientation);
+    setBootstrap(payload);
   }
 
   async function handleReload() {
-    if (!electronApi) return
+    if (!electronApi) return;
 
     try {
-      setIsReloading(true)
-      await electronApi.reloadWindow()
+      setIsReloading(true);
+      await electronApi.reloadWindow();
     } finally {
-      setIsReloading(false)
+      setIsReloading(false);
     }
   }
 
@@ -416,11 +440,11 @@ export default function PlayerPage() {
           <div className="text-sm text-white/60">Загрузка проигрывателя...</div>
         </div>
       </main>
-    )
+    );
   }
 
   const shouldRenderContent =
-    Boolean(bootstrap.pairedClubId) && bootstrap.fullscreen
+    Boolean(bootstrap.pairedClubId) && bootstrap.fullscreen;
 
   if (shouldRenderContent) {
     return (
@@ -431,24 +455,43 @@ export default function PlayerPage() {
               "overflow-hidden",
               isPortrait
                 ? "absolute left-1/2 top-1/2 h-[100vw] w-[100vh] -translate-x-1/2 -translate-y-1/2 rotate-90"
-                : "relative h-full w-full"
+                : "relative h-full w-full",
             )}
           >
             <SignageStage
               key={bootstrap.orientation}
-              layout={bootstrap.layoutJson || createDefaultSignageLayout(bootstrap.orientation)}
+              layout={
+                bootstrap.layoutJson ||
+                createDefaultSignageLayout(bootstrap.orientation)
+              }
               orientation={bootstrap.orientation}
               className="h-full w-full"
-              forcedSlideId={bootstrap.controlAction === "pause" ? bootstrap.controlSlideId : null}
-              forcedUntil={bootstrap.controlAction === "pause" ? bootstrap.controlUntil : null}
-              jumpSlideId={bootstrap.controlAction === "jump" ? bootstrap.controlSlideId : null}
-              jumpRequestKey={bootstrap.controlAction === "jump" ? bootstrap.controlUpdatedAt : null}
-              onCurrentSlideChange={handleCurrentSlideChange}
+              forcedSlideId={
+                bootstrap.controlAction === "pause"
+                  ? bootstrap.controlSlideId
+                  : null
+              }
+              forcedUntil={
+                bootstrap.controlAction === "pause"
+                  ? bootstrap.controlUntil
+                  : null
+              }
+              jumpSlideId={
+                bootstrap.controlAction === "jump"
+                  ? bootstrap.controlSlideId
+                  : null
+              }
+              jumpRequestKey={
+                bootstrap.controlAction === "jump"
+                  ? bootstrap.controlUpdatedAt
+                  : null
+              }
+              onCurrentSlideChangeAction={handleCurrentSlideChange}
             />
           </div>
         </div>
       </main>
-    )
+    );
   }
 
   return (
@@ -459,7 +502,7 @@ export default function PlayerPage() {
             "overflow-hidden",
             isPortrait
               ? "absolute left-1/2 top-1/2 h-[100vw] w-[100vh] -translate-x-1/2 -translate-y-1/2 rotate-90"
-              : "relative h-full w-full"
+              : "relative h-full w-full",
           )}
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.08),_transparent_26%),linear-gradient(180deg,_rgba(255,255,255,0.02),_transparent_20%)]" />
@@ -470,9 +513,13 @@ export default function PlayerPage() {
                   variant="outline"
                   className="border-white/10 bg-white/5 text-white/70 backdrop-blur"
                 >
-                  {electronApi ? "Приложение Windows" : "Предпросмотр в браузере"}
+                  {electronApi
+                    ? "Приложение Windows"
+                    : "Предпросмотр в браузере"}
                 </Badge>
-                <div className="text-sm uppercase tracking-[0.28em] text-white/35">DashAdmin Экран</div>
+                <div className="text-sm uppercase tracking-[0.28em] text-white/35">
+                  DashAdmin Экран
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -483,7 +530,9 @@ export default function PlayerPage() {
                   disabled={!electronApi}
                 >
                   <Tv className="size-4" />
-                  {bootstrap.fullscreen ? "Выйти из полного экрана" : "Полный экран"}
+                  {bootstrap.fullscreen
+                    ? "Выйти из полного экрана"
+                    : "Полный экран"}
                 </Button>
                 <Button
                   variant="outline"
@@ -491,7 +540,9 @@ export default function PlayerPage() {
                   onClick={handleReload}
                   disabled={!electronApi || isReloading}
                 >
-                  <RefreshCw className={cn("size-4", isReloading && "animate-spin")} />
+                  <RefreshCw
+                    className={cn("size-4", isReloading && "animate-spin")}
+                  />
                   Обновить
                 </Button>
               </div>
@@ -525,7 +576,7 @@ export default function PlayerPage() {
                           "relative rounded-[18px] border border-white/8 bg-[#0f141b] transition-all duration-300",
                           bootstrap.orientation === "portrait"
                             ? "h-[168px] w-[96px] rotate-90"
-                            : "h-[96px] w-[168px]"
+                            : "h-[96px] w-[168px]",
                         )}
                       >
                         <div className="absolute inset-2 rounded-[12px] border border-white/6" />
@@ -533,13 +584,17 @@ export default function PlayerPage() {
                     </div>
                     <div className="space-y-2 pb-2">
                       <div className="text-base font-medium text-white">
-                        {bootstrap.orientation === "portrait" ? "Контент повернут на 90 градусов" : "Контент в стандартной ориентации"}
+                        {bootstrap.orientation === "portrait"
+                          ? "Контент повернут на 90 градусов"
+                          : "Контент в стандартной ориентации"}
                       </div>
                       <div className="text-sm text-white/45">
-                        Формат рендера: {bootstrap.contentWidth}x{bootstrap.contentHeight}
+                        Формат рендера: {bootstrap.contentWidth}x
+                        {bootstrap.contentHeight}
                       </div>
                       <div className="text-sm text-white/45">
-                        При вертикальном режиме весь слой вывода разворачивается под повернутый экран.
+                        При вертикальном режиме весь слой вывода разворачивается
+                        под повернутый экран.
                       </div>
                     </div>
                   </div>
@@ -570,14 +625,20 @@ export default function PlayerPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5 text-xs uppercase tracking-[0.24em] text-white/30">
               <div>{selectedDisplay?.label ?? "Экран не выбран"}</div>
-              <div>{bootstrap.contentWidth}x{bootstrap.contentHeight}</div>
-              <div>{bootstrap.fullscreen ? "Полный экран включен" : "Полный экран выключен"}</div>
+              <div>
+                {bootstrap.contentWidth}x{bootstrap.contentHeight}
+              </div>
+              <div>
+                {bootstrap.fullscreen
+                  ? "Полный экран включен"
+                  : "Полный экран выключен"}
+              </div>
             </div>
           </div>
         </div>
       </div>
     </main>
-  )
+  );
 }
 
 function OrientationButtons({
@@ -585,9 +646,9 @@ function OrientationButtons({
   disabled,
   onChange,
 }: {
-  orientation: "landscape" | "portrait"
-  disabled: boolean
-  onChange: (orientation: "landscape" | "portrait") => void
+  orientation: "landscape" | "portrait";
+  disabled: boolean;
+  onChange: (orientation: "landscape" | "portrait") => void;
 }) {
   return (
     <div className="mb-5 flex flex-wrap gap-2">
@@ -598,8 +659,9 @@ function OrientationButtons({
         className={cn(
           "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition",
           "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06]",
-          orientation === "landscape" && "border-white/25 bg-white/10 text-white",
-          disabled && "cursor-not-allowed opacity-70"
+          orientation === "landscape" &&
+            "border-white/25 bg-white/10 text-white",
+          disabled && "cursor-not-allowed opacity-70",
         )}
       >
         <RectangleHorizontal className="size-4" />
@@ -612,15 +674,16 @@ function OrientationButtons({
         className={cn(
           "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition",
           "border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06]",
-          orientation === "portrait" && "border-white/25 bg-white/10 text-white",
-          disabled && "cursor-not-allowed opacity-70"
+          orientation === "portrait" &&
+            "border-white/25 bg-white/10 text-white",
+          disabled && "cursor-not-allowed opacity-70",
         )}
       >
         <RectangleVertical className="size-4" />
         Вертикально
       </button>
     </div>
-  )
+  );
 }
 
 function DisplayList({
@@ -630,16 +693,16 @@ function DisplayList({
   disabled,
   onSelect,
 }: {
-  displays: DisplayInfo[]
-  selectedDisplayId: string | null
-  pendingDisplayId: string | null
-  disabled: boolean
-  onSelect: (displayId: string) => void
+  displays: DisplayInfo[];
+  selectedDisplayId: string | null;
+  pendingDisplayId: string | null;
+  disabled: boolean;
+  onSelect: (displayId: string) => void;
 }) {
   return (
     <div className="space-y-3">
       {displays.map((display, index) => {
-        const selected = display.id === selectedDisplayId
+        const selected = display.id === selectedDisplayId;
 
         return (
           <button
@@ -651,7 +714,7 @@ function DisplayList({
               "group w-full rounded-2xl border px-4 py-4 text-left transition",
               "border-white/10 bg-white/2 hover:border-white/20 hover:bg-white/[0.04]",
               selected && "border-white/30 bg-white/[0.07]",
-              disabled && "cursor-not-allowed opacity-70"
+              disabled && "cursor-not-allowed opacity-70",
             )}
           >
             <div className="flex items-start justify-between gap-4">
@@ -665,7 +728,8 @@ function DisplayList({
                   ) : null}
                 </div>
                 <div className="text-sm text-white/45">
-                  {display.bounds.width}x{display.bounds.height} · x:{display.bounds.x} · y:
+                  {display.bounds.width}x{display.bounds.height} · x:
+                  {display.bounds.x} · y:
                   {display.bounds.y}
                 </div>
               </div>
@@ -675,15 +739,15 @@ function DisplayList({
                   "mt-1 flex size-9 items-center justify-center rounded-full border transition",
                   selected
                     ? "border-white/25 bg-white/10 text-white"
-                    : "border-white/10 text-white/20 group-hover:border-white/20 group-hover:text-white/50"
+                    : "border-white/10 text-white/20 group-hover:border-white/20 group-hover:text-white/50",
                 )}
               >
                 <Check className="size-4" />
               </div>
             </div>
           </button>
-        )
+        );
       })}
     </div>
-  )
+  );
 }

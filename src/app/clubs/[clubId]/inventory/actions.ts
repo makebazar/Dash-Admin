@@ -5574,6 +5574,121 @@ export async function getPromoQueue(clubId: string, userId: string) {
   return result.rows;
 }
 
+export async function getPendingQuestVerifications(
+  clubId: string,
+  userId: string,
+) {
+  await assertUserCanAccessClub(clubId, userId);
+  const res = await query(
+    `SELECT
+       pq.id,
+       pq.verification_photo_url,
+       pq.assigned_at,
+       q.title as quest_title,
+       p.full_name as player_name,
+       p.phone_number as player_phone
+     FROM promo_player_quests pq
+     JOIN promo_quests q ON q.id = pq.quest_id
+     JOIN promo_players p ON p.id = pq.player_id
+     WHERE pq.club_id = $1 AND pq.status = 'pending_verification'
+     ORDER BY pq.assigned_at ASC`,
+    [clubId],
+  );
+  return res.rows;
+}
+
+export async function verifyQuestSafe(
+  clubId: string,
+  userId: string,
+  requestId: string,
+  action: "approve" | "reject",
+) {
+  const client = await getClient();
+  try {
+    await assertUserCanAccessClub(clubId, userId);
+    await client.query("BEGIN");
+
+    if (action === "approve") {
+      // Get internal integer employee ID
+      const empRes = await client.query(
+        `SELECT id FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+        [clubId, userId],
+      );
+      const employeeId = empRes.rows[0]?.id;
+
+      // 1. Get quest details for reward
+      const qRes = await client.query(
+        `SELECT
+           pq.player_id,
+           pq.quest_id,
+           q.reward_xp,
+           q.reward_tickets,
+           q.reward_bonus_balance,
+           q.reward_prize_id
+         FROM promo_player_quests pq
+         JOIN promo_quests q ON q.id = pq.quest_id
+         WHERE pq.id = $1`,
+        [requestId],
+      );
+
+      if (qRes.rows.length === 0) throw new Error("Request not found");
+      const quest = qRes.rows[0];
+
+      // 2. Update status to completed
+      await client.query(
+        `UPDATE promo_player_quests
+         SET status = 'completed',
+             completed_at = NOW(),
+             reviewed_at = NOW(),
+             reviewed_by = $1
+         WHERE id = $2`,
+        [employeeId || null, requestId],
+      );
+
+      // 3. Issue rewards
+      const { rewardPlayerForQuest } = await import("@/lib/promo-quests");
+      await rewardPlayerForQuest(client, clubId, quest.player_id, quest);
+    } else {
+      // Get internal integer employee ID
+      const empRes = await client.query(
+        `SELECT id FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+        [clubId, userId],
+      );
+      const employeeId = empRes.rows[0]?.id;
+
+      // Reject: set back to active
+      await client.query(
+        `UPDATE promo_player_quests
+         SET status = 'active',
+             verification_photo_url = NULL,
+             reviewed_at = NOW(),
+             reviewed_by = $1
+         WHERE id = $2`,
+        [employeeId || null, requestId],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    // Notify via SSE
+    const { notifyInventoryClub } = await import("@/lib/inventory-events");
+    notifyInventoryClub(clubId, {
+      type: "PROMO_QUEUE_UPDATED",
+      timestamp: Date.now(),
+    });
+
+    return { ok: true as const };
+  } catch (error: any) {
+    await client.query("ROLLBACK");
+    return {
+      ok: false as const,
+      error: getActionErrorMessage(error, "Ошибка проверки задания"),
+    };
+  } finally {
+    client.release();
+  }
+}
+
 export async function claimPromoItemSafe(
   clubId: string,
   userId: string,

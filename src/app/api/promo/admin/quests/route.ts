@@ -45,9 +45,9 @@ export async function POST(request: Request) {
          is_randomizable, lifetime_minutes, is_active,
          available_days, time_start, time_end,
          action_button_text, action_button_url, requires_photo_verification,
-         reset_period, min_level
+         reset_period, min_level, target_service_id
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
        ) RETURNING *`,
       [
         data.club_id,
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
         data.requires_photo_verification || false,
         data.reset_period || "none",
         data.min_level || 1,
+        data.target_service_id || null,
       ],
     );
     return NextResponse.json({ success: true, quest: res.rows[0] });
@@ -105,9 +106,9 @@ export async function PUT(request: Request) {
          lifetime_minutes = $12, is_active = $13,
          available_days = $14, time_start = $15, time_end = $16,
          action_button_text = $17, action_button_url = $18, requires_photo_verification = $19,
-         reset_period = $20, min_level = $21,
+         reset_period = $20, min_level = $21, target_service_id = $22,
          updated_at = NOW()
-       WHERE id = $22 AND club_id = $23
+       WHERE id = $23 AND club_id = $24
        RETURNING *`,
       [
         data.title,
@@ -131,6 +132,7 @@ export async function PUT(request: Request) {
         data.requires_photo_verification || false,
         data.reset_period || "none",
         data.min_level || 1,
+        data.target_service_id || null,
         data.id,
         data.club_id,
       ],
