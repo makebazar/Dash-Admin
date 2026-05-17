@@ -653,7 +653,9 @@ export default function ShiftsPage({
       const cash = getMetricValue(shift, "cash_income");
       const card = getMetricValue(shift, "card_income");
       const customIncome = reportFields
-        .filter((f) => f.field_type === "INCOME")
+        .filter(
+          (f) => f.field_type === "INCOME" && f.metric_key !== "receipts_count",
+        )
         .reduce((sum, f) => sum + getMetricValue(shift, f.metric_key), 0);
       return cash + card + customIncome;
     },
@@ -1301,7 +1303,9 @@ export default function ShiftsPage({
   const totalCustomIncome = useMemo(
     () =>
       customFieldTotals
-        .filter((f) => f.field_type === "INCOME")
+        .filter(
+          (f) => f.field_type === "INCOME" && f.metric_key !== "receipts_count",
+        )
         .reduce((sum, f) => sum + f.total, 0),
     [customFieldTotals],
   );
@@ -1318,6 +1322,18 @@ export default function ShiftsPage({
 
   const totalRevenue = totals.totalCash + totals.totalCard + totalCustomIncome;
   const totalExpenses = totals.totalExpensesCore + totalCustomExpenses;
+
+  const receiptsTotal = useMemo(() => {
+    return (
+      customFieldTotals.find((f) => f.metric_key === "receipts_count")?.total ||
+      0
+    );
+  }, [customFieldTotals]);
+
+  const averageReceipt = useMemo(() => {
+    if (receiptsTotal > 0) return totalRevenue / receiptsTotal;
+    return 0;
+  }, [totalRevenue, receiptsTotal]);
 
   if (isLoading && shifts.length === 0) {
     return (
@@ -1562,6 +1578,7 @@ export default function ShiftsPage({
                     (f.field_type === "OTHER" ||
                       f.field_type === "INCOME" ||
                       !f.field_type) &&
+                    f.metric_key !== "receipts_count" &&
                     f.show_in_stats,
                 )
                 .map((field) => (
@@ -1580,45 +1597,19 @@ export default function ShiftsPage({
                     </span>
                   </div>
                 ))}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between h-full min-h-55">
-            <div className="mb-6">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">
-                Расходы
-              </p>
-              <p className="text-3xl lg:text-4xl font-bold text-rose-600 tracking-tight whitespace-nowrap">
-                -{formatMoney(totalExpenses)}
-              </p>
-            </div>
-            <div className="space-y-3 mt-auto">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500 truncate mr-2">Из кассы</span>
-                <span className="font-medium text-slate-900 whitespace-nowrap">
-                  {formatMoney(totals.totalExpensesCore)}
-                </span>
-              </div>
+              {/* Receipts Count as separate line if present */}
               {customFieldTotals
-                .filter(
-                  (f) =>
-                    (f.field_type === "EXPENSE" ||
-                      f.field_type === "EXPENSE_LIST") &&
-                    f.show_in_stats,
-                )
+                .filter((f) => f.metric_key === "receipts_count")
                 .map((field) => (
                   <div
                     key={field.metric_key}
                     className="flex items-center justify-between text-sm"
                   >
-                    <span
-                      className="text-slate-500 truncate mr-2"
-                      title={field.custom_label}
-                    >
+                    <span className="text-slate-500 truncate mr-2">
                       {field.custom_label}
                     </span>
                     <span className="font-medium text-slate-900 whitespace-nowrap">
-                      {formatMoney(field.total || 0)}
+                      {(field.total || 0).toLocaleString()}
                     </span>
                   </div>
                 ))}
@@ -1628,16 +1619,61 @@ export default function ShiftsPage({
           <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between h-full min-h-55">
             <div className="mb-6">
               <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">
-                Смены
+                Средний чек
               </p>
-              <p className="text-3xl lg:text-4xl font-bold text-slate-900 tracking-tight whitespace-nowrap">
-                {shifts.length}
+              <p className="text-3xl lg:text-4xl font-bold text-blue-600 tracking-tight whitespace-nowrap">
+                {averageReceipt > 0 ? formatMoney(averageReceipt) : "—"}
               </p>
             </div>
             <div className="space-y-3 mt-auto">
               <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500 truncate mr-2">
+                  Всего чеков
+                </span>
+                <span className="font-medium text-slate-900 whitespace-nowrap">
+                  {receiptsTotal.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500 truncate mr-2">
+                  Общая выручка
+                </span>
+                <span className="font-medium text-slate-900 whitespace-nowrap">
+                  {formatMoney(totalRevenue)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between h-full min-h-55">
+            <div className="mb-6">
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">
+                Смены и Расходы
+              </p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-3xl lg:text-4xl font-bold text-slate-900 tracking-tight whitespace-nowrap">
+                  {shifts.length}
+                </p>
+                <p className="text-sm text-slate-500 font-medium">смен</p>
+              </div>
+            </div>
+            <div className="space-y-3 mt-auto pt-4 border-t border-slate-50">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500 font-medium">
+                  Всего расходов
+                </span>
+                <span className="font-bold text-rose-600 whitespace-nowrap">
+                  -{formatMoney(totalExpenses)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-400 pl-2">
+                <span>Из них касса</span>
+                <span>{formatMoney(totals.totalExpensesCore)}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm pt-2">
                 <span className="flex items-center gap-1.5 text-slate-500 truncate mr-2">
-                  <Sun className="h-4 w-4 text-orange-500 shrink-0" /> Дневные
+                  <Sun className="h-3.5 w-3.5 text-orange-500 shrink-0" />{" "}
+                  Дневные
                 </span>
                 <span className="font-medium text-slate-900 whitespace-nowrap">
                   {shifts.filter((s) => s.shift_type !== "NIGHT").length}
@@ -1645,7 +1681,7 @@ export default function ShiftsPage({
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-1.5 text-slate-500 truncate mr-2">
-                  <Moon className="h-4 w-4 text-blue-500 shrink-0" /> Ночные
+                  <Moon className="h-3.5 w-3.5 text-blue-500 shrink-0" /> Ночные
                 </span>
                 <span className="font-medium text-slate-900 whitespace-nowrap">
                   {shifts.filter((s) => s.shift_type === "NIGHT").length}
@@ -2100,9 +2136,18 @@ export default function ShiftsPage({
                                   : shift.report_data &&
                                       shift.report_data[field.metric_key] !==
                                         undefined
-                                    ? formatMoney(
-                                        getMetricValue(shift, field.metric_key),
-                                      )
+                                    ? field.field_type === "OTHER" ||
+                                      field.metric_key === "receipts_count"
+                                      ? getMetricValue(
+                                          shift,
+                                          field.metric_key,
+                                        ).toLocaleString()
+                                      : formatMoney(
+                                          getMetricValue(
+                                            shift,
+                                            field.metric_key,
+                                          ),
+                                        )
                                     : "-"}
                               </TableCell>
                             ))}

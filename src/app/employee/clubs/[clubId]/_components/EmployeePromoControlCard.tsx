@@ -469,6 +469,7 @@ export function EmployeePromoControlCard({
                       >
                         <img
                           src={req.verification_photo_url}
+                          alt="Верификация задания"
                           className="w-full h-full object-cover"
                         />
                       </div>

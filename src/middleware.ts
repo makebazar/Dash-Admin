@@ -5,18 +5,27 @@ export function middleware(req: NextRequest) {
   const host = req.headers.get("host") || "";
   const { pathname } = req.nextUrl;
 
-  // 0. WWW TO NON-WWW REDIRECT
+  // --- CONFIGURATION ---
+  const isDev =
+    process.env.NODE_ENV === "development" ||
+    host.includes("localhost") ||
+    host.includes("127.0.0.1") ||
+    host.includes("0.0.0.0");
+
+  // Skip subdomain logic in development unless specifically testing them
+  if (isDev) {
+    return NextResponse.next();
+  }
+
+  // 0. WWW TO NON-WWW REDIRECT (Production only)
   if (host.startsWith("www.")) {
     const url = req.nextUrl.clone();
     url.hostname = host.split(":")[0].replace(/^www\./, "");
-    url.port = ""; // Remove port (especially 3000) for the public redirect
+    url.port = ""; // Remove port for the public redirect
     return NextResponse.redirect(url, 301);
   }
 
-  // --- CONFIGURATION ---
-  // Change these to your actual production domains
-  const ADMIN_DOMAIN =
-    process.env.NEXT_PUBLIC_ADMIN_DOMAIN || "admin.mydashadmin.ru";
+  const ADMIN_DOMAIN = process.env.ADMIN_DOMAIN || "admin.mydashadmin.ru";
   const GAME_DOMAIN =
     process.env.NEXT_PUBLIC_GAME_DOMAIN || "game.mydashadmin.ru";
 
@@ -28,24 +37,50 @@ export function middleware(req: NextRequest) {
     }
 
     // Prevent game domain from accessing admin panels or internal app routes
-    // Allow only /promo, /api/promo, and public assets
     const isAllowedPath =
       pathname.startsWith("/promo") ||
       pathname.startsWith("/api/promo") ||
       pathname.startsWith("/_next") ||
       pathname.startsWith("/favicon.ico") ||
-      pathname.includes("."); // images, scripts, etc.
+      pathname.includes(".");
 
     if (!isAllowedPath) {
-      // Rewrite unauthorized paths to the promo lobby
       return NextResponse.rewrite(new URL("/promo", req.url));
     }
   }
 
-  // 2. ADMIN DOMAIN LOGIC (Optional: restrict /promo access from main domain)
+  // 2. ADMIN DOMAIN LOGIC
   if (host.includes(ADMIN_DOMAIN)) {
-    // If you want to keep admin domain clean, you can redirect /promo to the game domain
-    // but for now we'll allow it for easier testing
+    // If the path already starts with /dashadmin-x, redirect to clean URL
+    if (pathname.startsWith("/dashadmin-x")) {
+      const cleanPath = pathname.replace("/dashadmin-x", "") || "/";
+      return NextResponse.redirect(new URL(cleanPath, req.url), 307);
+    }
+
+    // Don't rewrite API, static files, auth routes, or internal Next.js routes
+    if (
+      pathname.startsWith("/api") ||
+      pathname.startsWith("/_next") ||
+      pathname.startsWith("/login") ||
+      pathname.startsWith("/legal-consent") ||
+      pathname.startsWith("/favicon.ico") ||
+      pathname.includes(".")
+    ) {
+      return NextResponse.next();
+    }
+
+    // Rewrite everything else to /dashadmin-x
+    const url = req.nextUrl.clone();
+    url.pathname = `/dashadmin-x${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  // Redirect from main domain /dashadmin-x to subdomain
+  if (!host.includes(ADMIN_DOMAIN) && pathname.startsWith("/dashadmin-x")) {
+    const url = new URL(req.url);
+    url.hostname = ADMIN_DOMAIN;
+    url.pathname = pathname.replace("/dashadmin-x", "") || "/";
+    return NextResponse.redirect(url, 307);
   }
 
   return NextResponse.next();
@@ -53,14 +88,5 @@ export function middleware(req: NextRequest) {
 
 // Ensure middleware only runs on relevant paths
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (internal api routes, we handle /api/promo separately above if needed)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    "/((?!_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

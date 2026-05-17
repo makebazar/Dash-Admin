@@ -11,56 +11,9 @@ import {
 } from "@/lib/club-api-access";
 
 async function syncOwnersSubscriptionForClub(clubId: string | number) {
-  const hasSubscriptionStatus = await hasColumn("users", "subscription_status");
-  const hasSubscriptionCanceledAt = await hasColumn(
-    "users",
-    "subscription_canceled_at",
-  );
-
-  const sourceResult = await query(
-    `SELECT
-            u.subscription_plan,
-            ${hasSubscriptionStatus ? "u.subscription_status" : "NULL::varchar as subscription_status"},
-            u.subscription_started_at,
-            u.subscription_ends_at,
-            ${hasSubscriptionCanceledAt ? "u.subscription_canceled_at" : "NULL::timestamp as subscription_canceled_at"}
-         FROM clubs c
-         JOIN users u ON u.id = c.owner_id
-         WHERE c.id = $1`,
-    [clubId],
-  );
-
-  if ((sourceResult.rowCount || 0) === 0) return;
-  const source = sourceResult.rows[0];
-
-  await query(
-    `UPDATE users
-         SET subscription_plan = $1,
-             ${hasSubscriptionStatus ? "subscription_status = $2," : ""}
-             subscription_started_at = $3::timestamp,
-             subscription_ends_at = $4::timestamp
-             ${hasSubscriptionCanceledAt ? ", subscription_canceled_at = $5::timestamp" : ""}
-         WHERE id IN (
-            SELECT c.owner_id
-            FROM clubs c
-            WHERE c.id = $6
-            UNION
-            SELECT ce.user_id
-            FROM club_employees ce
-            WHERE ce.club_id = $6
-              AND ce.role = 'Владелец'
-              AND ce.is_active = TRUE
-              AND ce.dismissed_at IS NULL
-         )`,
-    [
-      source.subscription_plan,
-      source.subscription_status,
-      source.subscription_started_at,
-      source.subscription_ends_at,
-      source.subscription_canceled_at,
-      clubId,
-    ],
-  );
+  // Логика синхронизации через пользователей отключена,
+  // так как теперь подписки работают на уровне каждого клуба отдельно.
+  return;
 }
 
 export async function GET(

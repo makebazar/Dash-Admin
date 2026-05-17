@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
-import { isSuperAdmin } from "@/lib/super-admin";
+import { isSuperAdmin } from "@/lib/admin";
 
 async function ensureSuperAdmin() {
   const userId = (await cookies()).get("session_user_id")?.value;

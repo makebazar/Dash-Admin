@@ -34,6 +34,9 @@ export async function GET() {
                     c.name,
                     c.address,
                     c.created_at,
+                    c.subscription_plan,
+                    c.subscription_status,
+                    c.subscription_ends_at,
                     CASE
                         WHEN c.owner_id = $1 THEN TRUE
                         WHEN ce.role = 'Владелец' THEN TRUE
@@ -45,8 +48,38 @@ export async function GET() {
                         WHEN r_global.name IS NOT NULL THEN r_global.name
                         ELSE 'Сотрудник'
                     END as role,
-                    COALESCE(r_club.employee_access_settings, r_global.employee_access_settings, '{}'::jsonb) as permissions
-             FROM clubs c
+                    COALESCE(r_club.employee_access_settings, r_global.employee_access_settings, '{}'::jsonb) as permissions,
+                    (SELECT u.full_name
+                     FROM shifts s
+                     JOIN users u ON s.user_id = u.id
+                     WHERE s.club_id = c.id AND s.check_out IS NULL
+                     ORDER BY s.check_in DESC LIMIT 1) as active_shift_user,
+                    (SELECT COALESCE(SUM(
+                        COALESCE(s.cash_income, 0) +
+                        COALESCE(s.card_income, 0) +
+                        COALESCE((
+                            SELECT SUM(
+                                CASE
+                                    WHEN jsonb_typeof(kv.v) = 'number' THEN (kv.v)::text::numeric
+                                    WHEN jsonb_typeof(kv.v) = 'string' AND kv.v->>0 ~ '^-?[0-9.]+$' THEN (kv.v->>0)::numeric
+                                    WHEN jsonb_typeof(kv.v) = 'object' AND (kv.v)->'value' IS NOT NULL AND jsonb_typeof((kv.v)->'value') = 'number' THEN ((kv.v)->'value')::text::numeric
+                                    ELSE 0
+                                END
+                            )
+                            FROM jsonb_each(s.report_data) as kv(k, v)
+                            WHERE kv.k IN (
+                                SELECT f->>'metric_key'
+                                    FROM club_report_templates t, jsonb_array_elements(t.schema) f
+                                    WHERE t.club_id = s.club_id AND t.is_active = TRUE
+                                      AND f->>'field_type' = 'INCOME'
+                                      AND f->>'metric_key' NOT IN ('cash_income', 'card_income')
+                            )
+                        ), 0)
+                     ), 0)
+                     FROM shifts s
+                     WHERE s.club_id = c.id
+                       AND s.status NOT IN ('ACTIVE', 'CANCELLED')
+                       AND date_trunc('month', s.check_in) = date_trunc('month', CURRENT_DATE)) as monthly_revenue             FROM clubs c
              LEFT JOIN club_employees ce ON ce.club_id = c.id
                 AND ce.user_id = $1
                 AND ce.is_active = TRUE
@@ -135,6 +168,8 @@ export async function POST(request: Request) {
     const ownerResult = await query(
       `SELECT
                 u.id,
+                u.full_name,
+                u.phone_number,
                 ${hasSubscriptionPlan ? "u.subscription_plan" : "NULL::varchar as subscription_plan"},
                 ${hasSubscriptionStatus ? "u.subscription_status" : "NULL::varchar as subscription_status"},
                 ${hasSubscriptionEndsAt ? "u.subscription_ends_at" : "NULL::timestamp as subscription_ends_at"},
@@ -164,6 +199,48 @@ export async function POST(request: Request) {
       endsAtToApply = hasSubscriptionEndsAt
         ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
         : null;
+
+      // Create CRM lead for the new user
+      try {
+        // Check if lead already exists by phone
+        const leadCheck = await query(
+          "SELECT id FROM crm_leads WHERE phone = $1 LIMIT 1",
+          [owner.phone_number],
+        );
+
+        if (leadCheck.rowCount === 0) {
+          // Get next position for 'new' status
+          const posResult = await query(
+            "SELECT COALESCE(MAX(position), -1) + 1 as next_pos FROM crm_leads WHERE status = 'new'",
+          );
+          const nextPosition = posResult.rows[0].next_pos;
+
+          const leadResult = await query(
+            `INSERT INTO crm_leads (name, contact_person, phone, status, notes, position, address)
+             VALUES ($1, $2, $3, 'new', $4, $5, $6) RETURNING id`,
+            [
+              name.trim(),
+              owner.full_name,
+              owner.phone_number,
+              `Создал первый клуб в системе.`,
+              nextPosition,
+              address?.trim() || null,
+            ],
+          );
+
+          if (leadResult.rowCount !== null && leadResult.rowCount > 0) {
+            const leadId = leadResult.rows[0].id;
+            await query(
+              `INSERT INTO crm_contacts (lead_id, name, phone, role)
+               VALUES ($1, $2, $3, $4)`,
+              [leadId, owner.full_name, owner.phone_number, "Владелец"],
+            );
+          }
+        }
+      } catch (crmError) {
+        // Don't fail club creation if CRM lead creation fails
+        console.error("Failed to create CRM lead:", crmError);
+      }
     }
 
     const subscriptionState = resolveSubscriptionState({
@@ -179,15 +256,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const setParts: string[] = [];
+    const params: any[] = [];
+    let i = 1;
+
     if (
       owner.subscription_plan !== planToApply ||
       owner.subscription_status !== statusToApply ||
       owner.subscription_ends_at !== endsAtToApply
     ) {
-      const setParts: string[] = [];
-      const params: any[] = [];
-      let i = 1;
-
       let statusParamIndex: number | null = null;
 
       if (hasSubscriptionPlan) {
@@ -236,8 +313,12 @@ export async function POST(request: Request) {
       }
     }
 
+    // 1. Создаем клуб с начальной подпиской (Trial 14 дней)
     const result = await query(
-      `INSERT INTO clubs (name, address, owner_id) VALUES ($1, $2, $3) RETURNING id, ${hasPublicId ? "public_id" : "id::text as public_id"}, name, address, created_at`,
+      `INSERT INTO clubs
+       (name, address, owner_id, subscription_plan, subscription_status, subscription_ends_at, subscription_started_at)
+       VALUES ($1, $2, $3, 'trial', 'trialing', NOW() + INTERVAL '14 days', NOW())
+       RETURNING id, ${hasPublicId ? "public_id" : "id::text as public_id"}, name, address, created_at`,
       [name.trim(), address?.trim() || null, userId],
     );
 

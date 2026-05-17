@@ -184,7 +184,7 @@ export async function getClubApiAccess(clubId: string): Promise<ClubApiAccess> {
     ),
     schedule: resolveAccessLevel(
       rawPerms.schedule_access,
-      rawPerms.can_manage_employees,
+      rawPerms.can_manage_employees || rawPerms.schedule_enabled,
     ),
     employees: resolveAccessLevel(
       rawPerms.employees_access,
@@ -196,7 +196,7 @@ export async function getClubApiAccess(clubId: string): Promise<ClubApiAccess> {
     ),
     requests: resolveAccessLevel(
       rawPerms.requests_access,
-      rawPerms.can_manage_employees,
+      rawPerms.can_manage_employees || rawPerms.requests_enabled,
     ),
     finance: resolveAccessLevel(
       rawPerms.finance_access,
@@ -204,11 +204,11 @@ export async function getClubApiAccess(clubId: string): Promise<ClubApiAccess> {
     ),
     inventory: resolveAccessLevel(
       rawPerms.inventory_access,
-      rawPerms.can_manage_inventory,
+      rawPerms.can_manage_inventory || rawPerms.inventory_actions_enabled,
     ),
     equipment: resolveAccessLevel(
       rawPerms.equipment_access,
-      rawPerms.can_manage_equipment,
+      rawPerms.can_manage_equipment || rawPerms.maintenance_enabled,
     ),
     signage: resolveAccessLevel(rawPerms.signage_access, isFullAccess),
     kb: resolveAccessLevel(rawPerms.kb_access, rawPerms.can_edit_settings),
@@ -218,7 +218,7 @@ export async function getClubApiAccess(clubId: string): Promise<ClubApiAccess> {
     ),
     tasks: resolveAccessLevel(
       rawPerms.tasks_access,
-      rawPerms.can_manage_equipment,
+      rawPerms.can_manage_equipment || rawPerms.maintenance_enabled,
     ),
     settings_general: resolveAccessLevel(
       rawPerms.settings_general_access,

@@ -2089,9 +2089,9 @@ export async function generateMonthlySalaryReport(
   leaderboardState = await getClubEmployeeLeaderboardState(clubId, year, month);
   const leaderboard = leaderboardState.leaderboard;
   const leaderboardMap = new Map(
-    leaderboard.map((item) => [item.user_id, item]),
+    leaderboard.map((item: any) => [item.user_id, item]),
   );
-  leaderboardTop = leaderboard.slice(0, 5).map((item) => ({
+  leaderboardTop = leaderboard.slice(0, 5).map((item: any) => ({
     rank: item.rank,
     user_id: item.user_id,
     full_name: item.full_name,

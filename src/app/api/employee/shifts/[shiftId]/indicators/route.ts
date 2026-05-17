@@ -157,13 +157,16 @@ export async function GET(
     };
     // Calculate POS revenue for reconciliation
     const posRevenueRes = await query(
-      `SELECT COALESCE(SUM(total_amount), 0) as pos_revenue
-             FROM shift_receipts
-             WHERE shift_id = $1 AND voided_at IS NULL AND committed_at IS NOT NULL
-               AND payment_type != 'salary'`,
+      `SELECT
+         COALESCE(SUM(total_amount), 0) as pos_revenue,
+         COUNT(id) as receipts_count
+       FROM shift_receipts
+       WHERE shift_id = $1 AND voided_at IS NULL AND committed_at IS NOT NULL
+         AND payment_type != \'salary\'`,
       [shiftId],
     );
     const posRevenue = Number(posRevenueRes.rows[0].pos_revenue || 0);
+    const receiptsCount = Number(posRevenueRes.rows[0].receipts_count || 0);
 
     // Fetch detailed bar purchases
     const barPurchasesRes = await query(
@@ -233,9 +236,13 @@ export async function GET(
     }
 
     // 4. Return instant payout amount and indicators
+    const averageCheck = receiptsCount > 0 ? posRevenue / receiptsCount : 0;
+
     return NextResponse.json({
       projected_instant_payout: calculation?.breakdown?.instant_payout || 0,
       calculated_revenue: posRevenue,
+      receipts_count: receiptsCount,
+      average_check: averageCheck,
       shift_earnings: calculation?.breakdown?.base || 0,
       kpi_bonus: (calculation?.breakdown?.bonuses || []).reduce(
         (sum: number, b: any) => sum + (Number(b.amount) || 0),

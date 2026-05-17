@@ -114,7 +114,7 @@ DashAdmin/
 │   │   ├── dashboard/    # Dashboard view
 │   │   ├── employee/     # Employee workspace
 │   │   ├── clubs/        # Club management
-│   │   └── super-admin/  # Super admin panel
+│   │   └── dashadmin-x/  # Super admin panel (v2)
 │   ├── components/       # Reusable React components
 │   ├── db/              # Database schema and connection
 │   └── lib/             # Utilities and helpers

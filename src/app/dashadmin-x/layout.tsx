@@ -12,6 +12,8 @@ import {
   User,
   Store,
   Shield,
+  PhoneCall,
+  Headphones,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,9 +25,12 @@ interface UserData {
 
 const NAV_ITEMS = [
   { label: "Обзор", href: "/dashadmin-x", icon: LayoutDashboard },
+  { label: "CRM", href: "/dashadmin-x/crm", icon: PhoneCall },
+  { label: "Подписки", href: "/dashadmin-x/subscriptions", icon: Zap },
   { label: "Пользователи", href: "/dashadmin-x/users", icon: Users },
   { label: "Клубы", href: "/dashadmin-x/clubs", icon: Store },
   { label: "Роли", href: "/dashadmin-x/roles", icon: Shield },
+  { label: "Поддержка", href: "/dashadmin-x/support", icon: Headphones },
 ];
 
 export default function DashAdminXLayout({

@@ -31,7 +31,7 @@ INSERT INTO subscription_plans (code, name, tagline, description, price_amount, 
 VALUES ('annual', 'Годовой', 'Выгоднее на 20%', 'Оплата за год вперёд', 27840, 14400, 'year', 1, 14, 20, TRUE)
 ON CONFLICT (code) DO NOTHING;
 
-UPDATE subscription_plans SET 
+UPDATE subscription_plans SET
     price_per_extra_club = 14400,
     grace_period_days = 14
 WHERE code = 'annual';

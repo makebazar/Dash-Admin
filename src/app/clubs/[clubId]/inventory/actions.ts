@@ -5567,7 +5567,7 @@ export async function getPromoQueue(clubId: string, userId: string) {
      FROM promo_prize_queue q
      JOIN promo_players p ON q.player_id = p.id
      LEFT JOIN promo_prizes pr ON q.prize_id = pr.id
-     WHERE q.club_id = $1 AND q.status = 'pending' AND q.prize_id IS NULL
+     WHERE q.club_id = $1 AND q.status = 'pending'
      ORDER BY q.created_at DESC`,
     [clubId],
   );

@@ -1,262 +1,220 @@
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { query } from '@/db';
-import { hasColumn } from '@/lib/db-compat';
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { query } from "@/db";
 
 const normalizePeriodUnit = (value: string | null | undefined) => {
-    if (value === 'day' || value === 'month' || value === 'year') return value;
-    return 'month';
+  if (value === "day" || value === "month" || value === "year") return value;
+  return "month";
 };
 
 const addPeriod = (base: Date, unit: string, value: number) => {
-    const next = new Date(base);
-    if (unit === 'day') {
-        next.setDate(next.getDate() + value);
-        return next;
-    }
-    if (unit === 'year') {
-        next.setFullYear(next.getFullYear() + value);
-        return next;
-    }
-    next.setMonth(next.getMonth() + value);
+  const next = new Date(base);
+  if (unit === "day") {
+    next.setDate(next.getDate() + value);
     return next;
+  }
+  if (unit === "year") {
+    next.setFullYear(next.getFullYear() + value);
+    return next;
+  }
+  next.setMonth(next.getMonth() + value);
+  return next;
 };
 
-async function ensurePlansTable() {
-    await query(`
-        CREATE TABLE IF NOT EXISTS subscription_plans (
-            id SERIAL PRIMARY KEY,
-            code VARCHAR(100) NOT NULL UNIQUE,
-            name VARCHAR(255) NOT NULL,
-            price_amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
-            period_unit VARCHAR(20) NOT NULL DEFAULT 'month',
-            period_value INTEGER NOT NULL DEFAULT 1,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at TIMESTAMP DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
-        )
-    `);
-
-    await query(`CREATE INDEX IF NOT EXISTS idx_subscription_plans_active ON subscription_plans(is_active, created_at DESC)`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS tagline VARCHAR(255)`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS description TEXT`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '[]'::jsonb`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS badge_text VARCHAR(100)`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS badge_tone VARCHAR(30) NOT NULL DEFAULT 'default'`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS cta_text VARCHAR(100)`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS card_theme VARCHAR(30) NOT NULL DEFAULT 'light'`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 100`);
-    await query(`ALTER TABLE subscription_plans ADD COLUMN IF NOT EXISTS is_highlighted BOOLEAN NOT NULL DEFAULT FALSE`);
-    await query(
-        `INSERT INTO subscription_plans (code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, period_unit, period_value, is_active)
-         VALUES
-            ('new_user', 'Бесплатно', '14 дней доступа', 'Подходит для быстрого старта нового клуба', '["До 1 клуба","До 3 сотрудников в клубе","Базовый доступ"]'::jsonb, 'Старт', 'info', 'Начать бесплатно', 'light', 10, FALSE, 0, 'day', 14, TRUE),
-            ('starter', 'Стартовый', 'Для небольшого клуба', 'Оптимальный тариф для стабильной работы', '["До 1 клуба","До 15 сотрудников в клубе","Базовая аналитика"]'::jsonb, NULL, 'default', 'Выбрать Стартовый', 'light', 20, FALSE, 2900, 'month', 1, TRUE),
-            ('pro', 'Про', 'Для роста сети', 'Расширенные лимиты и аналитика', '["До 3 клубов","До 50 сотрудников в клубе","Продвинутая аналитика"]'::jsonb, 'Популярный', 'success', 'Перейти на Про', 'dark', 30, TRUE, 7900, 'month', 1, TRUE),
-            ('enterprise', 'Энтерпрайз', 'Без ограничений', 'Максимальные возможности для сети клубов', '["Безлимит клубов","Безлимит сотрудников","Приоритетная поддержка"]'::jsonb, 'Максимум', 'warning', 'Связаться с нами', 'accent', 40, FALSE, 19900, 'month', 1, TRUE)
-         ON CONFLICT (code) DO NOTHING`
-    );
-    await query(
-        `UPDATE subscription_plans
-         SET name = 'Бесплатно',
-             tagline = '14 дней доступа',
-             price_amount = 0,
-             period_unit = 'day',
-             period_value = 14,
-             is_active = TRUE,
-             updated_at = NOW()
-         WHERE code = 'new_user'`
-    );
-    await query(`UPDATE subscription_plans SET is_active = FALSE, updated_at = NOW() WHERE code = 'trial'`);
-}
-
 async function getOwnerClubIds(userId: string) {
-    const result = await query(
-        `SELECT DISTINCT club_id
-         FROM (
-            SELECT c.id as club_id
-            FROM clubs c
-            WHERE c.owner_id = $1
-            UNION
-            SELECT ce.club_id
-            FROM club_employees ce
-            WHERE ce.user_id = $1
-              AND ce.role = 'Владелец'
-              AND ce.is_active = TRUE
-              AND ce.dismissed_at IS NULL
-         ) owner_clubs`,
-        [userId]
-    );
-    return result.rows.map(row => Number(row.club_id)).filter(value => Number.isInteger(value) && value > 0);
+  const result = await query(`SELECT id FROM clubs WHERE owner_id = $1`, [
+    userId,
+  ]);
+  return result.rows.map((row) => Number(row.id));
 }
 
-export async function GET() {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        await ensurePlansTable();
-
-        const plansResult = await query(
-            `SELECT id, code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, period_unit, period_value, is_active
-             FROM subscription_plans
-             WHERE is_active = TRUE
-             ORDER BY display_order ASC, created_at DESC`
-        );
-
-        const hasSubscriptionPlan = await hasColumn('users', 'subscription_plan');
-        const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
-        const hasSubscriptionEndsAt = await hasColumn('users', 'subscription_ends_at');
-        const userResult = await query(
-            `SELECT ${hasSubscriptionPlan ? 'subscription_plan' : "NULL::varchar as subscription_plan"},
-                    ${hasSubscriptionStatus ? 'subscription_status' : "NULL::varchar as subscription_status"},
-                    ${hasSubscriptionEndsAt ? 'subscription_ends_at' : "NULL::timestamp as subscription_ends_at"}
-             FROM users
-             WHERE id = $1`,
-            [userId]
-        );
-
-        return NextResponse.json({
-            plans: plansResult.rows,
-            current: userResult.rows[0] || null
-        });
-    } catch (error) {
-        console.error('Get Self Subscription Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+export async function GET(request: Request) {
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const { searchParams } = new URL(request.url);
+    const clubId = searchParams.get("clubId");
+
+    // Получаем тарифы
+    const plansResult = await query(
+      `SELECT id, code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, price_per_extra_club, period_unit, period_value, is_active
+         FROM subscription_plans
+         WHERE is_active = TRUE AND is_public = TRUE
+         ORDER BY display_order ASC, created_at DESC`,
+    );
+
+    // Находим "основной" клуб (самый старый из активных), который всегда платит 100% цены
+    const primaryClubResult = await query(
+      `SELECT id FROM clubs
+       WHERE owner_id = $1
+         AND subscription_status = 'active'
+         AND (subscription_ends_at > NOW() OR subscription_ends_at IS NULL)
+       ORDER BY created_at ASC
+       LIMIT 1`,
+      [userId],
+    );
+    const primaryActiveClubId = primaryClubResult.rows[0]?.id
+      ? Number(primaryClubResult.rows[0].id)
+      : null;
+
+    // Скидка применяется только если у пользователя есть активный клуб, и мы сейчас смотрим НЕ на него
+    const isDiscountApplicable =
+      primaryActiveClubId !== null &&
+      (clubId ? Number(clubId) !== primaryActiveClubId : false);
+
+    // Если запрашиваем для конкретного клуба, получаем его текущий статус
+    let currentStatus = null;
+    if (clubId) {
+      const clubRes = await query(
+        `SELECT subscription_plan, subscription_status, subscription_ends_at
+                 FROM clubs WHERE id = $1 AND owner_id = $2`,
+        [clubId, userId],
+      );
+      currentStatus = clubRes.rows[0] || null;
+    }
+
+    return NextResponse.json({
+      plans: plansResult.rows.map((plan) => ({
+        ...plan,
+        // Если скидка применима, показываем цену для доп. клуба
+        current_price:
+          isDiscountApplicable && plan.price_per_extra_club > 0
+            ? plan.price_per_extra_club
+            : plan.price_amount,
+      })),
+      current: currentStatus,
+      has_active_clubs: primaryActiveClubId !== null, // Оставляем для совместимости, но логика цены теперь опирается на isDiscountApplicable
+    });
+  } catch (error) {
+    console.error("Get Self Subscription Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: Request) {
-    try {
-        const userId = (await cookies()).get('session_user_id')?.value;
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+  try {
+    const userId = (await cookies()).get("session_user_id")?.value;
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-        await ensurePlansTable();
-        const ownerClubIds = await getOwnerClubIds(userId);
+    const body = await request.json();
+    const planCode = String(body?.plan_code || "")
+      .trim()
+      .toLowerCase();
+    const clubId = body?.club_id ? Number(body.club_id) : null;
 
-        const body = await request.json();
-        const planCode = String(body?.plan_code || '').trim().toLowerCase();
-        if (!planCode) {
-            return NextResponse.json({ error: 'Plan code is required' }, { status: 400 });
-        }
+    if (!planCode) {
+      return NextResponse.json(
+        { error: "Plan code is required" },
+        { status: 400 },
+      );
+    }
 
-        const planResult = await query(
-            `SELECT code, name, period_unit, period_value, is_active
+    const planResult = await query(
+      `SELECT code, name, price_amount, price_per_extra_club, period_unit, period_value, is_active
              FROM subscription_plans
              WHERE code = $1
              LIMIT 1`,
-            [planCode]
-        );
-        if ((planResult.rowCount || 0) === 0) {
-            return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
-        }
+      [planCode],
+    );
 
-        const plan = planResult.rows[0];
-        if (!plan.is_active) {
-            return NextResponse.json({ error: 'Plan is inactive' }, { status: 400 });
-        }
-
-        const hasSubscriptionStatus = await hasColumn('users', 'subscription_status');
-        const hasSubscriptionCanceledAt = await hasColumn('users', 'subscription_canceled_at');
-        const hasSubscriptionPlan = await hasColumn('users', 'subscription_plan');
-        const hasSubscriptionStartedAt = await hasColumn('users', 'subscription_started_at');
-        const hasSubscriptionEndsAt = await hasColumn('users', 'subscription_ends_at');
-        const now = new Date();
-        const nextEndsAt = addPeriod(now, normalizePeriodUnit(plan.period_unit), Number(plan.period_value || 1));
-        const nextStatus = planCode === 'new_user' ? 'trialing' : 'active';
-
-        const setParts: string[] = []
-        const params: any[] = []
-        let i = 1
-
-        let statusParamIndex: number | null = null
-
-        if (hasSubscriptionPlan) {
-            setParts.push(`subscription_plan = $${i}`)
-            params.push(planCode)
-            i += 1
-        }
-
-        if (hasSubscriptionStatus) {
-            statusParamIndex = i
-            setParts.push(`subscription_status = $${i}`)
-            params.push(nextStatus)
-            i += 1
-        }
-
-        if (hasSubscriptionStartedAt) {
-            setParts.push(`subscription_started_at = $${i}::timestamp`)
-            params.push(now.toISOString())
-            i += 1
-        }
-
-        if (hasSubscriptionEndsAt) {
-            setParts.push(`subscription_ends_at = $${i}::timestamp`)
-            params.push(nextEndsAt.toISOString())
-            i += 1
-        }
-
-        if (hasSubscriptionCanceledAt) {
-            if (statusParamIndex !== null) {
-                setParts.push(`subscription_canceled_at = CASE WHEN $${statusParamIndex}::varchar = 'canceled' THEN NOW() ELSE NULL END`)
-            } else {
-                setParts.push(`subscription_canceled_at = NULL`)
-            }
-        }
-
-        if (setParts.length === 0) {
-            return NextResponse.json({ error: 'Subscription fields are not available' }, { status: 500 });
-        }
-
-        let updated;
-        if (ownerClubIds.length === 0) {
-            params.push(userId)
-            updated = await query(
-                `UPDATE users
-                 SET ${setParts.join(', ')}
-                 WHERE id = $${i}
-                 RETURNING id`,
-                params
-            );
-        } else {
-            params.push(ownerClubIds)
-            updated = await query(
-                `WITH owner_users AS (
-                    SELECT c.owner_id as owner_user_id
-                    FROM clubs c
-                    WHERE c.id = ANY($${i}::int[])
-                    UNION
-                    SELECT ce.user_id as owner_user_id
-                    FROM club_employees ce
-                    WHERE ce.club_id = ANY($${i}::int[])
-                      AND ce.role = 'Владелец'
-                      AND ce.is_active = TRUE
-                      AND ce.dismissed_at IS NULL
-                 )
-                 UPDATE users
-                 SET ${setParts.join(', ')}
-                 WHERE id IN (SELECT owner_user_id FROM owner_users)
-                 RETURNING id`,
-                params
-            );
-        }
-
-        return NextResponse.json({
-            success: true,
-            plan: {
-                code: plan.code,
-                name: plan.name
-            },
-            synced_users_count: updated.rowCount || 0,
-            subscription_status: nextStatus,
-            subscription_ends_at: nextEndsAt.toISOString()
-        });
-    } catch (error) {
-        console.error('Change Self Subscription Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    if ((planResult.rowCount || 0) === 0) {
+      return NextResponse.json({ error: "Plan not found" }, { status: 404 });
     }
+
+    const plan = planResult.rows[0];
+
+    // Определяем цену
+    const primaryClubResult = await query(
+      `SELECT id FROM clubs
+       WHERE owner_id = $1
+         AND subscription_status = 'active'
+         AND (subscription_ends_at > NOW() OR subscription_ends_at IS NULL)
+       ORDER BY created_at ASC
+       LIMIT 1`,
+      [userId],
+    );
+    const primaryActiveClubId = primaryClubResult.rows[0]?.id
+      ? Number(primaryClubResult.rows[0].id)
+      : null;
+    const isDiscountApplicable =
+      primaryActiveClubId !== null &&
+      (clubId ? Number(clubId) !== primaryActiveClubId : false);
+
+    const amount =
+      isDiscountApplicable && plan.price_per_extra_club > 0
+        ? plan.price_per_extra_club
+        : plan.price_amount;
+
+    const now = new Date();
+    const nextEndsAt = addPeriod(
+      now,
+      normalizePeriodUnit(plan.period_unit),
+      Number(plan.period_value || 1),
+    );
+    const nextStatus = planCode === "new_user" ? "trialing" : "active";
+
+    // 1. Создаем заказ (Order) - пока что он сразу "оплачен", так как у нас заглушка
+    const orderResult = await query(
+      `INSERT INTO subscription_orders
+             (club_id, user_id, plan_code, amount, status, paid_at, period_unit, period_value)
+             VALUES ($1, $2, $3, $4, 'paid', NOW(), $5, $6)
+             RETURNING id`,
+      [clubId, userId, planCode, amount, plan.period_unit, plan.period_value],
+    );
+
+    // 2. Обновляем подписку клуба
+    let updatedCount = 0;
+    if (clubId) {
+      const res = await query(
+        `UPDATE clubs
+                 SET subscription_plan = $1,
+                     subscription_status = $2,
+                     subscription_started_at = CASE WHEN subscription_status = 'trialing' THEN NOW() ELSE subscription_started_at END,
+                     subscription_ends_at = $3,
+                     subscription_canceled_at = NULL
+                 WHERE id = $4 AND owner_id = $5`,
+        [planCode, nextStatus, nextEndsAt.toISOString(), clubId, userId],
+      );
+      updatedCount = res.rowCount || 0;
+    } else {
+      // Если clubId не передан, обновляем все клубы владельца (Legacy behavior)
+      const res = await query(
+        `UPDATE clubs
+                 SET subscription_plan = $1,
+                     subscription_status = $2,
+                     subscription_ends_at = $3,
+                     subscription_canceled_at = NULL
+                 WHERE owner_id = $4`,
+        [planCode, nextStatus, nextEndsAt.toISOString(), userId],
+      );
+      updatedCount = res.rowCount || 0;
+    }
+
+    return NextResponse.json({
+      success: true,
+      order_id: orderResult.rows[0].id,
+      plan: {
+        code: plan.code,
+        name: plan.name,
+        amount: amount,
+      },
+      updated_clubs_count: updatedCount,
+      subscription_status: nextStatus,
+      subscription_ends_at: nextEndsAt.toISOString(),
+    });
+  } catch (error) {
+    console.error("Change Subscription Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }

@@ -389,7 +389,7 @@ export function ShiftClosingWizard({
                       <div className="h-px flex-1 bg-zinc-800" />
                     </div>
                     <div className="bg-zinc-900 rounded-[2.5rem] border border-zinc-800 overflow-hidden shadow-xl">
-                      <div className="p-8 grid grid-cols-2 gap-10">
+                      <div className="p-8 grid grid-cols-2 md:grid-cols-4 gap-10">
                         <div className="space-y-2">
                           <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
                             Введено вами
@@ -420,6 +420,28 @@ export function ShiftClosingWizard({
                             {(
                               shiftIndicators.calculated_revenue || 0
                             ).toLocaleString()}{" "}
+                            ₽
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                            Количество чеков
+                          </span>
+                          <div className="text-2xl font-black text-white italic">
+                            {shiftIndicators.receipts_count || 0}
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                            Средний чек
+                          </span>
+                          <div className="text-2xl font-black text-white italic">
+                            {(
+                              shiftIndicators.average_check || 0
+                            ).toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{" "}
                             ₽
                           </div>
                         </div>

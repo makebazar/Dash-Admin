@@ -47,7 +47,7 @@ export function SalarySummaryWidget({
   // Determine base label
   let baseLabel = "Базовая ставка";
   if (stats.is_hourly_rate !== false && (stats.total_hours || 0) > 0) {
-    baseLabel = `Ставка (${stats.total_hours} ч)`;
+    baseLabel = `Ставка (${Number(stats.total_hours).toFixed(1)} ч)`;
   } else if (stats.completed_shifts_count) {
     baseLabel = `Ставка (${stats.completed_shifts_count} выходов)`;
   }

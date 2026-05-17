@@ -576,7 +576,7 @@ export function QuestsTab({
                                       setEditingQuest({
                                         ...editingQuest,
                                         target_entity_id: current
-                                          .filter((i) => i !== id)
+                                          .filter((i: string) => i !== id)
                                           .join(","),
                                       });
                                     }}
@@ -659,7 +659,7 @@ export function QuestsTab({
                                   setEditingQuest({
                                     ...editingQuest,
                                     target_entity_id: current
-                                      .filter((i) => i !== id)
+                                      .filter((i: string) => i !== id)
                                       .join(","),
                                   });
                                 }}

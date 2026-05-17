@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
-import { isSuperAdmin } from "@/lib/super-admin";
+import { isSuperAdmin } from "@/lib/admin";
 import { resolveSubscriptionState } from "@/lib/subscriptions";
 import { hasColumn } from "@/lib/db-compat";
 import { normalizeInventorySettings } from "@/lib/inventory-settings";
@@ -192,13 +192,13 @@ export async function GET() {
       .filter((id) => Number.isInteger(id));
     if (clubIds.length > 0) {
       const ownerSubscriptionResult = await query(
-        `SELECT c.id as club_id,
-                        u.subscription_plan,
-                        ${hasSubscriptionStatus ? "u.subscription_status" : "NULL::varchar as subscription_status"},
-                        u.subscription_ends_at
-                 FROM clubs c
-                 JOIN users u ON u.id = c.owner_id
-                 WHERE c.id = ANY($1::int[])`,
+        `SELECT id as club_id,
+                        subscription_plan,
+                        subscription_status,
+                        subscription_ends_at,
+                        grace_period_days
+                 FROM clubs
+                 WHERE id = ANY($1::int[])`,
         [clubIds],
       );
 

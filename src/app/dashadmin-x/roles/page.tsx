@@ -13,6 +13,8 @@ import {
   Clock,
   Box,
   DollarSign,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +35,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type AccessLevel = "none" | "view" | "edit";
@@ -186,6 +195,13 @@ export default function RolesPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newRoleName, setNewRoleName] = useState("");
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
+  const [reassignToRoleId, setReassignToRoleId] = useState<string>("");
+
   useEffect(() => {
     fetchRoles();
   }, []);
@@ -193,7 +209,7 @@ export default function RolesPage() {
   const fetchRoles = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/super-admin/roles");
+      const res = await fetch("/api/dashadmin-x/roles");
       const data = await res.json();
       if (res.ok) {
         setRoles(data.roles || []);
@@ -202,6 +218,61 @@ export default function RolesPage() {
       console.error("Error fetching roles:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleCreateRole = async () => {
+    if (!newRoleName.trim()) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/dashadmin-x/roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newRoleName.trim() }),
+      });
+      if (res.ok) {
+        await fetchRoles();
+        setIsCreateDialogOpen(false);
+        setNewRoleName("");
+      } else {
+        const err = await res.json();
+        alert(err.error || "Ошибка при создании роли");
+      }
+    } catch (error) {
+      console.error("Error creating role:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteRole = async () => {
+    if (!roleToDelete) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/dashadmin-x/roles", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roleId: roleToDelete.id,
+          reassignRoleId: reassignToRoleId || null,
+        }),
+      });
+      if (res.ok) {
+        await fetchRoles();
+        setIsDeleteDialogOpen(false);
+        setRoleToDelete(null);
+        setReassignToRoleId("");
+        if (selectedRoleId === roleToDelete.id) {
+          setSelectedRoleId(null);
+        }
+      } else {
+        const err = await res.json();
+        alert(err.error || "Ошибка при удалении роли");
+      }
+    } catch (error) {
+      console.error("Error deleting role:", error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -232,7 +303,7 @@ export default function RolesPage() {
     setIsSaving(true);
     setSaveSuccess(false);
     try {
-      const res = await fetch("/api/super-admin/roles", {
+      const res = await fetch("/api/dashadmin-x/roles", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -276,14 +347,23 @@ export default function RolesPage() {
             Детальная настройка RBAC (Role-Based Access Control)
           </p>
         </div>
-        <div className="relative w-full md:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Поиск роли..."
-            className="pl-9 h-10 rounded-xl border-slate-200 bg-white"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div className="flex items-center gap-3">
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Поиск роли..."
+              className="pl-9 h-10 rounded-xl border-slate-200 bg-white"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <Button
+            onClick={() => setIsCreateDialogOpen(true)}
+            className="h-10 px-4 bg-black text-white hover:bg-slate-800 rounded-xl flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Создать роль</span>
+          </Button>
         </div>
       </div>
 
@@ -298,13 +378,31 @@ export default function RolesPage() {
               key={role.id}
               onClick={() => setSelectedRoleId(role.id)}
               className={cn(
-                "group cursor-pointer p-4 rounded-2xl border transition-all",
+                "group cursor-pointer p-4 rounded-2xl border transition-all relative",
                 selectedRoleId === role.id
                   ? "bg-black border-black text-white shadow-lg"
                   : "bg-white border-slate-200 hover:border-slate-300 text-slate-900",
               )}
             >
-              <div className="flex items-center justify-between mb-2">
+              {role.name !== "Админ" && role.name !== "Управляющий" && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRoleToDelete(role);
+                    setIsDeleteDialogOpen(true);
+                  }}
+                  className={cn(
+                    "absolute top-4 right-4 p-1.5 rounded-lg transition-all opacity-0 group-hover:opacity-100",
+                    selectedRoleId === role.id
+                      ? "hover:bg-white/20 text-white/60 hover:text-white"
+                      : "hover:bg-rose-50 text-slate-300 hover:text-rose-500",
+                  )}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+
+              <div className="flex items-center justify-between mb-2 pr-8">
                 <h3 className="font-bold tracking-tight">{role.name}</h3>
                 <Badge
                   variant={selectedRoleId === role.id ? "secondary" : "outline"}
@@ -581,6 +679,128 @@ export default function RolesPage() {
           )}
         </div>
       </div>
+
+      {/* Create Role Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className="rounded-3xl border-none shadow-2xl p-0 overflow-hidden max-w-md">
+          <DialogHeader className="p-8 bg-black text-white">
+            <DialogTitle className="text-2xl font-bold">Новая роль</DialogTitle>
+            <p className="text-slate-400 text-sm mt-1">
+              Создайте новую роль для системы
+            </p>
+          </DialogHeader>
+          <div className="p-8 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Название роли
+              </Label>
+              <Input
+                placeholder="Напр. Супервайзер"
+                className="h-12 rounded-2xl border-slate-200"
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="p-8 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+            <Button
+              variant="ghost"
+              onClick={() => setIsCreateDialogOpen(false)}
+              className="rounded-xl"
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={handleCreateRole}
+              disabled={isSaving || !newRoleName.trim()}
+              className="bg-black text-white hover:bg-slate-800 rounded-xl px-8"
+            >
+              {isSaving ? "Создание..." : "Создать роль"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Role Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="rounded-3xl border-none shadow-2xl p-0 overflow-hidden max-w-md">
+          <DialogHeader className="p-8 bg-rose-600 text-white">
+            <DialogTitle className="text-2xl font-bold">
+              Удаление роли
+            </DialogTitle>
+            <p className="text-rose-100 text-sm mt-1">
+              Вы уверены, что хотите удалить роль "{roleToDelete?.name}"?
+            </p>
+          </DialogHeader>
+          <div className="p-8 space-y-6">
+            {(roleToDelete?.users_count || 0) +
+              (roleToDelete?.club_employees_count || 0) >
+            0 ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex gap-3 text-amber-800">
+                  <AlertTriangle className="h-5 w-5 shrink-0" />
+                  <p className="text-sm font-medium">
+                    У этой роли есть активные пользователи (
+                    {(roleToDelete?.users_count || 0) +
+                      (roleToDelete?.club_employees_count || 0)}{" "}
+                    чел.). Выберите роль, которой они будут назначены после
+                    удаления.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Переназначить на роль
+                  </Label>
+                  <Select
+                    value={reassignToRoleId}
+                    onValueChange={setReassignToRoleId}
+                  >
+                    <SelectTrigger className="h-12 rounded-2xl border-slate-200">
+                      <SelectValue placeholder="Выберите роль" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl">
+                      {roles
+                        .filter((r) => r.id !== roleToDelete?.id)
+                        .map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {r.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : (
+              <p className="text-slate-600">
+                Это действие необратимо. Роль будет полностью удалена из
+                системы.
+              </p>
+            )}
+          </div>
+          <DialogFooter className="p-8 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+            <Button
+              variant="ghost"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              className="rounded-xl"
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={handleDeleteRole}
+              disabled={
+                isSaving ||
+                ((roleToDelete?.users_count || 0) +
+                  (roleToDelete?.club_employees_count || 0) >
+                  0 &&
+                  !reassignToRoleId)
+              }
+              className="bg-rose-600 text-white hover:bg-rose-700 rounded-xl px-8"
+            >
+              {isSaving ? "Удаление..." : "Удалить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

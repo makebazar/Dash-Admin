@@ -58,7 +58,7 @@ export default function UserDetailPage() {
 
     const fetchUser = () => {
         setIsLoading(true)
-        fetch(`/api/super-admin/users/${params.id}`, {
+        fetch(`/api/dashadmin-x/users/${params.id}`, {
             credentials: 'include'
         })
             .then(res => res.json())
@@ -85,7 +85,7 @@ export default function UserDetailPage() {
     const handleSave = async () => {
         setIsSaving(true)
         try {
-            const res = await fetch(`/api/super-admin/users/${params.id}`, {
+            const res = await fetch(`/api/dashadmin-x/users/${params.id}`, {
                 method: 'PUT',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
@@ -109,7 +109,7 @@ export default function UserDetailPage() {
         setIsDeleting(true)
         setDeleteError('')
         try {
-            const res = await fetch(`/api/super-admin/users/${params.id}`, {
+            const res = await fetch(`/api/dashadmin-x/users/${params.id}`, {
                 method: 'DELETE',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },

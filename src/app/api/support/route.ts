@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { query } from "@/db"
-import { isSuperAdmin } from "@/lib/super-admin"
+import { isSuperAdmin } from "@/lib/admin"
 import {
   ensureSupportTables,
   SUPPORT_CATEGORIES,

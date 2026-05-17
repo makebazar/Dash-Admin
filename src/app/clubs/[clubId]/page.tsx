@@ -256,6 +256,7 @@ async function getReportMetricMeta(clubId: string): Promise<MetricMeta> {
     card_income: { category: "INCOME", label: "Безналичные" },
     expenses: { category: "EXPENSE", label: "Расходы" },
     expenses_cash: { category: "EXPENSE", label: "Расходы наличными" },
+    receipts_count: { category: "OTHER", label: "Количество чеков" },
   };
   fields.forEach((field: any) => {
     const key = field.metric_key || field.key;
@@ -320,6 +321,7 @@ function calculateShiftIncomeTotal(
           "revenue_card",
           "cash",
           "card",
+          "receipts_count",
         ].includes(key)
       ) {
         total += normalizeMetricValue(value);
@@ -372,6 +374,7 @@ function buildRevenueBreakdown(
             "revenue_card",
             "cash",
             "card",
+            "receipts_count",
           ].includes(key)
         ) {
           add(key, normalizeMetricValue(value));
@@ -974,7 +977,7 @@ export default async function ClubDashboardPage({
               </div>
             </div>
 
-            <div className="md:w-2/3 h-[400px] bg-white rounded-2xl border border-slate-200 p-4">
+            <div className="md:w-2/3 h-100 bg-white rounded-2xl border border-slate-200 p-4">
               <RevenueTrendChart
                 currentData={revenueTrend}
                 previousData={previousRevenueTrend}
