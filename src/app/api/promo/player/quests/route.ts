@@ -36,6 +36,9 @@ export async function GET(request: Request) {
          pq.expires_at,
          pq.completed_at,
          pq.verification_photo_url,
+         pq.period_start,
+         q.reset_period,
+         q.reset_hours,
          (q.min_level > COALESCE(current_lvl.level_number, 1)) as is_level_locked
        FROM promo_quests q
        LEFT JOIN promo_player_quests pq ON pq.quest_id = q.id AND pq.player_id = $1

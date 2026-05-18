@@ -9,6 +9,7 @@ interface Prize {
   name: string;
   type: string;
   value: string | number;
+  image_url?: string;
   probability?: string | number;
   win_condition?: {
     dice_sums?: number[];
@@ -149,8 +150,16 @@ export const PrizesSidebar = ({
                     className="p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col gap-2 group hover:bg-white/10 transition-colors"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-black/40 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                        {getPrizeIcon(prize.type)}
+                      <div className="w-12 h-12 bg-black/40 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform overflow-hidden border border-white/5">
+                        {prize.image_url ? (
+                          <img
+                            src={prize.image_url}
+                            className="w-full h-full object-cover"
+                            alt={prize.name}
+                          />
+                        ) : (
+                          getPrizeIcon(prize.type)
+                        )}
                       </div>
                       <div className="flex-1">
                         <div className="text-sm font-black text-white uppercase italic leading-tight">

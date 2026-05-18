@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     await client.query(
       `INSERT INTO promo_player_quests (player_id, club_id, quest_id, current_progress, status, verification_photo_url, assigned_at)
        VALUES ($1, $2, $3, 1, 'pending_verification', $4, NOW())
-       ON CONFLICT (player_id, club_id, quest_id, assigned_at)
+       ON CONFLICT (player_id, club_id, quest_id)
        DO UPDATE SET
          status = 'pending_verification',
          verification_photo_url = $4,

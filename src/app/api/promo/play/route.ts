@@ -243,7 +243,7 @@ export async function POST(request: Request) {
 
     const historyId = historyResult.rows[0].id;
 
-    // 6. Handle auto-rewards (Queue insertion removed as per user request: only withdrawals should be in queue)
+    // 6. Handle auto-rewards
     if (wonPrize) {
       if (wonPrize.type === "bonus") {
         await client.query(
@@ -266,6 +266,13 @@ export async function POST(request: Request) {
                  SELECT $1, $2, 'available', 'prize_win', $3
                  FROM generate_series(1, $4)`,
           [playerId, activeClubId, expiryDate, ticketCount],
+        );
+      } else if (wonPrize.type === "physical") {
+        // Physical prizes MUST be in the queue for admin to see
+        await client.query(
+          `INSERT INTO promo_prize_queue (history_id, player_id, club_id, prize_id, status)
+                 VALUES ($1, $2, $3, $4, 'pending')`,
+          [historyId, playerId, activeClubId, wonPrize.id],
         );
       }
     }

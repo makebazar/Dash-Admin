@@ -254,7 +254,7 @@ async function getActiveQuestsForPlayer(
        ) AS current_lvl ON TRUE
        WHERE q.club_id = $2::int
          AND q.is_active = TRUE
-         AND (pq.id IS NULL OR pq.status = 'active' OR pq.status = 'pending_verification')
+         AND (pq.id IS NULL OR pq.status = 'active' OR pq.status = 'pending_verification' OR (q.reset_period != 'none' AND (pq.status = 'completed' OR pq.status = 'claimed')))
          AND q.min_level <= COALESCE(current_lvl.level_number, 1)
          AND (q.available_days IS NULL OR (EXTRACT(DOW FROM timezone(COALESCE(c.timezone, 'Europe/Moscow'), now()))) = ANY(q.available_days))
          AND (q.time_start IS NULL OR (timezone(COALESCE(c.timezone, 'Europe/Moscow'), now()))::TIME >= q.time_start)
@@ -270,7 +270,20 @@ async function getActiveQuestsForPlayer(
       const now = new Date();
       let needsReset = false;
 
-      if (quest.reset_period === "weekly") {
+      if (quest.reset_period === "always") {
+        needsReset = true;
+      } else if (quest.reset_period === "hours" && quest.reset_hours) {
+        const diffMs = now.getTime() - periodStart.getTime();
+        const diffHours = diffMs / (1000 * 60 * 60);
+        if (diffHours >= quest.reset_hours) needsReset = true;
+      } else if (quest.reset_period === "daily") {
+        if (
+          periodStart.getDate() !== now.getDate() ||
+          periodStart.getMonth() !== now.getMonth() ||
+          periodStart.getFullYear() !== now.getFullYear()
+        )
+          needsReset = true;
+      } else if (quest.reset_period === "weekly") {
         // Check if different week
         const startWeek = getWeekNumber(periodStart);
         const nowWeek = getWeekNumber(now);
@@ -289,10 +302,18 @@ async function getActiveQuestsForPlayer(
 
       if (needsReset) {
         await client.query(
-          `UPDATE promo_player_quests SET current_progress = 0, period_start = NOW() WHERE id = $1::uuid`,
+          `UPDATE promo_player_quests
+           SET current_progress = 0,
+               status = 'active',
+               completed_at = NULL,
+               claimed_at = NULL,
+               verification_photo_url = NULL,
+               period_start = NOW()
+           WHERE id = $1::uuid`,
           [quest.player_quest_id],
         );
         quest.current_progress = 0;
+        quest.status = "active";
       }
     }
   }
@@ -389,8 +410,8 @@ export async function rewardPlayerForQuest(
 
   // Handle specific prize reward if configured
   if (quest.reward_prize_id) {
-    // Insert into history
-    await client.query(
+    // 1. Insert into history
+    const histRes = await client.query(
       `INSERT INTO promo_history (player_id, club_id, game_type, prize_id, result_data)
        VALUES ($1::uuid, $2::int, 'QUEST_REWARD', $3, $4)
        RETURNING id`,
@@ -401,6 +422,20 @@ export async function rewardPlayerForQuest(
         JSON.stringify({ quest_id: quest.quest_id }),
       ],
     );
+    const historyId = histRes.rows[0].id;
+
+    // 2. If it's a physical prize, add to queue
+    const prizeRes = await client.query(
+      `SELECT type FROM promo_prizes WHERE id = $1`,
+      [quest.reward_prize_id],
+    );
+    if (prizeRes.rows[0]?.type === "physical") {
+      await client.query(
+        `INSERT INTO promo_prize_queue (history_id, player_id, club_id, prize_id, status)
+         VALUES ($1, $2, $3, $4, 'pending')`,
+        [historyId, playerId, clubId, quest.reward_prize_id],
+      );
+    }
   }
   // Send notification to player PWA (if implemented via SSE)
   try {

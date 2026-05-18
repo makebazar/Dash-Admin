@@ -61,6 +61,7 @@ type Prize = {
   probability: number;
   daily_limit: number;
   is_active: boolean;
+  image_url?: string;
   game_slug?: string;
   min_level?: number;
   max_level?: number;
@@ -170,6 +171,25 @@ export default function PromotionsPage() {
       is_active: boolean;
     }[],
   });
+
+  const handlePrizeImageUpload = async (prizeIdx: number, file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.url) {
+        const newPrizes = [...prizes];
+        newPrizes[prizeIdx] = { ...newPrizes[prizeIdx], image_url: data.url };
+        setPrizes(newPrizes);
+      }
+    } catch (e) {
+      alert("Ошибка загрузки");
+    }
+  };
 
   const handleUpdatePlayerBalance = async () => {
     if (!editingPlayer) return;
@@ -2188,22 +2208,52 @@ export default function PromotionsPage() {
                                 </button>
 
                                 <div className="space-y-4">
-                                  <div>
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                                      Название
-                                    </label>
-                                    <input
-                                      value={prize.name}
-                                      onChange={(e) => {
-                                        const newPrizes = [...prizes];
-                                        newPrizes[globalIdx] = {
-                                          ...newPrizes[globalIdx],
-                                          name: e.target.value,
-                                        };
-                                        setPrizes(newPrizes);
-                                      }}
-                                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm focus:border-orange-500 outline-none"
-                                    />
+                                  <div className="flex gap-4">
+                                    <div className="flex-1">
+                                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                                        Название
+                                      </label>
+                                      <input
+                                        value={prize.name}
+                                        onChange={(e) => {
+                                          const newPrizes = [...prizes];
+                                          newPrizes[globalIdx] = {
+                                            ...newPrizes[globalIdx],
+                                            name: e.target.value,
+                                          };
+                                          setPrizes(newPrizes);
+                                        }}
+                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm focus:border-orange-500 outline-none"
+                                      />
+                                    </div>
+                                    <div className="w-20 shrink-0">
+                                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2 text-center">
+                                        Фото
+                                      </label>
+                                      <div className="relative group/photo aspect-square bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center cursor-pointer">
+                                        {prize.image_url ? (
+                                          <img
+                                            src={prize.image_url}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <Plus className="w-4 h-4 text-slate-300 group-hover/photo:text-orange-500 transition-colors" />
+                                        )}
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file)
+                                              handlePrizeImageUpload(
+                                                globalIdx,
+                                                file,
+                                              );
+                                          }}
+                                          className="absolute inset-0 opacity-0 cursor-pointer"
+                                        />
+                                      </div>
+                                    </div>
                                   </div>
 
                                   {selectedGameId === "dice" && (

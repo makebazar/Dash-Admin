@@ -131,6 +131,41 @@ export default function QuestsPage() {
               const isPending = quest.status === "pending_verification";
               const isLocked = quest.is_level_locked;
 
+              // Calculate time until next reset for recurring quests
+              let nextResetText = null;
+              if (
+                isCompleted &&
+                quest.reset_period !== "none" &&
+                quest.period_start
+              ) {
+                const periodStart = new Date(quest.period_start);
+                const now = new Date();
+                let nextResetDate = new Date(periodStart);
+
+                if (quest.reset_period === "daily") {
+                  nextResetDate.setDate(nextResetDate.getDate() + 1);
+                  nextResetDate.setHours(0, 0, 0, 0);
+                } else if (
+                  quest.reset_period === "hours" &&
+                  quest.reset_hours
+                ) {
+                  nextResetDate.setHours(
+                    nextResetDate.getHours() + quest.reset_hours,
+                  );
+                } else if (quest.reset_period === "weekly") {
+                  nextResetDate.setDate(nextResetDate.getDate() + 7);
+                } else if (quest.reset_period === "monthly") {
+                  nextResetDate.setMonth(nextResetDate.getMonth() + 1);
+                }
+
+                const diff = nextResetDate.getTime() - now.getTime();
+                if (diff > 0) {
+                  const h = Math.floor(diff / (1000 * 60 * 60));
+                  const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                  nextResetText = `Доступно через ${h}ч ${m}м`;
+                }
+              }
+
               return (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -138,18 +173,38 @@ export default function QuestsPage() {
                   key={quest.id}
                   className={`bg-white/5 border border-white/10 rounded-3xl p-6 relative overflow-hidden ${isCompleted || isLocked ? "opacity-60" : ""}`}
                 >
-                  {isLocked && (
+                  {(isLocked || nextResetText) && (
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-10 flex items-center justify-center">
                       <div className="bg-zinc-900/90 border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-3 shadow-2xl">
-                        <Lock className="w-5 h-5 text-orange-500" />
-                        <span className="font-black uppercase italic tracking-tight text-sm">
-                          Нужен {quest.min_level} уровень
-                        </span>
+                        {isLocked ? (
+                          <>
+                            <Lock className="w-5 h-5 text-orange-500" />
+                            <span className="font-black uppercase italic tracking-tight text-sm">
+                              Нужен {quest.min_level} уровень
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-5 h-5 text-orange-500" />
+                            <span className="font-black uppercase italic tracking-tight text-sm">
+                              {nextResetText}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
                   <div className="flex flex-col gap-6">
                     <div className="flex flex-col sm:flex-row gap-6">
+                      {quest.image_url && (
+                        <div className="w-full sm:w-24 h-48 sm:h-24 rounded-[2rem] overflow-hidden border border-white/10 shrink-0">
+                          <img
+                            src={quest.image_url}
+                            className="w-full h-full object-cover"
+                            alt={quest.title}
+                          />
+                        </div>
+                      )}
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           {isCompleted && (
@@ -242,8 +297,19 @@ export default function QuestsPage() {
                           )}
 
                         {isPending && (
-                          <div className="bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-2xl text-[10px] font-bold text-yellow-500 uppercase tracking-widest text-center">
-                            На проверке администратором
+                          <div className="space-y-3">
+                            {quest.verification_photo_url && (
+                              <div className="w-full aspect-video rounded-2xl overflow-hidden border border-white/10">
+                                <img
+                                  src={quest.verification_photo_url}
+                                  className="w-full h-full object-cover"
+                                  alt="Proof"
+                                />
+                              </div>
+                            )}
+                            <div className="bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-2xl text-[10px] font-bold text-yellow-500 uppercase tracking-widest text-center">
+                              На проверке администратором
+                            </div>
                           </div>
                         )}
                       </div>

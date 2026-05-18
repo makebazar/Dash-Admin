@@ -56,6 +56,23 @@ export function QuestsTab({
     }
   };
 
+  const handleQuestImageUpload = async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.url) {
+        setEditingQuest({ ...editingQuest, image_url: data.url });
+      }
+    } catch (e) {
+      alert("Ошибка загрузки");
+    }
+  };
+
   const handleSaveQuest = async () => {
     setSaving(true);
     try {
@@ -115,6 +132,8 @@ export function QuestsTab({
       requires_photo_verification: false,
       reset_period: "none",
       min_level: 1,
+      image_url: null,
+      reset_hours: 24,
     });
   };
 
@@ -165,22 +184,48 @@ export function QuestsTab({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                    Название
-                  </label>
-                  <input
-                    type="text"
-                    value={editingQuest.title}
-                    onChange={(e) =>
-                      setEditingQuest({
-                        ...editingQuest,
-                        title: e.target.value,
-                      })
-                    }
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
-                    placeholder="Напр. Бодрость на всю ночь"
-                  />
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                      Название
+                    </label>
+                    <input
+                      type="text"
+                      value={editingQuest.title}
+                      onChange={(e) =>
+                        setEditingQuest({
+                          ...editingQuest,
+                          title: e.target.value,
+                        })
+                      }
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
+                      placeholder="Напр. Бодрость на всю ночь"
+                    />
+                  </div>
+                  <div className="w-20 shrink-0">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2 text-center">
+                      Фото
+                    </label>
+                    <div className="relative group/photo aspect-square bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center cursor-pointer">
+                      {editingQuest.image_url ? (
+                        <img
+                          src={editingQuest.image_url}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Plus className="w-4 h-4 text-slate-300 group-hover/photo:text-orange-500 transition-colors" />
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleQuestImageUpload(file);
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
@@ -255,10 +300,36 @@ export function QuestsTab({
                     className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
                   >
                     <option value="none">Без сброса (Разовый)</option>
+                    <option value="daily">Ежедневно</option>
                     <option value="weekly">Еженедельно</option>
                     <option value="monthly">Ежемесячно</option>
+                    <option value="hours">Через X часов</option>
+                    <option value="always">
+                      Всегда (сразу после выполнения)
+                    </option>
                   </select>
                 </div>
+
+                {editingQuest.reset_period === "hours" && (
+                  <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                      Интервал сброса (в часах)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editingQuest.reset_hours || ""}
+                      onChange={(e) =>
+                        setEditingQuest({
+                          ...editingQuest,
+                          reset_hours: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-orange-500"
+                      placeholder="Напр. 24"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
@@ -811,9 +882,19 @@ export function QuestsTab({
                 className={`border border-slate-200 rounded-3xl p-5 flex flex-col ${!quest.is_active ? "opacity-50 grayscale" : "bg-white"}`}
               >
                 <div className="flex justify-between items-start mb-3">
-                  <h4 className="font-black italic text-lg leading-tight">
-                    {quest.title}
-                  </h4>
+                  <div className="flex gap-4">
+                    {quest.image_url && (
+                      <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-slate-100">
+                        <img
+                          src={quest.image_url}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <h4 className="font-black italic text-lg leading-tight">
+                      {quest.title}
+                    </h4>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setEditingQuest(quest)}
