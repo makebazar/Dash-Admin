@@ -204,6 +204,7 @@ export async function POST(request: Request) {
         }
       } else {
         // Generic probability logic (Wheel, etc)
+        let lastValidPrize = null;
         for (const prize of prizes) {
           if (prize.daily_limit > 0) {
             const countResult = await client.query(
@@ -214,11 +215,22 @@ export async function POST(request: Request) {
             if (countResult.rows[0].count >= prize.daily_limit) continue;
           }
 
+          lastValidPrize = prize;
           cumulative += parseFloat(prize.probability);
           if (roll <= cumulative) {
             wonPrize = prize;
             break;
           }
+        }
+
+        // Float precision fallback: if probability is meant to be 100%, but roll missed by a tiny fraction
+        if (
+          !wonPrize &&
+          lastValidPrize &&
+          cumulative >= 99.9 &&
+          roll > cumulative
+        ) {
+          wonPrize = lastValidPrize;
         }
       }
     }

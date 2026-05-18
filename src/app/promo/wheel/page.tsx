@@ -131,8 +131,9 @@ export default function RealisticWheel() {
             0,
           );
 
-          // If total probability < 100%, add a fallback empty sector to fill the wheel
-          if (totalProb < 99.9) {
+          // Always ensure there is at least one empty sector so losses can be displayed
+          const hasEmpty = newSectors.some((s) => !s.isPrize);
+          if (!hasEmpty || totalProb < 99.9) {
             newSectors.push({
               id: "fallback-empty",
               label: "Пусто",
@@ -250,6 +251,7 @@ export default function RealisticWheel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gameType: "wheel" }),
+        cache: "no-store",
       });
 
       const data = await res.json();
