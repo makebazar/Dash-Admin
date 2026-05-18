@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     }
 
     const result = await query(
-      `SELECT * FROM promo_prizes WHERE club_id = $1 ORDER BY probability DESC`,
+      `SELECT * FROM promo_prizes WHERE club_id = $1 AND is_active = TRUE ORDER BY probability DESC`,
       [clubId],
     );
 
@@ -46,9 +46,9 @@ export async function POST(request: Request) {
 
     await client.query("BEGIN");
 
-    // 1. Get existing prize IDs to identify which ones to delete
+    // 1. Get existing active prize IDs to identify which ones to delete
     const existingPrizesRes = await client.query(
-      `SELECT id FROM promo_prizes WHERE club_id = $1`,
+      `SELECT id FROM promo_prizes WHERE club_id = $1 AND is_active = TRUE`,
       [numericClubId],
     );
     const existingIds = existingPrizesRes.rows.map((r) => r.id);
