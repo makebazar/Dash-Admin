@@ -342,28 +342,33 @@ export default function LuckyCardsGame() {
 
       setHistory((prev) => [wonCard.label, ...prev].slice(0, 10));
 
-      if (wonCard.type === "win") {
+      const isActualWin = serverResult.won && serverResult.prize;
+      const isEmptyPrize =
+        isActualWin &&
+        (serverResult.prize.type === "none" ||
+          serverResult.prize.name.toLowerCase() === "пусто" ||
+          serverResult.prize.name.toLowerCase() === "попробуй еще" ||
+          parseFloat(serverResult.prize.value) === 0);
+
+      if (isActualWin && !isEmptyPrize) {
         playSound("win");
-        setGameMessage({
-          text: "ВЫИГРЫШ!",
-          sub: "Заберите приз на кассе",
-          color: "text-orange-500",
-        });
-      } else if (wonCard.type === "bonus") {
-        playSound("win");
-        if (serverResult.prize?.type === "attempt") {
+        if (serverResult.prize.type === "attempt") {
           setTickets(
             (prev) =>
               prev + Math.floor(parseFloat(serverResult.prize.value) || 1),
           );
+          setGameMessage({
+            text: "БОНУС!",
+            sub: "Билет зачислен",
+            color: "text-blue-400",
+          });
         } else {
-          setTickets((prev) => prev + 1);
+          setGameMessage({
+            text: "ВЫИГРЫШ!",
+            sub: serverResult.prize.name,
+            color: "text-orange-500",
+          });
         }
-        setGameMessage({
-          text: "БОНУС!",
-          sub: "Билет зачислен",
-          color: "text-blue-400",
-        });
       } else {
         playSound("lose");
         setGameMessage({
@@ -373,7 +378,11 @@ export default function LuckyCardsGame() {
         });
       }
 
-      if (serverResult.prize?.type === "virtual") {
+      if (
+        isActualWin &&
+        !isEmptyPrize &&
+        serverResult.prize.type === "virtual"
+      ) {
         setBonusBalance((prev) => prev + parseFloat(serverResult.prize.value));
       }
 

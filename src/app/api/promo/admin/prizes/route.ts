@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
 import { query, getClient } from "@/db";
 import { cookies } from "next/headers";
+import { resolveClubId } from "@/lib/promo-admin-utils";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const clubId = searchParams.get("clubId");
+    const clubIdParam = searchParams.get("clubId");
     const userId = (await cookies()).get("session_user_id")?.value;
 
-    if (!userId || !clubId) {
+    if (!userId || !clubIdParam) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const clubId = await resolveClubId(clubIdParam);
+    if (!clubId) {
+      return NextResponse.json({ error: "Invalid Club" }, { status: 404 });
     }
 
     const result = await query(
@@ -26,16 +32,16 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const client = await getClient();
   try {
-    const { clubId, prizes } = await request.json();
+    const { clubId: clubIdParam, prizes } = await request.json();
     const userId = (await cookies()).get("session_user_id")?.value;
 
-    if (!userId || !clubId) {
+    if (!userId || !clubIdParam) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const numericClubId = parseInt(String(clubId), 10);
-    if (isNaN(numericClubId)) {
-      return NextResponse.json({ error: "Invalid Club ID" }, { status: 400 });
+    const numericClubId = await resolveClubId(clubIdParam);
+    if (!numericClubId) {
+      return NextResponse.json({ error: "Invalid Club" }, { status: 400 });
     }
 
     await client.query("BEGIN");

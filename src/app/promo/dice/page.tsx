@@ -485,7 +485,15 @@ export default function BowlPhysicsDice() {
           setResult({ d1, d2, sum });
           setIsRolling(false);
 
-          if (data.won && data.prize) {
+          const isWin = data.won && data.prize;
+          const isEmptyPrize =
+            isWin &&
+            (data.prize.type === "none" ||
+              data.prize.name.toLowerCase() === "пусто" ||
+              data.prize.name.toLowerCase() === "попробуй еще" ||
+              parseFloat(data.prize.value) === 0);
+
+          if (isWin && !isEmptyPrize) {
             setGameMessage({
               text: "ВЫИГРЫШ!",
               sub: data.prize.name,

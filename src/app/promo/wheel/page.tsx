@@ -110,12 +110,20 @@ export default function RealisticWheel() {
           setRawPrizes(dbPrizes);
 
           // Build sectors.
-          const newSectors = dbPrizes.map((p: any, i: number) => ({
-            id: p.id,
-            label: p.name,
-            color: COLORS[i % COLORS.length],
-            isPrize: true,
-          }));
+          const newSectors = dbPrizes.map((p: any, i: number) => {
+            const isEmpty =
+              p.type === "none" ||
+              p.name.toLowerCase() === "пусто" ||
+              p.name.toLowerCase() === "попробуй еще" ||
+              p.value === 0;
+
+            return {
+              id: p.id,
+              label: p.name,
+              color: COLORS[i % COLORS.length],
+              isPrize: !isEmpty,
+            };
+          });
 
           // Calculate total probability
           const totalProb = dbPrizes.reduce(
@@ -123,17 +131,14 @@ export default function RealisticWheel() {
             0,
           );
 
-          // If total probability < 100%, add 1 or more empty sectors to fill the wheel
+          // If total probability < 100%, add a fallback empty sector to fill the wheel
           if (totalProb < 99.9) {
-            const emptyCount = Math.max(1, Math.floor(newSectors.length / 2));
-            for (let i = 0; i < emptyCount; i++) {
-              newSectors.push({
-                id: `empty-${i}`,
-                label: "Попробуй еще",
-                color: "#334155",
-                isPrize: false,
-              });
-            }
+            newSectors.push({
+              id: "fallback-empty",
+              label: "Пусто",
+              color: "#334155",
+              isPrize: false,
+            });
           }
 
           // If no prizes are configured at all
@@ -146,7 +151,7 @@ export default function RealisticWheel() {
             });
           }
 
-          // Shuffle sectors to make it look better
+          // Shuffle sectors
           const shuffledSectors = newSectors.sort(() => Math.random() - 0.5);
           setSectors(shuffledSectors);
         }
@@ -470,8 +475,8 @@ export default function RealisticWheel() {
               className="text-2xl font-bold bg-white/10 px-8 py-3 rounded-full border border-white/20 text-center"
             >
               {!result.isPrize ||
-              result.label === "Пусто" ||
-              result.label === "Попробуй еще"
+              result.label.toLowerCase() === "пусто" ||
+              result.label.toLowerCase() === "попробуй еще"
                 ? "Попробуй еще раз! 🥺"
                 : `Твой приз: ${result.label} 🎉`}
             </motion.div>

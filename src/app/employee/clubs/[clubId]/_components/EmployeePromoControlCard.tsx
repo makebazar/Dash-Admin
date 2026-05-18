@@ -745,7 +745,8 @@ export function EmployeePromoControlCard({
                   </div>
 
                   {/* BP Activation */}
-                  {promoSettings.bp_settings?.is_enabled && (
+                  {(promoSettings.bp_enabled ||
+                    promoSettings.bp_settings?.is_enabled) && (
                     <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3">
                       <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
                         <Gift className="w-3 h-3" /> Боевой Пропуск
@@ -755,7 +756,11 @@ export function EmployeePromoControlCard({
                         playerId={accrualPlayer.id}
                         hasPremium={accrualPlayer.has_premium}
                         onActivated={refresh}
-                        price={promoSettings.bp_settings?.bp_price}
+                        price={
+                          promoSettings.bp_price ||
+                          promoSettings.bp_settings?.bp_price ||
+                          1000
+                        }
                       />
                     </div>
                   )}

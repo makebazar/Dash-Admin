@@ -28,10 +28,18 @@ export async function POST(request: Request) {
 
     const internalClubId = clubResult.rows[0].id;
 
-    // 2. Get player info
+    // 2. Get player info + BP status
     const playerResult = await query(
-      `SELECT id, phone_number, full_name FROM promo_players WHERE id = $1`,
-      [playerId],
+      `SELECT
+        p.id, p.phone_number, p.full_name,
+        COALESCE((
+          SELECT has_premium
+          FROM promo_bp_player_progress bp
+          JOIN promo_bp_seasons s ON s.id = bp.season_id
+          WHERE bp.player_id = p.id AND s.club_id = $2 AND s.is_active = TRUE AND NOW() BETWEEN s.start_date AND s.end_date
+        ), FALSE) as has_premium
+       FROM promo_players p WHERE p.id = $1`,
+      [playerId, internalClubId],
     );
 
     if (playerResult.rowCount === 0) {
@@ -47,6 +55,7 @@ export async function POST(request: Request) {
         id: player.id,
         phone_number: player.phone_number,
         full_name: player.full_name,
+        has_premium: player.has_premium,
         intent,
         cart: intent === "bonus_order" ? cart : undefined,
       },

@@ -173,8 +173,16 @@ export default function DeepDiveSafeDemo() {
       await new Promise((r) => setTimeout(r, 800));
 
       // 4. Result evaluation
+      const isActualWin = data.won && data.prize;
+      const isEmptyPrize =
+        isActualWin &&
+        (data.prize.type === "none" ||
+          data.prize.name.toLowerCase() === "пусто" ||
+          data.prize.name.toLowerCase() === "попробуй еще" ||
+          parseFloat(data.prize.value) === 0);
+
       if (data.isCodeCorrect) {
-        if (data.won) {
+        if (isActualWin && !isEmptyPrize) {
           setWonPrize(data.prize);
 
           // Update counters instantly for the animation
@@ -186,7 +194,7 @@ export default function DeepDiveSafeDemo() {
             );
           }
         } else {
-          // Correct code but NO PRIZE (probability roll failed)
+          // Correct code but NO PRIZE or EMPTY PRIZE
           setWonPrize({ name: "Пусто", type: "none", value: 0 });
         }
 
