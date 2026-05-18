@@ -209,6 +209,7 @@ export function QuestsTab({
                     <div className="relative group/photo aspect-square bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center cursor-pointer">
                       {editingQuest.image_url ? (
                         <img
+                          alt="Quest"
                           src={editingQuest.image_url}
                           className="w-full h-full object-cover"
                         />
@@ -886,6 +887,7 @@ export function QuestsTab({
                     {quest.image_url && (
                       <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-slate-100">
                         <img
+                          alt={quest.name}
                           src={quest.image_url}
                           className="w-full h-full object-cover"
                         />

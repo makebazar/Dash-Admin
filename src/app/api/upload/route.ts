@@ -316,10 +316,18 @@ export async function POST(request: NextRequest) {
       mimeType: finalUpload.mimeType,
       transcoded: finalUpload.fileName !== preparedUpload.fileName,
     });
-  } catch (error) {
-    console.error("Error uploading file:", error);
+  } catch (error: any) {
+    console.error("Error uploading file:", {
+      message: error.message,
+      stack: error.stack,
+      cause: error.cause,
+    });
     return NextResponse.json(
-      { error: "Failed to upload file" },
+      {
+        error: "Failed to upload file",
+        details: error.message,
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 },
     );
   }

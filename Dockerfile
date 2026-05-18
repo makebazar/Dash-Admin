@@ -43,8 +43,8 @@ RUN NODE_OPTIONS='--max-old-space-size=4096' NEXT_TELEMETRY_DISABLED=1 NODE_ENV=
 
 # Production stage
 FROM public.ecr.aws/docker/library/node:20-alpine AS runner
-# Install ffmpeg in production stage
-RUN apk add --no-cache ffmpeg
+# Install ffmpeg and libc6-compat for sharp in production stage
+RUN apk add --no-cache ffmpeg libc6-compat
 WORKDIR /app
 
 ENV NODE_ENV=production

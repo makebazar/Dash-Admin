@@ -1,4 +1,5 @@
 import { PoolClient } from "pg";
+import { accrueBPXP } from "./promo-bp";
 
 export type ReceiptItem = {
   product_id: number;
@@ -16,11 +17,22 @@ export async function processReceiptEvent(
   totalAmount: number,
   items: ReceiptItem[],
 ) {
+  // 1. Fetch club settings for XP rules
+  const clubRes = await client.query(
+    `SELECT promo_settings FROM clubs WHERE id = $1`,
+    [clubId],
+  );
+  const settings = clubRes.rows[0]?.promo_settings || {};
+  const xpPer100 = settings.xp_per_100_rub ?? 10;
+
   // 1. Calculate and award base XP for the purchase (e.g., 10 XP per 100 RUB)
-  const xpEarned = Math.floor(totalAmount / 100) * 10;
+  const xpEarned = Math.floor(totalAmount / 100) * xpPer100;
   if (xpEarned > 0) {
     await addPlayerXP(client, clubId, playerId, xpEarned);
   }
+
+  // 1.1 Accrue Battle Pass XP
+  await accrueBPXP(client, clubId, playerId, totalAmount, "purchase");
 
   // 2. Fetch active quests for this player
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
@@ -172,6 +184,23 @@ export async function processBalanceTopupEvent(
   playerId: string,
   amount: number,
 ) {
+  // 1. Fetch club settings for XP rules
+  const clubRes = await client.query(
+    `SELECT promo_settings FROM clubs WHERE id = $1`,
+    [clubId],
+  );
+  const settings = clubRes.rows[0]?.promo_settings || {};
+  const xpPer100 = settings.xp_per_100_rub ?? 10;
+
+  // 1. Calculate and award base XP for the topup (e.g., 10 XP per 100 RUB)
+  const xpEarned = Math.floor(amount / 100) * xpPer100;
+  if (xpEarned > 0) {
+    await addPlayerXP(client, clubId, playerId, xpEarned);
+  }
+
+  // 1.1 Accrue Battle Pass XP
+  await accrueBPXP(client, clubId, playerId, amount, "topup");
+
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
 
   for (const quest of activeQuests) {

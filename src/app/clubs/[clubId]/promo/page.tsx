@@ -48,6 +48,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { LevelsTab } from "./_components/LevelsTab";
 import { QuestsTab } from "./_components/QuestsTab";
 import { VerificationTab } from "./_components/VerificationTab";
+import { BattlePassTab } from "./_components/BattlePassTab";
+import { BPActivationButton } from "./_components/BPActivationButton";
 
 /**
  * ПАНЕЛЬ УПРАВЛЕНИЯ АКЦИЯМИ (ДЛЯ ВЛАДЕЛЬЦА / УПРАВА)
@@ -94,6 +96,7 @@ export default function PromotionsPage() {
     | "levels"
     | "quests"
     | "verification"
+    | "battlepass"
   >("queue");
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
 
@@ -170,6 +173,10 @@ export default function PromotionsPage() {
       time_end: string;
       is_active: boolean;
     }[],
+    bp_enabled: true,
+    bp_price: 1000,
+    xp_per_100_rub: 10,
+    bp_xp_per_rub: 1,
   });
 
   const handlePrizeImageUpload = async (prizeIdx: number, file: File) => {
@@ -547,6 +554,7 @@ export default function PromotionsPage() {
           { id: "levels", label: "Уровни", icon: Trophy },
           { id: "quests", label: "Квесты", icon: Target },
           { id: "verification", label: "Проверка", icon: Clock },
+          { id: "battlepass", label: "Battle Pass", icon: Gamepad2 },
           { id: "general", label: "Настройки", icon: Settings },
         ].map((tab) => (
           <button
@@ -1053,6 +1061,13 @@ export default function PromotionsPage() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-3">
+                            <BPActivationButton
+                              clubId={String(clubId)}
+                              playerId={player.id}
+                              hasPremium={player.has_premium}
+                              onActivated={() => fetchData(true)}
+                              price={settings.bp_price}
+                            />
                             <button
                               onClick={() => {
                                 setEditingPlayer(player);
@@ -2233,6 +2248,7 @@ export default function PromotionsPage() {
                                       <div className="relative group/photo aspect-square bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center cursor-pointer">
                                         {prize.image_url ? (
                                           <img
+                                            alt="Prize"
                                             src={prize.image_url}
                                             className="w-full h-full object-cover"
                                           />
@@ -3364,6 +3380,17 @@ export default function PromotionsPage() {
           </motion.div>
         )}
 
+        {activeTab === "battlepass" && (
+          <motion.div
+            key="battlepass"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <BattlePassTab clubId={String(clubId)} products={allProducts} />
+          </motion.div>
+        )}
+
         {activeTab === "general" && (
           <motion.div
             key="general-settings"
@@ -3440,7 +3467,110 @@ export default function PromotionsPage() {
                 </div>
               </div>
 
-              <div className="space-y-4">
+              {/* Battle Pass Settings */}
+              <div className="pt-6 border-t border-slate-100 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-black text-lg uppercase italic">
+                      Battle Pass
+                    </h3>
+                    <p className="text-slate-500 text-sm font-medium">
+                      Настройка сезонного боевого пропуска
+                    </p>
+                  </div>
+                  <button
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        bp_enabled: !settings.bp_enabled,
+                      })
+                    }
+                    className={cn(
+                      "w-16 h-8 rounded-full transition-all relative p-1",
+                      settings.bp_enabled ? "bg-amber-500" : "bg-slate-200",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "w-6 h-6 bg-white rounded-full shadow-sm transition-all",
+                        settings.bp_enabled ? "translate-x-8" : "translate-x-0",
+                      )}
+                    />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                      Стоимость активации Premium (₽)
+                    </label>
+                    <input
+                      type="number"
+                      value={settings.bp_price || 1000}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          bp_price: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-black text-xl outline-none focus:border-orange-500"
+                    />
+                    <p className="text-[10px] text-slate-400 font-medium px-2 mt-1">
+                      Эта сумма будет отображаться игрокам как стоимость покупки
+                      Premium-ветки.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* XP Accrual Settings */}
+              <div className="pt-6 border-t border-slate-100 space-y-6">
+                <div>
+                  <h3 className="font-black text-lg uppercase italic">
+                    Начисление XP
+                  </h3>
+                  <p className="text-slate-500 text-sm font-medium">
+                    Настройка правил получения опыта
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                      Базовый XP за 100 ₽
+                    </label>
+                    <input
+                      type="number"
+                      value={settings.xp_per_100_rub ?? 10}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          xp_per_100_rub: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-black text-xl outline-none focus:border-orange-500"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                      Battle Pass XP за 1 ₽
+                    </label>
+                    <input
+                      type="number"
+                      value={settings.bp_xp_per_rub ?? 1}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          bp_xp_per_rub: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 font-black text-xl outline-none focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-6 border-t border-slate-100">
                 {" "}
                 <div className="flex items-center justify-between px-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">

@@ -48,6 +48,28 @@ export async function GET(request: Request) {
     const totalXp = parseFloat(data.total_xp || 0);
     const levelInfo = await getPlayerLevelInfo(client, activeClubId, totalXp);
 
+    // Get Battle Pass Info (Wrapped in try-catch to prevent crash if tables are missing)
+    let bpInfo = null;
+    try {
+      const { getPlayerBPInfo } = await import("@/lib/promo-bp");
+      const bpSettings =
+        data.promo_settings?.bp_enabled !== false
+          ? {
+              enabled: data.promo_settings?.bp_enabled ?? true,
+              price: data.promo_settings?.bp_price ?? 1000,
+            }
+          : null;
+
+      bpInfo = await getPlayerBPInfo(
+        client,
+        activeClubId,
+        playerId,
+        bpSettings,
+      );
+    } catch (e) {
+      console.error("BP Info Error (possibly tables not migrated yet):", e);
+    }
+
     return NextResponse.json({
       player: {
         id: data.id,
@@ -59,6 +81,7 @@ export async function GET(request: Request) {
         clubId: activeClubId,
         settings: data.promo_settings,
         level: levelInfo,
+        bp: bpInfo,
       },
       allLevels: allLevelsResult.rows,
       tickets: ticketsResult.rows[0].count,

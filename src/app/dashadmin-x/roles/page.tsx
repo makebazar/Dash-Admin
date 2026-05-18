@@ -330,7 +330,7 @@ export default function RolesPage() {
 
   if (isLoading && roles.length === 0) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-[400px]">
+      <div className="p-8 flex items-center justify-center min-h-100">
         <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
       </div>
     );
@@ -665,7 +665,7 @@ export default function RolesPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="h-full min-h-[500px] rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center p-8 text-center">
+            <div className="h-full min-h-125 rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center p-8 text-center">
               <div className="h-16 w-16 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-300 mb-4 shadow-sm">
                 <Shield className="h-8 w-8" />
               </div>

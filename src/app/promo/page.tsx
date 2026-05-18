@@ -31,6 +31,7 @@ import { PrizesSidebar } from "./components/PrizesSidebar";
 import { LandingView } from "./components/LandingView";
 import { BottomNav } from "./components/BottomNav";
 import { PromoHeader } from "./components/PromoHeader";
+import { BPPlayerWidget } from "./components/BPPlayerWidget";
 import { cn } from "@/lib/utils";
 
 /**
@@ -207,11 +208,17 @@ export default function PromoLobby() {
         }
 
         const data = await res.json();
+        if (!data.player) {
+          setIsAuth(false);
+          setLoading(false);
+          return;
+        }
+
         setPlayer(data.player);
         setTickets(data.tickets);
         setIsAuth(true);
 
-        const currentClubId = urlClubId || data.player.club_id;
+        const currentClubId = urlClubId || data.player.clubId;
 
         // Fetch products and settings
         const [prizesRes, productsRes, clubRes] = await Promise.all([
@@ -531,6 +538,13 @@ export default function PromoLobby() {
       <main className="max-w-6xl mx-auto p-6 pt-10 pb-32">
         {activeTab === "games" && (
           <>
+            {/* Battle Pass Section */}
+            {player?.bp && (
+              <div className="mb-12">
+                <BPPlayerWidget bp={player.bp} />
+              </div>
+            )}
+
             {/* Info Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-16">
               <motion.div

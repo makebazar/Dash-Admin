@@ -31,7 +31,13 @@ export async function GET(request: Request) {
         p.full_name,
         COALESCE(b.total_xp, 0) as total_xp,
         COALESCE(b.bonus_balance, 0) as bonus_balance,
-        (SELECT COUNT(*)::int FROM promo_tickets t WHERE t.player_id = p.id AND t.club_id = $1 AND t.status = 'available' AND (t.expires_at IS NULL OR t.expires_at > NOW())) as tickets_count
+        (SELECT COUNT(*)::int FROM promo_tickets t WHERE t.player_id = p.id AND t.club_id = $1 AND t.status = 'available' AND (t.expires_at IS NULL OR t.expires_at > NOW())) as tickets_count,
+        COALESCE((
+          SELECT has_premium
+          FROM promo_bp_player_progress bp
+          JOIN promo_bp_seasons s ON s.id = bp.season_id
+          WHERE bp.player_id = p.id AND s.club_id = $1 AND s.is_active = TRUE AND NOW() BETWEEN s.start_date AND s.end_date
+        ), FALSE) as has_premium
        FROM promo_players p
        JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $1
        WHERE 1=1 ${whereClause}

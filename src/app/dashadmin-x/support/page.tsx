@@ -322,7 +322,7 @@ export default function SupportPage() {
                   Обращения не найдены
                 </div>
               ) : (
-                <div className="space-y-2 overflow-y-auto max-h-[600px] pr-2">
+                <div className="space-y-2 overflow-y-auto max-h-150 pr-2">
                   {filteredTickets.map((ticket) => (
                     <button
                       key={ticket.id}
@@ -481,7 +481,7 @@ export default function SupportPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-6">
-                  <div className="max-h-[400px] space-y-4 overflow-y-auto pr-2 mb-8">
+                  <div className="max-h-100 space-y-4 overflow-y-auto pr-2 mb-8">
                     {messages.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400">
                         Сообщений пока нет
@@ -539,10 +539,9 @@ export default function SupportPage() {
                       Ваш ответ
                     </Label>
                     <Textarea
-                      id="support-reply"
                       value={reply}
                       onChange={(event) => setReply(event.target.value)}
-                      className="min-h-[120px] rounded-2xl border-slate-200 bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400"
+                      className="min-h-30 rounded-2xl border-slate-200 bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400"
                       placeholder="Введите текст ответа..."
                     />
                     <div className="flex justify-end">
@@ -563,7 +562,7 @@ export default function SupportPage() {
                 </CardContent>
               </>
             ) : (
-              <div className="flex min-h-[500px] items-center justify-center text-sm text-slate-400 italic">
+              <div className="flex min-h-125 items-center justify-center text-sm text-slate-400 italic">
                 Выберите обращение для просмотра деталей
               </div>
             )}
