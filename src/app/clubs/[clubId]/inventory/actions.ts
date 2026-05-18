@@ -5550,10 +5550,15 @@ function getActionErrorMessage(error: unknown, fallback: string) {
 
 export async function getClubPromoSettings(clubId: string, userId: string) {
   await assertUserCanAccessClub(clubId, userId);
-  const result = await query(`SELECT promo_settings FROM clubs WHERE id = $1`, [
-    clubId,
-  ]);
-  return result.rows[0]?.promo_settings || {};
+  const result = await query(
+    `SELECT promo_settings, bp_settings FROM clubs WHERE id = $1`,
+    [clubId],
+  );
+  const row = result.rows[0];
+  return {
+    ...(row?.promo_settings || {}),
+    bp_settings: row?.bp_settings || {},
+  };
 }
 
 export async function getPromoQueue(clubId: string, userId: string) {

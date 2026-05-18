@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { query, getClient } from "@/db";
 import { cookies } from "next/headers";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   const client = await getClient();
   try {
@@ -244,15 +246,16 @@ export async function POST(request: Request) {
     const historyId = historyResult.rows[0].id;
 
     // 6. Handle auto-rewards
+    let questRewards: any[] = [];
     if (wonPrize) {
       if (wonPrize.type === "bonus") {
         await client.query(
-          `UPDATE promo_player_balances SET total_xp = total_xp + $1 WHERE player_id = $2 AND club_id = $3`,
+          `UPDATE promo_player_balances SET total_xp = COALESCE(total_xp, 0) + $1 WHERE player_id = $2 AND club_id = $3`,
           [wonPrize.value, playerId, activeClubId],
         );
       } else if (wonPrize.type === "virtual") {
         await client.query(
-          `UPDATE promo_player_balances SET bonus_balance = bonus_balance + $1 WHERE player_id = $2 AND club_id = $3`,
+          `UPDATE promo_player_balances SET bonus_balance = COALESCE(bonus_balance, 0) + $1 WHERE player_id = $2 AND club_id = $3`,
           [wonPrize.value, playerId, activeClubId],
         );
       } else if (wonPrize.type === "attempt") {
@@ -276,12 +279,11 @@ export async function POST(request: Request) {
         );
       }
     }
-    await client.query("COMMIT");
 
-    // 6.5. Process Quests
+    // 6.5. Process Quests (Inside transaction)
     try {
       const { processGameEvent } = await import("@/lib/promo-quests");
-      await processGameEvent(
+      const questResults = await processGameEvent(
         client,
         activeClubId,
         playerId,
@@ -289,9 +291,14 @@ export async function POST(request: Request) {
         !!wonPrize,
         ticketsNeeded,
       );
+      if (questResults && Array.isArray(questResults)) {
+        questRewards = questResults;
+      }
     } catch (e) {
       console.error("Quest Game Processing Error:", e);
     }
+
+    await client.query("COMMIT");
 
     // 7. Notify admin/staff (Removed as per user request: games no longer in queue)
     await query(`SELECT pg_notify('promo_queue_updates', $1)`, [activeClubId]);
@@ -302,6 +309,7 @@ export async function POST(request: Request) {
       isCodeCorrect,
       winningCode,
       diceResult,
+      questRewards,
       prize: wonPrize
         ? {
             id: wonPrize.id,

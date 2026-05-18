@@ -109,7 +109,7 @@ export default function RealisticWheel() {
           const dbPrizes = prizesData.prizes;
           setRawPrizes(dbPrizes);
 
-          // Build sectors. EXACTLY as many as there are prizes in the database.
+          // Build sectors.
           const newSectors = dbPrizes.map((p: any, i: number) => ({
             id: p.id,
             label: p.name,
@@ -117,7 +117,26 @@ export default function RealisticWheel() {
             isPrize: true,
           }));
 
-          // If no prizes are configured, we add a fallback "No prizes" sector to prevent division by zero
+          // Calculate total probability
+          const totalProb = dbPrizes.reduce(
+            (sum: number, p: any) => sum + parseFloat(p.probability),
+            0,
+          );
+
+          // If total probability < 100%, add 1 or more empty sectors to fill the wheel
+          if (totalProb < 99.9) {
+            const emptyCount = Math.max(1, Math.floor(newSectors.length / 2));
+            for (let i = 0; i < emptyCount; i++) {
+              newSectors.push({
+                id: `empty-${i}`,
+                label: "Попробуй еще",
+                color: "#334155",
+                isPrize: false,
+              });
+            }
+          }
+
+          // If no prizes are configured at all
           if (newSectors.length === 0) {
             newSectors.push({
               id: "empty-none",
@@ -127,7 +146,9 @@ export default function RealisticWheel() {
             });
           }
 
-          setSectors(newSectors);
+          // Shuffle sectors to make it look better
+          const shuffledSectors = newSectors.sort(() => Math.random() - 0.5);
+          setSectors(shuffledSectors);
         }
       } catch (err) {
         console.error("Fetch error:", err);
@@ -275,9 +296,7 @@ export default function RealisticWheel() {
       setResult(targetSector);
 
       // Update counters instantly for the animation
-      if (data.won && targetSector?.isPrize) {
-        // Since we don't have the full raw prize object here without changes,
-        // we can just use data.prize which we got from the API
+      if (data.won && data.prize) {
         if (data.prize.type === "virtual") {
           setBonusBalance((prev) => prev + parseFloat(data.prize.value));
         } else if (data.prize.type === "attempt") {
@@ -285,6 +304,18 @@ export default function RealisticWheel() {
             (prev) => prev + Math.floor(parseFloat(data.prize.value) || 1),
           );
         }
+      }
+
+      // Handle Quest Rewards (Show a notification or update balance)
+      if (data.questRewards && data.questRewards.length > 0) {
+        data.questRewards.forEach((q: any) => {
+          if (q.rewardBonusBalance > 0) {
+            setBonusBalance((prev) => prev + parseFloat(q.rewardBonusBalance));
+          }
+          if (q.rewardTickets > 0) {
+            setTicketsCount((prev) => prev + parseInt(q.rewardTickets));
+          }
+        });
       }
     } catch (err) {
       console.error("Spin error:", err);
@@ -438,7 +469,9 @@ export default function RealisticWheel() {
               animate={{ opacity: 1, scale: 1 }}
               className="text-2xl font-bold bg-white/10 px-8 py-3 rounded-full border border-white/20 text-center"
             >
-              {!result.isPrize
+              {!result.isPrize ||
+              result.label === "Пусто" ||
+              result.label === "Попробуй еще"
                 ? "Попробуй еще раз! 🥺"
                 : `Твой приз: ${result.label} 🎉`}
             </motion.div>

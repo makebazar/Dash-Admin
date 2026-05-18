@@ -190,6 +190,20 @@ export default function DeepDiveSafeDemo() {
           setWonPrize({ name: "Пусто", type: "none", value: 0 });
         }
 
+        // Handle Quest Rewards
+        if (data.questRewards && data.questRewards.length > 0) {
+          data.questRewards.forEach((q: any) => {
+            if (q.rewardBonusBalance > 0) {
+              setBonusBalance(
+                (prev) => prev + parseFloat(q.rewardBonusBalance),
+              );
+            }
+            if (q.rewardTickets > 0) {
+              setTicketsCount((prev) => prev + parseInt(q.rewardTickets));
+            }
+          });
+        }
+
         setStatus("success");
         playBeep(300, "square", 0.1);
         setTimeout(() => playBeep(400, "square", 0.1), 100);

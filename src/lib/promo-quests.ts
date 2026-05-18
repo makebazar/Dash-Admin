@@ -146,6 +146,7 @@ export async function processGameEvent(
   ticketsSpent: number,
 ) {
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
+  const rewards: any[] = [];
 
   for (const quest of activeQuests) {
     // Check for target game filter if specified
@@ -170,9 +171,24 @@ export async function processGameEvent(
     }
 
     if (delta > 0) {
-      await progressQuest(client, clubId, playerId, quest, delta);
+      const result = await progressQuest(
+        client,
+        clubId,
+        playerId,
+        quest,
+        delta,
+      );
+      if (result && result.rewarded) {
+        rewards.push({
+          questTitle: quest.title,
+          rewardXp: quest.reward_xp,
+          rewardTickets: quest.reward_tickets,
+          rewardBonusBalance: quest.reward_bonus_balance,
+        });
+      }
     }
   }
+  return rewards;
 }
 
 /**
@@ -399,7 +415,9 @@ export async function progressQuest(
 
   if (isCompleted) {
     await rewardPlayerForQuest(client, clubId, playerId, quest);
+    return { rewarded: true };
   }
+  return { rewarded: false };
 }
 
 /**

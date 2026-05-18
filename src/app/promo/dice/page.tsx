@@ -502,6 +502,20 @@ export default function BowlPhysicsDice() {
               color: "text-white/40",
             });
           }
+
+          // Handle Quest Rewards
+          if (data.questRewards && data.questRewards.length > 0) {
+            data.questRewards.forEach((q: any) => {
+              if (q.rewardBonusBalance > 0) {
+                setBonusBalance(
+                  (prev) => prev + parseFloat(q.rewardBonusBalance),
+                );
+              }
+              if (q.rewardTickets > 0) {
+                setTickets((prev) => prev + parseInt(q.rewardTickets));
+              }
+            });
+          }
         }
       }, 400);
     } catch (err: any) {

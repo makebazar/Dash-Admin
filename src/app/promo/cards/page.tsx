@@ -376,6 +376,18 @@ export default function LuckyCardsGame() {
       if (serverResult.prize?.type === "virtual") {
         setBonusBalance((prev) => prev + parseFloat(serverResult.prize.value));
       }
+
+      // Handle Quest Rewards
+      if (serverResult.questRewards && serverResult.questRewards.length > 0) {
+        serverResult.questRewards.forEach((q: any) => {
+          if (q.rewardBonusBalance > 0) {
+            setBonusBalance((prev) => prev + parseFloat(q.rewardBonusBalance));
+          }
+          if (q.rewardTickets > 0) {
+            setTickets((prev) => prev + parseInt(q.rewardTickets));
+          }
+        });
+      }
     }, 600);
   };
 

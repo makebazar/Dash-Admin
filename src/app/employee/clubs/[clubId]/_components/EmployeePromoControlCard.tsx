@@ -50,6 +50,7 @@ import { cn } from "@/lib/utils";
 import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
+import { BPActivationButton } from "@/app/clubs/[clubId]/promo/_components/BPActivationButton";
 
 export function EmployeePromoControlCard({
   clubId,
@@ -742,6 +743,22 @@ export function EmployeePromoControlCard({
                       <X className="w-4 h-4" />
                     </Button>
                   </div>
+
+                  {/* BP Activation */}
+                  {promoSettings.bp_settings?.is_enabled && (
+                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                        <Gift className="w-3 h-3" /> Боевой Пропуск
+                      </Label>
+                      <BPActivationButton
+                        clubId={clubId}
+                        playerId={accrualPlayer.id}
+                        hasPremium={accrualPlayer.has_premium}
+                        onActivated={refresh}
+                        price={promoSettings.bp_settings?.bp_price}
+                      />
+                    </div>
+                  )}
 
                   {/* Top-up Section */}
                   <div className="space-y-4">
