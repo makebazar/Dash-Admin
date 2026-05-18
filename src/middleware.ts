@@ -40,6 +40,7 @@ export function middleware(req: NextRequest) {
     const isAllowedPath =
       pathname.startsWith("/promo") ||
       pathname.startsWith("/api/promo") ||
+      pathname.startsWith("/api/upload") ||
       pathname.startsWith("/_next") ||
       pathname.startsWith("/favicon.ico") ||
       pathname.includes(".");

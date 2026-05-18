@@ -33,17 +33,31 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Insert or Update player quest status to 'pending_verification'
-    await client.query(
-      `INSERT INTO promo_player_quests (player_id, club_id, quest_id, current_progress, status, verification_photo_url, assigned_at)
-       VALUES ($1, $2, $3, 1, 'pending_verification', $4, NOW())
-       ON CONFLICT (player_id, club_id, quest_id)
-       DO UPDATE SET
-         status = 'pending_verification',
-         verification_photo_url = $4,
-         current_progress = 1`,
-      [playerId, activeClubId, questId, photoUrl || null],
+    // 2. Update existing active quest or insert new one
+    const existingRes = await client.query(
+      `SELECT id FROM promo_player_quests
+       WHERE player_id = $1 AND club_id = $2 AND quest_id = $3
+       AND status IN ('active', 'pending_verification')
+       ORDER BY assigned_at DESC LIMIT 1`,
+      [playerId, activeClubId, questId],
     );
+
+    if (existingRes.rows.length > 0) {
+      await client.query(
+        `UPDATE promo_player_quests
+         SET status = 'pending_verification',
+             verification_photo_url = $1,
+             current_progress = 1
+         WHERE id = $2`,
+        [photoUrl || null, existingRes.rows[0].id],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO promo_player_quests (player_id, club_id, quest_id, current_progress, status, verification_photo_url, assigned_at)
+         VALUES ($1, $2, $3, 1, 'pending_verification', $4, NOW())`,
+        [playerId, activeClubId, questId, photoUrl || null],
+      );
+    }
 
     // 3. Notify the club about new verification request
     try {

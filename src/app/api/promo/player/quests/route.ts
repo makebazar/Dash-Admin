@@ -41,7 +41,13 @@ export async function GET(request: Request) {
          q.reset_hours,
          (q.min_level > COALESCE(current_lvl.level_number, 1)) as is_level_locked
        FROM promo_quests q
-       LEFT JOIN promo_player_quests pq ON pq.quest_id = q.id AND pq.player_id = $1
+       LEFT JOIN LATERAL (
+         SELECT current_progress, status, expires_at, completed_at, verification_photo_url, period_start, id
+         FROM promo_player_quests
+         WHERE quest_id = q.id AND player_id = $1
+         ORDER BY assigned_at DESC
+         LIMIT 1
+       ) pq ON TRUE
        LEFT JOIN promo_player_balances pb ON pb.player_id = $1 AND pb.club_id = $2
        JOIN clubs c ON c.id = $2
        LEFT JOIN LATERAL (
