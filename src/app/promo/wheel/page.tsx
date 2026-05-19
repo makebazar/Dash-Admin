@@ -109,8 +109,15 @@ export default function RealisticWheel() {
           const dbPrizes = prizesData.prizes;
           setRawPrizes(dbPrizes);
 
+          interface Sector {
+            id: string | number;
+            label: string;
+            color: string;
+            isPrize: boolean;
+          }
+
           // Build sectors.
-          const newSectors = dbPrizes.map((p: any, i: number) => {
+          const newSectors: Sector[] = dbPrizes.map((p: any, i: number) => {
             const isEmpty =
               p.type === "none" ||
               p.name.toLowerCase() === "пусто" ||
@@ -132,7 +139,7 @@ export default function RealisticWheel() {
           );
 
           // Always ensure there is at least one empty sector so losses can be displayed
-          const hasEmpty = newSectors.some((s) => !s.isPrize);
+          const hasEmpty = newSectors.some((s: Sector) => !s.isPrize);
           if (!hasEmpty || totalProb < 99.9) {
             newSectors.push({
               id: "fallback-empty",

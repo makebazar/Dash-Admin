@@ -247,7 +247,7 @@ export default function DeepDiveSafeDemo() {
   }
 
   return (
-    <div className="min-h-screen bg-[#020617] bg-gradient-to-b from-[#0f172a] to-[#020617] flex flex-col items-center justify-center font-mono overflow-hidden relative text-white perspective-[1200px]">
+    <div className="min-h-screen bg-[#020617] bg-linear-to-b from-[#0f172a] to-[#020617] flex flex-col items-center justify-center font-mono overflow-hidden relative text-white perspective-distant">
       <GameHeader
         ticketsCount={ticketsCount}
         bonusBalance={bonusBalance}
@@ -286,7 +286,7 @@ export default function DeepDiveSafeDemo() {
             duration: status === "success" ? 1.5 : 0.8,
             ease: "easeInOut",
           }}
-          className="relative flex items-center justify-center w-[320px] h-[320px] sm:w-[360px] sm:h-[360px]"
+          className="relative flex items-center justify-center w-80 h-80 sm:w-90 sm:h-90"
         >
           {/* === БОЛЬШОЕ ВНЕШНЕЕ КОЛЬЦО (Механизм) === */}
           <motion.div
@@ -298,7 +298,7 @@ export default function DeepDiveSafeDemo() {
               duration: status === "verifying" ? 2 : 2,
               ease: "easeInOut",
             }}
-            className="absolute inset-0 rounded-full border-[15px] border-[#1e293b] shadow-[0_0_40px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(0,0,0,0.9)]"
+            className="absolute inset-0 rounded-full border-15 border-[#1e293b] shadow-[0_0_40px_rgba(0,0,0,0.8),inset_0_0_20px_rgba(0,0,0,0.9)]"
           >
             {/* Декоративные зубцы шестеренки */}
             <div className="absolute inset-0 pointer-events-none">
@@ -308,7 +308,7 @@ export default function DeepDiveSafeDemo() {
                   className="absolute inset-0"
                   style={{ transform: `rotate(${i * 30}deg)` }}
                 >
-                  <div className="absolute top-[-12px] left-1/2 -translate-x-1/2 w-6 h-8 bg-linear-to-b from-[#334155] to-[#1e293b] border border-[#475569] shadow-lg rounded-t-sm" />
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-8 bg-linear-to-b from-[#334155] to-[#1e293b] border border-[#475569] shadow-lg rounded-t-sm" />
                 </div>
               ))}
             </div>
@@ -324,9 +324,9 @@ export default function DeepDiveSafeDemo() {
               ease: "linear",
               repeat: status === "verifying" ? Infinity : 0,
             }}
-            className="absolute w-[240px] h-[240px] sm:w-[280px] sm:h-[280px] rounded-full border-2 border-dashed border-[#475569] opacity-60"
+            className="absolute w-60 h-60 sm:w-70 sm:h-70 rounded-full border-2 border-dashed border-[#475569] opacity-60"
           />
-          <div className="absolute w-[220px] h-[220px] sm:w-[260px] sm:h-[260px] rounded-full border border-green-500/10" />
+          <div className="absolute w-55 h-55 sm:w-65 sm:h-65 rounded-full border border-green-500/10" />
 
           {/* === ЦЕНТРАЛЬНЫЙ МОДУЛЬ (Замок / Экран) === */}
           <AnimatePresence mode="wait">
@@ -338,8 +338,8 @@ export default function DeepDiveSafeDemo() {
                 className="absolute z-20 flex flex-col items-center"
               >
                 {/* ЭКРАН ВЕРИФИКАЦИИ */}
-                <div className="w-[240px] h-16 bg-[#020617] border-2 border-green-500/40 rounded-lg flex items-center justify-center mb-4 relative overflow-hidden shadow-[0_0_30px_rgba(74,222,128,0.1),inset_0_0_20px_black]">
-                  <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_50%,rgba(0,0,0,0.6)_51%)] bg-[length:100%_4px] opacity-30 pointer-events-none z-10" />
+                <div className="w-60 h-16 bg-[#020617] border-2 border-green-500/40 rounded-lg flex items-center justify-center mb-4 relative overflow-hidden shadow-[0_0_30px_rgba(74,222,128,0.1),inset_0_0_20px_black]">
+                  <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_50%,rgba(0,0,0,0.6)_51%)] bg-size-[100%_4px] opacity-30 pointer-events-none z-10" />
                   <div className="absolute top-0 w-full h-1 bg-green-500/40 blur-[2px] animate-[scan_2s_linear_infinite]" />
 
                   <span
@@ -352,7 +352,7 @@ export default function DeepDiveSafeDemo() {
                 </div>
 
                 {/* КНОПКИ ВВОДА КОДА */}
-                <div className="grid grid-cols-3 gap-2 w-[240px] z-50">
+                <div className="grid grid-cols-3 gap-2 w-60 z-50">
                   {codes.map((code) => (
                     <button
                       key={code}
@@ -383,7 +383,7 @@ export default function DeepDiveSafeDemo() {
                   type: "spring",
                   bounce: 0.4,
                 }}
-                className="absolute z-30 flex flex-col items-center justify-center w-[300px] h-[300px]"
+                className="absolute z-30 flex flex-col items-center justify-center w-75 h-75"
               >
                 {/* Свечение сзади */}
                 <motion.div
