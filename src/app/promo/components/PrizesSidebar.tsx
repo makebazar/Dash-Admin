@@ -10,6 +10,7 @@ interface Prize {
   type: string;
   value: string | number;
   image_url?: string;
+  target_level?: number;
   probability?: string | number;
   win_condition?: {
     dice_sums?: number[];
@@ -21,13 +22,21 @@ interface PrizesSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   prizes: Prize[];
+  playerLevel?: number;
 }
 
 export const PrizesSidebar = ({
   isOpen,
   onClose,
   prizes,
+  playerLevel,
 }: PrizesSidebarProps) => {
+  // Filter prizes by current level if playerLevel is provided
+  const filteredPrizes = React.useMemo(() => {
+    if (!playerLevel) return prizes;
+    return prizes.filter((p) => p.target_level === playerLevel);
+  }, [prizes, playerLevel]);
+
   const getPrizeIcon = (type: string) => {
     switch (type) {
       case "virtual":
@@ -131,7 +140,7 @@ export const PrizesSidebar = ({
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
-              {prizes.length === 0 ? (
+              {filteredPrizes.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8">
                   <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4 border border-white/10 opacity-20">
                     <Package className="w-8 h-8 text-white" />
@@ -141,7 +150,7 @@ export const PrizesSidebar = ({
                   </p>
                 </div>
               ) : (
-                prizes.map((prize, idx) => (
+                filteredPrizes.map((prize, idx) => (
                   <motion.div
                     key={prize.id || idx}
                     initial={{ opacity: 0, y: 10 }}
@@ -162,8 +171,17 @@ export const PrizesSidebar = ({
                         )}
                       </div>
                       <div className="flex-1">
-                        <div className="text-sm font-black text-white uppercase italic leading-tight">
-                          {prize.name}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-black text-white uppercase italic leading-tight">
+                            {prize.name}
+                          </div>
+                          {prize.target_level && (
+                            <div className="px-2 py-0.5 bg-orange-500/10 border border-orange-500/20 rounded-md shrink-0">
+                              <span className="text-[9px] font-black text-orange-500 uppercase tracking-tight">
+                                Lvl {prize.target_level}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">

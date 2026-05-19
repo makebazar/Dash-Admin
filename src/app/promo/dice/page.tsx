@@ -89,7 +89,10 @@ export default function BowlPhysicsDice() {
 
         const prizesData = await prizesRes.json();
         if (prizesData.success) {
-          setPrizes(prizesData.prizes || []);
+          const dbPrizes = (prizesData.prizes || []).filter(
+            (p: any) => p.is_available === undefined || p.is_available === true,
+          );
+          setPrizes(dbPrizes);
         }
       } catch (err) {
         console.error("Fetch error:", err);

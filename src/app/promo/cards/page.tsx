@@ -201,8 +201,11 @@ export default function LuckyCardsGame() {
         const prizesData = await prizesRes.json();
 
         if (prizesData.success && prizesData.prizes?.length > 0) {
-          setRawPrizes(prizesData.prizes);
-          const mapped = prizesData.prizes.map((p: any, i: number) =>
+          const dbPrizes = prizesData.prizes.filter(
+            (p: any) => p.is_available === undefined || p.is_available === true,
+          );
+          setRawPrizes(dbPrizes);
+          const mapped = dbPrizes.map((p: any, i: number) =>
             mapPrizeToCard(p, i),
           );
           setCards(mapped);

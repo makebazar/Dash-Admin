@@ -71,7 +71,10 @@ export default function DeepDiveSafeDemo() {
 
       const prizesData = await prizesRes.json();
       if (prizesData.success) {
-        setPrizes(prizesData.prizes || []);
+        const dbPrizes = (prizesData.prizes || []).filter(
+          (p: any) => p.is_available === undefined || p.is_available === true,
+        );
+        setPrizes(dbPrizes);
       }
 
       resetGame();

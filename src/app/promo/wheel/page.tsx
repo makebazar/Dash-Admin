@@ -106,7 +106,10 @@ export default function RealisticWheel() {
         const prizesData = await prizesRes.json();
 
         if (prizesData.success) {
-          const dbPrizes = prizesData.prizes;
+          // Filter prizes by availability if the flag exists
+          const dbPrizes = prizesData.prizes.filter(
+            (p: any) => p.is_available === undefined || p.is_available === true,
+          );
           setRawPrizes(dbPrizes);
 
           interface Sector {

@@ -39,17 +39,34 @@ export async function GET(request: Request) {
         COALESCE(
           pr.name,
           CASE
-            WHEN h.game_type LIKE 'TOPUP%' THEN 'Пополнение: ' || (h.result_data->>'amount') || ' ₽'
+            WHEN h.game_type = 'mines' THEN
+              CASE
+                WHEN (h.result_data->>'amount')::float > 0 THEN 'Mines: Выигрыш ' || COALESCE(h.result_data->>'amount', '0') || ' ₽'
+                ELSE 'Mines: Ставка ' || ABS(COALESCE(h.result_data->>'amount', '0')::float) || ' ₽'
+              END
+            WHEN h.game_type = 'rocket' THEN
+              CASE
+                WHEN (h.result_data->>'amount')::float > 0 THEN 'Rocket: Выигрыш ' || COALESCE(h.result_data->>'amount', '0') || ' ₽'
+                ELSE 'Rocket: Ставка ' || ABS(COALESCE(h.result_data->>'amount', '0')::float) || ' ₽'
+              END
+            WHEN h.game_type = 'dice' THEN 'Кости: Сумма ' || COALESCE(h.result_data->'diceResult'->>'sum', '?') || ' (' || COALESCE(h.result_data->'diceResult'->>'d1', '?') || ':' || COALESCE(h.result_data->'diceResult'->>'d2', '?') || ')'
+            WHEN h.game_type = 'safe' THEN 'Сейф: Неверный код (' || COALESCE(h.result_data->>'selectedCode', '?') || ')'
+            WHEN h.game_type = 'cards' THEN 'Карты: Проигрыш'
+            WHEN h.game_type = 'flappy' THEN 'Flappy: Счет ' || COALESCE(h.result_data->>'score', '0')
+            WHEN h.game_type LIKE 'TOPUP%' THEN 'Пополнение: ' || COALESCE(h.result_data->>'amount', '0') || ' ₽'
             WHEN h.game_type LIKE 'SERVICE_AWARD%' THEN COALESCE(h.result_data->>'rule_name', 'Начисление услуг')
-            WHEN h.game_type = 'BAR_BONUS_PURCHASE' THEN 'Покупка в баре: ' || (h.result_data->>'bonus_cost') || ' 🪙'
-            WHEN h.game_type = 'WITHDRAW' THEN 'Вывод: ' || (h.result_data->>'amount') || ' ₽'
+            WHEN h.game_type = 'BAR_BONUS_PURCHASE' THEN 'Покупка в баре: ' || COALESCE(h.result_data->>'bonus_cost', '0') || ' 🪙'
+            WHEN h.game_type = 'WITHDRAW' THEN 'Вывод: ' || COALESCE(h.result_data->>'amount', '0') || ' ₽'
             WHEN h.game_type = 'QUEST_REWARD' THEN 'Награда за квест'
-            ELSE NULL
+            ELSE 'Проигрыш'
           END
         ) as prize_name,
+
         COALESCE(
           pr.type,
           CASE
+            WHEN h.game_type = 'mines' OR h.game_type = 'rocket' THEN
+              CASE WHEN (h.result_data->>'amount')::float > 0 THEN 'virtual' ELSE 'bet' END
             WHEN h.game_type LIKE 'TOPUP%' THEN 'topup'
             WHEN h.game_type LIKE 'SERVICE_AWARD%' THEN 'service'
             WHEN h.game_type = 'BAR_BONUS_PURCHASE' THEN 'bar'
@@ -73,8 +90,24 @@ export async function GET(request: Request) {
     const stats = await query(
       `SELECT
         (SELECT COUNT(*) FROM promo_tickets WHERE club_id = $1 AND created_at >= CURRENT_DATE) as tickets_issued_today,
-        (SELECT COUNT(*) FROM promo_history WHERE club_id = $1 AND created_at >= CURRENT_DATE) as games_played_today,
-        (SELECT COALESCE(SUM(pr.value), 0) FROM promo_history h JOIN promo_prizes pr ON h.prize_id = pr.id WHERE h.club_id = $1 AND h.created_at >= CURRENT_DATE AND pr.type = 'virtual') as prize_money_today
+        (SELECT COUNT(*) FROM promo_history WHERE club_id = $1 AND created_at >= CURRENT_DATE AND game_type NOT IN ('TOPUP', 'WITHDRAW', 'SERVICE_AWARD', 'BAR_BONUS_PURCHASE')) as games_played_today,
+        (SELECT COALESCE(SUM(pr.value), 0) FROM promo_history h JOIN promo_prizes pr ON h.prize_id = pr.id WHERE h.club_id = $1 AND h.created_at >= CURRENT_DATE AND pr.type = 'virtual')
+        + (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND created_at >= CURRENT_DATE AND game_type IN ('mines', 'rocket')) as prize_money_today,
+        (SELECT COALESCE(SUM(pr.value), 0) FROM promo_history h JOIN promo_prizes pr ON h.prize_id = pr.id WHERE h.club_id = $1 AND h.created_at >= date_trunc('month', CURRENT_DATE) AND pr.type = 'virtual')
+        + (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND created_at >= date_trunc('month', CURRENT_DATE) AND game_type IN ('mines', 'rocket')) as prize_money_month,
+
+        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'WITHDRAW' AND created_at >= CURRENT_DATE)
+        + (SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE' AND created_at >= CURRENT_DATE) as bonuses_used_today,
+        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'WITHDRAW' AND created_at >= date_trunc('month', CURRENT_DATE))
+        + (SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE' AND created_at >= date_trunc('month', CURRENT_DATE)) as bonuses_used_month,
+
+        (SELECT ABS(COALESCE(SUM((result_data->>'amount')::float), 0)) FROM promo_history WHERE club_id = $1 AND game_type IN ('mines', 'rocket') AND (result_data->>'amount')::float < 0 AND created_at >= CURRENT_DATE) as betting_losses_today,
+
+        (SELECT COALESCE(SUM(bonus_balance), 0) FROM promo_player_balances WHERE club_id = $1) as total_bonus_debt,
+
+        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'TOPUP' AND created_at >= CURRENT_DATE) as real_topup_today,
+        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)) as real_topup_month,
+        (SELECT COUNT(DISTINCT player_id) FROM promo_history WHERE club_id = $1 AND created_at >= CURRENT_DATE) as active_players_today
       `,
       [clubId],
     );

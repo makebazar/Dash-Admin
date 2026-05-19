@@ -534,6 +534,7 @@ export default function PromoLobby() {
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
         prizes={prizes}
+        playerLevel={player?.level?.currentLevel}
       />
       <main className="max-w-6xl mx-auto p-6 pt-10 pb-32">
         {activeTab === "games" && (

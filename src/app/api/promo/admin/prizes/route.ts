@@ -90,8 +90,8 @@ export async function POST(request: Request) {
         await client.query(
           `UPDATE promo_prizes
            SET name = $1, type = $2, value = $3, probability = $4, daily_limit = $5, is_active = $6,
-               game_slug = $7, win_condition = $8, min_level = $9, max_level = $10, image_url = $11
-           WHERE id = $12 AND club_id = $13`,
+               game_slug = $7, win_condition = $8, image_url = $9, target_level = $10
+           WHERE id = $11 AND club_id = $12`,
           [
             prize.name,
             prize.type,
@@ -101,9 +101,8 @@ export async function POST(request: Request) {
             prize.is_active,
             prize.game_slug,
             winCondition,
-            prize.min_level || 1,
-            prize.max_level || 999,
             prize.image_url || null,
+            prize.target_level || null,
             prize.id,
             numericClubId,
           ],
@@ -112,8 +111,8 @@ export async function POST(request: Request) {
         // INSERT new prize
         await client.query(
           `INSERT INTO promo_prizes (club_id, name, type, value, probability, daily_limit, is_active,
-                                     game_slug, win_condition, min_level, max_level, image_url)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+                                     game_slug, win_condition, image_url, target_level)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
             numericClubId,
             prize.name,
@@ -124,9 +123,8 @@ export async function POST(request: Request) {
             prize.is_active,
             prize.game_slug,
             winCondition,
-            prize.min_level || 1,
-            prize.max_level || 999,
             prize.image_url || null,
+            prize.target_level || null,
           ],
         );
       }

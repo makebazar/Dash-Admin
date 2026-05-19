@@ -121,12 +121,14 @@ export async function POST(request: Request) {
       const prizesResult = await client.query(
         `SELECT * FROM promo_prizes
          WHERE club_id = $1 AND is_active = TRUE
-         AND game_slug = $2
-         AND $3 >= min_level AND $3 <= max_level`,
-        [activeClubId, gameType, playerLevel],
+         AND game_slug = $2`,
+        [activeClubId, gameType],
       );
 
-      const prizes = prizesResult.rows;
+      // Filter prizes specifically for this level tier
+      let prizes = prizesResult.rows.filter(
+        (p) => p.target_level === playerLevel,
+      );
 
       if (gameType === "dice") {
         const d1 = Math.floor(Math.random() * 6) + 1;
