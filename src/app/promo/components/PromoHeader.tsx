@@ -2,18 +2,22 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Ticket, Coins } from "lucide-react";
+import { Ticket, Coins, Gift } from "lucide-react";
 
 interface PromoHeaderProps {
   initialPlayer?: any;
   initialTickets?: number;
   title?: string;
+  onPrizesClick?: () => void;
+  showPrizes?: boolean;
 }
 
 export function PromoHeader({
   initialPlayer,
   initialTickets,
   title = "Игровая зона",
+  onPrizesClick,
+  showPrizes,
 }: PromoHeaderProps) {
   const [player, setPlayer] = useState<any>(initialPlayer || null);
   const [tickets, setTickets] = useState<number>(initialTickets || 0);
@@ -52,6 +56,17 @@ export function PromoHeader({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          {onPrizesClick && (
+            <button
+              onClick={onPrizesClick}
+              className={`w-9 h-9 sm:w-10 sm:h-10 border rounded-xl flex items-center justify-center active:scale-90 transition-transform backdrop-blur-md ${showPrizes ? "bg-orange-500/20 border-orange-500/30" : "bg-white/5 border-white/10 hover:bg-white/10"}`}
+            >
+              <Gift
+                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${showPrizes ? "text-orange-500" : "text-white/70"}`}
+              />
+            </button>
+          )}
+
           <Link
             href="/promo/roadmap"
             className="flex items-center gap-1.5 sm:gap-2 bg-orange-500/10 border border-orange-500/20 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl hover:bg-orange-500/20 transition-colors"

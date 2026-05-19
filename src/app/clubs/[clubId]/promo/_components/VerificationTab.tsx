@@ -12,7 +12,9 @@ export function VerificationTab({ clubId }: { clubId: string }) {
 
   const fetchRequests = async () => {
     try {
-      const res = await fetch(`/api/promo/admin/quests/verification?clubId=${clubId}`);
+      const res = await fetch(
+        `/api/promo/admin/quests/verification?clubId=${clubId}`,
+      );
       const data = await res.json();
       setRequests(data.requests || []);
     } catch (e) {
@@ -26,7 +28,10 @@ export function VerificationTab({ clubId }: { clubId: string }) {
     fetchRequests();
   }, [clubId]);
 
-  const handleAction = async (requestId: string, action: "approve" | "reject") => {
+  const handleAction = async (
+    requestId: string,
+    action: "approve" | "reject",
+  ) => {
     setProcessing(requestId);
     try {
       const res = await fetch("/api/promo/admin/quests/verification", {
@@ -97,6 +102,23 @@ export function VerificationTab({ clubId }: { clubId: string }) {
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-orange-500 tracking-tight">
                     <Target className="w-3 h-3" /> {req.quest_title}
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {req.reward_xp > 0 && (
+                      <div className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-tight border border-blue-100">
+                        +{Math.floor(req.reward_xp)} XP
+                      </div>
+                    )}
+                    {req.reward_tickets > 0 && (
+                      <div className="px-2 py-0.5 bg-orange-50 text-orange-600 rounded-lg text-[9px] font-black uppercase tracking-tight border border-orange-100">
+                        +{Math.floor(req.reward_tickets)} Билетов
+                      </div>
+                    )}
+                    {req.reward_bonus_balance > 0 && (
+                      <div className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-tight border border-emerald-100">
+                        +{Math.floor(req.reward_bonus_balance)} ₽
+                      </div>
+                    )}
                   </div>
                 </div>
 

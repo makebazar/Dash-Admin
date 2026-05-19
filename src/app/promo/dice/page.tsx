@@ -23,6 +23,7 @@ export default function BowlPhysicsDice() {
   const [isRolling, setIsRolling] = useState(false);
   const [tickets, setTickets] = useState(3);
   const [bonusBalance, setBonusBalance] = useState(0);
+  const [player, setPlayer] = useState<any>(null);
   const [showPrizes, setShowPrizes] = useState(false);
   const [prizes, setPrizes] = useState<any[]>([]);
   const [result, setResult] = useState<{
@@ -78,21 +79,19 @@ export default function BowlPhysicsDice() {
       try {
         const [playerRes, prizesRes] = await Promise.all([
           fetch("/api/promo/player"),
-          fetch("/api/promo/prizes?gameType=dice"),
+          fetch("/api/promo/prizes?gameType=dice&all=true"),
         ]);
 
         const playerData = await playerRes.json();
         if (playerData.success || playerData.tickets !== undefined) {
+          setPlayer(playerData.player);
           setTickets(playerData.tickets);
           setBonusBalance(playerData.player?.bonusBalance || 0);
         }
 
         const prizesData = await prizesRes.json();
         if (prizesData.success) {
-          const dbPrizes = (prizesData.prizes || []).filter(
-            (p: any) => p.is_available === undefined || p.is_available === true,
-          );
-          setPrizes(dbPrizes);
+          setPrizes(prizesData.prizes || []);
         }
       } catch (err) {
         console.error("Fetch error:", err);
@@ -552,6 +551,7 @@ export default function BowlPhysicsDice() {
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
         prizes={prizes}
+        playerLevel={player?.level?.currentLevel}
       />
 
       <AnimatePresence>

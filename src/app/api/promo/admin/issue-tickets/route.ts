@@ -32,7 +32,6 @@ export async function POST(request: Request) {
     );
 
     const settings = clubResult.rows[0]?.promo_settings || {};
-    const expiryHours = settings.ticket_expiry_hours || 24;
 
     let finalTicketsCount = 0;
     if (mode === "count") {
@@ -84,14 +83,11 @@ export async function POST(request: Request) {
     );
 
     // 4. Issue tickets
-    const expiryDate = new Date();
-    expiryDate.setHours(expiryDate.getHours() + expiryHours);
-
     await query(
       `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
-             SELECT $1, $2, 'available', 'admin_manual', $3
-             FROM generate_series(1, $4)`,
-      [playerId, clubId, expiryDate, finalTicketsCount],
+             SELECT $1, $2, 'available', 'admin_manual', NULL
+             FROM generate_series(1, $3)`,
+      [playerId, clubId, finalTicketsCount],
     );
 
     // 5. Process Quests (if amount was used)
@@ -118,7 +114,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       ticketsIssued: finalTicketsCount,
-      expiresAt: expiryDate,
+      expiresAt: null,
     });
   } catch (error) {
     console.error("Issue Tickets Error:", error);

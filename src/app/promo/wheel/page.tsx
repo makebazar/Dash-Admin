@@ -79,6 +79,7 @@ export default function RealisticWheel() {
   const [result, setResult] = useState<any>(null);
   const [ticketsCount, setTicketsCount] = useState(0);
   const [bonusBalance, setBonusBalance] = useState(0);
+  const [player, setPlayer] = useState<any>(null);
   const [sectors, setSectors] = useState<any[]>([]);
   const [rawPrizes, setRawPrizes] = useState<any[]>([]);
   const [showPrizes, setShowPrizes] = useState(false);
@@ -97,20 +98,28 @@ export default function RealisticWheel() {
         const playerRes = await fetch("/api/promo/player");
         const playerData = await playerRes.json();
         if (playerData.success || playerData.tickets !== undefined) {
+          setPlayer(playerData.player);
           setTicketsCount(playerData.tickets);
           setBonusBalance(playerData.player?.bonusBalance || 0);
         }
 
         // 2. Fetch prizes
-        const prizesRes = await fetch("/api/promo/prizes?gameType=wheel");
+        const prizesRes = await fetch(
+          "/api/promo/prizes?gameType=wheel&all=true",
+        );
         const prizesData = await prizesRes.json();
 
         if (prizesData.success) {
-          // Filter prizes by availability if the flag exists
-          const dbPrizes = prizesData.prizes.filter(
-            (p: any) => p.is_available === undefined || p.is_available === true,
+          const allPrizes = prizesData.prizes || [];
+          setRawPrizes(allPrizes);
+
+          // Get player level from playerData if possible, or fallback to currentLevel
+          const currentLevel = playerData.player?.level?.currentLevel || 1;
+
+          // Filter prizes for the wheel: only current level
+          const wheelPrizes = allPrizes.filter(
+            (p: any) => (p.target_level || 1) === currentLevel,
           );
-          setRawPrizes(dbPrizes);
 
           interface Sector {
             id: string | number;
@@ -120,7 +129,7 @@ export default function RealisticWheel() {
           }
 
           // Build sectors.
-          const newSectors: Sector[] = dbPrizes.map((p: any, i: number) => {
+          let newSectors: Sector[] = wheelPrizes.map((p: any, i: number) => {
             const isEmpty =
               p.type === "none" ||
               p.name.toLowerCase() === "пусто" ||
@@ -135,31 +144,22 @@ export default function RealisticWheel() {
             };
           });
 
-          // Calculate total probability
-          const totalProb = dbPrizes.reduce(
-            (sum: number, p: any) => sum + parseFloat(p.probability),
-            0,
-          );
-
-          // Always ensure there is at least one empty sector so losses can be displayed
-          const hasEmpty = newSectors.some((s: Sector) => !s.isPrize);
-          if (!hasEmpty || totalProb < 99.9) {
-            newSectors.push({
-              id: "fallback-empty",
-              label: "Пусто",
-              color: "#334155",
-              isPrize: false,
-            });
+          // If too few sectors, add some empty ones for balance
+          if (newSectors.length < 8) {
+            const needed = 8 - newSectors.length;
+            for (let i = 0; i < needed; i++) {
+              newSectors.push({
+                id: `fallback-empty-${i}`,
+                label: "Пусто",
+                color: "#334155",
+                isPrize: false,
+              });
+            }
           }
 
-          // If no prizes are configured at all
-          if (newSectors.length === 0) {
-            newSectors.push({
-              id: "empty-none",
-              label: "Призов нет",
-              color: "#334155",
-              isPrize: false,
-            });
+          // If too many sectors (unlikely with level filtering, but for safety), limit them
+          if (newSectors.length > 16) {
+            newSectors = newSectors.slice(0, 16);
           }
 
           // Shuffle sectors
@@ -364,6 +364,7 @@ export default function RealisticWheel() {
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
         prizes={rawPrizes}
+        playerLevel={player?.level?.currentLevel}
       />
 
       <AnimatePresence>
@@ -412,16 +413,16 @@ export default function RealisticWheel() {
                     className="fill-white font-bold tracking-tight"
                     style={{
                       fontSize:
-                        sectors.length > 10
-                          ? "3px"
-                          : sectors.length > 6
-                            ? "4px"
-                            : "5px",
+                        sectors.length > 12
+                          ? "2.5px"
+                          : sectors.length > 8
+                            ? "3.5px"
+                            : "4.5px",
                       filter: "drop-shadow(0px 1px 2px rgba(0,0,0,0.8))",
                     }}
                   >
-                    {sector.label.length > 12
-                      ? sector.label.substring(0, 10) + ".."
+                    {sector.label.length > 15
+                      ? sector.label.substring(0, 12) + ".."
                       : sector.label}
                   </text>
                 </g>

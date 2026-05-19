@@ -19,6 +19,9 @@ export async function GET(request: Request) {
          pq.verification_photo_url,
          pq.assigned_at,
          q.title as quest_title,
+         q.reward_xp,
+         q.reward_tickets,
+         q.reward_bonus_balance,
          p.full_name as player_name,
          p.phone_number as player_phone
        FROM promo_player_quests pq

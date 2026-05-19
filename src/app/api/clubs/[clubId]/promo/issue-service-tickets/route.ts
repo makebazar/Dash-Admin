@@ -80,15 +80,11 @@ export async function POST(
     }
 
     // 3. Issue tickets
-    const expiryHours = settings.ticket_expiry_hours || 24;
-    const expiryDate = new Date();
-    expiryDate.setHours(expiryDate.getHours() + expiryHours);
-
     await client.query(
       `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
-          SELECT $1, $2, 'available', 'service_award', $3
-          FROM generate_series(1, $4)`,
-      [playerId, clubId, expiryDate, rule.tickets],
+          SELECT $1, $2, 'available', 'service_award', NULL
+          FROM generate_series(1, $3)`,
+      [playerId, clubId, rule.tickets],
     );
 
     // 4. Log in promo_history

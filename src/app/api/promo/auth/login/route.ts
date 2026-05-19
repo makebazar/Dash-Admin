@@ -186,15 +186,11 @@ export async function POST(request: Request) {
       const welcomeTickets = parseInt(settings.welcome_bonus_tickets) || 0;
 
       if (welcomeTickets > 0 && !welcomeBonusAlreadyAwarded) {
-        const expiryHours = settings.ticket_expiry_hours || 24;
-        const expiryDate = new Date();
-        expiryDate.setHours(expiryDate.getHours() + expiryHours);
-
         await client.query(
           `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
-           SELECT $1, $2, 'available', 'welcome_bonus', $3
+           SELECT $1, $2, 'available', 'welcome_bonus', NULL
            FROM generate_series(1, $4)`,
-          [playerId, numericClubId, expiryDate, welcomeTickets],
+          [playerId, numericClubId, null, welcomeTickets],
         );
 
         // Mark as awarded

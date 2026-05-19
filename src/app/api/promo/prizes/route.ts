@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const gameType = searchParams.get("gameType") || "wheel";
+    const gameType = searchParams.get("gameType"); // Made optional
     const requestedLevel = searchParams.get("level"); // New: optional explicit level filter
+    const showAllLevels = searchParams.get("all") === "true"; // New: skip level filtering
     const cookieStore = await cookies();
     const activeClubId = cookieStore.get("promo_active_club_id")?.value;
     const playerId = cookieStore.get("promo_player_id")?.value;
@@ -17,15 +18,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "No club context" }, { status: 400 });
     }
 
-    // 1. Fetch prizes for the game
-    const prizesResult = await query(
-      `SELECT id, name, type, value, probability, image_url, game_slug, win_condition, target_level
+    // 1. Fetch prizes for the game (or all games if gameType is missing)
+    let queryStr = `SELECT id, name, type, value, probability, image_url, game_slug, win_condition, target_level
        FROM promo_prizes
-       WHERE club_id = $1 AND is_active = TRUE
-       AND game_slug = $2
-       ORDER BY probability DESC`,
-      [activeClubId, gameType],
-    );
+       WHERE club_id = $1 AND is_active = TRUE`;
+    const queryParams = [activeClubId];
+
+    if (gameType) {
+      queryStr += ` AND game_slug = $2`;
+      queryParams.push(gameType);
+    }
+
+    queryStr += ` ORDER BY probability DESC`;
+
+    const prizesResult = await query(queryStr, queryParams);
 
     let prizes = prizesResult.rows;
 
@@ -61,7 +67,7 @@ export async function GET(request: Request) {
       : playerLevel;
 
     // 4. Apply Filtering / Decoration
-    if (effectiveLevel !== null) {
+    if (effectiveLevel !== null && !showAllLevels) {
       prizes = prizes.map((p) => ({
         ...p,
         is_available: p.target_level === effectiveLevel,

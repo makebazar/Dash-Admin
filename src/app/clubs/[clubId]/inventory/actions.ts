@@ -5437,15 +5437,11 @@ export async function createShiftReceipt(
         );
 
         if (ticketsToAward > 0) {
-          const expiryHours = promoSettings.ticket_expiry_hours || 24;
-          const expiryDate = new Date();
-          expiryDate.setHours(expiryDate.getHours() + expiryHours);
-
           await client.query(
             `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
-             SELECT $1, $2, 'available', 'pos_sale', $3
-             FROM generate_series(1, $4)`,
-            [data.promo_player_id, clubId, expiryDate, ticketsToAward],
+             SELECT $1, $2, 'available', 'pos_sale', NULL
+             FROM generate_series(1, $3)`,
+            [data.promo_player_id, clubId, ticketsToAward],
           );
         }
       }
@@ -5789,18 +5785,13 @@ export async function bulkAccruePromoSafe(
         );
 
         if (ticketsToAward > 0) {
-          const expiryHours = settings.ticket_expiry_hours || 24;
-          const expiryDate = new Date();
-          expiryDate.setHours(expiryDate.getHours() + expiryHours);
-
           await client.query(
             `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at, history_id)
-             SELECT $1::uuid, $2::int, 'available', 'topup', $3, $4::uuid
-             FROM generate_series(1, $5)`,
+             SELECT $1::uuid, $2::int, 'available', 'topup', NULL, $3::uuid
+             FROM generate_series(1, $4)`,
             [
               data.player_id,
               clubId,
-              expiryDate,
               topupHistoryRes.rows[0].id,
               ticketsToAward,
             ],
@@ -5840,21 +5831,11 @@ export async function bulkAccruePromoSafe(
       );
       historyIds.push(serviceHistoryRes.rows[0].id);
 
-      const expiryHours = settings.ticket_expiry_hours || 24;
-      const expiryDate = new Date();
-      expiryDate.setHours(expiryDate.getHours() + expiryHours);
-
       await client.query(
         `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at, history_id)
-         SELECT $1::uuid, $2::int, 'available', 'service_award', $3, $4::uuid
-         FROM generate_series(1, $5)`,
-        [
-          data.player_id,
-          clubId,
-          expiryDate,
-          serviceHistoryRes.rows[0].id,
-          rule.tickets,
-        ],
+         SELECT $1::uuid, $2::int, 'available', 'service_award', NULL, $3::uuid
+         FROM generate_series(1, $4)`,
+        [data.player_id, clubId, serviceHistoryRes.rows[0].id, rule.tickets],
       );
 
       // Process Quests

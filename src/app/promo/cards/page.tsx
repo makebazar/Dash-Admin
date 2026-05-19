@@ -104,6 +104,7 @@ export default function LuckyCardsGame() {
   const router = useRouter();
   const [tickets, setTickets] = useState(0);
   const [bonusBalance, setBonusBalance] = useState(0);
+  const [player, setPlayer] = useState<any>(null);
   const [rawPrizes, setRawPrizes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPrizes, setShowPrizes] = useState(false);
@@ -192,22 +193,53 @@ export default function LuckyCardsGame() {
         const playerRes = await fetch("/api/promo/player");
         const playerData = await playerRes.json();
         if (playerData.success || playerData.tickets !== undefined) {
+          setPlayer(playerData.player);
           setTickets(playerData.tickets);
           setBonusBalance(playerData.player?.bonusBalance || 0);
           setGameSettings(playerData.player?.settings || {});
         }
 
-        const prizesRes = await fetch("/api/promo/prizes?gameType=cards");
+        const prizesRes = await fetch(
+          "/api/promo/prizes?gameType=cards&all=true",
+        );
         const prizesData = await prizesRes.json();
 
         if (prizesData.success && prizesData.prizes?.length > 0) {
-          const dbPrizes = prizesData.prizes.filter(
-            (p: any) => p.is_available === undefined || p.is_available === true,
+          const allPrizes = prizesData.prizes;
+          setRawPrizes(allPrizes);
+
+          // Get player level
+          const currentLevel = playerData.player?.level?.currentLevel || 1;
+
+          // Filter for current level
+          const wheelPrizes = allPrizes.filter(
+            (p: any) => (p.target_level || 1) === currentLevel,
           );
-          setRawPrizes(dbPrizes);
-          const mapped = dbPrizes.map((p: any, i: number) =>
+
+          // Map and limit to 5
+          let mapped = wheelPrizes.map((p: any, i: number) =>
             mapPrizeToCard(p, i),
           );
+
+          if (mapped.length > 5) {
+            mapped = mapped.slice(0, 5);
+          }
+
+          // Ensure at least 3 cards for a good look
+          if (mapped.length < 3) {
+            const needed = 3 - mapped.length;
+            for (let i = 0; i < needed; i++) {
+              mapped.push({
+                id: mapped.length + 1,
+                prizeId: `empty-${i}`,
+                value: "❌",
+                type: "lose",
+                label: "Пусто",
+                color: "from-gray-600 to-gray-800",
+              });
+            }
+          }
+
           setCards(mapped);
         } else {
           setCards(generateDefaultCards(3));
@@ -448,6 +480,7 @@ export default function LuckyCardsGame() {
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
         prizes={rawPrizes}
+        playerLevel={player?.level?.currentLevel}
       />
 
       <main className="flex-1 w-full flex flex-col items-center justify-center p-4 pt-24 pb-36 min-h-0">

@@ -23,16 +23,14 @@ export async function processReceiptEvent(
     [clubId],
   );
   const settings = clubRes.rows[0]?.promo_settings || {};
-  const xpPer100 = settings.xp_per_100_rub ?? 10;
+  const xpPer100 = settings.xp_per_100_rub ?? 100;
 
-  // 1. Calculate and award base XP for the purchase (e.g., 10 XP per 100 RUB)
+  // 1. Calculate and award base XP for the purchase (e.g., 100 XP per 100 RUB)
   const xpEarned = Math.floor(totalAmount / 100) * xpPer100;
   if (xpEarned > 0) {
-    await addPlayerXP(client, clubId, playerId, xpEarned);
+    // This now updates both Permanent XP and Battle Pass XP
+    await addPlayerXP(client, clubId, playerId, xpEarned, true);
   }
-
-  // 1.1 Accrue Battle Pass XP
-  await accrueBPXP(client, clubId, playerId, totalAmount, "purchase");
 
   // 2. Fetch active quests for this player
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
@@ -206,16 +204,14 @@ export async function processBalanceTopupEvent(
     [clubId],
   );
   const settings = clubRes.rows[0]?.promo_settings || {};
-  const xpPer100 = settings.xp_per_100_rub ?? 10;
+  const xpPer100 = settings.xp_per_100_rub ?? 100;
 
-  // 1. Calculate and award base XP for the topup (e.g., 10 XP per 100 RUB)
+  // 1. Calculate and award base XP for the topup (e.g., 100 XP per 100 RUB)
   const xpEarned = Math.floor(amount / 100) * xpPer100;
   if (xpEarned > 0) {
-    await addPlayerXP(client, clubId, playerId, xpEarned);
+    // This now updates both Permanent XP and Battle Pass XP
+    await addPlayerXP(client, clubId, playerId, xpEarned, true);
   }
-
-  // 1.1 Accrue Battle Pass XP
-  await accrueBPXP(client, clubId, playerId, amount, "topup");
 
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
 
@@ -431,14 +427,21 @@ export async function rewardPlayerForQuest(
 ) {
   // Add XP and Bonus Balance
   if (quest.reward_xp > 0 || quest.reward_bonus_balance > 0) {
-    await client.query(
-      `UPDATE promo_player_balances
-       SET total_xp = COALESCE(total_xp, 0) + $1::numeric,
-           bonus_balance = COALESCE(bonus_balance, 0) + $2::numeric,
-           updated_at = NOW()
-       WHERE player_id = $3::uuid AND club_id = $4::int`,
-      [quest.reward_xp, quest.reward_bonus_balance, playerId, clubId],
-    );
+    // 1. Award XP (Quest XP also goes to BP, usually without money boosts unless specified)
+    if (quest.reward_xp > 0) {
+      await addPlayerXP(client, clubId, playerId, quest.reward_xp);
+    }
+
+    // 2. Award Bonus Balance
+    if (quest.reward_bonus_balance > 0) {
+      await client.query(
+        `UPDATE promo_player_balances
+         SET bonus_balance = COALESCE(bonus_balance, 0) + $1::numeric,
+             updated_at = NOW()
+         WHERE player_id = $2::uuid AND club_id = $3::int`,
+        [quest.reward_bonus_balance, playerId, clubId],
+      );
+    }
   }
 
   // Issue Tickets
@@ -503,14 +506,26 @@ export async function addPlayerXP(
   clubId: number | string,
   playerId: string,
   xpAmount: number,
+  isMoneyBased: boolean = false,
 ) {
+  // 1. Add to Battle Pass (if active)
+  const { addXPToBP } = await import("./promo-bp");
+  const finalXP = await addXPToBP(
+    client,
+    clubId,
+    playerId,
+    xpAmount,
+    isMoneyBased,
+  );
+
+  // 2. Update Permanent Global Balance
   await client.query(
     `INSERT INTO promo_player_balances (player_id, club_id, total_xp)
      VALUES ($1::uuid, $2::int, $3::numeric)
      ON CONFLICT (player_id, club_id)
      DO UPDATE SET total_xp = COALESCE(promo_player_balances.total_xp, 0) + $3::numeric,
                    updated_at = NOW()`,
-    [playerId, clubId, xpAmount],
+    [playerId, clubId, finalXP || xpAmount],
   );
 }
 

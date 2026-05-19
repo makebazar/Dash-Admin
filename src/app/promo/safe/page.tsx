@@ -27,6 +27,7 @@ export default function DeepDiveSafeDemo() {
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [ticketsCount, setTicketsCount] = useState(0);
   const [bonusBalance, setBonusBalance] = useState(0);
+  const [player, setPlayer] = useState<any>(null);
   const [prizes, setPrizes] = useState<any[]>([]);
   const [showPrizes, setShowPrizes] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -60,21 +61,19 @@ export default function DeepDiveSafeDemo() {
       setLoading(true);
       const [playerRes, prizesRes] = await Promise.all([
         fetch("/api/promo/player"),
-        fetch("/api/promo/prizes?gameType=safe"),
+        fetch("/api/promo/prizes?gameType=safe&all=true"),
       ]);
 
       const playerData = await playerRes.json();
       if (playerData.success || playerData.tickets !== undefined) {
+        setPlayer(playerData.player);
         setTicketsCount(playerData.tickets);
         setBonusBalance(playerData.player?.bonusBalance || 0);
       }
 
       const prizesData = await prizesRes.json();
       if (prizesData.success) {
-        const dbPrizes = (prizesData.prizes || []).filter(
-          (p: any) => p.is_available === undefined || p.is_available === true,
-        );
-        setPrizes(dbPrizes);
+        setPrizes(prizesData.prizes || []);
       }
 
       resetGame();
@@ -263,6 +262,7 @@ export default function DeepDiveSafeDemo() {
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
         prizes={prizes}
+        playerLevel={player?.level?.currentLevel}
       />
 
       <AnimatePresence>

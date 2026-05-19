@@ -12,7 +12,7 @@ export interface BPReward {
 
 /**
  * Accrues XP for a player in the current active BP season.
- * 1 RUB = 1 XP (modified by boosts).
+ * 1 RUB = X XP (modified by boosts).
  */
 export async function accrueBPXP(
   client: PoolClient,
@@ -21,7 +21,7 @@ export async function accrueBPXP(
   amount: number,
   source: string = "purchase",
 ) {
-  // 1. Find active season for the club and get promo settings
+  // 1. Find active season and get multiplier
   const seasonRes = await client.query(
     `SELECT s.id, c.promo_settings
      FROM promo_bp_seasons s
@@ -32,10 +32,41 @@ export async function accrueBPXP(
     [clubId],
   );
 
-  if (seasonRes.rowCount === 0) return; // No active season
+  if (seasonRes.rowCount === 0) return;
   const { id: seasonId, promo_settings } = seasonRes.rows[0];
   const settings = promo_settings || {};
   const bpXpMultiplier = settings.bp_xp_per_rub ?? 1;
+
+  // 2. Base XP from amount
+  let xpToAdd = Math.floor(amount * bpXpMultiplier);
+  if (xpToAdd <= 0) return;
+
+  // 3. Add to BP (boosts are handled inside addXPToBP or here? Let's handle here for money-based XP)
+  await addXPToBP(client, clubId, playerId, xpToAdd, true);
+}
+
+/**
+ * Directly adds XP to the current active Battle Pass season.
+ * @param applyBoost If true, will double XP if the player has an active boost.
+ */
+export async function addXPToBP(
+  client: PoolClient,
+  clubId: number | string,
+  playerId: string,
+  xpAmount: number,
+  applyBoost: boolean = false,
+) {
+  // 1. Find active season
+  const seasonRes = await client.query(
+    `SELECT id FROM promo_bp_seasons
+     WHERE club_id = $1 AND is_active = TRUE
+       AND NOW() BETWEEN start_date AND end_date
+     LIMIT 1`,
+    [clubId],
+  );
+
+  if (seasonRes.rowCount === 0) return;
+  const seasonId = seasonRes.rows[0].id;
 
   // 2. Get or create player progress
   const progressRes = await client.query(
@@ -48,14 +79,16 @@ export async function accrueBPXP(
   );
   let progress = progressRes.rows[0];
 
-  // 3. Calculate XP with boost
-  let xpToAdd = Math.floor(amount * bpXpMultiplier);
+  // 3. Apply boost if requested
+  let finalXP = xpAmount;
   const now = new Date();
-  if (progress.boost_expires_at && new Date(progress.boost_expires_at) > now) {
-    xpToAdd *= 2;
+  if (
+    applyBoost &&
+    progress.boost_expires_at &&
+    new Date(progress.boost_expires_at) > now
+  ) {
+    finalXP *= 2;
   }
-
-  if (xpToAdd <= 0) return;
 
   // 4. Update XP
   const updatedProgressRes = await client.query(
@@ -64,12 +97,13 @@ export async function accrueBPXP(
          updated_at = NOW()
      WHERE id = $2
      RETURNING *`,
-    [xpToAdd, progress.id],
+    [finalXP, progress.id],
   );
   progress = updatedProgressRes.rows[0];
 
   // 5. Check for new rewards
   await checkAndAwardBPRewards(client, clubId, playerId, progress, seasonId);
+  return finalXP;
 }
 
 /**

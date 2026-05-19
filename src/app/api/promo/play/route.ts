@@ -274,15 +274,12 @@ export async function POST(request: Request) {
         );
       } else if (wonPrize.type === "attempt") {
         const ticketCount = Math.floor(parseFloat(wonPrize.value) || 1);
-        const expiryHours = settings.ticket_expiry_hours || 24;
-        const expiryDate = new Date();
-        expiryDate.setHours(expiryDate.getHours() + expiryHours);
 
         await client.query(
           `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
-                 SELECT $1, $2, 'available', 'prize_win', $3
-                 FROM generate_series(1, $4)`,
-          [playerId, activeClubId, expiryDate, ticketCount],
+                 SELECT $1, $2, 'available', 'prize_win', NULL
+                 FROM generate_series(1, $3)`,
+          [playerId, activeClubId, ticketCount],
         );
       } else if (wonPrize.type === "physical") {
         // Physical prizes MUST be in the queue for admin to see

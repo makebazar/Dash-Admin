@@ -222,7 +222,7 @@ export default function PromoLobby() {
 
         // Fetch products and settings
         const [prizesRes, productsRes, clubRes] = await Promise.all([
-          fetch(`/api/promo/prizes`),
+          fetch(`/api/promo/prizes?all=true`),
           fetch(`/api/promo/products?clubId=${currentClubId}`),
           fetch(`/api/promo/public-info?clubId=${currentClubId}`),
         ]);
@@ -529,7 +529,12 @@ export default function PromoLobby() {
           </motion.div>
         )}
       </AnimatePresence>
-      <PromoHeader initialPlayer={player} initialTickets={tickets} />
+      <PromoHeader
+        initialPlayer={player}
+        initialTickets={tickets}
+        onPrizesClick={() => setShowPrizes(true)}
+        showPrizes={showPrizes}
+      />
       <PrizesSidebar
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
