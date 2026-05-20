@@ -2,7 +2,16 @@
 
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, Disc, Clock, Calendar, Edit2, X, Save } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Disc,
+  Clock,
+  Calendar,
+  Edit2,
+  X,
+  Save,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { v4 as uuidv4 } from "uuid";
 
@@ -50,7 +59,9 @@ export function ServicesTab({ settings, saveSettings }: ServicesTabProps) {
   const handleSaveLocal = () => {
     let nextRules;
     if (rules.find((r: any) => r.id === localRule.id)) {
-      nextRules = rules.map((r: any) => (r.id === localRule.id ? localRule : r));
+      nextRules = rules.map((r: any) =>
+        r.id === localRule.id ? localRule : r,
+      );
     } else {
       nextRules = [...rules, localRule];
     }
@@ -102,7 +113,9 @@ export function ServicesTab({ settings, saveSettings }: ServicesTabProps) {
           <div className="bg-slate-50 border border-slate-100 p-6 rounded-3xl space-y-6">
             <div className="flex items-center justify-between">
               <h4 className="font-black text-lg uppercase italic">
-                {rules.find((r: any) => r.id === localRule.id) ? "Редактирование" : "Новое правило"}
+                {rules.find((r: any) => r.id === localRule.id)
+                  ? "Редактирование"
+                  : "Новое правило"}
               </h4>
               <button
                 onClick={() => {
@@ -124,7 +137,9 @@ export function ServicesTab({ settings, saveSettings }: ServicesTabProps) {
                   <input
                     type="text"
                     value={localRule.name}
-                    onChange={(e) => setLocalRule({ ...localRule, name: e.target.value })}
+                    onChange={(e) =>
+                      setLocalRule({ ...localRule, name: e.target.value })
+                    }
                     className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-blue-500"
                     placeholder="Напр. Пакет 3 часа"
                   />
@@ -136,7 +151,12 @@ export function ServicesTab({ settings, saveSettings }: ServicesTabProps) {
                   <input
                     type="number"
                     value={localRule.tickets}
-                    onChange={(e) => setLocalRule({ ...localRule, tickets: parseInt(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      setLocalRule({
+                        ...localRule,
+                        tickets: parseInt(e.target.value) || 0,
+                      })
+                    }
                     className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-blue-500"
                   />
                 </div>
@@ -149,7 +169,12 @@ export function ServicesTab({ settings, saveSettings }: ServicesTabProps) {
                     <input
                       type="time"
                       value={localRule.time_start}
-                      onChange={(e) => setLocalRule({ ...localRule, time_start: e.target.value })}
+                      onChange={(e) =>
+                        setLocalRule({
+                          ...localRule,
+                          time_start: e.target.value,
+                        })
+                      }
                       className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-blue-500"
                     />
                   </div>
@@ -160,7 +185,9 @@ export function ServicesTab({ settings, saveSettings }: ServicesTabProps) {
                     <input
                       type="time"
                       value={localRule.time_end}
-                      onChange={(e) => setLocalRule({ ...localRule, time_end: e.target.value })}
+                      onChange={(e) =>
+                        setLocalRule({ ...localRule, time_end: e.target.value })
+                      }
                       className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-sm outline-none focus:border-blue-500"
                     />
                   </div>
@@ -174,7 +201,9 @@ export function ServicesTab({ settings, saveSettings }: ServicesTabProps) {
                   </label>
                   <div className="flex flex-wrap gap-2">
                     {DAYS.map((day) => {
-                      const isSelected = (localRule.days || []).includes(day.id);
+                      const isSelected = (localRule.days || []).includes(
+                        day.id,
+                      );
                       return (
                         <button
                           key={day.id}
@@ -227,16 +256,22 @@ export function ServicesTab({ settings, saveSettings }: ServicesTabProps) {
               >
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center border border-slate-100 shadow-sm group-hover:scale-110 transition-transform">
-                    <div className="text-blue-500 font-black italic text-lg">+{rule.tickets}</div>
+                    <div className="text-blue-500 font-black italic text-lg">
+                      +{rule.tickets}
+                    </div>
                   </div>
                   <div>
-                    <div className="font-black uppercase italic text-sm tracking-tight">{rule.name}</div>
+                    <div className="font-black uppercase italic text-sm tracking-tight">
+                      {rule.name}
+                    </div>
                     <div className="flex items-center gap-3 mt-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                       <div className="flex items-center gap-1">
-                        <Clock className="w-2.5 h-2.5" /> {rule.time_start}-{rule.time_end}
+                        <Clock className="w-2.5 h-2.5" /> {rule.time_start}-
+                        {rule.time_end}
                       </div>
                       <div className="flex items-center gap-1">
-                        <Calendar className="w-2.5 h-2.5" /> {rule.days.length} дн.
+                        <Calendar className="w-2.5 h-2.5" /> {rule.days.length}{" "}
+                        дн.
                       </div>
                     </div>
                   </div>

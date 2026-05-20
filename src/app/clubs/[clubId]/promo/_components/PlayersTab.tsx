@@ -235,7 +235,7 @@ export function PlayersTab({ clubId, players, onRefresh }: PlayersTabProps) {
             <button
               onClick={handleIssueTickets}
               disabled={isIssuing || !issueForm.phone}
-              className="w-full h-[52px] bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-2xl flex items-center justify-center gap-2 font-black uppercase italic tracking-wider transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98]"
+              className="w-full h-13 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-2xl flex items-center justify-center gap-2 font-black uppercase italic tracking-wider transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98]"
             >
               {isIssuing ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -502,7 +502,7 @@ export function PlayersTab({ clubId, players, onRefresh }: PlayersTabProps) {
                 <button
                   onClick={handleUpdatePlayer}
                   disabled={isSaving}
-                  className="w-full h-[60px] bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-2xl flex items-center justify-center gap-3 font-black uppercase italic tracking-wider transition-all shadow-xl active:scale-[0.98]"
+                  className="w-full h-15 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-2xl flex items-center justify-center gap-3 font-black uppercase italic tracking-wider transition-all shadow-xl active:scale-[0.98]"
                 >
                   {isSaving ? (
                     <Loader2 className="w-5 h-5 animate-spin" />

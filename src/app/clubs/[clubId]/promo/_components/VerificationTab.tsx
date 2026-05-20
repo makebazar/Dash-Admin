@@ -169,7 +169,7 @@ export function VerificationTab({ clubId }: { clubId: string }) {
       {/* Lightbox */}
       {selectedPhoto && (
         <div
-          className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-10 cursor-zoom-out"
+          className="fixed inset-0 bg-black/90 z-100 flex items-center justify-center p-10 cursor-zoom-out"
           onClick={() => setSelectedPhoto(null)}
         >
           <img

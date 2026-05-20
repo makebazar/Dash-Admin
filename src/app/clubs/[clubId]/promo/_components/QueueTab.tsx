@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Trophy, CheckCircle2, Trash2, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type QueueItem = {
+export type QueueItem = {
   id: string;
   player_name: string;
   player_phone: string;
@@ -53,7 +53,7 @@ export function QueueTab({ queue, handleClaim, handleCancel }: QueueTabProps) {
           </div>
         </div>
 
-        <div className="min-h-[400px]">
+        <div className="min-h-100">
           {queue.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 space-y-4 opacity-30">
               <Trophy className="w-16 h-16 text-slate-300" />
@@ -98,9 +98,7 @@ export function QueueTab({ queue, handleClaim, handleCancel }: QueueTabProps) {
                               : "bg-emerald-100 text-emerald-600",
                           )}
                         >
-                          {item.prize_type === "physical"
-                            ? "Товар"
-                            : "Бонус"}
+                          {item.prize_type === "physical" ? "Товар" : "Бонус"}
                         </span>
                       </div>
                       <div className="font-black text-xl italic text-slate-900 tracking-tight">

@@ -189,8 +189,8 @@ export async function POST(request: Request) {
         await client.query(
           `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
            SELECT $1, $2, 'available', 'welcome_bonus', NULL
-           FROM generate_series(1, $4)`,
-          [playerId, numericClubId, null, welcomeTickets],
+           FROM generate_series(1, $3)`,
+          [playerId, numericClubId, welcomeTickets],
         );
 
         // Mark as awarded

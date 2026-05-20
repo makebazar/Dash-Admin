@@ -60,7 +60,11 @@ export function BarTab({
     if (index >= 0) {
       nextItems[index] = { ...nextItems[index], custom_bonus_price: numPrice };
     } else {
-      nextItems.push({ id: productId, is_enabled: false, custom_bonus_price: numPrice });
+      nextItems.push({
+        id: productId,
+        is_enabled: false,
+        custom_bonus_price: numPrice,
+      });
     }
 
     saveSettings({ ...settings, bar_items: nextItems });
@@ -88,7 +92,8 @@ export function BarTab({
               Маркет <span className="text-emerald-500">Товаров</span>
             </h3>
             <p className="text-slate-500 text-sm font-medium mt-1">
-              Выберите товары из склада, которые будут доступны к покупке за бонусы в приложении гостя.
+              Выберите товары из склада, которые будут доступны к покупке за
+              бонусы в приложении гостя.
             </p>
           </div>
 
@@ -135,9 +140,13 @@ export function BarTab({
               const barConfig = barItems.find(
                 (bi: any) => String(bi.id) === String(product.id),
               );
-              const isEnabled = barConfig?.is_enabled === true || String(barConfig?.is_enabled) === "true";
+              const isEnabled =
+                barConfig?.is_enabled === true ||
+                String(barConfig?.is_enabled) === "true";
               const customPrice = barConfig?.custom_bonus_price;
-              const defaultPrice = Math.round(product.selling_price * multiplier);
+              const defaultPrice = Math.round(
+                product.selling_price * multiplier,
+              );
 
               return (
                 <div
@@ -198,7 +207,7 @@ export function BarTab({
 
                     <div className="hidden md:block w-px h-10 bg-slate-100" />
 
-                    <div className="flex flex-col items-end min-w-[80px]">
+                    <div className="flex flex-col items-end min-w-20">
                       <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                         Статус
                       </div>

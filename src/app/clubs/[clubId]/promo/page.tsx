@@ -18,18 +18,25 @@ import {
 } from "lucide-react";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { QueueTab } from "./_components/QueueTab";
-import { HistoryTab } from "./_components/HistoryTab";
-import { PlayersTab } from "./_components/PlayersTab";
-import { GeneralTab } from "./_components/GeneralTab";
-import { LevelsTab } from "./_components/LevelsTab";
-import { QuestsTab } from "./_components/QuestsTab";
-import { VerificationTab } from "./_components/VerificationTab";
-import { BattlePassTab } from "./_components/BattlePassTab";
-import { ServicesTab } from "./_components/ServicesTab";
-import { AccrualTab } from "./_components/AccrualTab";
-import { BarTab } from "./_components/BarTab";
-import { GamesTab, type Prize, GAMES } from "./_components/GamesTab";
+import {
+  QueueTab,
+  type QueueItem,
+} from "@/app/clubs/[clubId]/promo/_components/QueueTab";
+import { HistoryTab } from "@/app/clubs/[clubId]/promo/_components/HistoryTab";
+import { PlayersTab } from "@/app/clubs/[clubId]/promo/_components/PlayersTab";
+import { GeneralTab } from "@/app/clubs/[clubId]/promo/_components/GeneralTab";
+import { LevelsTab } from "@/app/clubs/[clubId]/promo/_components/LevelsTab";
+import { QuestsTab } from "@/app/clubs/[clubId]/promo/_components/QuestsTab";
+import { VerificationTab } from "@/app/clubs/[clubId]/promo/_components/VerificationTab";
+import { BattlePassTab } from "@/app/clubs/[clubId]/promo/_components/BattlePassTab";
+import { ServicesTab } from "@/app/clubs/[clubId]/promo/_components/ServicesTab";
+import { AccrualTab } from "@/app/clubs/[clubId]/promo/_components/AccrualTab";
+import { BarTab } from "@/app/clubs/[clubId]/promo/_components/BarTab";
+import {
+  GamesTab,
+  type Prize,
+  GAMES,
+} from "@/app/clubs/[clubId]/promo/_components/GamesTab";
 
 /**
  * ПАНЕЛЬ УПРАВЛЕНИЯ АКЦИЯМИ (ДЛЯ ВЛАДЕЛЬЦА / УПРАВА)
@@ -49,9 +56,7 @@ export default function PromotionsPage() {
     | "quests"
     | "verification"
     | "battlepass"
-    | "services"
     | "accrual"
-    | "bar"
   >("queue");
 
   const [settings, setSettings] = useState<any>(null);
