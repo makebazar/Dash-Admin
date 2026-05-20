@@ -46,6 +46,7 @@ export function mapKpiToUnifiedProps(
         .find((t: any) => t.is_met);
       const requiredPerShift = nextThreshold?.per_shift_to_reach || 0;
       const isShiftActive = !!activeShiftId;
+      const isShiftMode = data.bonus_mode === "SHIFT" || data.mode === "SHIFT";
 
       return {
         title: data.name || "Выручка",
@@ -67,13 +68,15 @@ export function mapKpiToUnifiedProps(
             : undefined,
         stats: [
           {
-            label: "Выручка",
+            label: isShiftMode ? "Выручка" : "Выручка",
             value: formatCurrency(data.current_value),
           },
           {
-            label: "Цель месяца",
-            value: formatCurrency(nextThreshold?.planned_month_threshold || 0),
-            subValue: `${plannedShifts} смен`,
+            label: isShiftMode ? "План на смену" : "Цель месяца",
+            value: isShiftMode
+              ? formatCurrency(nextThreshold?.original_from || 0)
+              : formatCurrency(nextThreshold?.planned_month_threshold || 0),
+            subValue: isShiftMode ? undefined : `${plannedShifts} смен`,
           },
           {
             label: "Средняя за смену",
@@ -85,19 +88,21 @@ export function mapKpiToUnifiedProps(
             color: "emerald",
           },
         ],
-        progress: {
-          label: "Прогресс к цели месяца",
-          percent: nextThreshold
-            ? Math.min(
-                Math.round(
-                  (data.current_value /
-                    (nextThreshold.planned_month_threshold || 1)) *
+        progress: isShiftMode
+          ? undefined
+          : {
+              label: "Прогресс к цели месяца",
+              percent: nextThreshold
+                ? Math.min(
+                    Math.round(
+                      (data.current_value /
+                        (nextThreshold.planned_month_threshold || 1)) *
+                        100,
+                    ),
                     100,
-                ),
-                100,
-              )
-            : 100,
-        },
+                  )
+                : 100,
+            },
         alert: isShiftActive
           ? {
               message: `Цель на текущую смену: ${formatCurrency(requiredPerShift)}`,
@@ -135,7 +140,7 @@ export function mapKpiToUnifiedProps(
                   </div>
                   <div className="flex items-center justify-between text-[10px]">
                     <span className="text-slate-500 font-bold">
-                      План: {formatCurrency(t.planned_month_threshold)}
+                      План: {formatCurrency(isShiftMode ? t.original_from : t.planned_month_threshold)}
                     </span>
                     <span className="text-emerald-700 font-black">
                       +
@@ -417,13 +422,13 @@ export function mapKpiToUnifiedProps(
         mainValue: formatCurrency(data.bonus_amount || 0),
         mainLabel: "Ваша премия",
         stats: [
-          ...(data.breakdown || []).map((b: any) => ({
+          ...(data.metric_breakdown || []).map((b: any) => ({
             label: getPromoLabel(b.source),
             value:
-              b.source === "promo_topup_total_sum"
-                ? formatCurrency(b.value)
-                : Math.round(b.value),
-            subValue: "+" + formatCurrency(b.bonus),
+              b.source === "promo_topup_total_sum" || b.source?.includes("(sum)")
+                ? formatCurrency(b.count || b.value)
+                : Math.round(b.count || b.value),
+            subValue: "+" + formatCurrency(b.earned || b.bonus),
           })),
           {
             label: "Итого премия",
@@ -434,6 +439,42 @@ export function mapKpiToUnifiedProps(
         footerLabel: "Правила начисления",
         children: (
           <div className="space-y-3">
+            {data.thresholds && Array.isArray(data.thresholds) && data.thresholds.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                  Пороги за смену
+                </h4>
+                <div className="grid gap-2">
+                  {[...data.thresholds]
+                    .sort((a: any, b: any) => (a.from || 0) - (b.from || 0))
+                    .map((t: any, i: number) => {
+                      const labelKey = t.label || `Ступень ${i + 1}`;
+                      const countReached = data.threshold_counts?.[labelKey] || 0;
+                      return (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100"
+                        >
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-bold text-slate-700">
+                              {t.label || `Ступень ${i + 1}`} (от {formatCurrency(t.from || 0)})
+                            </div>
+                            {countReached > 0 && (
+                              <div className="text-[10px] text-slate-500 font-medium">
+                                Достигнуто в этом месяце: <span className="font-black text-emerald-600">{countReached} раз</span>
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-xs font-black text-slate-900">
+                            {t.percent ? `${t.percent}% от выручки` : `+${formatCurrency(t.amount || t.bonus || 0)}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
             <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
               Действующие правила
             </h4>
@@ -697,5 +738,6 @@ function getPromoLabel(source: string) {
     promo_topup_total_sum: "Пополнения",
     promo_service_count: "Услуги",
   };
-  return map[source] || source;
+  const cleanSource = source ? source.replace(/\s*\(sum\)/g, "") : source;
+  return map[cleanSource] || cleanSource;
 }

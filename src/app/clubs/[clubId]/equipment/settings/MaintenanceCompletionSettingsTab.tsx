@@ -28,6 +28,7 @@ type MaintenanceSettings = {
   min_photos_after: number;
   require_notes_on_completion: boolean;
   block_desktop_access: boolean;
+  instruction_step_order: "BEFORE_PHOTOS" | "AFTER_PHOTO_BEFORE" | "AFTER_PHOTOS";
 };
 
 type TypeSettings = {
@@ -53,6 +54,7 @@ const DEFAULT_SETTINGS: MaintenanceSettings = {
   min_photos_after: 1,
   require_notes_on_completion: false,
   block_desktop_access: false,
+  instruction_step_order: "BEFORE_PHOTOS",
 };
 
 export function MaintenanceCompletionSettingsTab({
@@ -93,6 +95,7 @@ export function MaintenanceCompletionSettingsTab({
           require_notes_on_completion:
             !!settingsData.require_notes_on_completion,
           block_desktop_access: !!settingsData.block_desktop_access,
+          instruction_step_order: settingsData.instruction_step_order || "BEFORE_PHOTOS",
         });
       }
 
@@ -373,6 +376,37 @@ export function MaintenanceCompletionSettingsTab({
                 }))
               }
             />
+          </div>
+
+          <div className="h-px bg-border" />
+
+          <div className="flex flex-col gap-4">
+            <div className="space-y-1">
+              <Label className="text-base font-semibold">
+                Порядок этапов в терминале
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Определяет, на каком шаге сотруднику будет показана инструкция к задаче.
+              </p>
+            </div>
+            <Select
+              value={settings.instruction_step_order}
+              onValueChange={(val: "BEFORE_PHOTOS" | "AFTER_PHOTO_BEFORE" | "AFTER_PHOTOS") =>
+                setSettings((prev) => ({
+                  ...prev,
+                  instruction_step_order: val,
+                }))
+              }
+            >
+              <SelectTrigger className="w-full sm:w-[350px] rounded-xl h-10">
+                <SelectValue placeholder="Выберите порядок этапов" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="BEFORE_PHOTOS">Инструкция перед фото (фото До и После)</SelectItem>
+                <SelectItem value="AFTER_PHOTO_BEFORE">Инструкция между фото До и фото После</SelectItem>
+                <SelectItem value="AFTER_PHOTOS">Инструкция после фото (после До и После)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex justify-end pt-4">

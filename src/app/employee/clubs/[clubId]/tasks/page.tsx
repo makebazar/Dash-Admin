@@ -17,6 +17,7 @@ import {
   X,
   Info,
   QrCode as QrIcon,
+  Undo2,
 } from "lucide-react";
 
 import { format } from "date-fns";
@@ -390,6 +391,28 @@ function EmployeeTasksContent() {
     }
   };
 
+  const handleReturnFromWork = async (taskId: string) => {
+    setIsUpdating(taskId);
+    try {
+      const res = await fetch(
+        `/api/clubs/${clubId}/equipment/maintenance/${taskId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "PENDING" }),
+        },
+      );
+
+      if (res.ok) {
+        fetchData(false);
+      }
+    } catch (error) {
+      console.error("Error returning task from work:", error);
+    } finally {
+      setIsUpdating(null);
+    }
+  };
+
   const handleCreateTerminalSession = () => {
     const idsToStart =
       selectedTaskIds.length > 0 ? selectedTaskIds : inProgressTaskIds;
@@ -596,67 +619,107 @@ function EmployeeTasksContent() {
                         </span>
                       </div>
                     ) : isInCurrentSession ? (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="h-10 px-4 rounded-xl font-black text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white uppercase tracking-tighter shadow-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isMobile) {
-                            window.open(terminalUrl, "_self");
-                          }
-                        }}
-                      >
-                        В работе
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant={
-                          isInProgress || isRework ? "default" : "outline"
-                        }
-                        className={cn(
-                          "h-10 px-4 rounded-xl font-black text-[11px] transition-all flex items-center gap-2 uppercase tracking-tighter shadow-sm",
-                          isInProgress || isRework
-                            ? isRejected
-                              ? "bg-rose-500 hover:bg-rose-600 text-white border-none"
-                              : "bg-primary text-primary-foreground border-none"
-                            : "border-primary/20 text-primary hover:bg-primary/5",
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isInProgress || isRework) {
-                            if (isMobile && sessionId) {
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-10 w-10 p-0 rounded-xl border-zinc-800 hover:bg-zinc-900 text-zinc-400 active:scale-95 transition-all shadow-sm"
+                          title="Вернуть из работы"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReturnFromWork(task.id);
+                          }}
+                          disabled={isUpdating === task.id}
+                        >
+                          {isUpdating === task.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
+                          ) : (
+                            <Undo2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-10 px-4 rounded-xl font-black text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white uppercase tracking-tighter shadow-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isMobile) {
                               window.open(terminalUrl, "_self");
-                            } else {
-                              createSession([task.id]);
                             }
-                          } else {
-                            if (sessionId) {
-                              createSession([task.id]);
-                            } else {
-                              handleAction(task.id, "START");
-                            }
-                          }
-                        }}
-                        disabled={isUpdating === task.id || isCreatingSession}
-                      >
-                        {isUpdating === task.id ||
-                        (isCreatingSession &&
-                          selectedTaskIds.includes(task.id)) ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <>
-                            {sessionId
-                              ? "Добавить"
-                              : isInProgress || isRework
-                                ? isMobile
-                                  ? "Открыть"
-                                  : "QR-код"
-                                : "Начать"}
-                          </>
+                          }}
+                        >
+                          В работе
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {(isInProgress || isRework) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-10 w-10 p-0 rounded-xl border-zinc-800 hover:bg-zinc-900 text-zinc-400 active:scale-95 transition-all shadow-sm"
+                            title="Вернуть из работы"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReturnFromWork(task.id);
+                            }}
+                            disabled={isUpdating === task.id}
+                          >
+                            {isUpdating === task.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
+                            ) : (
+                              <Undo2 className="h-4 w-4" />
+                            )}
+                          </Button>
                         )}
-                      </Button>
+                        <Button
+                          size="sm"
+                          variant={
+                            isInProgress || isRework ? "default" : "outline"
+                          }
+                          className={cn(
+                            "h-10 px-4 rounded-xl font-black text-[11px] transition-all flex items-center gap-2 uppercase tracking-tighter shadow-sm",
+                            isInProgress || isRework
+                              ? isRejected
+                                ? "bg-rose-500 hover:bg-rose-600 text-white border-none"
+                                : "bg-primary text-primary-foreground border-none"
+                              : "border-primary/20 text-primary hover:bg-primary/5",
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isInProgress || isRework) {
+                              if (isMobile && sessionId) {
+                                window.open(terminalUrl, "_self");
+                              } else {
+                                createSession([task.id]);
+                              }
+                            } else {
+                              if (sessionId) {
+                                createSession([task.id]);
+                              } else {
+                                handleAction(task.id, "START");
+                              }
+                            }
+                          }}
+                          disabled={isUpdating === task.id || isCreatingSession}
+                        >
+                          {isUpdating === task.id ||
+                          (isCreatingSession &&
+                            selectedTaskIds.includes(task.id)) ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <>
+                              {sessionId
+                                ? "Добавить"
+                                : isInProgress || isRework
+                                  ? isMobile
+                                    ? "Открыть"
+                                    : "QR-код"
+                                  : "Начать"}
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     )}
                   </div>
                 )}

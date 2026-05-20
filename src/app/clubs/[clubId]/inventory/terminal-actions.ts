@@ -626,3 +626,20 @@ export async function saveShiftZoneSnapshotTerminal(
     return { ok: false as const, error: error.message || "Ошибка сохранения" };
   }
 }
+
+export async function getInventorySettingsTerminal(clubId: string) {
+  try {
+    const res = await query(
+      `SELECT inventory_settings FROM clubs WHERE id = $1 LIMIT 1`,
+      [clubId],
+    );
+    if (res.rowCount === 0) throw new Error("Клуб не найден");
+    const settings = normalizeInventorySettings(res.rows[0]?.inventory_settings);
+    return { ok: true as const, data: settings };
+  } catch (error: any) {
+    return {
+      ok: false as const,
+      error: error.message || "Не удалось загрузить настройки",
+    };
+  }
+}

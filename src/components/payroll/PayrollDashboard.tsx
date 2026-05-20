@@ -635,34 +635,39 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const shifts = (
       Array.isArray(employee.shifts) ? employee.shifts : []
     ).filter((s: any) => s.type !== "PERIOD_BONUS");
-    const shiftBonusMap = new Map<
-      string,
-      { name: string; payoutType: string; amount: number }
-    >();
+    const shiftBonusesBreakdown = Array.isArray(employee.shift_bonuses_breakdown)
+      ? employee.shift_bonuses_breakdown
+      : [];
 
-    shifts.forEach((s: any) => {
-      const list = Array.isArray(s.bonuses) ? s.bonuses : [];
-      list.forEach((b: any) => {
-        const type = String(b?.type || "");
-        const mode = String(b?.mode || "");
-        if (type === "PERIOD_BONUS_CONTRIBUTION" || mode === "MONTH") return;
+    const shiftBonusesReal = shiftBonusesBreakdown
+      .filter((b: any) => String(b.payout_type || b.payoutType) !== "VIRTUAL_BALANCE")
+      .map((b: any) => ({
+        name: b.name,
+        payoutType: b.payout_type || b.payoutType || "REAL_MONEY",
+        amount: b.amount || 0,
+        type: b.type,
+        count: b.count || 0,
+        source_value: b.source_value || 0,
+        original_type: b.original_type,
+        source_key: b.source_key,
+        thresholds: b.thresholds,
+        threshold_counts: b.threshold_counts,
+      }));
 
-        const payoutType = String(b?.payout_type || "REAL_MONEY");
-        const name = String(b?.name || b?.type || "Бонус");
-        const key = `${payoutType}||${name}`;
-        const existing = shiftBonusMap.get(key);
-        const amt = parseFloat(b?.amount) || 0;
-        if (existing) existing.amount += amt;
-        else shiftBonusMap.set(key, { name, payoutType, amount: amt });
-      });
-    });
-
-    const shiftBonusesReal = Array.from(shiftBonusMap.values())
-      .filter((v) => v.payoutType !== "VIRTUAL_BALANCE" && v.amount > 0.0001)
-      .sort((a, b) => b.amount - a.amount);
-    const shiftBonusesVirtual = Array.from(shiftBonusMap.values())
-      .filter((v) => v.payoutType === "VIRTUAL_BALANCE" && v.amount > 0.0001)
-      .sort((a, b) => b.amount - a.amount);
+    const shiftBonusesVirtual = shiftBonusesBreakdown
+      .filter((b: any) => String(b.payout_type || b.payoutType) === "VIRTUAL_BALANCE")
+      .map((b: any) => ({
+        name: b.name,
+        payoutType: b.payout_type || b.payoutType || "VIRTUAL_BALANCE",
+        amount: b.amount || 0,
+        type: b.type,
+        count: b.count || 0,
+        source_value: b.source_value || 0,
+        original_type: b.original_type,
+        source_key: b.source_key,
+        thresholds: b.thresholds,
+        threshold_counts: b.threshold_counts,
+      }));
 
     const rawMonthlyKpis = Array.isArray(employee.period_bonuses)
       ? employee.period_bonuses
@@ -694,7 +699,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
       kpiGroupMeta.set(key, { showRole: !allSame, dedupe: allSame });
     });
     const seenKpiKeys = new Set<string>();
-    const monthlyKpis = rawMonthlyKpis.filter((k: any) => {
+    const filteredPeriodBonuses = rawMonthlyKpis.filter((k: any) => {
       const key = String(k?.metric_key || k?.source || k?.name || "");
       const meta = kpiGroupMeta.get(key);
       if (meta?.dedupe) {
@@ -704,15 +709,48 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
       }
       return true;
     });
+
+    const shiftKpis = [...shiftBonusesReal, ...shiftBonusesVirtual].map((sb) => {
+      const isPercent = sb.original_type === "progressive_percent" || sb.original_type === "percent_revenue";
+      const count = isPercent ? (sb.source_value || 0) : (sb.count || 0);
+      const reward_value = isPercent
+        ? (count > 0 ? (sb.amount / count) * 100 : 0)
+        : (sb.count > 0 ? sb.amount / sb.count : 0);
+      const reward_type = isPercent ? "PERCENT" : "FIXED";
+      const source = isPercent
+        ? (sb.source_key === "Bar" ? "Выручка бара (sum)" : "Выручка (sum)")
+        : "За смены";
+
+      return {
+        name: sb.name,
+        type: "per_unit", // Force render without progress bar
+        payout_type: sb.payoutType,
+        bonus_amount: sb.amount,
+        current_value: count,
+        target_value: 0,
+        is_met: true,
+        metric_key: isPercent ? "sum" : undefined,
+        thresholds: sb.thresholds || undefined,
+        threshold_counts: sb.threshold_counts || undefined,
+        metric_breakdown: [
+          {
+            source,
+            count,
+            earned: sb.amount,
+            reward_value,
+            reward_type,
+          },
+        ],
+      };
+    });
+
+    const monthlyKpis = [...filteredPeriodBonuses, ...shiftKpis];
+
     const monthCash = monthlyKpis.filter(
-      (k: any) =>
-        k?.payout_type !== "VIRTUAL_BALANCE" &&
-        Number(k?.bonus_amount || 0) > 0,
+      (k: any) => k?.payout_type !== "VIRTUAL_BALANCE",
     );
     const monthVirtual = monthlyKpis.filter(
-      (k: any) =>
-        k?.payout_type === "VIRTUAL_BALANCE" &&
-        Number(k?.bonus_amount || 0) > 0,
+      (k: any) => k?.payout_type === "VIRTUAL_BALANCE",
     );
 
     const checklist = Array.isArray(employee.checklist_bonuses)
@@ -722,7 +760,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     const base = Number(employee.breakdown?.base_salary || 0);
     const premiumTotal = Number(employee.kpi_bonus_amount || 0);
     const perShiftBonusTotal = shiftBonusesReal.reduce(
-      (sum, x) => sum + x.amount,
+      (sum: number, x: any) => sum + x.amount,
       0,
     );
     const deductions = Number(employee.total_bar_purchases || 0);
@@ -885,14 +923,26 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                             </div>
                           </div>
                         )}
-                        {showMonthKpi && (
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="text-slate-700">KPI за месяц</div>
-                            <div className="font-black text-slate-900 whitespace-nowrap">
-                              {formatCurrency(monthKpiAmount)}
+                        {monthlyKpis
+                          .filter(
+                            (k: any) =>
+                              String(k?.payout_type || "REAL_MONEY") !==
+                                "VIRTUAL_BALANCE" &&
+                              Number(k?.bonus_amount || 0) !== 0,
+                          )
+                          .map((k: any, idx: number) => (
+                            <div
+                              key={`kpi-${idx}`}
+                              className="flex items-center justify-between gap-4"
+                            >
+                              <div className="text-slate-700">
+                                {k?.name || "KPI за месяц"}
+                              </div>
+                              <div className="font-black text-slate-900 whitespace-nowrap">
+                                {formatCurrency(Number(k?.bonus_amount || 0))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          ))}
                         {showChecklistMonth && (
                           <div className="flex items-center justify-between gap-4">
                             <div className="text-slate-700">
@@ -923,7 +973,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div className="text-sm font-black text-slate-900">
-              KPI за месяц
+              KPI и Бонусы
             </div>
             <Badge
               variant="outline"
@@ -998,7 +1048,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                     promo_topup_total_sum: "Сумма пополнений",
                     promo_service_count: "Сервисные услуги",
                   };
-                  return labels[src] || src;
+                  const cleanSrc = src ? src.replace(/\s*\(sum\)/g, "") : src;
+                  return labels[cleanSrc] || cleanSrc;
                 };
 
                 const isMonetary =
@@ -1024,6 +1075,11 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 const metricBreakdown = Array.isArray(k?.metric_breakdown)
                   ? k.metric_breakdown
                   : [];
+
+                const isShiftBonus =
+                  isPerUnit &&
+                  (metricBreakdown[0]?.source === "За смены" ||
+                    metricBreakdown[0]?.source?.includes("Выручка"));
 
                 return (
                   <PayrollManagerKpiCard
@@ -1083,32 +1139,87 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                         <span className="font-black uppercase tracking-widest text-blue-400 block mb-1">
                           Расчет бонуса
                         </span>
-                        {isPercentReward ? (
-                          <>
-                            База для расчета:{" "}
-                            <span className="font-bold">
-                              {formatCurrency(current)}
-                            </span>{" "}
-                            × Ступень:{" "}
-                            <span className="font-bold">
-                              {currentTierReward || "0%"}
-                            </span>{" "}
-                            = Итого:{" "}
-                            <span className="font-bold">
-                              {formatCurrency(bonusAmount)}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            Фиксированный бонус за достижение ступени:{" "}
-                            <span className="font-bold">
-                              {formatCurrency(bonusAmount)}
-                            </span>
-                          </>
-                        )}
+                        {(() => {
+                          if (isShiftBonus) {
+                            return (
+                              <>
+                                Начисление происходит индивидуально в рамках каждой отработанной смены.{" "}
+                                Здесь показана итоговая накопленная сумма.
+                              </>
+                            );
+                          }
+
+                          if (isPerUnit) {
+                            return (
+                              <>
+                                Бонус суммируется за каждое выполненное действие (штуку/акцию) по фиксированному тарифу или проценту.
+                              </>
+                            );
+                          }
+
+                          return isPercentReward ? (
+                            <>
+                              База для расчета:{" "}
+                              <span className="font-bold">
+                                {formatCurrency(current)}
+                              </span>{" "}
+                              × Ступень:{" "}
+                              <span className="font-bold">
+                                {currentTierReward || "0%"}
+                              </span>{" "}
+                              = Итого:{" "}
+                              <span className="font-bold">
+                                {formatCurrency(bonusAmount)}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              Фиксированный бонус за достижение ступени:{" "}
+                              <span className="font-bold">
+                                {formatCurrency(bonusAmount)}
+                              </span>
+                            </>
+                          );
+                        })()}
                       </div>
 
-                      {sortedThresholds.length > 0 && (
+                      {/* Shift-level Progressive Thresholds */}
+                      {isShiftBonus && sortedThresholds.length > 0 && (
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                            Пороги сменных начислений
+                          </span>
+                          <div className="grid gap-2">
+                            {sortedThresholds.map((t: any, ti: number) => {
+                              const labelKey = t.label || `Ступень ${ti + 1}`;
+                              const countReached = k.threshold_counts?.[labelKey] || 0;
+                              return (
+                                <div
+                                  key={ti}
+                                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100"
+                                >
+                                  <div className="space-y-0.5">
+                                    <div className="text-[11px] font-bold text-slate-700">
+                                      {t.label || `Ступень ${ti + 1}`} (от {formatCurrency(t.from || 0)})
+                                    </div>
+                                    {countReached > 0 && (
+                                      <div className="text-[10px] text-slate-500 font-medium">
+                                        Достигнуто в этом месяце: <span className="font-black text-emerald-600">{countReached} раз</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] font-black text-slate-900">
+                                    {t.percent ? `${t.percent}%` : formatCurrency(t.amount || t.bonus || 0)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Monthly/Period Thresholds */}
+                      {!isShiftBonus && sortedThresholds.length > 0 && (
                         <div className="space-y-2">
                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                             Все ступени
@@ -1157,8 +1268,9 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
           )}
 
           {employee.maintenance_status &&
-          (Math.abs(Number(employee.maintenance_status.bonus_amount || 0)) >
-            0 ||
+          (employee.scheme_features?.has_maintenance ||
+            Math.abs(Number(employee.maintenance_status.bonus_amount || 0)) >
+              0 ||
             Number(employee.maintenance_status.current_value || 0) > 0 ||
             Number(employee.maintenance_status.target_value || 0) > 0) ? (
             <div className="pt-4 border-t border-slate-200">
@@ -1336,15 +1448,15 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
-            <div className="text-sm font-black text-slate-900">
-              Бонусы за смены
-            </div>
-            {shiftBonusesReal.length > 0 ? (
+          {shiftBonusesVirtual.length > 0 && (
+            <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
+              <div className="text-sm font-black text-slate-900">
+                Виртуальный баланс
+              </div>
               <div className="space-y-2">
-                {shiftBonusesReal.map((b, i) => (
+                {shiftBonusesVirtual.map((b: any, i: number) => (
                   <div
-                    key={`sb-${i}`}
+                    key={`sv-${i}`}
                     className="flex items-start justify-between gap-4"
                   >
                     <div className="min-w-0">
@@ -1352,43 +1464,14 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                         {b.name}
                       </div>
                     </div>
-                    <div className="text-sm font-black text-emerald-700 whitespace-nowrap">
+                    <div className="text-sm font-black text-purple-700 whitespace-nowrap">
                       +{formatCurrency(b.amount)}
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                Бонусов за смены нет
-              </div>
-            )}
-
-            {shiftBonusesVirtual.length > 0 ? (
-              <div className="pt-4 border-t border-slate-200">
-                <div className="text-[10px] font-black uppercase tracking-widest text-purple-600">
-                  Виртуальный баланс
-                </div>
-                <div className="mt-3 space-y-2">
-                  {shiftBonusesVirtual.map((b, i) => (
-                    <div
-                      key={`sv-${i}`}
-                      className="flex items-start justify-between gap-4"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm font-bold text-slate-900 truncate">
-                          {b.name}
-                        </div>
-                      </div>
-                      <div className="text-sm font-black text-purple-700 whitespace-nowrap">
-                        +{formatCurrency(b.amount)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
+            </div>
+          )}
 
           <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
             <div className="text-sm font-black text-slate-900">Чек-листы</div>
@@ -1838,6 +1921,50 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                           {formatCurrency(employee.balance)}
                         </p>
                       </div>
+                      {(() => {
+                        const totalRevenue = employee.metrics?.total_revenue || 0;
+                        const personalReceiptsCount = (employee.shifts || []).reduce(
+                          (sum: number, s: any) => {
+                            const rc = Number(s.metrics?.receipts_count || s.report_data?.receipts_count || 0);
+                            return sum + rc;
+                          },
+                          0
+                        );
+                        const personalAverageCheck = personalReceiptsCount > 0 ? totalRevenue / personalReceiptsCount : 0;
+
+                        const getReceiptWord = (count: number) => {
+                          const mod10 = count % 10;
+                          const mod100 = count % 100;
+                          if (mod100 >= 11 && mod100 <= 19) {
+                            return "чеков";
+                          }
+                          if (mod10 === 1) {
+                            return "чек";
+                          }
+                          if (mod10 >= 2 && mod10 <= 4) {
+                            return "чека";
+                          }
+                          return "чеков";
+                        };
+
+                        if (personalReceiptsCount === 0) return null;
+
+                        return (
+                          <div className="rounded-xl border border-blue-100/60 bg-blue-50/40 p-3">
+                            <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-blue-600/70">
+                              Средний чек
+                            </p>
+                            <div className="flex flex-col">
+                              <p className="font-bold text-blue-600">
+                                {formatCurrency(personalAverageCheck)}
+                              </p>
+                              <p className="text-[9px] text-muted-foreground font-medium">
+                                {personalReceiptsCount} {getReceiptWord(personalReceiptsCount)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {employee.total_bar_purchases &&
                       employee.total_bar_purchases > 0 ? (
                         <div className="rounded-xl border border-rose-100/60 bg-rose-50/40 p-3">
@@ -1908,6 +2035,30 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                         {(() => {
                           const totalRevenue =
                             employee.metrics?.total_revenue || 0;
+                          
+                          const personalReceiptsCount = (employee.shifts || []).reduce(
+                            (sum: number, s: any) => {
+                              const rc = Number(s.metrics?.receipts_count || s.report_data?.receipts_count || 0);
+                              return sum + rc;
+                            },
+                            0
+                          );
+                          const personalAverageCheck = personalReceiptsCount > 0 ? totalRevenue / personalReceiptsCount : 0;
+
+                          const getReceiptWord = (count: number) => {
+                            const mod10 = count % 10;
+                            const mod100 = count % 100;
+                            if (mod100 >= 11 && mod100 <= 19) {
+                              return "чеков";
+                            }
+                            if (mod10 === 1) {
+                              return "чек";
+                            }
+                            if (mod10 >= 2 && mod10 <= 4) {
+                              return "чека";
+                            }
+                            return "чеков";
+                          };
 
                           return (
                             <div className="space-y-4">
@@ -1955,6 +2106,19 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                       /смена
                                     </span>
                                   </div>
+                                  {personalReceiptsCount > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-muted-foreground font-medium">
+                                        Личный средний чек:
+                                      </span>
+                                      <span className="font-bold text-blue-600">
+                                        {formatCurrency(personalAverageCheck)}
+                                        <span className="text-[10px] text-muted-foreground font-normal ml-1">
+                                          ({personalReceiptsCount} {getReceiptWord(personalReceiptsCount)})
+                                        </span>
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>

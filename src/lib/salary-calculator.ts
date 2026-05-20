@@ -156,6 +156,7 @@ export async function calculateSalary(
       let bonusAmount = 0;
       const sourceKey = bonus.source || "total";
       let metricValue = 0;
+      let metThresholdLabel: string | null = null;
       if (sourceKey === "total")
         metricValue = reportMetrics["total_revenue"] || 0;
       else if (sourceKey === "cash")
@@ -194,11 +195,16 @@ export async function calculateSalary(
           // For FIXED monthly bonuses, we don't add per-shift contribution usually
         } else if (bonus.thresholds) {
           // Daily progressive logic
+          const sortedAsc = [...bonus.thresholds].sort(
+            (a, b) => (Number(a.from) || 0) - (Number(b.from) || 0),
+          );
           const sorted = [...bonus.thresholds].sort(
             (a, b) => (Number(b.from) || 0) - (Number(a.from) || 0),
           );
           for (const t of sorted) {
             if (metricValue >= (Number(t.from) || 0)) {
+              const idx = sortedAsc.indexOf(t);
+              metThresholdLabel = t.label || `Ступень ${idx + 1}`;
               if (bonus.reward_type === "FIXED") {
                 bonusAmount = Number(t.amount) || 0;
               } else {
@@ -482,6 +488,7 @@ export async function calculateSalary(
           source_value: metricValue,
           payout_type: payoutType,
           mode: bonus.mode,
+          met_threshold_label: metThresholdLabel,
         });
 
         // Разделяем по типу выплаты

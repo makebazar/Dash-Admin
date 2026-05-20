@@ -42,7 +42,8 @@ interface SettingsTabProps {
         employee_discount_percent?: number,
         employee_discount_overrides?: Record<string, number>,
         allow_cost_price_sale?: boolean,
-        price_tag_settings?: PriceTagSettings
+        price_tag_settings?: PriceTagSettings,
+        block_desktop_handover?: boolean
     }
 }
 
@@ -641,6 +642,25 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
                                                 <Switch
                                                     checked={normalizedSettings?.blind_inventory_enabled ?? true}
                                                     onCheckedChange={(checked) => handleUpdateSetting('blind_inventory_enabled', checked)}
+                                                    disabled={isPending}
+                                                    className="data-[state=checked]:bg-blue-600"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {isShiftAccountabilityEnabled && (
+                                            <div className="flex items-center justify-between gap-4 rounded-xl border border-border p-4">
+                                                <div className="space-y-1">
+                                                    <Label className="text-sm font-bold text-foreground">
+                                                        Блокировать доступ с ПК в терминал передачи смены
+                                                    </Label>
+                                                    <p className="text-xs text-muted-foreground leading-relaxed max-w-[520px]">
+                                                        Если включено, войти в терминал можно будет только со смартфона. Если выключено, разрешается работа с ПК.
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    checked={normalizedSettings?.block_desktop_handover ?? true}
+                                                    onCheckedChange={(checked) => handleUpdateSetting('block_desktop_handover', checked)}
                                                     disabled={isPending}
                                                     className="data-[state=checked]:bg-blue-600"
                                                 />

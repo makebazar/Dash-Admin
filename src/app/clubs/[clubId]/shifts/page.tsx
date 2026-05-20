@@ -1335,6 +1335,10 @@ export default function ShiftsPage({
     return 0;
   }, [totalRevenue, receiptsTotal]);
 
+  const hasReceiptsCount = useMemo(() => {
+    return reportFields.some((f) => f.metric_key === "receipts_count");
+  }, [reportFields]);
+
   if (isLoading && shifts.length === 0) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -1887,6 +1891,22 @@ export default function ShiftsPage({
                                 : "-"}
                             </div>
                           </div>
+                          {hasReceiptsCount && (
+                            <div className="rounded-xl bg-blue-50/50 border border-blue-100/50 p-3">
+                              <div className="text-[10px] uppercase font-bold tracking-widest text-blue-400 mb-1">
+                                Ср. чек
+                              </div>
+                              <div className="text-sm font-bold text-blue-600 tabular-nums">
+                                {(() => {
+                                  const totalRevenue = calculateShiftTotalIncome(shift);
+                                  const receiptsCount = Number(shift.report_data?.receipts_count || 0);
+                                  return receiptsCount > 0
+                                    ? formatMoney(totalRevenue / receiptsCount)
+                                    : "—";
+                                })()}
+                              </div>
+                            </div>
+                          )}
                           {reportFields.map((field: any) => {
                             const raw = shift.report_data?.[field.metric_key];
                             const parsed = parseFloat(String(raw));
@@ -1981,6 +2001,11 @@ export default function ShiftsPage({
                         <TableHead className="h-12 text-right text-slate-500 font-medium">
                           Расходы
                         </TableHead>
+                        {hasReceiptsCount && (
+                          <TableHead className="h-12 text-right text-slate-500 font-medium whitespace-nowrap">
+                            Средний чек
+                          </TableHead>
+                        )}
                         {reportFields.map((field: any) => (
                           <TableHead
                             key={field.metric_key}
@@ -2126,6 +2151,21 @@ export default function ShiftsPage({
                                     getMetricValue(shift, "expenses"),
                                   )}
                             </TableCell>
+                            {hasReceiptsCount && (
+                              <TableCell className="py-4 text-right font-medium text-blue-600 tabular-nums whitespace-nowrap">
+                                {shift.report_mode === "NO_REPORT" ? (
+                                  "—"
+                                ) : (
+                                  (() => {
+                                    const totalRevenue = calculateShiftTotalIncome(shift);
+                                    const receiptsCount = Number(shift.report_data?.receipts_count || 0);
+                                    return receiptsCount > 0
+                                      ? formatMoney(totalRevenue / receiptsCount)
+                                      : "—";
+                                  })()
+                                )}
+                              </TableCell>
+                            )}
                             {reportFields.map((field: any) => (
                               <TableCell
                                 key={field.metric_key}

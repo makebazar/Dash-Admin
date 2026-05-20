@@ -47,6 +47,7 @@ interface Task {
   require_comment_mode: "ALWAYS" | "ON_ISSUE" | "NEVER";
   instructions?: string;
   performance_instructions?: string;
+  instruction_step_order?: string;
   task_type?:
     | "CLEANING"
     | "REPAIR"
@@ -259,16 +260,68 @@ export default function MaintenanceTerminalPage() {
     return () => window.removeEventListener("resize", checkIsDesktop);
   }, []);
 
+  const getTaskSteps = (task: Task): Step[] => {
+    if (!task) return [];
+    const isRework =
+      task.status === "REWORK" ||
+      task.verification_status === "REJECTED";
+    
+    const steps: Step[] = [];
+    if (isRework) steps.push("REWORK");
+
+    if (isDesktop) {
+      steps.push("INFO");
+      if (
+        task.performance_metrics &&
+        task.performance_metrics.length > 0
+      ) {
+        steps.push("PERFORMANCE");
+      }
+    } else {
+      const order = task.instruction_step_order || "BEFORE_PHOTOS";
+      if (order === "BEFORE_PHOTOS") {
+        steps.push("INFO");
+        if (task.require_photo_before) steps.push("BEFORE");
+        if (
+          task.performance_metrics &&
+          task.performance_metrics.length > 0
+        ) {
+          steps.push("PERFORMANCE");
+        }
+        if (task.require_photo_after) steps.push("AFTER");
+      } else if (order === "AFTER_PHOTO_BEFORE") {
+        if (task.require_photo_before) steps.push("BEFORE");
+        steps.push("INFO");
+        if (
+          task.performance_metrics &&
+          task.performance_metrics.length > 0
+        ) {
+          steps.push("PERFORMANCE");
+        }
+        if (task.require_photo_after) steps.push("AFTER");
+      } else {
+        // AFTER_PHOTOS
+        if (task.require_photo_before) steps.push("BEFORE");
+        if (
+          task.performance_metrics &&
+          task.performance_metrics.length > 0
+        ) {
+          steps.push("PERFORMANCE");
+        }
+        if (task.require_photo_after) steps.push("AFTER");
+        steps.push("INFO");
+      }
+    }
+
+    steps.push("REPORT");
+    return steps;
+  };
+
   const currentTask = tasks[currentTaskIdx];
   const currentReport = currentTask ? reports[currentTask.id] : null;
 
   const isFirstStepOfTask = currentTask
-    ? currentTask.status === "REWORK" ||
-      currentTask.verification_status === "REJECTED"
-      ? currentStep === "REWORK"
-      : currentTask.require_photo_before
-        ? currentStep === "BEFORE"
-        : currentStep === "INFO"
+    ? currentStep === getTaskSteps(currentTask)[0]
     : false;
 
   const handlePhoto = async (
@@ -341,126 +394,63 @@ export default function MaintenanceTerminalPage() {
     if (currentTaskIdx < tasks.length - 1) {
       const nextIdx = currentTaskIdx + 1;
       setCurrentTaskIdx(nextIdx);
-      const nextIsRework =
-        tasks[nextIdx]?.status === "REWORK" ||
-        tasks[nextIdx]?.verification_status === "REJECTED";
-      setCurrentStep(
-        nextIsRework
-          ? "REWORK"
-          : tasks[nextIdx].require_photo_before
-            ? "BEFORE"
-            : "INFO",
-      );
+      const nextSteps = getTaskSteps(tasks[nextIdx]);
+      setCurrentStep(nextSteps[0]);
     } else {
       setCurrentStep("SUMMARY");
     }
   };
 
   const nextStep = () => {
-    if (currentStep === "REWORK") {
-      setCurrentStep(currentTask.require_photo_before ? "BEFORE" : "INFO");
-    } else if (currentStep === "PLAN") {
+    if (currentStep === "PLAN") {
       setCurrentTaskIdx(0);
-      const isRework =
-        tasks[0]?.status === "REWORK" ||
-        tasks[0]?.verification_status === "REJECTED";
-      setCurrentStep(
-        isRework ? "REWORK" : tasks[0].require_photo_before ? "BEFORE" : "INFO",
-      );
-    } else if (currentStep === "BEFORE") setCurrentStep("INFO");
-    else if (currentStep === "INFO") {
-      if (
-        currentTask?.performance_metrics &&
-        currentTask.performance_metrics.length > 0
-      ) {
-        setCurrentStep("PERFORMANCE");
-      } else if (currentTask?.require_photo_after) {
-        setCurrentStep("AFTER");
+      const steps = getTaskSteps(tasks[0]);
+      setCurrentStep(steps[0]);
+    } else if (currentStep === "SUMMARY") {
+      // Do nothing
+    } else {
+      const steps = getTaskSteps(currentTask);
+      const idx = steps.indexOf(currentStep);
+      if (idx !== -1 && idx < steps.length - 1) {
+        setCurrentStep(steps[idx + 1]);
       } else {
-        setCurrentStep("REPORT");
-      }
-    } else if (currentStep === "PERFORMANCE") {
-      if (currentTask?.require_photo_after) setCurrentStep("AFTER");
-      else setCurrentStep("REPORT");
-    } else if (currentStep === "AFTER") setCurrentStep("REPORT");
-    else if (currentStep === "REPORT") {
-      if (currentTaskIdx < tasks.length - 1) {
-        const nextIdx = currentTaskIdx + 1;
-        setCurrentTaskIdx(nextIdx);
-        const nextIsRework =
-          tasks[nextIdx]?.status === "REWORK" ||
-          tasks[nextIdx]?.verification_status === "REJECTED";
-        setCurrentStep(
-          nextIsRework
-            ? "REWORK"
-            : tasks[nextIdx].require_photo_before
-              ? "BEFORE"
-              : "INFO",
-        );
-      } else {
-        setCurrentStep("SUMMARY");
+        // We are at REPORT, go to next task or SUMMARY
+        if (currentTaskIdx < tasks.length - 1) {
+          const nextIdx = currentTaskIdx + 1;
+          setCurrentTaskIdx(nextIdx);
+          const nextSteps = getTaskSteps(tasks[nextIdx]);
+          setCurrentStep(nextSteps[0]);
+        } else {
+          setCurrentStep("SUMMARY");
+        }
       }
     }
   };
 
   const prevStep = () => {
-    if (currentStep === "SUMMARY") {
-      setCurrentTaskIdx(tasks.length - 1);
-      setCurrentStep("REPORT");
-    } else if (currentStep === "REPORT") {
-      if (currentTask?.require_photo_after) setCurrentStep("AFTER");
-      else if (
-        currentTask?.performance_metrics &&
-        currentTask.performance_metrics.length > 0
-      )
-        setCurrentStep("PERFORMANCE");
-      else setCurrentStep("INFO");
-    } else if (currentStep === "AFTER") {
-      if (
-        currentTask?.performance_metrics &&
-        currentTask.performance_metrics.length > 0
-      )
-        setCurrentStep("PERFORMANCE");
-      else setCurrentStep("INFO");
-    } else if (currentStep === "PERFORMANCE") {
-      setCurrentStep("INFO");
-    } else if (currentStep === "INFO") {
-      if (currentTask?.require_photo_before) setCurrentStep("BEFORE");
-      else if (
-        currentTask.status === "REWORK" ||
-        currentTask.verification_status === "REJECTED"
-      ) {
-        setCurrentStep("REWORK");
-      } else if (currentTaskIdx > 0) {
-        const prevIdx = currentTaskIdx - 1;
-        setCurrentTaskIdx(prevIdx);
-        setCurrentStep("REPORT");
-      } else {
-        setCurrentStep("PLAN");
-      }
-    } else if (currentStep === "BEFORE") {
-      if (
-        currentTask.status === "REWORK" ||
-        currentTask.verification_status === "REJECTED"
-      ) {
-        setCurrentStep("REWORK");
-      } else if (currentTaskIdx > 0) {
-        const prevIdx = currentTaskIdx - 1;
-        setCurrentTaskIdx(prevIdx);
-        setCurrentStep("REPORT");
-      } else {
-        setCurrentStep("PLAN");
-      }
-    } else if (currentStep === "REWORK") {
-      if (currentTaskIdx > 0) {
-        const prevIdx = currentTaskIdx - 1;
-        setCurrentTaskIdx(prevIdx);
-        setCurrentStep("REPORT");
-      } else {
-        setCurrentStep("PLAN");
-      }
-    } else if (currentStep === "PLAN") {
+    if (currentStep === "PLAN") {
       // Stay on plan
+    } else if (currentStep === "SUMMARY") {
+      const prevIdx = tasks.length - 1;
+      setCurrentTaskIdx(prevIdx);
+      const prevSteps = getTaskSteps(tasks[prevIdx]);
+      setCurrentStep(prevSteps[prevSteps.length - 1]); // which is REPORT
+    } else {
+      const steps = getTaskSteps(currentTask);
+      const idx = steps.indexOf(currentStep);
+      if (idx > 0) {
+        setCurrentStep(steps[idx - 1]);
+      } else {
+        // We are at the first step of the task, go to previous task's REPORT or PLAN
+        if (currentTaskIdx > 0) {
+          const prevIdx = currentTaskIdx - 1;
+          setCurrentTaskIdx(prevIdx);
+          const prevSteps = getTaskSteps(tasks[prevIdx]);
+          setCurrentStep(prevSteps[prevSteps.length - 1]); // which is REPORT
+        } else {
+          setCurrentStep("PLAN");
+        }
+      }
     }
   };
 
@@ -619,7 +609,16 @@ export default function MaintenanceTerminalPage() {
     if (!currentReport && currentStep !== "PLAN" && currentStep !== "SUMMARY")
       return false;
 
-    if (currentStep === "INFO") return true;
+    if (currentStep === "INFO") {
+      if (isDesktop) {
+        const beforePhotosOk = !currentTask.require_photo_before || 
+          (currentReport?.photos_before.length || 0) >= currentTask.min_photos_before;
+        const afterPhotosOk = !currentTask.require_photo_after || 
+          (currentReport?.photos_after.length || 0) >= currentTask.min_photos_after;
+        return beforePhotosOk && afterPhotosOk;
+      }
+      return true;
+    }
     if (currentStep === "PERFORMANCE") {
       if (!currentTask?.performance_metrics) return true;
       const data = currentReport?.performance_data || {};
@@ -742,15 +741,9 @@ export default function MaintenanceTerminalPage() {
       {/* Steps Progress */}
       {currentStep !== "PLAN" && currentStep !== "SUMMARY" && (
         <div className="px-5 py-3 flex gap-1.5 bg-zinc-900/50 border-b border-zinc-800/50">
-          {["BEFORE", "INFO", "AFTER", "REPORT"].map((s) => {
-            const stepVisible =
-              s === "BEFORE"
-                ? currentTask.require_photo_before
-                : s === "AFTER"
-                  ? currentTask.require_photo_after
-                  : true;
-            if (!stepVisible) return null;
-            return (
+          {getTaskSteps(currentTask)
+            .filter((s) => s !== "REWORK")
+            .map((s) => (
               <div
                 key={s}
                 className={cn(
@@ -760,8 +753,7 @@ export default function MaintenanceTerminalPage() {
                     : "bg-zinc-800",
                 )}
               />
-            );
-          })}
+            ))}
         </div>
       )}
 
@@ -907,7 +899,7 @@ export default function MaintenanceTerminalPage() {
           </div>
         )}
 
-        {currentStep === "BEFORE" && (
+        {currentStep === "BEFORE" && !isDesktop && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="space-y-2">
               <h2 className="text-2xl font-bold tracking-tight">
@@ -1000,7 +992,7 @@ export default function MaintenanceTerminalPage() {
           </div>
         )}
 
-        {currentStep === "INFO" && (
+        {currentStep === "INFO" && !isDesktop && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="space-y-2">
               <h2 className="text-2xl font-bold tracking-tight">Инструкции</h2>
@@ -1025,6 +1017,197 @@ export default function MaintenanceTerminalPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {currentStep === "INFO" && isDesktop && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="lg:col-span-6 space-y-6 flex flex-col">
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold tracking-tight">Инструкции</h2>
+                <p className="text-sm text-zinc-500 font-medium">
+                  Выполните обслуживание согласно установленному регламенту.
+                </p>
+              </div>
+              <div className="bg-zinc-900 rounded-[2rem] p-8 border border-zinc-800 shadow-inner relative overflow-hidden min-h-[400px]">
+                <div className="prose prose-invert max-w-none prose-zinc prose-sm">
+                  {currentTask.instructions ? (
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: currentTask.instructions,
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-center space-y-4 h-full">
+                      <Info className="h-12 w-12 text-zinc-700" />
+                      <p className="text-zinc-500 font-bold text-xs uppercase tracking-widest">
+                        Инструкции отсутствуют. Проведите стандартную чистку.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-6 space-y-8 flex flex-col">
+              {/* BEFORE PHOTOS SECTION */}
+              {currentTask.require_photo_before && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center px-1">
+                    <div>
+                      <h3 className="text-lg font-bold tracking-tight">Состояние до</h3>
+                      <p className="text-xs text-zinc-500 font-medium">
+                        Загрузите фото устройства перед началом работ.
+                      </p>
+                    </div>
+                    {currentTask.min_photos_before > 0 && (
+                      <span className="px-3 py-1 rounded-full border border-zinc-800 bg-zinc-900 text-[10px] font-mono font-bold text-zinc-400">
+                        Мин. фото: {currentTask.min_photos_before} (осталось: {Math.max(0, currentTask.min_photos_before - (currentReport?.photos_before.length || 0))})
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {currentReport?.photos_before.map((p, i) => (
+                      <div
+                        key={i}
+                        className="aspect-square rounded-2xl border border-zinc-800 overflow-hidden relative group shadow-lg"
+                      >
+                        <img
+                          src={typeof p === "string" ? p : URL.createObjectURL(p)}
+                          className="h-full w-full object-cover transition-all cursor-pointer"
+                          alt={`Фото до ${i + 1}`}
+                          onClick={() =>
+                            openViewer(
+                              currentReport.photos_before.map((img) =>
+                                typeof img === "string" ? img : URL.createObjectURL(img)
+                              ),
+                              i
+                            )
+                          }
+                        />
+                        <button
+                          onClick={() =>
+                            setReports((prev) => ({
+                              ...prev,
+                              [currentTask.id]: {
+                                ...prev[currentTask.id],
+                                photos_before: prev[currentTask.id].photos_before.filter((_, idx) => idx !== i),
+                              },
+                            }))
+                          }
+                          className="absolute top-2 right-2 h-8 w-8 bg-black/60 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/10 active:scale-90 transition-transform"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <label
+                      className={cn(
+                        "aspect-square rounded-2xl border-2 border-dashed border-zinc-800 flex flex-col items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-800/80 active:bg-zinc-800 cursor-pointer transition-all group",
+                        isUploadingPhoto && "opacity-50 pointer-events-none"
+                      )}
+                    >
+                      <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center group-active:scale-110 transition-transform">
+                        {isUploadingPhoto ? (
+                          <Loader2 className="h-5 w-5 text-emerald-500 animate-spin" />
+                        ) : (
+                          <Camera className="h-5 w-5 text-emerald-500" />
+                        )}
+                      </div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">
+                        {isUploadingPhoto ? "Загрузка..." : "Загрузить фото"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingPhoto}
+                        onChange={(e) => handlePhoto("before", e.target.files)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* AFTER PHOTOS SECTION */}
+              {currentTask.require_photo_after && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center px-1">
+                    <div>
+                      <h3 className="text-lg font-bold tracking-tight">Состояние после</h3>
+                      <p className="text-xs text-zinc-500 font-medium">
+                        Загрузите фото устройства после выполнения работ.
+                      </p>
+                    </div>
+                    {currentTask.min_photos_after > 0 && (
+                      <span className="px-3 py-1 rounded-full border border-zinc-800 bg-zinc-900 text-[10px] font-mono font-bold text-zinc-400">
+                        Мин. фото: {currentTask.min_photos_after} (осталось: {Math.max(0, currentTask.min_photos_after - (currentReport?.photos_after.length || 0))})
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {currentReport?.photos_after.map((p, i) => (
+                      <div
+                        key={i}
+                        className="aspect-square rounded-2xl border border-zinc-800 overflow-hidden relative group shadow-lg"
+                      >
+                        <img
+                          src={typeof p === "string" ? p : URL.createObjectURL(p)}
+                          className="h-full w-full object-cover transition-all cursor-pointer"
+                          alt={`Фото после ${i + 1}`}
+                          onClick={() =>
+                            openViewer(
+                              currentReport.photos_after.map((img) =>
+                                typeof img === "string" ? img : URL.createObjectURL(img)
+                              ),
+                              i
+                            )
+                          }
+                        />
+                        <button
+                          onClick={() =>
+                            setReports((prev) => ({
+                              ...prev,
+                              [currentTask.id]: {
+                                ...prev[currentTask.id],
+                                photos_after: prev[currentTask.id].photos_after.filter((_, idx) => idx !== i),
+                              },
+                            }))
+                          }
+                          className="absolute top-2 right-2 h-8 w-8 bg-black/60 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/10 active:scale-90 transition-transform"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <label
+                      className={cn(
+                        "aspect-square rounded-2xl border-2 border-dashed border-zinc-800 flex flex-col items-center justify-center gap-2 bg-zinc-900 hover:bg-zinc-800/80 active:bg-zinc-800 cursor-pointer transition-all group",
+                        isUploadingPhoto && "opacity-50 pointer-events-none"
+                      )}
+                    >
+                      <div className="h-10 w-10 rounded-full bg-emerald-500/10 flex items-center justify-center group-active:scale-110 transition-transform">
+                        {isUploadingPhoto ? (
+                          <Loader2 className="h-5 w-5 text-emerald-500 animate-spin" />
+                        ) : (
+                          <Camera className="h-5 w-5 text-emerald-500" />
+                        )}
+                      </div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">
+                        {isUploadingPhoto ? "Загрузка..." : "Загрузить фото"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingPhoto}
+                        onChange={(e) => handlePhoto("after", e.target.files)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1097,7 +1280,7 @@ export default function MaintenanceTerminalPage() {
           </div>
         )}
 
-        {currentStep === "AFTER" && (
+        {currentStep === "AFTER" && !isDesktop && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="space-y-2">
               <h2 className="text-2xl font-bold tracking-tight">

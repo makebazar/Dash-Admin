@@ -38,6 +38,7 @@ export async function GET(
                     CASE WHEN gs.require_notes_on_completion THEN 'ALWAYS' ELSE 'ON_ISSUE' END,
                     'ON_ISSUE'
                 ) as require_comment_mode,
+                COALESCE(gs.instruction_step_order, 'BEFORE_PHOTOS') as instruction_step_order,
                 ei.instructions,
                 ei.performance_instructions,
                 mt.task_type,

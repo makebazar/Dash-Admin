@@ -375,15 +375,40 @@ export async function PATCH(
         ],
       );
     } else if (effectiveAssignedUserId) {
-      // 1. First, update existing PENDING tasks
-      await query(
-        `UPDATE equipment_maintenance_tasks
-                 SET assigned_user_id = $1
-                 WHERE equipment_id = $2 AND status = 'PENDING'`,
-        [effectiveAssignedUserId, equipmentId],
+      // Get the club timezone to determine "today" date accurately
+      const clubRes = await query(
+        `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+         FROM clubs
+         WHERE id = $1`,
+        [clubId],
+      );
+      const todayDate = formatDateKeyInTimezone(
+        new Date(),
+        clubRes.rows[0]?.timezone || "Europe/Moscow",
       );
 
-      // 2. Check if ANY active task exists (PENDING/IN_PROGRESS)
+      // 1. Skip past overdue pending tasks so they don't fall on the new assignee
+      await query(
+        `UPDATE equipment_maintenance_tasks
+         SET status = 'SKIPPED',
+             notes = COALESCE(notes || E'\n', '') || $1
+         WHERE equipment_id = $2
+           AND status = 'PENDING'
+           AND due_date < $3`,
+        [`[Система] Пропущено автоматически при смене ответственного`, equipmentId, todayDate],
+      );
+
+      // 2. Update existing PENDING and IN_PROGRESS tasks that are due today or in the future, or are active in work
+      await query(
+        `UPDATE equipment_maintenance_tasks
+         SET assigned_user_id = $1
+         WHERE equipment_id = $2 
+           AND status IN ('PENDING', 'IN_PROGRESS')
+           AND (due_date >= $3 OR status = 'IN_PROGRESS')`,
+        [effectiveAssignedUserId, equipmentId, todayDate],
+      );
+
+      // 3. Check if ANY active task exists (PENDING/IN_PROGRESS)
       const activeTaskCheck = await query(
         `SELECT id FROM equipment_maintenance_tasks
                  WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')
@@ -391,18 +416,8 @@ export async function PATCH(
         [equipmentId],
       );
 
-      // 3. If no active task exists, trigger generation for this specific equipment
+      // 4. If no active task exists, trigger generation for this specific equipment
       if (activeTaskCheck.rowCount === 0) {
-        const clubRes = await query(
-          `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
-                     FROM clubs
-                     WHERE id = $1`,
-          [clubId],
-        );
-        const today = formatDateKeyInTimezone(
-          new Date(),
-          clubRes.rows[0]?.timezone || "Europe/Moscow",
-        );
         try {
           // We call the internal maintenance generation logic via a fetch to our own API
           // This ensures the "Smart Horizon" logic is applied
@@ -415,8 +430,8 @@ export async function PATCH(
                 Cookie: (await cookies()).toString(), // Pass cookies for auth
               },
               body: JSON.stringify({
-                date_from: today,
-                date_to: today,
+                date_from: todayDate,
+                date_to: todayDate,
                 equipment_ids: [equipmentId],
               }),
             },
@@ -429,12 +444,37 @@ export async function PATCH(
       body.assigned_user_id !== undefined ||
       body.assignment_mode !== undefined
     ) {
-      // Just sync if maintenance_enabled wasn't part of the trigger but assignment changed
+      // Get the club timezone to determine "today" date accurately
+      const clubRes = await query(
+        `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+         FROM clubs
+         WHERE id = $1`,
+        [clubId],
+      );
+      const todayDate = formatDateKeyInTimezone(
+        new Date(),
+        clubRes.rows[0]?.timezone || "Europe/Moscow",
+      );
+
+      // 1. Skip past overdue pending tasks so they don't fall on the new assignee
       await query(
         `UPDATE equipment_maintenance_tasks
-                 SET assigned_user_id = $1
-                 WHERE equipment_id = $2 AND status = 'PENDING'`,
-        [effectiveAssignedUserId, equipmentId],
+         SET status = 'SKIPPED',
+             notes = COALESCE(notes || E'\n', '') || $1
+         WHERE equipment_id = $2
+           AND status = 'PENDING'
+           AND due_date < $3`,
+        [`[Система] Пропущено автоматически при смене ответственного`, equipmentId, todayDate],
+      );
+
+      // 2. Just sync if maintenance_enabled wasn't part of the trigger but assignment changed
+      await query(
+        `UPDATE equipment_maintenance_tasks
+         SET assigned_user_id = $1
+         WHERE equipment_id = $2
+           AND status IN ('PENDING', 'IN_PROGRESS')
+           AND (due_date >= $3 OR status = 'IN_PROGRESS')`,
+        [effectiveAssignedUserId, equipmentId, todayDate],
       );
     }
 

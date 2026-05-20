@@ -1,0 +1,1616 @@
+<!doctype html>
+<html lang="ru">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Презентация DashAdmin: Система управленческого контроля</title>
+        
+        <!-- Google Fonts: Plus Jakarta Sans for headers, Inter for body -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+        
+        <!-- Reveal.js styles -->
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reset.css"
+        />
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.css"
+        />
+
+        <style>
+            /* Custom CSS matching DashAdmin Landing Page (Black theme, large typography, purple glow) */
+            :root {
+                --bg: #000000;
+                --text-primary: #ffffff;
+                --text-secondary: rgba(255, 255, 255, 0.6);
+                --text-dim: rgba(255, 255, 255, 0.4);
+                --accent: #c084fc; /* Violet 400 */
+                --accent-solid: #a855f7; /* Violet 500 */
+                --accent-glow: rgba(168, 85, 247, 0.15);
+                --border-color: rgba(255, 255, 255, 0.12);
+                --card-bg: rgba(255, 255, 255, 0.03);
+                --card-border: rgba(255, 255, 255, 0.08);
+                --success: #10b981;
+                --warning: #f59e0b;
+                --danger: #ef4444;
+                --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                --font-display: 'Plus Jakarta Sans', sans-serif;
+                --font-mono: 'JetBrains Mono', monospace;
+            }
+
+            html, body {
+                background-color: var(--bg) !important;
+                color: var(--text-primary);
+                font-family: var(--font-sans);
+                overflow: hidden;
+            }
+
+            /* Ambient glowing backgrounds behind slides */
+            .reveal {
+                background-color: var(--bg);
+                background-image: 
+                    radial-gradient(circle at 80% 20%, var(--accent-glow) 0px, transparent 50%),
+                    radial-gradient(circle at 10% 80%, rgba(56, 189, 248, 0.08) 0px, transparent 40%);
+                background-attachment: fixed;
+            }
+
+            /* Header / Logo Area */
+            .header-brand {
+                position: fixed;
+                top: 30px;
+                left: 40px;
+                z-index: 1000;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .logo-zap {
+                width: 20px;
+                height: 20px;
+                fill: var(--text-primary);
+            }
+            .brand-name {
+                font-family: var(--font-sans);
+                font-weight: 700;
+                font-size: 1.1rem;
+                letter-spacing: -0.02em;
+                color: var(--text-primary);
+            }
+
+            /* Global Reveal overrides */
+            .reveal section {
+                text-align: left;
+                padding: 40px 60px !important;
+                box-sizing: border-box;
+            }
+
+            /* Typographic Elements */
+            .slide-num {
+                font-family: var(--font-mono);
+                font-size: 0.85rem !important;
+                color: var(--text-dim) !important;
+                text-transform: uppercase;
+                letter-spacing: 0.15em;
+                margin-bottom: 25px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .slide-num::after {
+                content: "";
+                flex-grow: 1;
+                height: 1px;
+                background: var(--border-color);
+            }
+
+            .reveal h1 {
+                font-family: var(--font-display) !important;
+                font-size: 5rem !important;
+                font-weight: 800 !important;
+                letter-spacing: -0.04em !important;
+                line-height: 0.95 !important;
+                text-transform: none !important;
+                margin-bottom: 30px !important;
+                color: var(--text-primary) !important;
+            }
+
+            .reveal h2 {
+                font-family: var(--font-display) !important;
+                font-size: 3.2rem !important;
+                font-weight: 800 !important;
+                letter-spacing: -0.03em !important;
+                line-height: 1.05 !important;
+                text-transform: none !important;
+                margin-bottom: 35px !important;
+                color: var(--text-primary) !important;
+            }
+
+            .reveal h3 {
+                font-family: var(--font-sans) !important;
+                font-size: 1.6rem !important;
+                font-weight: 600 !important;
+                color: var(--text-primary) !important;
+                text-transform: none !important;
+                margin-bottom: 12px !important;
+                letter-spacing: -0.02em !important;
+            }
+
+            .reveal p {
+                font-size: 1.25rem !important;
+                color: var(--text-secondary) !important;
+                line-height: 1.55 !important;
+                margin-bottom: 20px !important;
+                font-weight: 400;
+            }
+
+            .reveal b,
+            .reveal strong {
+                color: var(--text-primary);
+                font-weight: 600;
+            }
+
+            .text-dimmed {
+                color: var(--text-dim) !important;
+            }
+
+            .highlight {
+                color: var(--accent) !important;
+            }
+
+            /* Custom Grid layouts */
+            .grid-2 {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 50px;
+                align-items: start;
+                width: 100%;
+            }
+
+            .grid-3 {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 30px;
+                align-items: start;
+                width: 100%;
+            }
+
+            /* Divider lines exactly like landing page */
+            .divider-line {
+                border-top: 1px solid var(--border-color);
+                margin-top: 30px;
+                padding-top: 30px;
+                width: 100%;
+            }
+
+            /* Minimal Feature Row (matching Landing FeatureRow) */
+            .feature-row {
+                border-top: 1px solid var(--border-color);
+                padding: 22px 0;
+                display: flex;
+                gap: 20px;
+                width: 100%;
+            }
+            .feature-row:last-child {
+                border-bottom: 1px solid var(--border-color);
+            }
+            .feature-row-num {
+                font-family: var(--font-mono);
+                color: var(--text-dim);
+                font-size: 0.9rem;
+                padding-top: 5px;
+                width: 40px;
+            }
+            .feature-row-content h3 {
+                font-size: 1.5rem !important;
+                margin-bottom: 8px !important;
+                letter-spacing: -0.01em !important;
+            }
+            .feature-row-content p {
+                font-size: 1.05rem !important;
+                color: var(--text-secondary) !important;
+                margin-bottom: 0 !important;
+                line-height: 1.5 !important;
+            }
+
+            /* Landing Column Style (for slide 3) */
+            .landing-col {
+                border-top: 1px solid var(--border-color);
+                padding-top: 25px;
+            }
+            .landing-col h3 {
+                font-size: 1.6rem !important;
+                margin-bottom: 15px !important;
+                font-weight: 700 !important;
+            }
+            .landing-col p {
+                font-size: 1.05rem !important;
+                line-height: 1.5 !important;
+            }
+
+            /* Pillar Columns (like "For whom" section) */
+            .pillar-list {
+                list-style: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            .pillar-list li {
+                padding-left: 20px !important;
+                margin-bottom: 14px !important;
+                position: relative;
+                font-size: 1.05rem !important;
+                line-height: 1.4 !important;
+                color: var(--text-secondary) !important;
+            }
+            .pillar-list li::before {
+                content: "—";
+                position: absolute;
+                left: 0;
+                color: var(--text-dim);
+            }
+
+            /* Buttons (Sleek pills like Landing page) */
+            .btn-pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 12px 24px;
+                background-color: var(--text-primary);
+                color: var(--bg);
+                border-radius: 9999px;
+                font-weight: 600;
+                font-size: 1.05rem;
+                margin-top: 20px;
+                border: 1px solid var(--text-primary);
+                transition: background-color 0.2s, transform 0.2s;
+                cursor: pointer;
+            }
+            .btn-pill svg {
+                width: 18px;
+                height: 18px;
+                transition: transform 0.2s;
+            }
+            .btn-pill:hover svg {
+                transform: translateX(4px);
+            }
+
+            /* Premium Mockup Containers */
+            /* Premium Mockup Containers */
+            .mockup-window {
+                background: #050507;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+                box-shadow: 
+                    0 25px 50px -12px rgba(0, 0, 0, 0.9),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+                    0 0 40px rgba(168, 85, 247, 0.03);
+                overflow: hidden;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .mockup-header {
+                background: #0c0c10;
+                padding: 14px 20px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            .mockup-dots {
+                display: flex;
+                gap: 6px;
+            }
+            .mockup-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.15);
+            }
+            .mockup-dot.danger { background: #ef4444; }
+            .mockup-dot.warning { background: #f59e0b; }
+            .mockup-dot.success { background: #10b981; }
+
+            .mockup-title {
+                font-family: var(--font-mono);
+                font-size: 0.72rem;
+                color: var(--text-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.12em;
+                font-weight: 500;
+            }
+            .mockup-content {
+                padding: 24px;
+                font-family: var(--font-sans);
+            }
+
+            /* Mockup 1: Shift Wizard (high fidelity checklists) */
+            .wizard-step {
+                display: flex;
+                align-items: flex-start;
+                gap: 15px;
+                padding: 16px;
+                background: rgba(255, 255, 255, 0.01);
+                border: 1px solid rgba(255, 255, 255, 0.04);
+                border-radius: 12px;
+                margin-bottom: 12px;
+                transition: border-color 0.2s, background-color 0.2s;
+            }
+            .wizard-step.done {
+                background: rgba(16, 185, 129, 0.02);
+                border-color: rgba(16, 185, 129, 0.15);
+            }
+            .wizard-step.active {
+                border-color: rgba(168, 85, 247, 0.35);
+                background: rgba(168, 85, 247, 0.04);
+                box-shadow: 0 0 20px rgba(168, 85, 247, 0.05);
+            }
+            .wizard-circle {
+                width: 24px;
+                height: 24px;
+                border-radius: 50%;
+                border: 2px solid rgba(255, 255, 255, 0.2);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 0.75rem;
+                font-weight: 700;
+                flex-shrink: 0;
+                margin-top: 2px;
+            }
+            .wizard-step.done .wizard-circle {
+                border-color: var(--success);
+                background: rgba(16, 185, 129, 0.1);
+                color: var(--success);
+            }
+            .wizard-step.active .wizard-circle {
+                border-color: var(--accent);
+                color: var(--accent);
+                box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+                animation: pulse-border 2.5s infinite;
+            }
+            .wizard-step-info {
+                flex-grow: 1;
+            }
+            .wizard-step-title {
+                font-size: 0.95rem;
+                font-weight: 600;
+                color: var(--text-primary);
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 3px;
+            }
+            .wizard-step-desc {
+                font-size: 0.8rem;
+                color: var(--text-dim);
+                line-height: 1.4;
+            }
+            .wizard-subcard {
+                background: rgba(0, 0, 0, 0.25);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 8px;
+                padding: 14px;
+                margin-top: 12px;
+            }
+            .wizard-field-title {
+                font-size: 0.82rem;
+                font-weight: 600;
+                color: var(--text-secondary);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .rating-chips {
+                display: flex;
+                gap: 8px;
+                margin-top: 10px;
+                flex-wrap: wrap;
+            }
+            .rating-chip {
+                font-size: 0.7rem;
+                font-weight: 600;
+                padding: 6px 12px;
+                border-radius: 99px;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                background: rgba(255, 255, 255, 0.02);
+                color: rgba(255, 255, 255, 0.4);
+            }
+            .rating-chip.active {
+                border-color: rgba(168, 85, 247, 0.5);
+                background: rgba(168, 85, 247, 0.15);
+                color: var(--accent);
+                box-shadow: 0 0 10px rgba(168, 85, 247, 0.1);
+            }
+            .photo-evidence-box {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-top: 12px;
+                border-top: 1px solid rgba(255, 255, 255, 0.05);
+                padding-top: 10px;
+            }
+            .photo-thumbnail-checked {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                font-size: 0.72rem;
+                font-weight: 600;
+                color: var(--success);
+                background: rgba(16, 185, 129, 0.08);
+                border: 1px solid rgba(16, 185, 129, 0.2);
+                border-radius: 6px;
+                padding: 4px 8px;
+            }
+            .photo-thumbnail-checked svg {
+                width: 12px;
+                height: 12px;
+                fill: currentColor;
+            }
+            .wizard-photo-btn {
+                background: var(--text-primary);
+                color: var(--bg);
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);
+                transition: transform 0.2s, background-color 0.2s;
+            }
+            .wizard-photo-btn:hover {
+                background: #e4e4e7;
+                transform: translateY(-1px);
+            }
+
+            @keyframes pulse-border {
+                0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4); }
+                70% { box-shadow: 0 0 0 8px rgba(168, 85, 247, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+            }
+
+            /* Mockup 2: PC Medical Card refined */
+            .pc-dashboard-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                padding-bottom: 12px;
+                margin-bottom: 16px;
+            }
+            .pc-dashboard-title {
+                font-size: 1rem;
+                font-weight: 700;
+                color: var(--text-primary);
+                letter-spacing: -0.01em;
+            }
+            .pc-dashboard-subtitle {
+                font-size: 0.72rem;
+                color: var(--text-dim);
+            }
+            .pc-grid-layout {
+                display: grid;
+                grid-template-columns: 1fr 1.6fr;
+                gap: 16px;
+            }
+            .pc-sensor-column {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .pc-status-card {
+                background: rgba(255, 255, 255, 0.01);
+                border: 1px solid rgba(255, 255, 255, 0.04);
+                border-radius: 10px;
+                padding: 12px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }
+            .pc-stat-label-refined {
+                font-size: 0.72rem;
+                color: var(--text-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+                margin-bottom: 4px;
+            }
+            .pc-metric-glowing {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .pc-metric-value-refined {
+                font-size: 1.6rem;
+                font-weight: 800;
+                font-family: var(--font-display);
+                color: var(--text-primary);
+            }
+            .pc-metric-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                display: inline-block;
+                background: var(--success);
+                box-shadow: 0 0 8px var(--success);
+            }
+            .pc-metric-dot.warning {
+                background: var(--warning);
+                box-shadow: 0 0 8px var(--warning);
+            }
+            .pc-health-circle-container {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                background: rgba(255, 255, 255, 0.01);
+                border: 1px solid rgba(255, 255, 255, 0.04);
+                border-radius: 10px;
+                padding: 12px;
+            }
+            .pc-health-meter-desc {
+                flex-grow: 1;
+            }
+            .pc-health-bar-track {
+                height: 6px;
+                background: rgba(255, 255, 255, 0.06);
+                border-radius: 99px;
+                overflow: hidden;
+                margin-top: 4px;
+            }
+            .pc-health-bar-fill {
+                height: 100%;
+                background: linear-gradient(90deg, var(--accent-solid), var(--success));
+                width: 98%;
+                border-radius: 99px;
+            }
+            
+            .pc-maintenance-list {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .maintenance-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid rgba(255, 255, 255, 0.03);
+                border-radius: 8px;
+                padding: 10px 12px;
+                font-size: 0.8rem;
+            }
+            .maintenance-item-info {
+                display: flex;
+                flex-direction: column;
+            }
+            .maintenance-item-name {
+                font-weight: 600;
+                color: var(--text-primary);
+            }
+            .maintenance-item-spec {
+                font-size: 0.7rem;
+                color: var(--text-dim);
+                margin-top: 1px;
+            }
+            
+            .badge {
+                font-size: 0.65rem;
+                font-weight: 700;
+                padding: 3px 8px;
+                border-radius: 99px;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+            }
+            .badge-success {
+                background: rgba(16, 185, 129, 0.08);
+                border: 1px solid rgba(16, 185, 129, 0.2);
+                color: var(--success);
+            }
+            .badge-warning {
+                background: rgba(245, 158, 11, 0.08);
+                border: 1px solid rgba(245, 158, 11, 0.2);
+                color: var(--warning);
+            }
+            .badge-violet {
+                background: rgba(168, 85, 247, 0.08);
+                border: 1px solid rgba(168, 85, 247, 0.2);
+                color: var(--accent);
+            }
+
+            .incident-alert-box {
+                margin-top: 12px;
+                background: rgba(239, 68, 68, 0.02);
+                border: 1px solid rgba(239, 68, 68, 0.15);
+                border-radius: 10px;
+                padding: 10px 14px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            .incident-alert-icon {
+                color: var(--danger);
+                font-weight: bold;
+                font-size: 1.1rem;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 20px;
+                height: 20px;
+                background: rgba(239, 68, 68, 0.1);
+                border-radius: 50%;
+                flex-shrink: 0;
+            }
+            .incident-alert-details {
+                font-size: 0.78rem;
+                color: var(--text-secondary);
+                flex-grow: 1;
+                line-height: 1.35;
+            }
+            .incident-alert-label {
+                font-weight: 700;
+                color: var(--text-primary);
+            }
+
+            /* Mockup 3: Player PWA refined */
+            .pwa-iphone {
+                width: 290px;
+                background: #000000;
+                border: 10px solid #1c1c1e;
+                border-radius: 40px;
+                box-shadow: 
+                    0 25px 60px rgba(0, 0, 0, 0.95),
+                    0 0 30px rgba(168, 85, 247, 0.1);
+                overflow: hidden;
+                margin: 0 auto;
+                font-family: var(--font-sans);
+                position: relative;
+                box-sizing: border-box;
+            }
+            .iphone-notch {
+                position: absolute;
+                top: 0;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 110px;
+                height: 18px;
+                background: #1c1c1e;
+                border-bottom-left-radius: 12px;
+                border-bottom-right-radius: 12px;
+                z-index: 100;
+            }
+            .iphone-status-bar {
+                height: 24px;
+                background: #09090b;
+                padding: 0 18px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                font-size: 0.65rem;
+                color: rgba(255, 255, 255, 0.6);
+                font-weight: 600;
+                letter-spacing: -0.01em;
+                box-sizing: border-box;
+            }
+            .pwa-header-refined {
+                background: #09090b;
+                padding: 16px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                box-sizing: border-box;
+            }
+            .pwa-user-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 8px;
+            }
+            .pwa-user-info {
+                display: flex;
+                flex-direction: column;
+            }
+            .pwa-user-name {
+                font-size: 0.8rem;
+                font-weight: 800;
+                color: var(--text-primary);
+                letter-spacing: -0.01em;
+                text-transform: uppercase;
+                margin: 0;
+            }
+            .pwa-tickets-pill {
+                background: rgba(245, 158, 11, 0.08);
+                border: 1px solid rgba(245, 158, 11, 0.2);
+                color: var(--warning);
+                font-size: 0.65rem;
+                font-weight: 800;
+                padding: 3px 8px;
+                border-radius: 20px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+            .pwa-xp-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                font-size: 0.65rem;
+                color: var(--text-dim);
+                font-weight: 500;
+            }
+            .pwa-xp-track {
+                flex-grow: 1;
+                height: 5px;
+                background: rgba(255, 255, 255, 0.08);
+                border-radius: 99px;
+                overflow: hidden;
+                margin: 0 10px;
+            }
+            .pwa-xp-fill-gradient {
+                height: 100%;
+                background: linear-gradient(90deg, var(--accent-solid), #ec4899);
+                width: 62.5%;
+                border-radius: 99px;
+            }
+            .pwa-body {
+                padding: 16px;
+                background: #020202;
+                min-height: 260px;
+                box-sizing: border-box;
+            }
+            .pwa-section-title {
+                font-size: 0.72rem;
+                font-weight: 700;
+                color: var(--text-dim);
+                margin-bottom: 10px;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            .pwa-quest-card {
+                background: rgba(255, 255, 255, 0.02);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 12px;
+                padding: 12px;
+                margin-bottom: 10px;
+                box-sizing: border-box;
+            }
+            .pwa-quest-card.completed {
+                border-color: rgba(16, 185, 129, 0.2);
+                background: rgba(16, 185, 129, 0.02);
+            }
+            .pwa-quest-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                margin-bottom: 6px;
+            }
+            .pwa-quest-title-text {
+                font-size: 0.8rem;
+                font-weight: 700;
+                color: var(--text-primary);
+                line-height: 1.25;
+                max-width: 72%;
+            }
+            .pwa-quest-progress-track {
+                height: 4px;
+                background: rgba(255, 255, 255, 0.06);
+                border-radius: 99px;
+                overflow: hidden;
+                margin-bottom: 6px;
+            }
+            .pwa-quest-progress-fill {
+                height: 100%;
+                background: var(--accent-solid);
+                width: 50%;
+            }
+            .pwa-quest-progress-fill.success {
+                background: var(--success);
+                width: 100%;
+            }
+            .pwa-quest-meta {
+                font-size: 0.65rem;
+                color: var(--text-dim);
+                line-height: 1.3;
+            }
+            .pwa-claim-btn {
+                width: 100%;
+                background: linear-gradient(90deg, var(--success), #059669);
+                color: #ffffff;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 6px;
+                font-size: 0.72rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                cursor: pointer;
+                margin-top: 8px;
+                box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+                animation: pulse-green 2s infinite;
+                transition: transform 0.1s;
+            }
+            .pwa-claim-btn:active {
+                transform: scale(0.98);
+            }
+            .pwa-nav {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                background: #09090b;
+                border-top: 1px solid rgba(255, 255, 255, 0.05);
+                padding: 12px 0;
+                text-align: center;
+                font-size: 0.65rem;
+                color: var(--text-dim);
+                box-sizing: border-box;
+            }
+            .pwa-nav-item.active {
+                color: var(--accent);
+                font-weight: 700;
+            }
+
+            @keyframes pulse-green {
+                0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+                70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+            }
+
+            /* Financial SVG Chart */
+            .chart-svg {
+                width: 100%;
+                height: 130px;
+                margin-top: 10px;
+            }
+            .chart-line {
+                stroke: var(--accent-solid);
+                stroke-width: 3;
+                fill: none;
+                stroke-linecap: round;
+                filter: drop-shadow(0px 4px 10px rgba(168, 85, 247, 0.4));
+            }
+            .chart-area {
+                fill: url(#chart-gradient);
+            }
+
+            /* Comparison Table Style */
+            .comparison-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: var(--font-sans);
+                font-size: 1.1rem;
+                margin-top: 20px;
+            }
+            .comparison-table th {
+                text-align: left;
+                padding: 16px 20px;
+                font-weight: 700;
+                font-family: var(--font-display);
+                border-bottom: 1px solid var(--border-color);
+                color: var(--text-primary);
+            }
+            .comparison-table td {
+                padding: 20px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+                color: var(--text-secondary);
+                vertical-align: top;
+                line-height: 1.5;
+            }
+            .comparison-table tr:last-child td {
+                border-bottom: none;
+            }
+            
+            /* Highlight DashAdmin ERP Column */
+            .comparison-table th:last-child,
+            .comparison-table td:last-child {
+                background: rgba(168, 85, 247, 0.02);
+                border-left: 1px solid rgba(168, 85, 247, 0.15);
+                border-right: 1px solid rgba(168, 85, 247, 0.15);
+                color: var(--text-primary);
+            }
+            .comparison-table th:last-child {
+                border-top: 1px solid rgba(168, 85, 247, 0.15);
+                border-top-left-radius: 12px;
+                border-top-right-radius: 12px;
+                background: rgba(168, 85, 247, 0.05);
+                color: var(--accent);
+            }
+            .comparison-table tr:last-child td:last-child {
+                border-bottom: 1px solid rgba(168, 85, 247, 0.15);
+                border-bottom-left-radius: 12px;
+                border-bottom-right-radius: 12px;
+            }
+
+            /* Floating PDF Button & Instruction Panel */
+            .pdf-export-widget {
+                position: fixed;
+                bottom: 30px;
+                left: 40px;
+                z-index: 9999;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                font-family: var(--font-sans);
+            }
+            .pdf-btn {
+                background: rgba(255, 255, 255, 0.06);
+                border: 1px solid var(--border-color);
+                color: var(--text-primary);
+                padding: 10px 18px;
+                border-radius: 99px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                cursor: pointer;
+                transition: background-color 0.2s, border-color 0.2s;
+                backdrop-filter: blur(8px);
+            }
+            .pdf-btn:hover {
+                background: rgba(255, 255, 255, 0.12);
+                border-color: rgba(255, 255, 255, 0.3);
+            }
+            .pdf-btn svg {
+                width: 14px;
+                height: 14px;
+            }
+            
+            /* Helper Panel Modal */
+            .pdf-panel {
+                position: fixed;
+                bottom: 85px;
+                left: 40px;
+                z-index: 9998;
+                width: 320px;
+                background: #09090b;
+                border: 1px solid var(--card-border);
+                border-radius: 16px;
+                padding: 20px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+                display: none;
+                font-family: var(--font-sans);
+                backdrop-filter: blur(12px);
+            }
+            .pdf-panel.show {
+                display: block;
+                animation: slide-up 0.2s ease-out;
+            }
+            .pdf-panel-title {
+                font-size: 0.95rem;
+                font-weight: 700;
+                margin-bottom: 12px;
+                color: var(--text-primary);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .pdf-panel-close {
+                cursor: pointer;
+                color: var(--text-dim);
+                font-size: 1.2rem;
+            }
+            .pdf-panel-close:hover {
+                color: var(--text-primary);
+            }
+            .pdf-step {
+                font-size: 0.82rem;
+                color: var(--text-secondary);
+                margin-bottom: 10px;
+                line-height: 1.4;
+            }
+            .pdf-step strong {
+                color: var(--accent);
+            }
+            .pdf-panel-btn {
+                width: 100%;
+                background: var(--text-primary);
+                color: var(--bg);
+                border: none;
+                padding: 8px;
+                border-radius: 8px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                cursor: pointer;
+                margin-top: 10px;
+                text-align: center;
+            }
+            .pdf-panel-btn:hover {
+                background: #e4e4e7;
+            }
+
+            @keyframes slide-up {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+
+            /* Reveal custom slide counter positioning to match Landing clean style */
+            .reveal .slide-number {
+                background-color: transparent !important;
+                color: var(--text-dim) !important;
+                font-family: var(--font-mono) !important;
+                font-size: 0.8rem !important;
+                bottom: 30px !important;
+                right: 40px !important;
+            }
+
+            /* Perfect print style optimization */
+            @media print {
+                html, body, .reveal, .reveal .slides, .reveal section {
+                    background: #000000 !important;
+                    color: #ffffff !important;
+                }
+                .pdf-export-widget, .pdf-panel, .header-brand {
+                    display: none !important;
+                }
+                .reveal .slides {
+                    transform: none !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                }
+                .reveal section {
+                    page-break-after: always !important;
+                    box-sizing: border-box !important;
+                    background: #000000 !important;
+                }
+                /* Ensure vectors and custom mockups print perfectly */
+                .mockup-window, .pwa-iphone {
+                    box-shadow: none !important;
+                    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        
+        <!-- Top Left Brand logo matching Landing Page navigation -->
+        <div class="header-brand">
+            <svg class="logo-zap" viewBox="0 0 24 24">
+                <path d="M13 10V3L4 14H11V21L20 10H13Z" />
+            </svg>
+            <span class="brand-name">DashAdmin</span>
+        </div>
+
+        <div class="reveal">
+            <div class="slides">
+                
+                <!-- Slide 1: Hero (Matching Landing Hero) -->
+                <section data-transition="fade">
+                    <div class="slide-num">Intro / 01</div>
+                    <h1 style="font-size: 6rem !important; margin-bottom: 20px !important;">
+                        Порядок<br />
+                        <span style="opacity: 0.4;">в клубе.</span>
+                    </h1>
+                    <div class="divider-line" style="margin-top: 20px; padding-top: 20px;">
+                        <p style="font-size: 1.7rem !important; color: var(--text-primary) !important; max-width: 850px; line-height: 1.3 !important; font-weight: 500;">
+                            Концепция DashAdmin — система управленческого контроля для компьютерных клубов.
+                        </p>
+                        <p style="font-size: 1.25rem !important; max-width: 750px; margin-top: 15px;">
+                            Мы превращаем хаотичные операционные процессы компьютерных клубов в прозрачную, оцифрованную и предсказуемую бизнес-модель. Заменяем Excel, чаты и журналы на единый цифровой контур.
+                        </p>
+                    </div>
+                    <div class="btn-pill" onclick="Reveal.next()">
+                        <span>Листать презентацию</span>
+                        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                            <path d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </section>
+
+                <!-- Slide 2: Fundamental Positioning (Part 1 - Feature Rows style) -->
+                <section data-transition="fade">
+                    <div class="slide-num">01 / Позиционирование</div>
+                    <h2>Фундаментальный подход</h2>
+                    <p style="max-width: 800px; margin-bottom: 30px;">
+                        DashAdmin — это не просто программа для администратора. Это полноценный пульт управления всеми активами, процессами и финансами вашего бизнеса.
+                    </p>
+                    
+                    <div style="display: flex; flex-direction: column; width: 100%;">
+                        <div class="feature-row">
+                            <div class="feature-row-num">01</div>
+                            <div class="feature-row-content">
+                                <h3>Инструмент управляющего <span class="highlight">(Полная прозрачность)</span></h3>
+                                <p>Это ваш объективный пульт контроля. Вы видите реальное положение дел через автоматизированный сбор данных, а не со слов персонала. Система спроектирована так, чтобы полностью исключить искажение и подгонку отчетов.</p>
+                            </div>
+                        </div>
+                        <div class="feature-row">
+                            <div class="feature-row-num">02</div>
+                            <div class="feature-row-content">
+                                <h3>Стандартизация процессов <span class="highlight">(Система вместо хаоса)</span></h3>
+                                <p>Мы полностью трансформируем роль персонала. Администратор становится системным менеджером смены с жесткими, оцифрованными регламентами. Система ведет сотрудника по шагам, исключая человеческий фактор.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Slide 3: Fundamental Positioning (Part 2 - Landing Columns style) -->
+                <section data-transition="fade">
+                    <div class="slide-num">01 / Позиционирование</div>
+                    <h2>Масштаб, активы и выручка</h2>
+                    <p style="max-width: 800px; margin-bottom: 40px;">
+                        Мы выстраиваем процессы так, чтобы бизнес мог расти без участия собственника в ручном микроменеджменте.
+                    </p>
+                    
+                    <div class="grid-3">
+                        <div class="landing-col">
+                            <h3 style="font-size: 1.35rem !important;">Контроль капитала</h3>
+                            <p style="font-size: 0.98rem !important; color: var(--text-secondary);">Ваш главный актив — оборудование. Мы переводим ПК из режима «черного ящика» в полностью управляемый ресурс: с историей ремонтов, чисток и планового ТО, минимизируя простои.</p>
+                        </div>
+                        <div class="landing-col">
+                            <h3 style="font-size: 1.35rem !important;">Бизнес без "незаменимых"</h3>
+                            <p style="font-size: 0.98rem !important; color: var(--text-secondary);">Интеллектуальный капитал, инструкции и регламенты хранятся в системе, а не в головах людей. Адаптация новых сотрудников ускоряется в разы: они сразу встают на системные "рельсы".</p>
+                        </div>
+                        <div class="landing-col">
+                            <h3 style="font-size: 1.35rem !important;">Драйвер выручки</h3>
+                            <p style="font-size: 0.98rem !important; color: var(--text-secondary);">Автоматический контроль склада гарантирует 100% наличие маржинальных товаров в баре, а идеальное состояние техники гарантирует полную посадку гостей и премиальный опыт.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Slide 4: Shift Wizard (Wizards & Reglaments with Live Mockup) -->
+                <section data-transition="fade">
+                    <div class="slide-num">02 / Ключевые контуры</div>
+                    <div class="grid-2">
+                        <div>
+                            <h2>«Рельсы» для сотрудников</h2>
+                            <p style="margin-top: 20px;">
+                                Администратор работает по четко заданному сценарию. Система <b>«Мастеров смены»</b> жестко направляет его действия на старте и при закрытии рабочего дня.
+                            </p>
+                            <p style="font-size: 1.1rem !important;">
+                                Смена физически не откроется и не начнется без обязательного выполнения трех базовых регламентов:
+                            </p>
+                            <ul class="pillar-list" style="margin-top: 15px;">
+                                <li>Физический пересчет и сверка кассы;</li>
+                                <li>Детальная инвентаризация товаров бара;</li>
+                                <li>Проверка чистоты зала с отправкой фотоотчета.</li>
+                            </ul>
+                            <p style="font-size: 1.05rem !important; margin-top: 20px;" class="text-dimmed">
+                                Если смена открыта — вы можете быть на 100% уверены, что в клубе идеальный порядок, подтвержденный фактами и фотографиями.
+                            </p>
+                        </div>
+                        
+                        <!-- UI Wizard Mockup -->
+                        <div class="mockup-window" style="margin-top: 20px;">
+                            <div class="mockup-header">
+                                <div class="mockup-dots">
+                                    <div class="mockup-dot danger"></div>
+                                    <div class="mockup-dot warning"></div>
+                                    <div class="mockup-dot success"></div>
+                                </div>
+                                <div class="mockup-title">Открытие смены // Смена #142</div>
+                            </div>
+                            <div class="mockup-content">
+                                <div class="wizard-step done">
+                                    <div class="wizard-circle">✓</div>
+                                    <div class="wizard-step-info">
+                                        <div class="wizard-step-title">Сверка и пересчет кассы</div>
+                                        <div class="wizard-step-desc">Сейф: 25 000 ₽ • Касса: 12 300 ₽ (Расхождений нет)</div>
+                                    </div>
+                                </div>
+                                <div class="wizard-step done">
+                                    <div class="wizard-circle">✓</div>
+                                    <div class="wizard-step-info">
+                                        <div class="wizard-step-title">Слепая инвентаризация бара</div>
+                                        <div class="wizard-step-desc">Пересчитано 12 категорий • Найдено соответствие 100%</div>
+                                    </div>
+                                </div>
+                                <div class="wizard-step active">
+                                    <div class="wizard-circle">3</div>
+                                    <div class="wizard-step-info">
+                                        <div class="wizard-step-title">Фотоотчет чистоты игрового зала</div>
+                                        <div class="wizard-step-desc">Требуется загрузить фото чистых столов VIP-зоны</div>
+                                        
+                                        <div class="wizard-subcard">
+                                            <div class="wizard-field-title">
+                                                <span>Оценка чистоты (VIP)</span>
+                                                <span class="text-dimmed" style="font-size: 0.72rem;">Вес: 5 баллов</span>
+                                            </div>
+                                            <div class="rating-chips">
+                                                <span class="rating-chip">Идеально (5 б)</span>
+                                                <span class="rating-chip active">Мелкие следы (4 б)</span>
+                                                <span class="rating-chip">Грязно (0 б)</span>
+                                            </div>
+                                            
+                                            <div class="photo-evidence-box">
+                                                <div class="photo-thumbnail-checked">
+                                                    <svg viewBox="0 0 24 24">
+                                                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                                    </svg>
+                                                    <span>vip_zone_east.jpg</span>
+                                                </div>
+                                                <button class="wizard-photo-btn">
+                                                    <svg style="width:14px; height:14px; fill:currentColor;" viewBox="0 0 24 24">
+                                                        <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m8 3a5 5 0 0 0-5 5a5 5 0 0 0 5 5a5 5 0 0 0 5-5a5 5 0 0 0-5-5m0 2a3 3 0 0 1 3 3a3 3 0 0 1-3 3a3 3 0 0 1-3-3a3 3 0 0 1 3-3z"/>
+                                                    </svg>
+                                                    Добавить фото
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Slide 5: Technical and Financial Control (PC Medical Card) -->
+                <section data-transition="fade">
+                    <div class="slide-num">02 / Ключевые контуры</div>
+                    <div class="grid-2">
+                        <div>
+                            <h2>Управление активами и финансами</h2>
+                            <p style="margin-top: 15px;">
+                                Мы объединяем технический учет оборудования и финансовый контроль в прозрачные дашборды.
+                            </p>
+                            
+                            <div class="landing-col" style="margin-top: 25px; padding-top: 20px;">
+                                <h3 style="font-size: 1.3rem !important;">«Рентген» ваших финансов</h3>
+                                <p style="font-size: 0.95rem !important; margin-bottom: 0 !important;">Каждая продажа на кассе (POS) мгновенно списывает товар со склада и фиксируется в финансовом отчете. Система сравнивает плановые остатки с ручным слепым пересчетом при каждой сдаче смены.</p>
+                            </div>
+                            <div class="landing-col" style="margin-top: 20px; padding-top: 20px;">
+                                <h3 style="font-size: 1.3rem !important;">«Медкарта» для каждого ПК</h3>
+                                <p style="font-size: 0.95rem !important; margin-bottom: 0 !important;">Каждая единица техники получает цифровой паспорт. DashAdmin отслеживает, когда ПК чистили, какие компоненты менялись, когда требуется профилактика и замена термопасты.</p>
+                            </div>
+                        </div>
+
+                        <!-- PC Medical Card Mockup -->
+                        <div class="mockup-window" style="margin-top: 20px;">
+                            <div class="mockup-header">
+                                <div class="mockup-dots">
+                                    <div class="mockup-dot danger"></div>
+                                    <div class="mockup-dot warning"></div>
+                                    <div class="mockup-dot success"></div>
+                                </div>
+                                <div class="mockup-title">Медкарта ПК // Рабочее Место #12</div>
+                            </div>
+                            <div class="mockup-content">
+                                <div class="pc-dashboard-header">
+                                    <div class="pc-dashboard-info">
+                                        <div class="pc-dashboard-title">ПК-12 (VIP ZONE)</div>
+                                        <div class="pc-dashboard-subtitle">Intel i7-13700KF / RTX 4080 / 32GB RAM</div>
+                                    </div>
+                                    <div class="badge badge-success">В работе</div>
+                                </div>
+                                
+                                <div class="pc-grid-layout">
+                                    <div class="pc-sensor-column">
+                                        <div class="pc-status-card">
+                                            <div class="pc-stat-label-refined">CPU Temp</div>
+                                            <div class="pc-metric-glowing">
+                                                <span class="pc-metric-dot"></span>
+                                                <span class="pc-metric-value-refined">48°C</span>
+                                            </div>
+                                        </div>
+                                        <div class="pc-status-card">
+                                            <div class="pc-stat-label-refined">GPU Temp</div>
+                                            <div class="pc-metric-glowing">
+                                                <span class="pc-metric-dot"></span>
+                                                <span class="pc-metric-value-refined">62°C</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="pc-maintenance-list">
+                                        <div class="pc-health-circle-container">
+                                            <div class="pc-health-meter-desc">
+                                                <div style="display:flex; justify-content:space-between; font-size: 0.75rem; font-weight:700; color:var(--text-primary);">
+                                                    <span>Здоровье системы</span>
+                                                    <span style="color:var(--success);">98%</span>
+                                                </div>
+                                                <div class="pc-health-bar-track">
+                                                    <div class="pc-health-bar-fill"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="maintenance-item">
+                                            <div class="maintenance-item-info">
+                                                <span class="maintenance-item-name">Продувка от пыли</span>
+                                                <span class="maintenance-item-spec">Проведено 3 дня назад</span>
+                                            </div>
+                                            <span class="badge badge-success">ОК</span>
+                                        </div>
+                                        <div class="maintenance-item">
+                                            <div class="maintenance-item-info">
+                                                <span class="maintenance-item-name">Замена термопасты</span>
+                                                <span class="maintenance-item-spec">Запланировано</span>
+                                            </div>
+                                            <span class="badge badge-violet">Через 12 дн</span>
+                                        </div>
+                                        <div class="maintenance-item">
+                                            <div class="maintenance-item-info">
+                                                <span class="maintenance-item-name">Стирка коврика</span>
+                                                <span class="maintenance-item-spec">Грязный коврик</span>
+                                            </div>
+                                            <span class="badge badge-warning">Отправлено</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="incident-alert-box">
+                                    <div class="incident-alert-icon">!</div>
+                                    <div class="incident-alert-details">
+                                        <span class="incident-alert-label">Активный инцидент:</span> Залипает левый Shift. Создана заявка #402. Назначен техник.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Slide 6: Gamification (PWA view & Quests) -->
+                <section data-transition="fade">
+                    <div class="slide-num">02 / Ключевые контуры</div>
+                    <div class="grid-2">
+                        <div>
+                            <h2>Интерактивный маркетинг и геймификация</h2>
+                            <p style="margin-top: 15px;">
+                                Мы превращаем визит в компьютерный клуб в увлекательную мета-игру. Игрок не просто оплачивает игровое время — он прокачивает своего персонажа.
+                            </p>
+                            
+                            <ul class="pillar-list" style="margin-top: 25px;">
+                                <li>
+                                    <b>Система уровней и опыта (XP):</b> Опыт автоматически начисляется за покупки в баре и пополнения баланса. С ростом уровня разблокируются более ценные призы.
+                                </li>
+                                <li>
+                                    <b>Интерактивные квесты:</b> Задания (напр. "Сыграй 5 часов" или "Купи 2 энергетика") стимулируют дополнительные продажи и повышают частоту визитов.
+                                </li>
+                                <li>
+                                    <b>Прозрачная мотивация персонала:</b> Администратор видит выполнение своего KPI и заработанный бонус прямо в дашборде в реальном времени.
+                                </li>
+                            </ul>
+                        </div>
+
+                        <!-- iPhone PWA Player Mockup -->
+                        <div style="display: flex; align-items: center; justify-content: center; width: 100%;">
+                            <div class="pwa-iphone">
+                                <div class="iphone-notch"></div>
+                                <div class="iphone-status-bar">
+                                    <span>9:41</span>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <svg style="width: 10px; height: 10px; fill: currentColor;" viewBox="0 0 24 24">
+                                            <path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.07 19.58 10.48 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/>
+                                        </svg>
+                                        <span>5G</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="pwa-header-refined">
+                                    <div class="pwa-user-row">
+                                        <div class="pwa-user-info">
+                                            <div class="pwa-user-name">Александр</div>
+                                            <span style="font-size: 0.65rem; color: var(--accent); font-weight:700;">LEVEL 5 (PRO)</span>
+                                        </div>
+                                        <div class="pwa-tickets-pill">
+                                            <span>🎫</span>
+                                            <span>12 билетов</span>
+                                        </div>
+                                    </div>
+                                    <div class="pwa-xp-row">
+                                        <span>1250 XP</span>
+                                        <div class="pwa-xp-track">
+                                            <div class="pwa-xp-fill-gradient"></div>
+                                        </div>
+                                        <span>2000 XP</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="pwa-body">
+                                    <div class="pwa-section-title">Активные квесты</div>
+                                    
+                                    <div class="pwa-quest-card">
+                                        <div class="pwa-quest-header">
+                                            <div class="pwa-quest-title-text">Купи 2 Red Bull в баре</div>
+                                            <span style="font-size: 0.72rem; color: var(--accent); font-weight:700;">1 / 2 шт</span>
+                                        </div>
+                                        <div class="pwa-quest-progress-track" style="margin-bottom: 6px;">
+                                            <div class="pwa-quest-progress-fill"></div>
+                                        </div>
+                                        <div class="pwa-quest-meta">Награда: +150 XP • 1 Билет</div>
+                                    </div>
+                                    
+                                    <div class="pwa-quest-card completed">
+                                        <div class="pwa-quest-header">
+                                            <div class="pwa-quest-title-text">Счастливый час VIP</div>
+                                            <span style="font-size: 0.72rem; color: var(--success); font-weight:700;">Готово</span>
+                                        </div>
+                                        <div class="pwa-quest-progress-track" style="margin-bottom: 6px;">
+                                            <div class="pwa-quest-progress-fill success"></div>
+                                        </div>
+                                        <div class="pwa-quest-meta" style="color: var(--success);">Награда: +300 XP • 3 Билета</div>
+                                        <button class="pwa-claim-btn">Забрать награду</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="pwa-nav">
+                                    <div>Игры</div>
+                                    <div class="pwa-nav-item active">Квесты</div>
+                                    <div>Кошелек</div>
+                                    <div>Профиль</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Slide 7: Loss Control & Audit Philosophy (4 Columns matching Landing Roles) -->
+                <section data-transition="fade">
+                    <div class="slide-num">03 / Контроль потерь</div>
+                    <h2>Философия независимого аудита</h2>
+                    <p style="max-width: 800px; margin-bottom: 40px;">
+                        Мы принципиально не доверяем автоматическим отчетам кассового ПО, потому что автоматика не видит реального положения дел в вашем зале. Наша система требует физического подтверждения фактов.
+                    </p>
+                    
+                    <div class="grid-3" style="grid-template-columns: repeat(4, 1fr); gap: 20px;">
+                        <div class="landing-col">
+                            <h3 style="font-size: 1.15rem !important;">1. Слепая инвентаризация</h3>
+                            <p style="font-size: 0.9rem !important; color: var(--text-secondary); line-height: 1.45;">Администратор при сдаче смены физически пересчитывает склад и вводит то, что <i>видит глазами</i>, не зная "правильного" остатка. Подогнать цифры невозможно.</p>
+                        </div>
+                        <div class="landing-col">
+                            <h3 style="font-size: 1.15rem !important;">2. Оцифровка физ. труда</h3>
+                            <p style="font-size: 0.9rem !important; color: var(--text-secondary); line-height: 1.45;">Ни один API в мире не почистит залипшую клавиатуру и не протрет пыль. DashAdmin требует от сотрудника встать, выполнить задачу и подтвердить ее реальным фотоотчетом.</p>
+                        </div>
+                        <div class="landing-col">
+                            <h3 style="font-size: 1.15rem !important;">3. Фиксация расхождений</h3>
+                            <p style="font-size: 0.9rem !important; color: var(--text-secondary); line-height: 1.45;">Система автоматически сопоставляет плановые показатели с ручным вводом. При несовпадении мгновенно загорается красный флаг и фиксируется материальная ответственность.</p>
+                        </div>
+                        <div class="landing-col">
+                            <h3 style="font-size: 1.15rem !important;">4. Защита от саботажа</h3>
+                            <p style="font-size: 0.9rem !important; color: var(--text-secondary); line-height: 1.45;">Несмотря на жесткий контроль, интерфейс для администратора выстроен в формате простейших пошаговых "мастеров". Заполнение занимает 5 минут — нет места отговоркам.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Slide 8: Market Positioning (Comparison Table in Landing Style) -->
+                <section data-transition="fade">
+                    <div class="slide-num">04 / Сравнение рынка</div>
+                    <h2>Биллинг vs. DashAdmin</h2>
+                    <p style="margin-bottom: 25px;">
+                        Частый вопрос собственников: <i>«Зачем нам DashAdmin, если у нас уже установлена биллинговая система?»</i>
+                    </p>
+                    
+                    <table class="comparison-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 50%">Классический Биллинг (Лаунчер)</th>
+                                <th style="width: 50%">DashAdmin (Управленческая ERP)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Управляет исключительно <b>компьютерами</b> (запуск сессий игроков, отсчет времени и автоблокировка экрана).</td>
+                                <td>Управляет <b>бизнесом компьютерного клуба</b> в целом (сотрудники, складские запасы, финансы, состояние активов).</td>
+                            </tr>
+                            <tr>
+                                <td>Складской учет — это простая таблица, цифры в которой сотрудники могут легко подогнать под отчет.</td>
+                                <td>Исключает воровство за счет жесткой <b>слепой инвентаризации</b> «из рук в руки» при каждой передаче смены.</td>
+                            </tr>
+                            <tr>
+                                <td>Не знает о физическом состоянии парка оборудования, износе комплектующих и чистоте рабочих мест.</td>
+                                <td>Ведет интерактивную <b>цифровую медкарту</b> каждого ПК, отслеживает плановое ТО и требует фото-подтверждения регламентов.</td>
+                            </tr>
+                            <tr>
+                                <td>Предоставляет стандартную систему скидок и базовую дисконтную сетку лояльности.</td>
+                                <td>Повышает выручку и возвращаемость гостей через <b>геймификацию</b> (сезоны Battlepass, ежедневные квесты).</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <!-- Slide 9: CTA (Matching Final CTA of Landing Page) -->
+                <section data-transition="fade">
+                    <div class="slide-num">Итог</div>
+                    <div style="text-align: center; margin-top: 80px;">
+                        <h1 style="font-size: 6.5rem !important; margin-bottom: 30px !important;">
+                            Порядок<br />
+                            <span style="opacity: 0.4;">в вашем бизнесе.</span>
+                        </h1>
+                        <p style="font-size: 1.6rem !important; max-width: 800px; margin: 0 auto 30px; color: var(--text-secondary) !important; line-height: 1.4 !important; font-weight: 500;">
+                            DashAdmin — ваш управляющий партнер, который делает бизнес прозрачным, стандартизированным и готовым к масштабированию.
+                        </p>
+                        <div class="btn-pill" onclick="window.location.reload();">
+                            <span>Начать с начала</span>
+                            <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" style="transform: rotate(-180deg);">
+                                <path d="M5 12h14M12 5l7 7-7 7" />
+                            </svg>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Floating PDF helper widget -->
+        <div class="pdf-export-widget">
+            <button class="pdf-btn" id="pdfBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                Экспорт в PDF
+            </button>
+        </div>
+
+        <!-- Floating instructions panel -->
+        <div class="pdf-panel" id="pdfPanel">
+            <div class="pdf-panel-title">
+                <span>Инструкция по сохранению</span>
+                <span class="pdf-panel-close" id="pdfCloseBtn">&times;</span>
+            </div>
+            <div class="pdf-step">
+                1. Для корректной верстки PDF откройте презентацию в специальном режиме печати, нажав кнопку ниже.
+            </div>
+            <div class="pdf-step">
+                2. Нажмите <strong>Cmd + P</strong> (Mac) или <strong>Ctrl + P</strong> (Windows).
+            </div>
+            <div class="pdf-step">
+                3. В открывшемся окне установите настройки:
+                <ul style="margin: 5px 0 5px 15px; padding: 0; list-style: circle;">
+                    <li>Ориентация: <strong>Альбомная</strong></li>
+                    <li>Поля: <strong>Нет</strong> (или Минимальные)</li>
+                    <li>Параметры: <strong>Включить фоновые рисунки</strong></li>
+                </ul>
+            </div>
+            <div class="pdf-step">
+                4. Выберите принтер: <strong>«Сохранить как PDF»</strong> и скачайте файл.
+            </div>
+            <button class="pdf-panel-btn" id="pdfPrintRedirect">Открыть режим печати</button>
+        </div>
+
+        <!-- Reveal.js scripts and initialization -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.js"></script>
+        <script>
+            // Initialize Reveal.js with modern smooth transition and landscape config
+            Reveal.initialize({
+                hash: true,
+                center: false,
+                transition: "fade",
+                width: 1200,
+                height: 800,
+                margin: 0.1,
+                minScale: 0.2,
+                maxScale: 2.0,
+                slideNumber: 'c/t',
+                controls: true,
+                progress: true,
+                keyboard: true,
+                overview: true
+            });
+
+            // Handle showing and hiding PDF instructions panel
+            const pdfBtn = document.getElementById('pdfBtn');
+            const pdfPanel = document.getElementById('pdfPanel');
+            const pdfCloseBtn = document.getElementById('pdfCloseBtn');
+            const pdfPrintRedirect = document.getElementById('pdfPrintRedirect');
+
+            pdfBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                pdfPanel.classList.toggle('show');
+            });
+
+            pdfCloseBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                pdfPanel.classList.remove('show');
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!pdfPanel.contains(e.target) && e.target !== pdfBtn) {
+                    pdfPanel.classList.remove('show');
+                }
+            });
+
+            pdfPrintRedirect.addEventListener('click', () => {
+                // Check if already in print-pdf mode
+                const url = new URL(window.location.href);
+                if (!url.searchParams.has('print-pdf')) {
+                    url.searchParams.set('print-pdf', 'true');
+                    window.open(url.toString(), '_blank');
+                } else {
+                    window.print();
+                }
+            });
+        </script>
+    </body>
+</html>

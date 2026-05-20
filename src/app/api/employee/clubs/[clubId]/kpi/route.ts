@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { query } from "@/db";
 import { cookies } from "next/headers";
-import { calculateMaintenanceOverduePenalty } from "@/lib/maintenance-penalties";
-import { calculateMaintenanceQualityMetrics } from "@/lib/maintenance-kpi-quality";
+import { generateMonthlySalaryReport } from "@/lib/salary-engine";
 
 // GET: Get employee's KPI progress for current period
 export async function GET(
@@ -17,1230 +15,151 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get current month/year
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
 
-    // Date boundaries
-    const startOfMonth = new Date(year, month - 1, 1);
-    const endOfMonth = new Date(year, month, 0, 23, 59, 59);
-    const startOfMonthIso = startOfMonth.toISOString();
-    const endOfMonthIso = endOfMonth.toISOString();
+    // Call the Single Source of Truth
+    const { reports } = await generateMonthlySalaryReport(clubId, month, year);
 
-    // 1. Fetch metric categories to correctly calculate "Total Income"
-    const templateRes = await query(
-      `SELECT schema FROM club_report_templates
-             WHERE club_id = $1 AND is_active = TRUE
-             ORDER BY created_at DESC LIMIT 1`,
-      [clubId],
+    // Find current user's report
+    const reportItem = reports.find(
+      (r: any) => String(r.employee_id) === String(userId),
     );
-    const templateSchema = templateRes.rows[0]?.schema;
-    const fields = Array.isArray(templateSchema)
-      ? templateSchema
-      : templateSchema?.fields || [];
+    const userReport = reportItem?._legacy_summary_format;
 
-    const systemMetricsRes = await query(
-      `SELECT key, category, type FROM system_metrics`,
-    );
-    const systemMetricsMap: Record<string, any> = {};
-    systemMetricsRes.rows.forEach((m) => {
-      systemMetricsMap[m.key] = m;
-    });
-
-    const metricCategories: Record<string, string> = {};
-    fields.forEach((f: any) => {
-      const key = f.metric_key || f.key;
-      if (key) {
-        let category = f.field_type || f.calculation_category;
-        if (!category) {
-          if (
-            key.includes("income") ||
-            key.includes("revenue") ||
-            key === "cash" ||
-            key === "card"
-          ) {
-            category = "INCOME";
-          } else if (key.includes("expense") || key === "expenses") {
-            category = "EXPENSE";
-          } else {
-            category = "OTHER";
-          }
-        }
-        metricCategories[key] = category;
-      }
-    });
-
-    await query(`
-            CREATE TABLE IF NOT EXISTS club_employee_role_preferences (
-                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
-                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                active_role_id INTEGER NULL REFERENCES roles(id) ON DELETE SET NULL,
-                updated_at TIMESTAMP DEFAULT NOW(),
-                UNIQUE(club_id, user_id)
-            );
-            CREATE INDEX IF NOT EXISTS idx_club_employee_role_preferences_club_user ON club_employee_role_preferences(club_id, user_id);
-        `);
-    await query(`
-            CREATE TABLE IF NOT EXISTS club_employee_roles (
-                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
-                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
-                priority INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW(),
-                UNIQUE(club_id, user_id, role_id)
-            );
-            CREATE INDEX IF NOT EXISTS idx_club_employee_roles_club_user ON club_employee_roles(club_id, user_id);
-        `);
-    await query(`
-            CREATE TABLE IF NOT EXISTS employee_role_salary_assignments (
-                club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
-                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
-                scheme_id INTEGER NULL REFERENCES salary_schemes(id) ON DELETE SET NULL,
-                assigned_at TIMESTAMP DEFAULT NOW(),
-                UNIQUE(club_id, user_id, role_id)
-            );
-            CREATE INDEX IF NOT EXISTS idx_employee_role_salary_assignments_club_user ON employee_role_salary_assignments(club_id, user_id);
-        `);
-
-    const prefRes = await query(
-      `SELECT active_role_id FROM club_employee_role_preferences WHERE club_id = $1 AND user_id = $2 LIMIT 1`,
-      [clubId, userId],
-    );
-    const preferredRoleId = prefRes.rows[0]?.active_role_id
-      ? Number(prefRes.rows[0].active_role_id)
-      : null;
-    const defaultRoleRes = await query(
-      `SELECT role_id FROM club_employee_roles WHERE club_id = $1 AND user_id = $2 ORDER BY priority ASC LIMIT 1`,
-      [clubId, userId],
-    );
-    const defaultRoleId = defaultRoleRes.rows[0]?.role_id
-      ? Number(defaultRoleRes.rows[0].role_id)
-      : null;
-
-    const fallbackUserRoleRes = await query(
-      `SELECT role_id FROM users WHERE id = $1 LIMIT 1`,
-      [userId],
-    );
-    const fallbackUserRoleId = fallbackUserRoleRes.rows[0]?.role_id
-      ? Number(fallbackUserRoleRes.rows[0].role_id)
-      : null;
-
-    const effectiveRoleId =
-      (Number.isFinite(preferredRoleId as any) ? preferredRoleId : null) ??
-      (Number.isFinite(defaultRoleId as any) ? defaultRoleId : null) ??
-      (Number.isFinite(fallbackUserRoleId as any) ? fallbackUserRoleId : null);
-
-    const schemeRes = await query(
-      `SELECT
-                ss.*,
-                v.formula as scheme_formula
-             FROM salary_schemes ss
-             LEFT JOIN LATERAL (
-                 SELECT formula, version
-                 FROM salary_scheme_versions
-                 WHERE scheme_id = ss.id
-                 ORDER BY version DESC
-                 LIMIT 1
-             ) v ON true
-             WHERE ss.id = COALESCE(
-                 (SELECT scheme_id FROM employee_role_salary_assignments WHERE user_id = $1 AND club_id = $2 AND role_id = $3 LIMIT 1),
-                 (SELECT scheme_id FROM employee_salary_assignments WHERE user_id = $1 AND club_id = $2 LIMIT 1)
-             )
-               AND ss.club_id = $2
-             LIMIT 1`,
-      [userId, clubId, effectiveRoleId],
-    );
-
-    if (schemeRes.rowCount === 0) {
+    if (!userReport) {
       return NextResponse.json({
         kpi: [],
         checklist: [],
         maintenance: null,
         hidden: true,
-        message: "Схема для выбранной роли не найдена",
+        message: "Нет данных для выбранного периода",
       });
     }
 
-    const rawScheme = schemeRes.rows[0];
-    const formula = rawScheme.scheme_formula || {};
+    if (!userReport.has_kpi_feature) {
+      return NextResponse.json({
+        kpi: [],
+        checklist: [],
+        maintenance: null,
+        hidden: true,
+      });
+    }
 
-    // Merge period_bonuses and bonuses from formula and main table
-    const period_bonuses =
-      Array.isArray(rawScheme.period_bonuses) &&
-      rawScheme.period_bonuses.length > 0
-        ? rawScheme.period_bonuses
-        : formula.period_bonuses || [];
+    const periodBonuses = userReport.period_bonuses || [];
+    const shiftBonusesBreakdown = Array.isArray(userReport.shift_bonuses_breakdown)
+      ? userReport.shift_bonuses_breakdown
+      : [];
 
-    const bonuses = formula.bonuses || [];
-    const scheme = { ...rawScheme, ...formula, period_bonuses, bonuses };
+    // Filter and map period bonuses
+    const mappedPeriodBonuses = periodBonuses
+      .filter(
+        (b: any) =>
+          b.type === "progressive_bonus" ||
+          b.type === "progressive_percent" ||
+          b.type === "PROGRESSIVE" ||
+          b.type === "per_unit",
+      )
+      .map((b: any) => ({
+        ...b,
+        type:
+          b.type === "progressive_percent" || b.type === "PROGRESSIVE" || b.type === "progressive_bonus"
+            ? "revenue"
+            : b.type === "per_unit"
+              ? "promo"
+              : b.type,
+      }));
 
-    const standard_monthly_shifts = scheme.standard_monthly_shifts || 15;
+    // Separate kpi (revenue) and promo (per_unit) period bonuses
+    const kpi = mappedPeriodBonuses.filter((b: any) => b.type === "revenue");
+    const periodPromo = mappedPeriodBonuses.filter((b: any) => b.type === "promo");
 
-    // Get planned shifts from ACTUAL schedule (work_schedules)
-    // We count how many shifts are assigned to this user in this month
-    // Dates in work_schedules are YYYY-MM-DD strings.
+    // Map shift bonuses to 'promo' format so they appear as KPI cards
+    const mappedShiftBonuses = shiftBonusesBreakdown.map((b: any) => {
+      const isPercent = b.original_type === "progressive_percent" || b.original_type === "percent_revenue";
+      const earned = b.amount || b.total_earned || 0;
+      const count = isPercent ? (b.source_value || 0) : (b.count || 0);
+      const reward_value = isPercent
+        ? (count > 0 ? (earned / count) * 100 : 0)
+        : (b.count > 0 ? earned / b.count : 0);
+      const reward_type = isPercent ? "PERCENT" : "FIXED";
+      const source = isPercent
+        ? (b.source_key === "Bar" ? "Выручка бара (sum)" : "Выручка (sum)")
+        : "За смены";
+
+      return {
+        id: b.id || `shift-${b.name}`,
+        type: "promo",
+        name: b.name,
+        bonus_amount: earned,
+        current_value: count,
+        mode: "SHIFT",
+        metric_key: isPercent ? "sum" : undefined,
+        thresholds: b.thresholds || undefined,
+        threshold_counts: b.threshold_counts || undefined,
+        metric_breakdown: [
+          {
+            source,
+            count,
+            earned,
+            reward_value,
+            reward_type,
+          },
+        ],
+        rules: [
+          {
+            source,
+            reward_type,
+            percent: isPercent ? reward_value : 0,
+            amount: isPercent ? 0 : reward_value,
+            rate: isPercent ? 0 : reward_value,
+          },
+        ],
+      };
+    });
+
+    const promo = [...periodPromo, ...mappedShiftBonuses];
+
+    const checklist = userReport.checklist_bonuses || [];
+    
+    let maintenance = null;
+    if (userReport.maintenance_status) {
+      const ms = userReport.maintenance_status;
+      maintenance = {
+        ...ms,
+        total_month_target: ms.target_value || 0,
+        completed_month_value: ms.current_value || 0,
+        total_gross: ms.base_bonus_amount || 0,
+      };
+    }
+
     const daysInMonth = new Date(year, month, 0).getDate();
-    const monthStr = month.toString().padStart(2, "0");
-    const plannedRes = await query(
-      `SELECT COUNT(*) as count FROM work_schedules
-             WHERE club_id = $1 AND user_id = $2
-             AND date >= $3 AND date <= $4`,
-      [
-        clubId,
-        userId,
-        `${year}-${monthStr}-01`,
-        `${year}-${monthStr}-${daysInMonth}`,
-      ],
-    );
-    const planned_shifts = parseInt(plannedRes.rows[0]?.count || "0");
-    const shiftsRes = await query(
-      `SELECT
-                id,
-                cash_revenue,
-                card_revenue,
-                total_hours,
-                report_data,
-                check_in,
-                status
-             FROM shifts
-             WHERE user_id = $1
-               AND club_id = $2
-               AND (
-                   (check_in >= $3 AND check_in <= $4 AND status != 'ACTIVE' AND status != 'CANCELLED')
-                   OR
-                   (status = 'ACTIVE')
-               )`,
-      [userId, clubId, startOfMonthIso, endOfMonthIso],
-    );
-
-    const finishedShifts = shiftsRes.rows;
-
-    // Separate active and closed shifts
-    // Handle edge case: multiple active shifts (should not happen, but safe to handle)
-    // We take the MOST RECENT active shift as the "current" one.
-    const allActiveShifts = finishedShifts.filter((s) => s.status === "ACTIVE");
-    const activeShift = allActiveShifts.sort(
-      (a, b) => new Date(b.check_in).getTime() - new Date(a.check_in).getTime(),
-    )[0];
-
-    const closedShifts = finishedShifts.filter((s) => s.status !== "ACTIVE");
-
-    const completed_shifts_count = closedShifts.length;
-    // Total count logic: closed + (1 if there is an active shift)
-    // We ignore "zombie" active shifts if any (extra ones)
-    // Also ensure total shifts is at least 1 so UI logic doesn't fail on 0
-    const total_shifts_count = completed_shifts_count + (activeShift ? 1 : 0);
-
-    console.log(
-      `[KPI API] Shifts found: ${total_shifts_count} (Closed: ${completed_shifts_count}, Active: ${activeShift ? 1 : 0})`,
-    );
-
-    // 2. Fetch monthly metrics (Checklists & Maintenance)
-    const evalRes = await query(
-      `SELECT COUNT(*) as count, AVG((total_score/max_score)*100) as avg_score
-             FROM evaluations
-             WHERE employee_id = $1 AND evaluation_date >= $2 AND evaluation_date <= $3`,
-      [userId, startOfMonthIso, endOfMonthIso],
-    );
-
-    const maintRes = await query(
-      `WITH scoped_tasks AS (
-                SELECT
-                    mt.*,
-                    COALESCE(
-                        mt.assigned_user_id,
-                        CASE
-                            WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
-                            WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
-                            ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
-                        END
-                    ) AS effective_assignee
-                FROM equipment_maintenance_tasks mt
-                JOIN equipment e ON mt.equipment_id = e.id
-                LEFT JOIN club_workstations w ON e.workstation_id = w.id
-                LEFT JOIN club_zones z ON z.club_id = e.club_id AND z.name = w.zone
-                WHERE mt.club_id = $4 AND (
-                    (
-                        mt.due_date >= $2
-                        AND mt.due_date <= $3
-                    )
-                    OR
-                    (
-                        mt.completed_by = $1
-                        AND mt.status = 'COMPLETED'
-                        AND mt.completed_at >= $2
-                        AND mt.completed_at <= $3
-                        AND mt.due_date < $2
-                    )
-                )
-                AND (COALESCE(
-                        mt.assigned_user_id,
-                        CASE
-                            WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
-                            WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
-                            ELSE COALESCE(w.assigned_user_id, z.assigned_user_id)
-                        END
-                    ) = $1 OR mt.completed_by = $1)
-                )
-                SELECT
-                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status != 'CANCELLED' AND (effective_assignee = $1 OR status = 'COMPLETED')) as total_tasks,
-                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks,
-                COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3 AND due_date < $2) as old_debt_closed_tasks,
-                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND due_date <= CURRENT_DATE AND status != 'CANCELLED' AND (effective_assignee = $1 OR status = 'COMPLETED')) as due_by_now_tasks,
-                COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status = 'COMPLETED' AND due_date <= CURRENT_DATE AND completed_at >= $2 AND completed_at <= $3) as completed_due_by_now_tasks,
-                COUNT(*) FILTER (WHERE status IN ('PENDING', 'IN_PROGRESS') AND due_date < CURRENT_DATE AND effective_assignee = $1) as overdue_open_tasks,
-                COUNT(*) FILTER (WHERE status = 'IN_PROGRESS' AND verification_status = 'REJECTED' AND effective_assignee = $1) as rework_open_tasks,
-                COUNT(*) FILTER (
-                    WHERE status = 'IN_PROGRESS'
-                      AND verification_status = 'REJECTED'
-                      AND effective_assignee = $1
-                      AND COALESCE(verified_at::date, CURRENT_DATE) <= CURRENT_DATE - 3
-                ) as stale_rework_tasks,
-                COUNT(*) FILTER (WHERE responsible_user_id_at_completion = $1 AND was_overdue = TRUE AND completed_at >= $2 AND completed_at <= $3) as overdue_completed_tasks,
-                COALESCE(SUM(overdue_days_at_completion) FILTER (WHERE responsible_user_id_at_completion = $1 AND was_overdue = TRUE AND completed_at >= $2 AND completed_at <= $3), 0) as overdue_completed_days,
-                COALESCE(SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3), 0) as bonus
-                FROM scoped_tasks`,
-      [userId, startOfMonthIso, endOfMonthIso, clubId],
-    );
-    const overdueHistoryRes = await query(
-      `SELECT overdue_days_at_completion, was_overdue, bonus_earned, overdue_penalty, due_date
-             FROM equipment_maintenance_tasks
-             WHERE responsible_user_id_at_completion = $1
-               AND club_id = $4
-               AND status = 'COMPLETED'
-               AND completed_at >= $2 AND completed_at <= $3`,
-      [userId, startOfMonthIso, endOfMonthIso, clubId],
-    );
-
-    // Breakdown by equipment type
-    // Penalty ONLY for tasks due in current month (filter by due_date)
-    const breakdownRes = await query(
-      `SELECT
-                e.type as equipment_type_code,
-                et.name_ru as equipment_type_name,
-                COUNT(*) as task_count,
-                COALESCE(SUM(mt.bonus_earned), 0) as gross_earnings,
-                COALESCE(SUM(CASE WHEN mt.due_date >= $4::date AND mt.due_date <= $5::date THEN mt.overdue_penalty ELSE 0 END), 0) as penalty
-              FROM equipment_maintenance_tasks mt
-              JOIN equipment e ON mt.equipment_id = e.id
-              LEFT JOIN equipment_types et ON e.type = et.code
-              WHERE mt.responsible_user_id_at_completion = $1
-                AND mt.club_id = $6
-                AND mt.status = 'COMPLETED'
-                AND mt.completed_at >= $2 AND mt.completed_at <= $3
-              GROUP BY e.type, et.name_ru
-              ORDER BY task_count DESC`,
-      [
-        userId,
-        startOfMonthIso,
-        endOfMonthIso,
-        startOfMonth.toISOString().split("T")[0],
-        endOfMonth.toISOString().split("T")[0],
-        clubId,
-      ],
-    );
-    // Filter overdue history for penalty calculation to current month only (by due_date)
-    const currentMonthOverdueHistory = overdueHistoryRes.rows.filter(
-      (t: any) => {
-        const dueDate = new Date(t.due_date);
-        return dueDate >= startOfMonth && dueDate <= endOfMonth;
-      },
-    );
-
-    const taskBonusSum = overdueHistoryRes.rows.reduce(
-      (sum: number, t: any) => sum + (parseFloat(t.bonus_earned) || 0),
-      0,
-    );
-
-    const maintTasksTotal = parseInt(maintRes.rows[0]?.total_tasks || "0");
-    const maintTasksCompleted = parseInt(
-      maintRes.rows[0]?.completed_tasks || "0",
-    );
-    const maintOverdueOpen = parseInt(
-      maintRes.rows[0]?.overdue_open_tasks || "0",
-    );
-    const maintReworkOpen = parseInt(
-      maintRes.rows[0]?.rework_open_tasks || "0",
-    );
-    const maintStaleRework = parseInt(
-      maintRes.rows[0]?.stale_rework_tasks || "0",
-    );
-
-    const qualityMetrics = calculateMaintenanceQualityMetrics({
-      assigned: maintTasksTotal,
-      completed: maintTasksCompleted,
-      dueByNow: maintTasksTotal, // Assuming all assigned tasks were due by now for this context
-      completedDueByNow: maintTasksCompleted,
-      overdueOpenTasks: maintOverdueOpen,
-      reworkOpenTasks: maintReworkOpen,
-      staleReworkTasks: maintStaleRework,
-    });
-    const maintEfficiency = qualityMetrics.efficiency;
-
-    const maintKpiConfig = (scheme.bonuses || []).find(
-      (b: any) => b.type === "maintenance_kpi",
-    );
-    let maintenanceBonus = 0;
-    if (maintKpiConfig) {
-      const mode = maintKpiConfig.mode || "PER_TASK";
-      if (mode === "PER_TASK") {
-        maintenanceBonus = taskBonusSum;
-      } else if (mode === "MONTHLY_TIERS") {
-        const tiers = maintKpiConfig.efficiency_thresholds || [];
-        const sortedTiers = [...tiers].sort(
-          (a: any, b: any) => (b.min_percent || 0) - (a.min_percent || 0),
-        );
-        const applicableTier = sortedTiers.find(
-          (tier) => maintEfficiency >= (tier.min_percent || 0),
-        );
-        if (applicableTier) {
-          maintenanceBonus = applicableTier.bonus_amount || 0;
-        }
-      }
-    }
-
-    // Calculate totals using the same logic as salary summary
-    const monthlyMetrics: Record<string, number> = {
-      total_revenue: 0,
-      total_hours: 0,
-      evaluation_score: parseFloat(evalRes.rows[0]?.avg_score || "0"),
-      evaluation_count: parseInt(evalRes.rows[0]?.count || "0"),
-      maintenance_tasks_completed: parseInt(
-        maintRes.rows[0]?.completed_tasks || "0",
-      ),
-      maintenance_tasks_assigned: parseInt(
-        maintRes.rows[0]?.total_tasks || "0",
-      ),
-      maintenance_bonus: maintenanceBonus,
-    };
-    const activeShiftMetrics: Record<string, number> = {
-      total_revenue: 0,
-      total_hours: 0,
-    };
-    const closedShiftsMetrics: Record<string, number> = {
-      total_revenue: 0,
-      total_hours: 0,
-    };
-
-    finishedShifts.forEach((s) => {
-      const isActive = s.status === "ACTIVE";
-      // Only process this shift if it is CLOSED or if it is the ONE valid active shift
-      if (isActive && s.id !== activeShift?.id) return;
-
-      // Calculate Shift Income
-      let shiftIncome = 0;
-      // Use revenue fields from DB
-      const cash = parseFloat(s.cash_revenue || 0);
-      const card = parseFloat(s.card_revenue || 0);
-
-      if (
-        metricCategories["cash_income"] === "INCOME" ||
-        !metricCategories["cash_income"]
-      )
-        shiftIncome += cash;
-      if (
-        metricCategories["card_income"] === "INCOME" ||
-        !metricCategories["card_income"]
-      )
-        shiftIncome += card;
-
-      if (s.report_data) {
-        const data =
-          typeof s.report_data === "string"
-            ? JSON.parse(s.report_data)
-            : s.report_data;
-        Object.keys(data).forEach((key) => {
-          const val = parseFloat(data[key] || 0);
-          // Only include INCOME metrics, excluding cash/card duplicates
-          if (
-            metricCategories[key] === "INCOME" &&
-            key !== "cash_income" &&
-            key !== "card_income"
-          ) {
-            shiftIncome += val;
-          }
-
-          // Add to metrics maps
-          monthlyMetrics[key] = (monthlyMetrics[key] || 0) + val;
-          if (isActive)
-            activeShiftMetrics[key] = (activeShiftMetrics[key] || 0) + val;
-          else closedShiftsMetrics[key] = (closedShiftsMetrics[key] || 0) + val;
-        });
-      }
-      monthlyMetrics.total_revenue += shiftIncome;
-      monthlyMetrics.total_hours += parseFloat(s.total_hours || 0);
-
-      if (isActive) {
-        activeShiftMetrics.total_revenue += shiftIncome;
-        activeShiftMetrics.total_hours += parseFloat(s.total_hours || 0);
-      } else {
-        closedShiftsMetrics.total_revenue =
-          (closedShiftsMetrics.total_revenue || 0) + shiftIncome;
-        closedShiftsMetrics.total_hours =
-          (closedShiftsMetrics.total_hours || 0) +
-          parseFloat(s.total_hours || 0);
-      }
-    });
-
-    // 2.5 Promo KPI Metrics (Total for month and current shift)
-    try {
-      // 1. Fetch TOTAL for the whole month for this employee (all shifts)
-      const totalPromoRes = await query(
-        `WITH employee_shifts AS (
-            SELECT check_in, COALESCE(check_out, NOW()) as check_out
-            FROM shifts
-            WHERE user_id = $2 AND club_id = $1
-              AND (
-                  (check_in >= $3 AND check_in <= $4 AND status != 'CANCELLED')
-                  OR
-                  (status = 'ACTIVE')
-              )
-        )
-        SELECT
-            (SELECT COUNT(DISTINCT p.id)::int
-             FROM promo_players p
-             JOIN promo_player_balances b ON b.player_id = p.id
-             WHERE b.club_id = $1
-               AND EXISTS (SELECT 1 FROM employee_shifts s WHERE p.created_at BETWEEN s.check_in AND s.check_out)
-            ) as total_new_players,
-            (SELECT COUNT(DISTINCT p.id)::int
-             FROM promo_players p
-             JOIN promo_history h ON h.player_id = p.id
-             WHERE h.club_id = $1 AND h.game_type = 'TOPUP'
-               AND EXISTS (
-                   SELECT 1 FROM employee_shifts s
-                   WHERE p.created_at BETWEEN s.check_in AND s.check_out
-                     AND h.created_at BETWEEN s.check_in AND s.check_out
-               )
-            ) as total_new_paying_players,
-            (SELECT SUM((h.result_data->>'amount')::numeric)::float
-             FROM promo_history h
-             WHERE h.club_id = $1 AND h.game_type = 'TOPUP'
-               AND EXISTS (SELECT 1 FROM employee_shifts s WHERE h.created_at BETWEEN s.check_in AND s.check_out)
-            ) as total_topup_sum,
-            (SELECT COUNT(*)::int
-             FROM promo_history h
-             WHERE h.club_id = $1 AND h.game_type = 'SERVICE_AWARD'
-               AND EXISTS (SELECT 1 FROM employee_shifts s WHERE h.created_at BETWEEN s.check_in AND s.check_out)
-            ) as total_service_count`,
-        [clubId, userId, startOfMonthIso, endOfMonthIso],
-      );
-
-      const totalPromo = totalPromoRes.rows[0] || {};
-
-      monthlyMetrics["promo_new_players"] =
-        (monthlyMetrics["promo_new_players"] || 0) +
-        (totalPromo.total_new_players || 0);
-      monthlyMetrics["promo_new_paying_players"] =
-        (monthlyMetrics["promo_new_paying_players"] || 0) +
-        (totalPromo.total_new_paying_players || 0);
-      monthlyMetrics["promo_topup_total_sum"] =
-        (monthlyMetrics["promo_topup_total_sum"] || 0) +
-        (totalPromo.total_topup_sum || 0);
-      monthlyMetrics["promo_service_count"] =
-        (monthlyMetrics["promo_service_count"] || 0) +
-        (totalPromo.total_service_count || 0);
-
-      // 2. Fetch specifically for ACTIVE shift if exists (for real-time UI)
-      if (activeShift) {
-        const shiftStart = new Date(activeShift.check_in);
-        const shiftEnd = now;
-
-        const [newPlayersRes, payingPlayersRes, topupSumRes, serviceAwardRes] =
-          await Promise.all([
-            query(
-              `SELECT COUNT(DISTINCT p.id)::int as count
-             FROM promo_players p
-             JOIN promo_player_balances b ON b.player_id = p.id
-             WHERE b.club_id = $1 AND p.created_at BETWEEN $2 AND $3`,
-              [clubId, shiftStart, shiftEnd],
-            ),
-            query(
-              `SELECT COUNT(DISTINCT p.id)::int as count
-             FROM promo_players p
-             JOIN promo_history h ON h.player_id = p.id
-             WHERE p.created_at BETWEEN $1 AND $2
-               AND h.game_type = 'TOPUP'
-               AND h.created_at BETWEEN $1 AND $2
-               AND h.club_id = $3`,
-              [shiftStart, shiftEnd, clubId],
-            ),
-            query(
-              `SELECT SUM((result_data->>'amount')::numeric)::float as total
-             FROM promo_history
-             WHERE club_id = $1 AND game_type = 'TOPUP' AND created_at BETWEEN $2 AND $3`,
-              [clubId, shiftStart, shiftEnd],
-            ),
-            query(
-              `SELECT COUNT(*)::int as count
-             FROM promo_history
-             WHERE club_id = $1 AND game_type = 'SERVICE_AWARD' AND created_at BETWEEN $2 AND $3`,
-              [clubId, shiftStart, shiftEnd],
-            ),
-          ]);
-
-        activeShiftMetrics["promo_new_players"] =
-          newPlayersRes.rows[0]?.count || 0;
-        activeShiftMetrics["promo_new_paying_players"] =
-          payingPlayersRes.rows[0]?.count || 0;
-        activeShiftMetrics["promo_topup_total_sum"] =
-          topupSumRes.rows[0]?.total || 0;
-        activeShiftMetrics["promo_service_count"] =
-          serviceAwardRes.rows[0]?.count || 0;
-      }
-    } catch (promoError) {
-      console.error("Error fetching Promo KPI metrics:", promoError);
-    }
-
-    // Days in month for projection
     const currentDay = now.getDate();
     const remainingDays = daysInMonth - currentDay;
-
-    // REVERTED LOGIC: "Remaining shifts" in UI traditionally means "Future shifts excluding current ones already counted".
-    // If we want to show "5 shifts left", and we have 8 shifts (7 closed + 1 active), and plan is 13.
-    // Then 13 - 8 = 5.
-    // So we should subtract TOTAL shifts (including active) from planned.
     const remaining_future_shifts = Math.max(
       0,
-      planned_shifts - total_shifts_count,
-    );
-
-    // But for CALCULATION of "how much to earn per shift", we have:
-    // The current active shift (which is not finished) + all future shifts.
-    // So we divide by (remaining_future_shifts + (activeShift ? 1 : 0)).
-    const shifts_opportunities =
-      remaining_future_shifts + (activeShift ? 1 : 0);
-
-    // 3. Calculate KPI progress with SCALED thresholds
-    // Combine period_bonuses and any progressive_bonus from main bonuses array
-    const all_progressive_bonuses = [
-      ...period_bonuses,
-      ...bonuses.filter(
-        (b: any) =>
-          b.type === "progressive_bonus" || b.type === "progressive_percent",
-      ),
-    ];
-
-    const kpi_progress = all_progressive_bonuses.map((bonus: any) => {
-      const metric_key = bonus.metric_key || bonus.source || "total_revenue";
-
-      // Current Value (Total for month, including active)
-      const current_value =
-        monthlyMetrics[metric_key] ||
-        (metric_key === "total_revenue"
-          ? monthlyMetrics.total_revenue
-          : metric_key === "total_hours"
-            ? monthlyMetrics.total_hours
-            : 0);
-
-      // Value for scaling (CLOSED shifts ONLY)
-      // This is the value used to compare against scaled thresholds
-      const value_for_scaling =
-        metric_key === "total_revenue"
-          ? closedShiftsMetrics.total_revenue
-          : metric_key === "total_hours"
-            ? closedShiftsMetrics.total_hours
-            : closedShiftsMetrics[metric_key] || 0;
-
-      // Average per shift based on COMPLETED shifts only to avoid skewing by partial active shift
-      const avg_per_shift =
-        completed_shifts_count > 0
-          ? value_for_scaling / completed_shifts_count
-          : 0;
-
-      const mode = bonus.bonus_mode || bonus.mode || "MONTH";
-
-      let current_level = 0;
-      let current_reward = 0;
-      let current_bonus_amount = 0;
-      let is_met = false;
-      let all_thresholds: any[] = [];
-
-      // Handle progressive thresholds
-      const bonusThresholds = bonus.thresholds || [];
-
-      if (bonusThresholds.length > 0) {
-        const sorted = [...bonusThresholds].sort(
-          (a: any, b: any) => (a.from || 0) - (b.from || 0),
-        );
-
-        // Scale thresholds exactly like in salaries/summary/route.ts
-        all_thresholds = sorted.map((t: any, idx: number) => {
-          const original_from = t.from || 0;
-
-          // SCALE thresholds based ONLY on CLOSED shifts count
-          const scaled_threshold =
-            mode === "SHIFT"
-              ? original_from * completed_shifts_count
-              : (original_from / standard_monthly_shifts) *
-                completed_shifts_count;
-
-          // CHECK MET status based ONLY on CLOSED shifts revenue
-          const isThresholdMet =
-            completed_shifts_count > 0 && value_for_scaling >= scaled_threshold;
-
-          // To REACH: we need to reach the SCALED threshold at the END of the month
-          // So we scale the monthly threshold to the TOTAL planned shifts
-          // Fallback: If no shifts are planned (schedule empty), use standard_monthly_shifts to show full target
-          const effectivePlannedShifts =
-            Math.max(planned_shifts, 0) || standard_monthly_shifts;
-          const endOfMonthThreshold =
-            mode === "SHIFT"
-              ? original_from * effectivePlannedShifts
-              : (original_from / standard_monthly_shifts) *
-                effectivePlannedShifts;
-
-          const totalRemainingToReach = Math.max(
-            0,
-            endOfMonthThreshold - current_value,
-          );
-
-          // Distribute remaining target over ALL available shifts (future + current active)
-          const perShiftToReach =
-            shifts_opportunities > 0
-              ? totalRemainingToReach / shifts_opportunities
-              : 0;
-          const perShiftToStay =
-            planned_shifts > 0 ? endOfMonthThreshold / planned_shifts : 0;
-
-          const percent = t.percent || 0;
-          const amount = t.bonus || t.amount || 0;
-
-          let potentialBonus = 0;
-          if (bonus.reward_type === "FIXED") {
-            potentialBonus = amount;
-          } else {
-            potentialBonus = endOfMonthThreshold * (percent / 100);
-          }
-
-          return {
-            level: idx + 1,
-            label: t.label || `Уровень ${idx + 1}`,
-            monthly_threshold: original_from,
-            planned_month_threshold: endOfMonthThreshold,
-            scaled_threshold: scaled_threshold,
-            display_shifts_count: completed_shifts_count, // Передаем актуальное кол-во смен для подписи
-            percent: percent,
-            amount: amount,
-            is_met: isThresholdMet,
-            remaining_total: totalRemainingToReach,
-            per_shift_to_reach: perShiftToReach,
-            per_shift_to_stay: perShiftToStay,
-            potential_bonus: potentialBonus,
-          };
-        });
-
-        // Find current level
-        for (let i = all_thresholds.length - 1; i >= 0; i--) {
-          if (all_thresholds[i].is_met) {
-            current_level = i + 1;
-            const reached_t = all_thresholds[i];
-
-            if (bonus.reward_type === "FIXED") {
-              current_bonus_amount = reached_t.amount;
-            } else {
-              current_bonus_amount =
-                value_for_scaling * (reached_t.percent / 100);
-            }
-
-            is_met = true;
-            break;
-          }
-        }
-      } else {
-        // Single target KPI (not progressive)
-        const target_per_shift = bonus.target_per_shift || 0;
-        const monthly_target =
-          mode === "SHIFT"
-            ? target_per_shift * standard_monthly_shifts
-            : bonus.target_value || 0;
-
-        const scaled_threshold =
-          mode === "SHIFT"
-            ? target_per_shift * total_shifts_count
-            : (monthly_target / standard_monthly_shifts) * total_shifts_count;
-
-        const effectivePlannedShifts =
-          Math.max(planned_shifts, 0) || standard_monthly_shifts;
-        const endOfMonthThreshold =
-          mode === "SHIFT"
-            ? target_per_shift * effectivePlannedShifts
-            : (monthly_target / standard_monthly_shifts) *
-              effectivePlannedShifts;
-
-        is_met = total_shifts_count > 0 && current_value >= scaled_threshold;
-        const totalRemainingToReach = Math.max(
-          0,
-          endOfMonthThreshold - current_value,
-        );
-        const perShiftToReach =
-          shifts_opportunities > 0
-            ? totalRemainingToReach / shifts_opportunities
-            : 0;
-
-        all_thresholds = [
-          {
-            level: 1,
-            label: "Цель",
-            monthly_threshold: monthly_target,
-            planned_month_threshold: endOfMonthThreshold,
-            scaled_threshold: scaled_threshold,
-            display_shifts_count: completed_shifts_count,
-            percent: bonus.reward_type === "PERCENT" ? bonus.reward_value : 0,
-            amount: bonus.reward_type === "FIXED" ? bonus.reward_value : 0,
-            is_met: is_met,
-            remaining_total: totalRemainingToReach,
-            per_shift_to_reach: perShiftToReach,
-            potential_bonus:
-              bonus.reward_type === "FIXED"
-                ? bonus.reward_value
-                : endOfMonthThreshold * (bonus.reward_value / 100),
-          },
-        ];
-
-        if (is_met) {
-          current_level = 1;
-          if (bonus.reward_type === "PERCENT") {
-            current_bonus_amount =
-              value_for_scaling * (bonus.reward_value / 100);
-          } else {
-            current_bonus_amount = bonus.reward_value;
-          }
-        }
-      }
-
-      // Projection logic (same as before but based on scaled metrics)
-      const projected_total =
-        current_value + avg_per_shift * remaining_future_shifts;
-      let projected_level = 0;
-      let projected_bonus = 0;
-
-      if (
-        (bonus.type === "PROGRESSIVE" ||
-          bonus.type === "progressive_percent") &&
-        all_thresholds.length > 0
-      ) {
-        for (let i = all_thresholds.length - 1; i >= 0; i--) {
-          const thresholdToReach = all_thresholds[i].planned_month_threshold;
-
-          if (projected_total >= thresholdToReach) {
-            projected_level = i + 1;
-            if (bonus.reward_type === "FIXED") {
-              projected_bonus = all_thresholds[i].amount;
-            } else {
-              projected_bonus =
-                projected_total * (all_thresholds[i].percent / 100);
-            }
-            break;
-          }
-        }
-      }
-
-      return {
-        id: bonus.id,
-        name: bonus.name,
-        metric_key,
-        current_value,
-        avg_per_shift,
-        current_level,
-        current_reward,
-        is_met,
-        bonus_amount: current_bonus_amount,
-        all_thresholds,
-        projected_total,
-        projected_level,
-        projected_bonus,
-        remaining_shifts: remaining_future_shifts,
-        current_shift_value:
-          activeShiftMetrics[metric_key] ||
-          (metric_key === "total_revenue"
-            ? activeShiftMetrics.total_revenue
-            : metric_key === "total_hours"
-              ? activeShiftMetrics.total_hours
-              : 0),
-      };
-    });
-
-    // 3.5 Calculate Per Unit (Promo) KPI progress
-    const promoConfigs = (scheme.bonuses || []).filter(
-      (b: any) => b.type === "per_unit",
-    );
-    const promo_progress = promoConfigs.map((bonus: any) => {
-      let current_value = 0;
-      let bonus_amount = 0;
-      const rules = bonus.rules || [];
-      const breakdown: any[] = [];
-
-      if (Array.isArray(rules) && rules.length > 0) {
-        rules.forEach((rule: any) => {
-          const val = monthlyMetrics[rule.source] || 0;
-          current_value += val;
-          let rule_bonus = 0;
-          if (rule.reward_type === "PERCENT") {
-            rule_bonus = val * ((Number(rule.percent) || 0) / 100);
-          } else {
-            rule_bonus = val * (Number(rule.amount) || 0);
-          }
-          bonus_amount += rule_bonus;
-
-          breakdown.push({
-            source: rule.source,
-            value: val,
-            bonus: rule_bonus,
-            rate: Number(rule.amount) || 0,
-            percent: Number(rule.percent) || 0,
-            reward_type: rule.reward_type || "FIXED",
-          });
-        });
-      } else {
-        const metric_key = bonus.source || "promo_new_players";
-        current_value = monthlyMetrics[metric_key] || 0;
-        const amount_promo =
-          Number(bonus.amount_promo) || Number(bonus.amount) || 0;
-        bonus_amount = current_value * amount_promo;
-
-        breakdown.push({
-          source: metric_key,
-          value: current_value,
-          bonus: bonus_amount,
-          rate: amount_promo,
-          reward_type: "FIXED",
-        });
-      }
-
-      return {
-        id: bonus.id || `per-unit-${bonus.source || "rules"}`,
-        type: "promo",
-        name: bonus.name || "Бонус за акции",
-        current_value,
-        bonus_amount,
-        rules,
-        breakdown,
-      };
-    });
-
-    // 4. Fetch Checklist KPI progress
-    const allChecklistConfigs = (scheme.bonuses || []).filter(
-      (b: any) => b.type === "checklist",
-    );
-    const checklist_progress = allChecklistConfigs.map((bonusConfig: any) => {
-      const score = monthlyMetrics["evaluation_score"] || 0;
-      const count = monthlyMetrics["evaluation_count"] || 0;
-
-      let bonusAmount = 0;
-      let current_thresholds: any[] = [];
-
-      if (
-        bonusConfig.use_thresholds &&
-        bonusConfig.checklist_thresholds?.length
-      ) {
-        const sorted = [...bonusConfig.checklist_thresholds].sort(
-          (a, b) => (Number(a.min_score) || 0) - (Number(b.min_score) || 0),
-        );
-
-        current_thresholds = sorted.map((t, idx) => ({
-          level: idx + 1,
-          label: t.label || `Уровень ${idx + 1}`,
-          from: Number(t.min_score) || 0,
-          amount: Number(t.amount) || 0,
-          is_met: score >= (Number(t.min_score) || 0),
-        }));
-
-        const metThreshold = [...sorted]
-          .reverse()
-          .find((t) => score >= (Number(t.min_score) || 0));
-        if (metThreshold) bonusAmount = Number(metThreshold.amount) || 0;
-      } else {
-        const minScore = Number(bonusConfig.min_score) || 0;
-        const amount = Number(bonusConfig.amount) || 0;
-
-        current_thresholds = [
-          {
-            level: 1,
-            label: "Цель",
-            from: minScore,
-            amount: amount,
-            is_met: score >= minScore,
-          },
-        ];
-
-        if (score >= minScore) bonusAmount = amount;
-      }
-
-      return {
-        id: bonusConfig.id || `checklist-${bonusConfig.checklist_template_id}`,
-        type: "checklist",
-        name: bonusConfig.name || "Чек-лист",
-        current_value: score,
-        count,
-        bonus_amount: bonusAmount,
-        thresholds: current_thresholds,
-        is_met: bonusAmount > 0,
-        mode: bonusConfig.mode || "MONTH",
-      };
-    });
-
-    const maintConfig = (scheme.bonuses || []).find(
-      (b: any) => b.type === "maintenance_kpi",
-    );
-    let maintenance_progress = null;
-    try {
-      if (maintConfig) {
-        const completed =
-          Number(monthlyMetrics["maintenance_tasks_completed"]) || 0;
-        const assigned =
-          Number(monthlyMetrics["maintenance_tasks_assigned"]) || 0;
-        const dueByNow = Number(maintRes.rows[0]?.due_by_now_tasks || 0);
-        const completedDueByNow = Number(
-          maintRes.rows[0]?.completed_due_by_now_tasks || 0,
-        );
-        const oldDebtClosed = Number(
-          maintRes.rows[0]?.old_debt_closed_tasks || 0,
-        );
-        const overdueOpen = Number(maintRes.rows[0]?.overdue_open_tasks || 0);
-        const reworkOpen = Number(maintRes.rows[0]?.rework_open_tasks || 0);
-        const staleRework = Number(maintRes.rows[0]?.stale_rework_tasks || 0);
-        const overdueCompletedTasks = Number(
-          maintRes.rows[0]?.overdue_completed_tasks || 0,
-        );
-        const overdueCompletedDays = Number(
-          maintRes.rows[0]?.overdue_completed_days || 0,
-        );
-        const upcoming = Math.max(0, assigned - dueByNow);
-        const qualityMetrics = calculateMaintenanceQualityMetrics({
-          assigned,
-          completed,
-          dueByNow,
-          completedDueByNow,
-          overdueOpenTasks: overdueOpen,
-          reworkOpenTasks: reworkOpen,
-          staleReworkTasks: staleRework,
-        });
-        const efficiency = qualityMetrics.efficiency;
-        const liveEfficiency = qualityMetrics.live_efficiency;
-        const projectedCompleted =
-          assigned > 0
-            ? Math.min(
-                assigned,
-                qualityMetrics.adjusted_completed +
-                  upcoming * (liveEfficiency / 100),
-              )
-            : qualityMetrics.adjusted_completed;
-        const projectedEfficiency =
-          assigned > 0
-            ? (projectedCompleted / assigned) * 100
-            : projectedCompleted > 0
-              ? 100
-              : 0;
-
-        let bonusAmount = 0;
-        let projectedBonusAmount = 0;
-        let projectedTierLabel: string | null = null;
-        const overduePenaltyMeta = calculateMaintenanceOverduePenalty(
-          maintConfig,
-          currentMonthOverdueHistory,
-        );
-        if (maintConfig.calculation_mode === "MONTHLY") {
-          const thresholds = maintConfig.efficiency_thresholds || [];
-          const sortedTiers = [...thresholds].sort(
-            (a: any, b: any) =>
-              (Number(b.from_percent) || 0) - (Number(a.from_percent) || 0),
-          );
-          const achievedTier = sortedTiers.find(
-            (t: any) => efficiency >= (Number(t.from_percent) || 0),
-          );
-          if (achievedTier) {
-            bonusAmount = Number(achievedTier.amount) || 0;
-          }
-          const projectedTier = sortedTiers.find(
-            (t: any) => projectedEfficiency >= (Number(t.from_percent) || 0),
-          );
-          if (projectedTier) {
-            projectedBonusAmount = Number(projectedTier.amount) || 0;
-            projectedTierLabel = projectedTier.label || null;
-          }
-        } else {
-          bonusAmount = Number(monthlyMetrics["maintenance_bonus"]) || 0;
-          projectedBonusAmount = bonusAmount;
-        }
-
-        const baseBonusAmount = bonusAmount;
-        const penaltyRawAmount = overduePenaltyMeta.total;
-        const penaltyAppliedAmount = Math.min(
-          baseBonusAmount,
-          penaltyRawAmount,
-        );
-        bonusAmount = Math.max(0, baseBonusAmount - penaltyAppliedAmount);
-        projectedBonusAmount = Math.max(
-          0,
-          projectedBonusAmount - penaltyAppliedAmount,
-        );
-
-        let current_thresholds: any[] = [];
-        if (maintConfig.efficiency_thresholds?.length) {
-          current_thresholds = maintConfig.efficiency_thresholds
-            .sort(
-              (a: any, b: any) =>
-                (Number(a.from_percent) || 0) - (Number(b.from_percent) || 0),
-            )
-            .map((t: any, idx: number) => ({
-              level: idx + 1,
-              label: t.label || `Уровень ${idx + 1}`,
-              from: Number(t.from_percent) || 0,
-              amount: Number(t.amount) || 0,
-              is_met: efficiency >= (Number(t.from_percent) || 0),
-            }));
-        }
-
-        // Create full breakdown with all equipment types from scheme
-        const perTypeRewards = maintConfig.per_equipment_type_rewards || [];
-        const equipmentTypesMap = new Map();
-
-        // Initialize with all types from scheme
-        for (const reward of perTypeRewards) {
-          const code =
-            reward.equipment_type_code ||
-            reward.type_code ||
-            reward.code ||
-            reward.type ||
-            "";
-          const name =
-            reward.equipment_type_name || reward.name_ru || reward.name || code;
-          equipmentTypesMap.set(code.toLowerCase(), {
-            type: name,
-            type_code: code,
-            count: 0,
-            gross: 0,
-            penalty: 0,
-            rate: Number(
-              reward.amount ||
-                reward.reward ||
-                reward.value ||
-                reward.bonus ||
-                0,
-            ),
-          });
-        }
-
-        // Fill in actual data
-        for (const row of breakdownRes.rows) {
-          const code = (row.equipment_type_code || "").toLowerCase();
-          if (equipmentTypesMap.has(code)) {
-            const item = equipmentTypesMap.get(code);
-            item.count = parseInt(row.task_count) || 0;
-            item.gross = parseFloat(row.gross_earnings) || 0;
-            item.penalty = Math.abs(parseFloat(row.penalty)) || 0;
-          } else {
-            // Type exists in tasks but not in scheme - add it
-            equipmentTypesMap.set(code, {
-              type:
-                row.equipment_type_name || row.equipment_type_code || "Другое",
-              type_code: row.equipment_type_code,
-              count: parseInt(row.task_count) || 0,
-              gross: parseFloat(row.gross_earnings) || 0,
-              penalty: Math.abs(parseFloat(row.penalty)) || 0,
-              rate: 0,
-            });
-          }
-        }
-
-        const breakdown = Array.from(equipmentTypesMap.values());
-        const totalGross = breakdown.reduce(
-          (sum: number, b: any) => sum + b.gross,
-          0,
-        );
-
-        maintenance_progress = {
-          id: maintConfig.id || "maintenance",
-          name: maintConfig.name || "Обслуживание",
-          efficiency,
-          live_efficiency: liveEfficiency,
-          bonus_amount: bonusAmount,
-          base_bonus_amount: baseBonusAmount,
-          overdue_penalty_amount: penaltyAppliedAmount,
-          overdue_penalty_raw_amount: penaltyRawAmount,
-          completed_month_value: completed,
-          total_month_target: assigned,
-          adjusted_completed_month_value: qualityMetrics.adjusted_completed,
-          upcoming_tasks: upcoming,
-          overdue_open_tasks: overdueOpen,
-          rework_open_tasks: reworkOpen,
-          stale_rework_tasks: staleRework,
-          old_debt_closed_tasks: oldDebtClosed,
-          overdue_completed_tasks: overdueCompletedTasks,
-          overdue_completed_days: overdueCompletedDays,
-          projected_completed_value: projectedCompleted,
-          projected_efficiency: projectedEfficiency,
-          projected_bonus_amount: projectedBonusAmount,
-          projected_tier_label: projectedTierLabel,
-          thresholds: current_thresholds,
-          mode: maintConfig.calculation_mode || "PER_TASK",
-          breakdown,
-          total_gross: totalGross,
-          per_type_rates: perTypeRewards.map((r: any) => ({
-            type:
-              r.equipment_type_name ||
-              r.name_ru ||
-              r.name ||
-              r.equipment_type_code ||
-              r.type_code ||
-              r.code ||
-              r.type ||
-              "Другое",
-            type_code:
-              r.equipment_type_code || r.type_code || r.code || r.type || "",
-            rate: Number(r.amount || r.reward || r.value || r.bonus || 0),
-          })),
-        };
-      }
-    } catch (e) {
-      console.error("[KPI API] Failed to calculate maintenance progress:", e);
-      maintenance_progress = null;
-    }
-
-    const total_kpi_bonus =
-      kpi_progress.reduce(
-        (sum: number, kpi: any) => sum + kpi.bonus_amount,
-        0,
-      ) +
-      promo_progress.reduce(
-        (sum: number, kpi: any) => sum + kpi.bonus_amount,
-        0,
-      ) +
-      checklist_progress.reduce(
-        (sum: number, cp: any) => sum + cp.bonus_amount,
-        0,
-      ) +
-      ((maintenance_progress?.bonus_amount || 0) -
-        (maintenance_progress?.overdue_penalty_amount || 0));
-
-    const total_projected_bonus = kpi_progress.reduce(
-      (sum: number, kpi: any) => sum + kpi.projected_bonus,
-      0,
+      (userReport.planned_shifts || 0) - (userReport.shifts_count || 0),
     );
 
     return NextResponse.json({
-      kpi: kpi_progress,
-      promo: promo_progress,
-      checklist: checklist_progress,
-      maintenance: maintenance_progress,
-      total_kpi_bonus,
-      total_projected_bonus,
-      shifts_count: total_shifts_count, // Revert to TOTAL (including active) for UI "Passed X shifts"
-      completed_shifts_count,
-      planned_shifts,
+      kpi,
+      promo,
+      checklist,
+      maintenance,
+      shifts_count: userReport.shifts_count || 0,
+      completed_shifts_count: userReport.shifts_count || 0,
+      planned_shifts: userReport.planned_shifts || 0,
       remaining_shifts: remaining_future_shifts,
       days_remaining: remainingDays,
       current_day: currentDay,
       days_in_month: daysInMonth,
+      hidden: false,
     });
-  } catch (error: any) {
-    console.error("Employee KPI Error:", error);
+  } catch (error) {
+    console.error("Error fetching employee KPI:", error);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" },
+      { error: "Internal Server Error" },
       { status: 500 },
     );
   }

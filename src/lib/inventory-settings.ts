@@ -21,6 +21,7 @@ export type RawInventorySettings = {
   employee_discount_overrides?: Record<string, number>;
   allow_cost_price_sale?: boolean;
   price_tag_settings?: any;
+  block_desktop_handover?: boolean;
 };
 
 export type InventorySettings = Omit<
@@ -41,6 +42,7 @@ export type InventorySettings = Omit<
   sales_capture_mode: "SHIFT";
   inventory_timing: "END_SHIFT";
   shift_accountability_mode: "DISABLED" | "WAREHOUSE";
+  block_desktop_handover: boolean;
 };
 
 export function normalizeInventorySettings(
@@ -168,6 +170,7 @@ export function normalizeInventorySettings(
     sales_capture_mode: "SHIFT",
     inventory_timing: "END_SHIFT",
     shift_accountability_mode: shiftAccountabilityMode,
+    block_desktop_handover: source.block_desktop_handover ?? true,
   };
 }
 

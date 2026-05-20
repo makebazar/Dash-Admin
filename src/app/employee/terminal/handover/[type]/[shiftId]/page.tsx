@@ -50,6 +50,7 @@ import {
   getShiftZoneSnapshotDraftTerminal,
   saveShiftZoneSnapshotTerminal,
   getProductsTerminal,
+  getInventorySettingsTerminal,
 } from "@/app/clubs/[clubId]/inventory/terminal-actions";
 import {
   type HandoverSourceCandidate,
@@ -97,6 +98,8 @@ export default function HandoverTerminalPage() {
   const [manualSearchQuery, setManualSearchQuery] = useState("");
   const [countdown, setCountdown] = useState(5);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [blockDesktop, setBlockDesktop] = useState(true);
+  const [activeWarehouseId, setActiveWarehouseId] = useState<string>("");
 
   const draftStorageKey = `shift-zone-snapshot:${clubId}:${shiftId}:${snapshotType}`;
 
@@ -188,19 +191,26 @@ export default function HandoverTerminalPage() {
       if (!clubId || !shiftId) return;
       if (!silent) setIsLoading(true);
       try {
-        const [rowsRes, warehousesRes, sourceCandidatesRes] = await Promise.all(
+        const [rowsRes, warehousesRes, sourceCandidatesRes, settingsRes] = await Promise.all(
           [
             getShiftZoneSnapshotDraftTerminal(clubId, shiftId, snapshotType),
             getShiftAccountabilityWarehousesTerminal(clubId, shiftId),
             snapshotType === "OPEN"
               ? getHandoverSourceCandidatesTerminal(clubId, shiftId)
               : Promise.resolve({ ok: true as const, data: [] }),
+            getInventorySettingsTerminal(clubId),
           ],
         );
 
         if (!rowsRes.ok) throw new Error(rowsRes.error);
         if (!warehousesRes.ok) throw new Error(warehousesRes.error);
         if (!sourceCandidatesRes.ok) throw new Error(sourceCandidatesRes.error);
+
+        let blockDesktopVal = true;
+        if (settingsRes.ok && settingsRes.data) {
+          blockDesktopVal = settingsRes.data.block_desktop_handover ?? true;
+        }
+        setBlockDesktop(blockDesktopVal);
 
         const serverRows = rowsRes.data.map((item: any) => ({
           ...item,
@@ -295,6 +305,9 @@ export default function HandoverTerminalPage() {
 
         setItems(nextItems);
         setWarehouses(availableWarehouses);
+        if (availableWarehouses.length > 0) {
+          setActiveWarehouseId((prev) => prev || String(availableWarehouses[0].id));
+        }
         setHandoverSourceCandidates(sourceCandidates);
         setSelectedSourceShiftId(nextSelectedSourceShiftId);
 
@@ -581,7 +594,7 @@ export default function HandoverTerminalPage() {
       </div>
     );
 
-  if (isDesktop && step !== "SUCCESS") {
+  if (blockDesktop && isDesktop && step !== "SUCCESS") {
     const terminalUrl = `${window.location.origin}/employee/terminal/handover/${type}/${shiftId}?clubId=${clubId}${blindCloseMode ? "&blind=true" : ""}`;
 
     return (
@@ -605,6 +618,1066 @@ export default function HandoverTerminalPage() {
         <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl text-[10px] font-mono text-zinc-600 uppercase tracking-[0.2em] font-bold">
           Mobile interface required
         </div>
+      </div>
+    );
+  }
+
+  if (!blockDesktop && isDesktop && step !== "SUCCESS") {
+    // 1. Compute stats
+    const warehouseStats = warehouses.map((wh) => {
+      const whItems = items.filter((item) => item.warehouse_id === wh.id);
+      const total = whItems.length;
+      const counted = whItems.filter((item) => item.confirmed).length;
+      return {
+        id: wh.id,
+        name: wh.name,
+        shift_zone_key: wh.shift_zone_key,
+        shift_zone_label: wh.shift_zone_label,
+        total,
+        counted,
+        progress: total === 0 ? 100 : Math.round((counted / total) * 100),
+      };
+    });
+
+    const activeWarehouse = warehouses.find((wh) => String(wh.id) === activeWarehouseId) || warehouses[0];
+
+    const activeItems = filteredItems.filter(
+      (item) => item.warehouse_id === (activeWarehouse ? Number(activeWarehouse.id) : 0)
+    );
+
+    const discrepancies = blindCloseMode
+      ? []
+      : items.filter(
+          (i) =>
+            i.confirmed &&
+            i.counted_quantity !== null &&
+            Number(i.counted_quantity) !== Number(i.system_quantity)
+        );
+
+    const totalShortageCost = items.reduce((sum, i) => {
+      if (i.confirmed && i.counted_quantity !== null) {
+        const diff = Number(i.counted_quantity) - Number(i.system_quantity);
+        if (diff < 0) {
+          return sum + Math.abs(diff) * Number(i.selling_price || 0);
+        }
+      }
+      return sum;
+    }, 0);
+
+    return (
+      <div className="h-screen bg-black text-zinc-100 flex flex-col overflow-hidden font-sans select-none">
+        {/* Desktop Header */}
+        <header className="h-20 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-xl px-8 flex items-center justify-between shrink-0 z-30">
+          <div className="flex items-center gap-6">
+            <div>
+              <h1 className="text-lg font-black tracking-tight uppercase italic leading-none text-white">
+                {snapshotType === "OPEN" ? "Приемка остатков" : "Сдача остатков"}
+              </h1>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "border-zinc-800 text-[9px] font-bold px-2 py-0.5",
+                    snapshotType === "OPEN"
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                  )}
+                >
+                  {snapshotType === "OPEN" ? "ПРИЕМКА" : "СДАЧА"}
+                </Badge>
+                {blindCloseMode && (
+                  <Badge
+                    variant="outline"
+                    className="bg-purple-500/10 text-purple-400 border-purple-500/20 text-[9px] font-bold px-2 py-0.5"
+                  >
+                    СЛЕПОЙ ПОДЧЕТ
+                  </Badge>
+                )}
+                <span className="text-zinc-600 text-xs font-mono font-bold">
+                  {items.length} ПОЗИЦИЙ
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Steps Indicator */}
+          <div className="flex items-center gap-3">
+            {snapshotType === "OPEN" && (
+              <>
+                <div
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-bold transition-all",
+                    step === "SETUP"
+                      ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-400"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-500"
+                  )}
+                >
+                  <span className="h-2 w-2 rounded-full bg-current" />
+                  1. ВЫБОР СМЕНЫ
+                </div>
+                <ChevronRight className="h-4 w-4 text-zinc-800" />
+              </>
+            )}
+            <div
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-bold transition-all",
+                step === "COUNTING"
+                  ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-400"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-500"
+              )}
+            >
+              <span className="h-2 w-2 rounded-full bg-current" />
+              {snapshotType === "OPEN" ? "2. ПОДЧЕТ ТОВАРОВ" : "1. ПОДЧЕТ ТОВАРОВ"}
+            </div>
+            <ChevronRight className="h-4 w-4 text-zinc-800" />
+            <div
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-bold transition-all",
+                step === "SUMMARY"
+                  ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-400"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-500"
+              )}
+            >
+              <span className="h-2 w-2 rounded-full bg-current" />
+              {snapshotType === "OPEN" ? "3. ИТОГОВЫЙ ОТЧЕТ" : "2. ИТОГОВЫЙ ОТЧЕТ"}
+            </div>
+          </div>
+
+          {/* Quick Stats Progress Card */}
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl px-4 py-2 text-right min-w-32 flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[9px] font-black text-zinc-500 uppercase tracking-wider mb-0.5 leading-none">
+                ОБЩИЙ ПРОГРЕСС
+              </div>
+              <div className="text-[10px] text-zinc-400 font-mono">
+                {stats.counted} из {stats.total} поз.
+              </div>
+            </div>
+            <div className="text-xl font-black font-mono text-emerald-500">
+              {stats.progress}%
+            </div>
+          </div>
+        </header>
+
+        {/* Step-specific layout rendering */}
+        {step === "SETUP" && (
+          <div className="flex-1 overflow-y-auto p-12 flex flex-col items-center justify-center bg-zinc-950">
+            <div className="max-w-2xl w-full space-y-8">
+              <div className="text-center space-y-2">
+                <h2 className="text-2xl font-black text-white uppercase italic tracking-tight">
+                  У КОГО ПРИНИМАЕТЕ ОСТАТКИ?
+                </h2>
+                <p className="text-zinc-500 text-sm font-medium">
+                  Выберите смену коллеги, которая передает вам бар. Все подсчитанные остатки станут вашей стартовой точкой.
+                </p>
+              </div>
+
+              <div className="grid gap-4">
+                {handoverSourceCandidates.length > 0 ? (
+                  handoverSourceCandidates.map((c) => (
+                    <button
+                      key={c.shift_id}
+                      type="button"
+                      onClick={() => setSelectedSourceShiftId(c.shift_id)}
+                      className={cn(
+                        "p-6 rounded-[2rem] border-2 transition-all flex items-center gap-6 text-left group",
+                        selectedSourceShiftId === c.shift_id
+                          ? "bg-emerald-500/5 border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.05)]"
+                          : "bg-zinc-900/50 border-zinc-900 text-zinc-400 hover:bg-zinc-900 hover:border-zinc-800",
+                        !c.is_counting_finished && "opacity-75"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-active:scale-95",
+                          selectedSourceShiftId === c.shift_id
+                            ? "bg-emerald-500 text-white"
+                            : "bg-zinc-800 text-zinc-400"
+                        )}
+                      >
+                        <User className="h-6 w-6" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className={cn(
+                            "text-base font-black tracking-tight truncate",
+                            selectedSourceShiftId === c.shift_id && "text-emerald-400"
+                          )}
+                        >
+                          {c.employee_name}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs">
+                          <span className="font-bold text-zinc-500 uppercase tracking-widest">
+                            {new Date(c.check_out!).toLocaleDateString("ru-RU", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            })}
+                          </span>
+                          <span className="text-zinc-600 font-bold">|</span>
+                          <span className="text-zinc-500 uppercase tracking-widest">
+                            {new Date(c.check_out!).toLocaleTimeString("ru-RU", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          {c.shift_type && (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[9px] font-bold px-2 py-0.5 border-zinc-800",
+                                c.shift_type === "NIGHT"
+                                  ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+                                  : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                              )}
+                            >
+                              {c.shift_type === "NIGHT" ? "НОЧЬ" : "ДЕНЬ"}
+                            </Badge>
+                          )}
+                        </div>
+                        {!c.is_counting_finished && (
+                          <div className="flex items-center gap-2 mt-2 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-xl w-fit">
+                            <Loader2 className="h-3 w-3 text-amber-400 animate-spin" />
+                            <span className="text-[9px] font-black text-amber-400 uppercase tracking-wider">
+                              Сотрудник еще считает остатки на девайсе...
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      {selectedSourceShiftId === c.shift_id && c.is_counting_finished && (
+                        <Check className="h-6 w-6 text-emerald-400" />
+                      )}
+                      {selectedSourceShiftId === c.shift_id && !c.is_counting_finished && (
+                        <AlertTriangle className="h-6 w-6 text-amber-500" />
+                      )}
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-12 text-center text-zinc-500 text-sm border-2 border-dashed border-zinc-800 rounded-[2.5rem] bg-zinc-900/20">
+                    Подходящих смен для приемки не найдено. Вы можете продолжить без выбора смены.
+                  </div>
+                )}
+              </div>
+
+              {/* Action */}
+              <div className="flex justify-end pt-4">
+                <Button
+                  className="h-16 px-8 rounded-[2rem] bg-zinc-100 hover:bg-white text-zinc-950 font-black text-lg shadow-2xl transition-all flex items-center gap-3 disabled:opacity-50"
+                  onClick={() => changeStep("COUNTING")}
+                  disabled={Boolean(
+                    (!selectedSourceShiftId && handoverSourceCandidates.length > 0) ||
+                      (selectedSourceShiftId &&
+                        !handoverSourceCandidates.find((c) => c.shift_id === selectedSourceShiftId)
+                          ?.is_counting_finished)
+                  )}
+                >
+                  Далее к подсчету
+                  <ChevronRight className="h-6 w-6" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === "COUNTING" && (
+          <div className="flex-1 flex overflow-hidden bg-zinc-950">
+            {/* Left Sidebar - Zones */}
+            <aside className="w-80 border-r border-zinc-900 flex flex-col overflow-hidden bg-zinc-950 shrink-0">
+              <div className="p-4 border-b border-zinc-900 bg-zinc-900/20 flex items-center justify-between">
+                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                  ЗОНЫ ОБСЛУЖИВАНИЯ
+                </span>
+                <span className="text-[10px] font-bold text-zinc-600 font-mono">
+                  {warehouses.length} зон
+                </span>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {warehouseStats.map((wh) => {
+                  const isActive = String(wh.id) === activeWarehouseId;
+                  return (
+                    <button
+                      key={wh.id}
+                      type="button"
+                      onClick={() => setActiveWarehouseId(String(wh.id))}
+                      className={cn(
+                        "w-full p-4 rounded-2xl border text-left transition-all flex items-center gap-3 group relative overflow-hidden",
+                        isActive
+                          ? "bg-zinc-900 border-zinc-800 text-white shadow-lg"
+                          : "bg-transparent border-transparent text-zinc-400 hover:bg-zinc-900/30 hover:text-zinc-200"
+                      )}
+                    >
+                      {/* Active Left Indicator Bar */}
+                      {isActive && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold tracking-tight truncate leading-tight">
+                          {wh.name}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 font-mono mt-1 uppercase tracking-tight flex items-center justify-between">
+                          <span>ПОДТВЕРЖДЕНО</span>
+                          <span className={cn("font-bold font-mono", wh.progress === 100 ? "text-emerald-500 font-black" : "text-zinc-400")}>
+                            {wh.counted} из {wh.total}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Small circular/pill progress indicator */}
+                      <div className={cn(
+                        "h-8 px-2 rounded-lg flex items-center justify-center text-xs font-black font-mono tracking-tight",
+                        wh.progress === 100
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          : "bg-zinc-900/80 border border-zinc-850 text-zinc-400"
+                      )}>
+                        {wh.progress}%
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </aside>
+
+            {/* Center Area - Products listing */}
+            <main className="flex-1 flex flex-col overflow-hidden bg-black/40">
+              {/* Product search and control header */}
+              <div className="p-4 border-b border-zinc-900 bg-zinc-950/40 flex items-center gap-4 shrink-0">
+                <div className="relative flex-1">
+                  <Search className="absolute left-4 top-3.5 h-4 w-4 text-zinc-500" />
+                  <Input
+                    placeholder={`Поиск в зоне ${activeWarehouse?.name || ""}...`}
+                    className="h-11 bg-zinc-900 border-zinc-800 pl-11 rounded-xl text-sm focus:ring-emerald-500/20 text-white font-bold"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-4 top-3.5 text-zinc-500 hover:text-white transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="h-11 px-4 rounded-xl border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-400 font-bold text-xs uppercase tracking-wider flex items-center gap-2 shrink-0"
+                  onClick={openAddDialog}
+                >
+                  <Plus className="h-4 w-4 text-emerald-400" />
+                  ДОБАВИТЬ ТОВАР
+                </Button>
+              </div>
+
+              {/* Items Table container */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {activeItems.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4">
+                    <div className="h-16 w-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600">
+                      <Package2 className="h-8 w-8" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider">
+                        {searchQuery ? "ТОВАРЫ НЕ НАЙДЕНЫ" : "СПИСОК ТОВАРОВ ПУСТ"}
+                      </h3>
+                      <p className="text-xs text-zinc-500 max-w-xs font-medium">
+                        {searchQuery ? "Попробуйте изменить поисковый запрос" : "Добавьте товары вручную через кнопку в левом меню"}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Table Column Labels */}
+                    <div className="grid grid-cols-[1fr_120px_160px_80px] gap-4 px-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest pb-1 border-b border-zinc-900/50">
+                      <span>Название товара</span>
+                      <span className="text-center">Текущий учет</span>
+                      <span className="text-center">Фактическое количество</span>
+                      <span className="text-right">Статус</span>
+                    </div>
+
+                    {/* Table Rows */}
+                    <div className="grid gap-2">
+                      {activeItems.map((item) => {
+                        const isDiff =
+                          !blindCloseMode &&
+                          item.counted_quantity !== null &&
+                          Number(item.counted_quantity) !== Number(item.system_quantity);
+                        const diffValue =
+                          Number(item.counted_quantity || 0) - Number(item.system_quantity || 0);
+
+                        const itemId = `${item.warehouse_id}:${item.product_id}`;
+                        const isScanned = scannedItemId === itemId;
+
+                        return (
+                          <div
+                            key={itemId}
+                            id={`item-${item.warehouse_id}-${item.product_id}`}
+                            className={cn(
+                              "grid grid-cols-[1fr_120px_160px_80px] gap-4 items-center p-4 rounded-2xl border transition-all bg-zinc-900/40 hover:bg-zinc-900/70",
+                              isDiff ? "border-amber-500/20" : "border-zinc-900",
+                              isScanned && "animate-scan-flash ring-1 ring-emerald-500",
+                              item.confirmed && "border-zinc-800 bg-zinc-900/80 shadow-md"
+                            )}
+                          >
+                            {/* Product Info Column */}
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-white truncate leading-tight">
+                                {item.product_name}
+                              </div>
+                              <div className="flex items-center gap-3 mt-1.5">
+                                {(item.barcode || (item.barcodes && item.barcodes.length > 0)) && (
+                                  <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-1">
+                                    <ScanLine className="h-3 w-3 text-zinc-600" />
+                                    {item.barcode || item.barcodes?.[0]}
+                                  </div>
+                                )}
+                                {item.category_name && (
+                                  <span className="text-zinc-600 font-sans font-bold uppercase tracking-wider text-[8px] border border-zinc-800/80 px-1.5 py-0.5 rounded bg-zinc-950/20">
+                                    {item.category_name}
+                                  </span>
+                                )}
+                                <span className="text-emerald-500 font-mono text-[10px] font-black">
+                                  {Number(item.selling_price || 0).toLocaleString()} ₽
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* System Stock Column */}
+                            <div className="flex justify-center">
+                              {!blindCloseMode ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs font-mono font-bold border-zinc-800 text-zinc-400 px-3 py-1 bg-zinc-950/50"
+                                >
+                                  {item.system_quantity} шт.
+                                </Badge>
+                              ) : (
+                                <span className="text-zinc-600 font-bold text-xs uppercase tracking-wider">—</span>
+                              )}
+                            </div>
+
+                            {/* Count Controls Column */}
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="flex items-center bg-zinc-950 border border-zinc-850 rounded-xl p-0.5 shadow-inner w-36 h-9 overflow-hidden">
+                                <button
+                                  type="button"
+                                  className="w-10 h-full flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-900 active:scale-90 transition-all shrink-0 font-bold text-lg select-none"
+                                  onClick={() =>
+                                    updateQuantity(
+                                      item.warehouse_id,
+                                      item.product_id,
+                                      Number(item.counted_quantity || 0) - 1
+                                    )
+                                  }
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  className={cn(
+                                    "grow bg-transparent text-center text-xs font-black text-emerald-400 focus:outline-none transition-transform min-w-0 w-full px-1 font-mono",
+                                    isScanned && "animate-bump"
+                                  )}
+                                  value={item.counted_quantity ?? ""}
+                                  onChange={(e) =>
+                                    updateQuantity(
+                                      item.warehouse_id,
+                                      item.product_id,
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="w-10 h-full flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-900 active:scale-90 transition-all shrink-0 font-bold text-lg select-none"
+                                  onClick={() =>
+                                    updateQuantity(
+                                      item.warehouse_id,
+                                      item.product_id,
+                                      Number(item.counted_quantity || 0) + 1
+                                    )
+                                  }
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Confirm/Status Column */}
+                            <div className="flex items-center justify-end gap-3">
+                              {isDiff && (
+                                <Badge
+                                  className={cn(
+                                    "text-[9px] font-black tracking-wide font-mono px-2 py-0.5 rounded-lg border",
+                                    diffValue > 0
+                                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                      : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                  )}
+                                >
+                                  {diffValue > 0 ? "+" : ""}
+                                  {diffValue}
+                                </Badge>
+                              )}
+                              <button
+                                type="button"
+                                className={cn(
+                                  "flex items-center justify-center h-9 w-9 rounded-xl border transition-all shrink-0 shadow-lg outline-none active:scale-95",
+                                  item.confirmed
+                                    ? "bg-emerald-500 text-zinc-950 border-emerald-500 shadow-emerald-500/20"
+                                    : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:text-zinc-200"
+                                )}
+                                onClick={() => confirmItem(item.warehouse_id, item.product_id)}
+                              >
+                                <Check className="h-4.5 w-4.5 font-bold" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </main>
+
+            {/* Right Panel - Stats, Discrepancies log & Primary Sticky buttons */}
+            <aside className="w-96 border-l border-zinc-900 flex flex-col overflow-hidden bg-zinc-950 shrink-0">
+              {/* Overall Progress Block */}
+              <div className="p-6 border-b border-zinc-900 space-y-4 shrink-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                    ВЫПОЛНЕНИЕ ПОДЧЕТА
+                  </span>
+                  <span className="text-xs font-black font-mono text-emerald-400">
+                    {stats.counted} / {stats.total} поз.
+                  </span>
+                </div>
+
+                {/* Sleek widescreen Progress Bar */}
+                <div className="w-full bg-zinc-900 h-2.5 rounded-full overflow-hidden border border-zinc-850">
+                  <div
+                    className="bg-emerald-500 h-full rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                    style={{ width: `${stats.progress}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Real-time discrepancies Log */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                    РАСХОЖДЕНИЯ С УЧЕТОМ
+                  </span>
+                  {!blindCloseMode && (
+                    <Badge variant="outline" className="border-zinc-855 text-zinc-505 font-mono font-bold text-[9px] px-2 py-0.5">
+                      {discrepancies.length} расх.
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {blindCloseMode ? (
+                    <div className="p-4 text-center text-zinc-500 text-xs border border-dashed border-zinc-850 rounded-xl bg-zinc-900/10 leading-relaxed font-medium">
+                      Информация о расхождениях скрыта в режиме слепого подсчета для точности
+                    </div>
+                  ) : discrepancies.length === 0 ? (
+                    <div className="p-6 text-center text-emerald-400 text-xs border border-dashed border-emerald-500/20 bg-emerald-500/5 rounded-2xl flex flex-col items-center gap-2 font-medium">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                      Все подсчитанные позиции сходятся с учетными остатками!
+                    </div>
+                  ) : (
+                    <>
+                      {/* Shortages list */}
+                      <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                        {discrepancies.map((i) => {
+                          const diff = Number(i.counted_quantity) - Number(i.system_quantity);
+                          const cost = Math.abs(diff) * Number(i.selling_price || 0);
+                          return (
+                            <div
+                              key={`${i.warehouse_id}:${i.product_id}`}
+                              className="flex items-center justify-between px-3.5 py-2.5 bg-zinc-900/50 rounded-xl border border-zinc-900 text-xs"
+                            >
+                              <div className="min-w-0 pr-2">
+                                <div className="font-bold text-zinc-300 truncate">
+                                  {i.product_name}
+                                </div>
+                                <div className="text-[9px] text-zinc-500 font-mono mt-0.5 uppercase tracking-tight flex items-center gap-1.5">
+                                  <span>{i.warehouse_name}</span>
+                                  {diff < 0 && cost > 0 && (
+                                    <>
+                                      <span className="w-1 h-1 rounded-full bg-zinc-800" />
+                                      <span className="text-zinc-400 font-bold">{cost.toLocaleString()} ₽</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <span
+                                className={cn(
+                                  "font-black font-mono tabular-nums shrink-0",
+                                  diff > 0 ? "text-emerald-400" : "text-rose-400"
+                                )}
+                              >
+                                {diff > 0 ? "+" : ""}
+                                {diff}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Cumulative Total Shortage */}
+                      {totalShortageCost > 0 && (
+                        <div className="flex items-center justify-between p-4 bg-rose-500/10 rounded-xl border border-rose-500/20 mt-3 shadow-md animate-in zoom-in-95">
+                          <div>
+                            <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest block mb-0.5">
+                              ОЦЕНКА НЕДОСТАЧИ
+                            </span>
+                            <span className="text-[10px] text-zinc-500 block leading-tight font-medium">
+                              По ценам продажи
+                            </span>
+                          </div>
+                          <span className="text-base font-black text-rose-500 font-mono tabular-nums">
+                            {totalShortageCost.toLocaleString()} ₽
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom Sticky Action Block */}
+              <div className="p-6 border-t border-zinc-900 bg-zinc-950 shrink-0 space-y-4">
+                {snapshotType === "OPEN" && (
+                  <Button
+                    variant="outline"
+                    className="w-full h-12 rounded-2xl border-zinc-900 bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-850 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                    onClick={() => changeStep("SETUP")}
+                  >
+                    <ChevronLeft className="h-4.5 w-4.5" />
+                    К ВЫБОРУ СМЕНЫ
+                  </Button>
+                )}
+
+                <Button
+                  className="w-full h-16 rounded-[2rem] bg-zinc-100 hover:bg-white text-zinc-950 font-black text-base uppercase tracking-wider italic shadow-2xl transition-all disabled:opacity-50 disabled:bg-zinc-900 disabled:text-zinc-500"
+                  onClick={() => changeStep("SUMMARY")}
+                  disabled={stats.progress < 100}
+                >
+                  {stats.progress < 100
+                    ? `НЕ СЧИТАНО ПОЗИЦИЙ: ${stats.total - stats.counted}`
+                    : "ПЕРЕЙТИ К ОТЧЕТУ"}
+                  <ChevronRight className="ml-2 h-5 w-5" />
+                </Button>
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {step === "SUMMARY" && (
+          <div className="flex-1 overflow-y-auto p-12 flex flex-col items-center justify-center bg-zinc-950">
+            <div className="max-w-4xl w-full grid grid-cols-2 gap-8 items-start">
+              {/* Summary Left details */}
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-black text-white uppercase italic tracking-tight">
+                    ИТОГОВЫЙ ОТЧЕТ
+                  </h2>
+                  <p className="text-zinc-500 text-sm font-medium">
+                    Пожалуйста, внимательно ознакомьтесь со сводкой перед отправкой в систему.
+                  </p>
+                </div>
+
+                <div className="bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800 p-6 space-y-5 shadow-lg">
+                  <div className="flex items-center justify-between text-sm font-bold border-b border-zinc-900 pb-3">
+                    <span className="text-zinc-500 uppercase tracking-widest text-xs">ТИП ОПЕРАЦИИ</span>
+                    <span className="text-white font-black">
+                      {snapshotType === "OPEN" ? "ПРИЕМКА ОСТАТКОВ" : "СДАЧА ОСТАТКОВ"}
+                    </span>
+                  </div>
+
+                  {snapshotType === "OPEN" && (
+                    <div className="flex items-center justify-between text-sm font-bold border-b border-zinc-900 pb-3">
+                      <span className="text-zinc-500 uppercase tracking-widest text-xs">ПРИНЯТО ОТ СОТРУДНИКА</span>
+                      <span className="text-emerald-400 font-black">
+                        {handoverSourceCandidates.find((c) => c.shift_id === selectedSourceShiftId)
+                          ?.employee_name || "—"}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between text-sm font-bold">
+                    <span className="text-zinc-500 uppercase tracking-widest text-xs">ОБРАБОТКА ПОЗИЦИЙ</span>
+                    <span className="text-white font-mono font-bold">
+                      {stats.counted} / {stats.total} - 100%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Disclaimer block */}
+                <div className="p-5 bg-zinc-900/40 rounded-3xl border border-zinc-900 text-xs text-zinc-400 leading-relaxed font-medium">
+                  {snapshotType === "OPEN" ? (
+                    <>
+                      Все зафиксированные расхождения возникли{" "}
+                      <strong className="text-zinc-200">до вашей смены</strong>. Материальную ответственность за них несет сдающий сотрудник.
+                      Фактически принятые вами остатки станут официальными стартовыми остатками вашей смены.
+                    </>
+                  ) : (
+                    <>
+                      Зафиксированные расхождения возникли{" "}
+                      <strong className="text-zinc-200">за время вашей смены</strong>. Отчет отправляется управляющему клубом для анализа сменной материальной ответственности.
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Summary Right details & Mismatches */}
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                      ПОДТВЕРЖДЕННЫЕ РАСХОЖДЕНИЯ
+                    </span>
+                    {!blindCloseMode && (
+                      <Badge variant="outline" className="border-zinc-850 text-zinc-505 font-mono font-bold text-[9px] px-2 py-0.5">
+                        {discrepancies.length} позиции
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {blindCloseMode ? (
+                      <div className="p-6 text-center text-zinc-500 text-xs border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/20 font-medium">
+                        Отчет составлен в режиме слепого подсчета. Сравнение произойдет автоматически на сервере.
+                      </div>
+                    ) : discrepancies.length === 0 ? (
+                      <div className="p-8 text-center text-emerald-400 text-xs border border-dashed border-emerald-500/20 bg-emerald-500/5 rounded-3xl flex flex-col items-center gap-2 font-medium">
+                        <CheckCircle2 className="h-6 w-6 text-emerald-400 animate-bounce" />
+                        Все позиции идеально сходятся с учетными остатками!
+                      </div>
+                    ) : (
+                      <>
+                        {discrepancies.map((i) => {
+                          const diff = Number(i.counted_quantity) - Number(i.system_quantity);
+                          const cost = Math.abs(diff) * Number(i.selling_price || 0);
+                          return (
+                            <div
+                              key={`${i.warehouse_id}:${i.product_id}`}
+                              className="flex items-center justify-between px-4 py-3 bg-zinc-900/50 rounded-2xl border border-zinc-900 text-xs"
+                            >
+                              <div>
+                                <span className="font-bold text-zinc-200 block truncate max-w-sm">
+                                  {i.product_name}
+                                </span>
+                                <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-tight block mt-0.5">
+                                  {i.warehouse_name} &bull; {cost > 0 ? `${cost.toLocaleString()} ₽` : "нет цены"}
+                                </span>
+                              </div>
+                              <span
+                                className={cn(
+                                  "font-black font-mono tabular-nums text-sm",
+                                  diff > 0 ? "text-emerald-400" : "text-rose-400"
+                                )}
+                              >
+                                {diff > 0 ? "+" : ""}
+                                {diff}
+                              </span>
+                            </div>
+                          );
+                        })}
+
+                        {/* Summary shortages cost */}
+                        {totalShortageCost > 0 && (
+                          <div className="flex items-center justify-between p-5 bg-rose-500/10 rounded-2xl border border-rose-500/20 mt-3 shadow-lg">
+                            <div>
+                              <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest block mb-0.5">
+                                ИТОГО ВЫЯВЛЕНО НЕДОСТАЧИ
+                              </span>
+                              <span className="text-[10px] text-zinc-505 font-medium">
+                                К материальному списанию
+                              </span>
+                            </div>
+                            <span className="text-lg font-black text-rose-500 font-mono tabular-nums">
+                              {totalShortageCost.toLocaleString()} ₽
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sign and Complete bottom controls */}
+                <div className="flex gap-4 pt-4">
+                  <Button
+                    variant="outline"
+                    className="h-16 px-6 rounded-[2rem] border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-850 font-bold transition-all flex items-center justify-center shrink-0"
+                    onClick={() => changeStep("COUNTING")}
+                  >
+                    <ChevronLeft className="h-6 w-6" />
+                  </Button>
+
+                  <Button
+                    className="flex-1 h-16 rounded-[2rem] bg-emerald-600 hover:bg-emerald-500 text-white font-black text-lg shadow-[0_0_40px_rgba(16,185,129,0.2)] hover:shadow-[0_0_50px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2"
+                    onClick={handleFinish}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    ) : (
+                      <>
+                        ЗАВЕРШИТЬ И ОТПРАВИТЬ
+                        <Check className="h-6 w-6" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <Dialog
+          open={isAddDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) window.history.back();
+          }}
+        >
+          <DialogContent className="fixed inset-0 z-100 h-dvh w-screen max-w-none border-none bg-zinc-950 p-0 text-zinc-100 selection:bg-emerald-500/30 overflow-hidden flex flex-col [&>button]:hidden translate-x-0 translate-y-0 sm:max-w-none sm:rounded-none">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
+              <DialogHeader className="space-y-1 text-left pt-2">
+                <DialogTitle className="text-xl font-black text-white uppercase italic tracking-tight">
+                  Добавить товар
+                </DialogTitle>
+                <DialogDescription className="text-xs text-zinc-500 font-medium">
+                  Поиск по всему каталогу клуба
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6 max-w-md mx-auto w-full">
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">
+                    Выберите склад
+                  </Label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {warehouses.map((w) => (
+                      <button
+                        key={w.id}
+                        onClick={() => setSelectedWarehouseId(String(w.id))}
+                        className={cn(
+                          "h-14 px-4 rounded-2xl border-2 transition-all text-left font-bold text-sm flex items-center justify-between",
+                          selectedWarehouseId === String(w.id)
+                            ? "bg-emerald-500/5 border-emerald-500/50 text-emerald-500"
+                            : "bg-zinc-900 border-zinc-800 text-zinc-400",
+                        )}
+                      >
+                        {w.name}
+                        {selectedWarehouseId === String(w.id) && (
+                          <Check className="h-5 w-5" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">
+                    Поиск товара
+                  </Label>
+                  <div className="relative">
+                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500" />
+                    <Input
+                      placeholder="Название или штрихкод..."
+                      className="h-16 bg-zinc-900 border-zinc-800 pl-14 rounded-2xl text-base font-bold focus:ring-emerald-500/20 focus:border-emerald-500/50"
+                      value={manualSearchQuery}
+                      onChange={(e) =>
+                        setManualSearchQuery(e.target.value.toLowerCase())
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    {!selectedWarehouseId ? (
+                      <div className="p-8 text-center text-zinc-500 text-sm border-2 border-dashed border-zinc-800 rounded-[2rem]">
+                        Сначала выберите склад, чтобы добавить товары
+                      </div>
+                    ) : (
+                      allProducts
+                        .filter(
+                          (p) =>
+                            p.name.toLowerCase().includes(manualSearchQuery) ||
+                            p.barcode?.includes(manualSearchQuery),
+                        )
+                        .slice(0, 40)
+                        .map((p) => {
+                          const warehouseId = Number(selectedWarehouseId);
+                          const isAlreadyAdded = items.some(
+                            (i) =>
+                              i.warehouse_id === warehouseId &&
+                              i.product_id === p.id,
+                          );
+
+                          return (
+                            <button
+                              key={p.id}
+                              className={cn(
+                                "w-full text-left p-5 rounded-[2rem] border transition-all flex justify-between items-center group active:scale-[0.98]",
+                                isAlreadyAdded
+                                  ? "bg-zinc-900/50 border-zinc-800 opacity-60"
+                                  : "bg-zinc-900 border-zinc-800",
+                              )}
+                              onClick={() => {
+                                if (isAlreadyAdded) return;
+
+                                const productId = p.id;
+                                const warehouse = warehouses.find(
+                                  (w) => w.id === warehouseId,
+                                );
+                                const product = allProducts.find(
+                                  (item) => item.id === productId,
+                                );
+                                if (warehouse && product) {
+                                  setItems((prev) => [
+                                    ...prev,
+                                    {
+                                      warehouse_id: warehouse.id,
+                                      warehouse_name: warehouse.name,
+                                      shift_zone_key: warehouse.shift_zone_key,
+                                      shift_zone_label:
+                                        warehouse.shift_zone_label,
+                                      product_id: product.id,
+                                      product_name: product.name,
+                                      barcode: product.barcode,
+                                      barcodes: product.barcodes,
+                                      counted_quantity: 1,
+                                      saved_counted_quantity: null,
+                                      system_quantity: 0,
+                                      selling_price: Number(
+                                        product.selling_price || 0,
+                                      ),
+                                      confirmed: true,
+                                    },
+                                  ]);
+
+                                  // Show visual feedback
+                                  setScannedItemId(
+                                    `${warehouseId}:${productId}`,
+                                  );
+                                  setTimeout(() => {
+                                    const el = document.getElementById(
+                                      `item-${warehouseId}-${productId}`,
+                                    );
+                                    if (el)
+                                      el.scrollIntoView({
+                                        behavior: "smooth",
+                                        block: "center",
+                                      });
+                                  }, 100);
+                                  setTimeout(
+                                    () => setScannedItemId(null),
+                                    1500,
+                                  );
+                                }
+                              }}
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className={cn(
+                                      "text-base font-bold truncate transition-colors",
+                                      isAlreadyAdded
+                                        ? "text-zinc-400"
+                                        : "text-white",
+                                    )}
+                                  >
+                                    {p.name}
+                                  </div>
+                                  {isAlreadyAdded && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[8px] px-1.5 h-4 border-emerald-500/30 text-emerald-500 bg-emerald-500/5 uppercase font-black"
+                                    >
+                                      В списке
+                                    </Badge>
+                                  )}
+                                </div>
+                                {p.barcode && (
+                                  <div className="text-[10px] text-zinc-505 font-mono mt-1 uppercase tracking-tight">
+                                    ШК: {p.barcode}
+                                  </div>
+                                )}
+                              </div>
+                              <div
+                                className={cn(
+                                  "h-10 w-10 rounded-2xl border flex items-center justify-center transition-colors shrink-0",
+                                  isAlreadyAdded
+                                    ? "bg-zinc-900 border-zinc-800 text-zinc-700"
+                                    : "bg-zinc-950 border-zinc-800 text-zinc-500",
+                                )}
+                              >
+                                {isAlreadyAdded ? (
+                                  <Check className="h-5 w-5" />
+                                ) : (
+                                  <Plus className="h-5 w-5" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 bg-zinc-950/80 backdrop-blur-xl border-t border-zinc-900 absolute bottom-0 left-0 right-0 z-50">
+              <Button
+                className="w-full h-16 rounded-[2rem] bg-zinc-100 hover:bg-white text-zinc-950 font-black uppercase italic tracking-tighter shadow-2xl active:scale-95 transition-all"
+                onClick={() => {
+                  window.history.back();
+                }}
+              >
+                <ChevronLeft className="mr-2 h-6 w-6" />
+                Вернуться к списку
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <style>{`
+        @keyframes scanFlash {
+          0% {
+            background-color: rgb(16 185 129 / 0.2);
+            border-color: #10b981;
+            transform: scale(1.02);
+          }
+          100% {
+            background-color: rgb(24 24 27);
+            border-color: rgb(39 39 42);
+            transform: scale(1);
+          }
+        }
+        .animate-scan-flash {
+          animation: scanFlash 1s ease-out;
+        }
+        @keyframes bump {
+          0% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.3);
+          }
+          100% {
+            transform: scale(1);
+          }
+        }
+        .animate-bump {
+          animation: bump 0.3s ease-out;
+        }
+      `}</style>
       </div>
     );
   }
@@ -1301,10 +2374,10 @@ export default function HandoverTerminalPage() {
                     Поиск товара
                   </Label>
                   <div className="relative">
-                    <Search className="absolute left-4 top-5 h-5 w-5 text-zinc-500" />
+                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500" />
                     <Input
                       placeholder="Название или штрихкод..."
-                      className="h-16 bg-zinc-900 border-zinc-800 pl-12 rounded-2xl text-base font-bold focus:ring-emerald-500/20 focus:border-emerald-500/50"
+                      className="h-16 bg-zinc-900 border-zinc-800 pl-14 rounded-2xl text-base font-bold focus:ring-emerald-500/20 focus:border-emerald-500/50"
                       value={manualSearchQuery}
                       onChange={(e) =>
                         setManualSearchQuery(e.target.value.toLowerCase())

@@ -79,9 +79,11 @@ export function SalarySummaryWidget({
         {/* Breakdown List */}
         <div className="space-y-3 pt-6 border-t border-white/3">
           {/* Base */}
-          <div className="flex justify-between items-center text-sm">
-            <span className="text-zinc-500 font-medium">{baseLabel}</span>
-            <span className="font-bold text-white">
+          <div className="flex justify-between items-center text-sm gap-3 w-full min-w-0">
+            <span className="text-zinc-500 font-medium truncate" title={baseLabel}>
+              {baseLabel}
+            </span>
+            <span className="font-bold text-white whitespace-nowrap shrink-0">
               {formatCurrency(bd.base_salary)}
             </span>
           </div>
@@ -90,10 +92,12 @@ export function SalarySummaryWidget({
           {bd.additions?.map((item, idx) => (
             <div
               key={`add-${idx}`}
-              className="flex justify-between items-center text-sm"
+              className="flex justify-between items-center text-sm gap-3 w-full min-w-0"
             >
-              <span className="text-zinc-500 font-medium">{item.name}</span>
-              <span className="font-black text-emerald-400">
+              <span className="text-zinc-500 font-medium truncate" title={item.name}>
+                {item.name}
+              </span>
+              <span className="font-black text-emerald-400 whitespace-nowrap shrink-0">
                 +{formatCurrency(item.amount)}
               </span>
             </div>
@@ -103,10 +107,12 @@ export function SalarySummaryWidget({
           {bd.deductions?.map((item, idx) => (
             <div
               key={`ded-${idx}`}
-              className="flex justify-between items-center text-sm"
+              className="flex justify-between items-center text-sm gap-3 w-full min-w-0"
             >
-              <span className="text-zinc-500 font-medium">{item.name}</span>
-              <span className="font-black text-rose-400">
+              <span className="text-zinc-500 font-medium truncate" title={item.name}>
+                {item.name}
+              </span>
+              <span className="font-black text-rose-400 whitespace-nowrap shrink-0">
                 -{formatCurrency(item.amount)}
               </span>
             </div>
@@ -115,11 +121,11 @@ export function SalarySummaryWidget({
           {/* Virtual Balance Info (Optional) */}
           {bd.virtual_total && bd.virtual_total > 0 ? (
             <div className="pt-2 mt-2 border-t border-white/3">
-              <div className="grid grid-cols-[1fr_auto] items-center text-[9px] uppercase tracking-tighter text-zinc-500 font-black gap-2 w-full overflow-hidden">
-                <span className="whitespace-nowrap truncate">
+              <div className="flex justify-between items-center text-[9px] uppercase tracking-tighter text-zinc-500 font-black gap-2 w-full min-w-0">
+                <span className="truncate" title="На виртуальный баланс">
                   На виртуальный баланс
                 </span>
-                <span className="text-sky-400 whitespace-nowrap text-right font-black">
+                <span className="text-sky-400 whitespace-nowrap shrink-0 text-right font-black">
                   {formatCurrency(bd.virtual_total)}
                 </span>
               </div>

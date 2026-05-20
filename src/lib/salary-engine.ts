@@ -26,6 +26,7 @@ export interface MonthlySalaryReport {
   role?: string;
   month: number;
   year: number;
+  is_hourly_rate?: boolean;
   metrics: {
     total_hours: number;
     completed_shifts: number;
@@ -60,6 +61,9 @@ function mapToMonthlySalaryReport(
 ): MonthlySalaryReport {
   const bonuses: SalaryComponent[] = [];
   const deductions: SalaryComponent[] = [];
+
+  const baseType = emp.base?.type || emp.type || "hourly";
+  const isHourly = baseType === "hourly";
 
   // 1. Shift Bonuses Breakdown
   if (Array.isArray(emp.shift_bonuses_breakdown)) {
@@ -174,6 +178,7 @@ function mapToMonthlySalaryReport(
     role: emp.role,
     month,
     year,
+    is_hourly_rate: isHourly,
     metrics: {
       total_hours: emp.metrics?.total_hours || 0,
       completed_shifts: emp.shifts_count || 0,
@@ -425,20 +430,64 @@ export async function generateMonthlySalaryReport(
 
   // Process employees to merge formula into the object structure expected by logic
   const employees = employeesRes.rows.map((row: any) => {
-    const formula = row.scheme_formula || {};
+    const uid = String(row.id);
+    
+    // Check if there is a role-based salary assignment for this employee
+    const roles = employeeRolesMap.get(uid) || [];
+    let roleScheme = null;
+    let chosenRoleId = row.role_id;
+    let chosenRoleName = row.role;
+    
+    if (roles.length > 0) {
+      // Find the first role that has a scheme mapped in employeeRoleSchemeMap
+      for (const r of roles) {
+        const key = `${uid}||${r.role_id}`;
+        if (employeeRoleSchemeMap.has(key)) {
+          roleScheme = employeeRoleSchemeMap.get(key);
+          chosenRoleId = r.role_id;
+          chosenRoleName = r.role_name;
+          break;
+        }
+      }
+    } else if (row.role_id) {
+      // Fallback to the main user role if no club-specific roles exist
+      const key = `${uid}||${row.role_id}`;
+      if (employeeRoleSchemeMap.has(key)) {
+        roleScheme = employeeRoleSchemeMap.get(key);
+      }
+    }
+
+    // If a roleScheme is found via ERSA, we prioritize its formula!
+    const activeFormula = roleScheme ? {
+      base: roleScheme.base,
+      bonuses: roleScheme.bonuses,
+      period_bonuses: roleScheme.period_bonuses,
+      standard_monthly_shifts: roleScheme.standard_monthly_shifts,
+      scheme_id: roleScheme.scheme_id,
+      scheme_name: roleScheme.scheme_name,
+      scheme_version: roleScheme.scheme_version,
+      ...roleScheme
+    } : null;
+
+    const formula = activeFormula || row.scheme_formula || {};
     const periodBonuses =
-      Array.isArray(row.period_bonuses) && row.period_bonuses.length > 0
+      Array.isArray(row.period_bonuses) && !activeFormula && row.period_bonuses.length > 0
         ? row.period_bonuses
         : formula.period_bonuses || [];
     const bonuses = formula.bonuses || [];
 
     return {
       ...row,
+      role: chosenRoleName || row.role,
+      role_id: chosenRoleId || row.role_id,
+      scheme_id: activeFormula ? activeFormula.scheme_id : row.scheme_id,
+      scheme_name: activeFormula ? activeFormula.scheme_name : row.scheme_name,
+      scheme_version: activeFormula ? activeFormula.scheme_version : row.scheme_version,
       ...formula, // Spread base, bonuses, type, amount etc.
       // Priority to explicit columns if they existed (they don't, but meant to override formula if needed)
       period_bonuses: periodBonuses,
       standard_monthly_shifts:
-        row.standard_monthly_shifts || formula.standard_monthly_shifts,
+        (activeFormula ? activeFormula.standard_monthly_shifts : row.standard_monthly_shifts) || formula.standard_monthly_shifts,
     };
   });
 
@@ -969,6 +1018,15 @@ export async function generateMonthlySalaryReport(
         : null;
       const activeScheme = snapshot || emp;
 
+      // Fallback: if activeScheme has no bonuses, try to get them from the shifts' salary_snapshot
+      if ((!activeScheme?.bonuses || activeScheme.bonuses.length === 0) && empShifts.length > 0) {
+        const shiftWithSnapshot = empShifts.find((s: any) => s.salary_snapshot && Array.isArray(s.salary_snapshot.bonuses) && s.salary_snapshot.bonuses.length > 0);
+        if (shiftWithSnapshot) {
+          activeScheme.bonuses = shiftWithSnapshot.salary_snapshot.bonuses;
+          activeScheme.period_bonuses = shiftWithSnapshot.salary_snapshot.period_bonuses || [];
+        }
+      }
+
       // Find Maintenance KPI bonus in employee's scheme
       const schemeBonuses = activeScheme.bonuses || [];
       const maintenanceBonusConfig = schemeBonuses.find(
@@ -1108,18 +1166,45 @@ export async function generateMonthlySalaryReport(
             const sorted = [...bonus.thresholds].sort(
               (a: any, b: any) => (a.from || 0) - (b.from || 0),
             );
-            const scaledThresholds = sorted.map((t: any) => {
+            const effectivePlannedShifts =
+              Math.max(planned_shifts, 0) || standard_shifts;
+            const shifts_opportunities = Math.max(
+              0,
+              effectivePlannedShifts - shifts_count,
+            );
+
+            const scaledThresholds = sorted.map((t: any, idx: number) => {
               const threshold_from = t.from || 0;
               let scaled_from =
                 mode === "SHIFT"
                   ? threshold_from * shifts_count
                   : (threshold_from / standard_shifts) * shifts_count;
+
+              const endOfMonthThreshold =
+                mode === "SHIFT"
+                  ? threshold_from * effectivePlannedShifts
+                  : (threshold_from / standard_shifts) * effectivePlannedShifts;
+
+              const totalRemainingToReach = Math.max(
+                0,
+                endOfMonthThreshold - current_value,
+              );
+              const perShiftToReach =
+                shifts_opportunities > 0
+                  ? totalRemainingToReach / shifts_opportunities
+                  : 0;
+
               return {
+                level: idx + 1,
                 from: scaled_from,
                 original_from: threshold_from,
+                planned_month_threshold: endOfMonthThreshold,
+                remaining_total: totalRemainingToReach,
+                per_shift_to_reach: perShiftToReach,
                 percent: t.percent || 0,
                 amount: t.amount || t.bonus || 0,
-                label: t.label || null,
+                label: t.label || `Ступень ${idx + 1}`,
+                is_met: shifts_count > 0 && current_value >= scaled_from,
               };
             });
             resultThresholds = scaledThresholds;
@@ -1185,9 +1270,14 @@ export async function generateMonthlySalaryReport(
                 ? 100
                 : 0;
 
+          const avg_per_shift =
+            shifts_count > 0 ? current_value / shifts_count : 0;
+
           return {
             ...bonus,
             thresholds: resultThresholds,
+            all_thresholds: resultThresholds, // For KpiMapper compatibility
+            avg_per_shift,
             current_value,
             target_value,
             progress_percent,
@@ -1228,6 +1318,16 @@ export async function generateMonthlySalaryReport(
                   bonus.type === "PROGRESSIVE") &&
                 bonus.mode === "MONTH"
               ) {
+                // Дедупликация: не добавлять, если уже есть из period_bonuses
+                const isDuplicate = bonuses_status.some(
+                  (bs: any) =>
+                    (bs.id && bs.id === bonus.id) ||
+                    (bs.name === bonus.name &&
+                      (bs.metric_key || bs.source) ===
+                        (bonus.metric_key || bonus.source)),
+                );
+                if (isDuplicate) return bonus;
+
                 const status = calculateBonusStatus(bonus, schemeCtx, roleMeta);
                 roleBonusStatuses.push(status);
                 bonuses_status.push(status);
@@ -1599,14 +1699,54 @@ export async function generateMonthlySalaryReport(
                 (item) =>
                   item.name === b.name && item.payout_type === b.payout_type,
               );
+              const configBonus = activeScheme?.bonuses?.find(
+                (cb: any) => cb.name === b.name
+              );
+              const thresholds = configBonus?.thresholds || undefined;
+
+              // Retrospectively resolve met_threshold_label if it is null or missing
+              let metLabel = b.met_threshold_label;
+              if (!metLabel && thresholds && Array.isArray(thresholds) && thresholds.length > 0 && b.source_value !== undefined) {
+                const sorted = [...thresholds].sort((a: any, b: any) => (a.from || 0) - (b.from || 0));
+                const met = [...sorted].reverse().find((t: any) => b.source_value >= (t.from || 0));
+                if (met) {
+                  const metIdx = sorted.indexOf(met);
+                  metLabel = met.label || `Ступень ${metIdx + 1}`;
+                }
+              }
+
               if (existing) {
                 existing.amount += b.amount;
+                existing.source_value = (existing.source_value || 0) + (b.source_value || 0);
+                if (b.original_type) {
+                  existing.original_type = b.original_type;
+                }
+                if (b.source_key) {
+                  existing.source_key = b.source_key;
+                }
+                if (thresholds) {
+                  existing.thresholds = thresholds;
+                }
+                if (metLabel) {
+                  existing.threshold_counts = existing.threshold_counts || {};
+                  existing.threshold_counts[metLabel] =
+                    (existing.threshold_counts[metLabel] || 0) + 1;
+                }
+                if (Math.abs(b.amount) > 0.0001) {
+                  existing.count = (existing.count || 0) + 1;
+                }
               } else {
                 acc.push({
                   name: b.name,
                   amount: b.amount,
                   payout_type: b.payout_type,
                   type: b.type,
+                  count: Math.abs(b.amount) > 0.0001 ? 1 : 0,
+                  source_value: b.source_value || 0,
+                  original_type: b.original_type,
+                  source_key: b.source_key,
+                  thresholds: thresholds,
+                  threshold_counts: metLabel ? { [metLabel]: 1 } : {},
                 });
               }
             }
@@ -1754,8 +1894,8 @@ export async function generateMonthlySalaryReport(
         let current_thresholds: any[] = [];
 
         if (
-          bonusConfig.use_thresholds &&
           bonusConfig.checklist_thresholds &&
+          Array.isArray(bonusConfig.checklist_thresholds) &&
           bonusConfig.checklist_thresholds.length > 0
         ) {
           // Sort descending: 100, 95, 90, 85, 80...
@@ -1819,6 +1959,7 @@ export async function generateMonthlySalaryReport(
           bonus_amount: total_earned_this_month,
           thresholds: current_thresholds,
           is_met: total_earned_this_month > 0,
+          count: empEval?.count || 0,
         });
       }
 

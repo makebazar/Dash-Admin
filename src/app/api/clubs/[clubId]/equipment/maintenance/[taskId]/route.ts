@@ -31,12 +31,26 @@ export async function PATCH(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Verify task belongs to club
+    // Verify task belongs to club and get effective assignment info
     const taskCheck = await query(
-      `SELECT mt.*, e.id as equipment_id
-             FROM equipment_maintenance_tasks mt
-             JOIN equipment e ON mt.equipment_id = e.id
-             WHERE mt.id = $1 AND e.club_id = $2`,
+      `SELECT mt.*, e.id as equipment_id,
+              CASE 
+                WHEN e.assignment_mode = 'DIRECT' THEN 'DIRECT'
+                WHEN e.assignment_mode = 'FREE_POOL' THEN 'FREE_POOL'
+                WHEN e.assignment_mode = 'INHERIT' THEN
+                  CASE WHEN w.assigned_user_id IS NOT NULL THEN 'DIRECT' ELSE 'FREE_POOL' END
+                ELSE 'FREE_POOL'
+              END as effective_assignment_mode,
+              CASE 
+                WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
+                WHEN e.assignment_mode = 'INHERIT' THEN w.assigned_user_id
+                ELSE NULL
+              END as effective_assigned_user_id
+       FROM equipment_maintenance_tasks mt
+       JOIN equipment e ON mt.equipment_id = e.id
+       LEFT JOIN club_workstations w ON e.workstation_id = w.id
+       WHERE mt.id = $1 AND e.club_id = $2`,
       [taskId, clubId],
     );
 
@@ -63,6 +77,19 @@ export async function PATCH(
         updates.push(`status = $${paramIndex}`);
         values.push(status);
         paramIndex++;
+
+        if (status === "PENDING") {
+          updates.push(`session_id = NULL`);
+          if (assigned_user_id === undefined) {
+            if (task.effective_assignment_mode === "FREE_POOL") {
+              updates.push(`assigned_user_id = NULL`);
+            } else if (task.effective_assignment_mode === "DIRECT") {
+              updates.push(`assigned_user_id = $${paramIndex}`);
+              values.push(task.effective_assigned_user_id);
+              paramIndex++;
+            }
+          }
+        }
 
         // If completing, set completed_by, completed_at, and update equipment's last_cleaned_at
         if (status === "COMPLETED") {

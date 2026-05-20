@@ -49,6 +49,7 @@ export async function GET(
         month_earnings: 0,
         hourly_rate: 0,
         kpi_bonus: 0,
+        is_hourly_rate: true,
         breakdown: {
           base_salary: 0,
           additions: [],
@@ -143,6 +144,7 @@ export async function GET(
       month_earnings: empReport.totals.accrued_real,
       hourly_rate: hourlyRate,
       kpi_bonus: totalKpiReal,
+      is_hourly_rate: empReport.is_hourly_rate,
       breakdown: {
         base_salary: empReport.breakdown.base_salary,
         additions,
