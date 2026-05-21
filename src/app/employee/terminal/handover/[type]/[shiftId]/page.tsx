@@ -191,16 +191,15 @@ export default function HandoverTerminalPage() {
       if (!clubId || !shiftId) return;
       if (!silent) setIsLoading(true);
       try {
-        const [rowsRes, warehousesRes, sourceCandidatesRes, settingsRes] = await Promise.all(
-          [
+        const [rowsRes, warehousesRes, sourceCandidatesRes, settingsRes] =
+          await Promise.all([
             getShiftZoneSnapshotDraftTerminal(clubId, shiftId, snapshotType),
             getShiftAccountabilityWarehousesTerminal(clubId, shiftId),
             snapshotType === "OPEN"
               ? getHandoverSourceCandidatesTerminal(clubId, shiftId)
               : Promise.resolve({ ok: true as const, data: [] }),
             getInventorySettingsTerminal(clubId),
-          ],
-        );
+          ]);
 
         if (!rowsRes.ok) throw new Error(rowsRes.error);
         if (!warehousesRes.ok) throw new Error(warehousesRes.error);
@@ -306,7 +305,9 @@ export default function HandoverTerminalPage() {
         setItems(nextItems);
         setWarehouses(availableWarehouses);
         if (availableWarehouses.length > 0) {
-          setActiveWarehouseId((prev) => prev || String(availableWarehouses[0].id));
+          setActiveWarehouseId(
+            (prev) => prev || String(availableWarehouses[0].id),
+          );
         }
         setHandoverSourceCandidates(sourceCandidates);
         setSelectedSourceShiftId(nextSelectedSourceShiftId);
@@ -337,14 +338,14 @@ export default function HandoverTerminalPage() {
 
   // Polling for completion (especially for desktop QR view)
   useEffect(() => {
-    if (!isDesktop || step === "SUCCESS" || isLoading) return;
+    if (!isDesktop || step === "SUCCESS" || isLoading || !blockDesktop) return;
 
     const interval = setInterval(() => {
       fetchData(true);
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [isDesktop, step, isLoading, fetchData]);
+  }, [isDesktop, step, isLoading, fetchData, blockDesktop]);
 
   // Save to localStorage
   useEffect(() => {
@@ -639,10 +640,14 @@ export default function HandoverTerminalPage() {
       };
     });
 
-    const activeWarehouse = warehouses.find((wh) => String(wh.id) === activeWarehouseId) || warehouses[0];
+    const activeWarehouse =
+      warehouses.find((wh) => String(wh.id) === activeWarehouseId) ||
+      warehouses[0];
 
     const activeItems = filteredItems.filter(
-      (item) => item.warehouse_id === (activeWarehouse ? Number(activeWarehouse.id) : 0)
+      (item) =>
+        item.warehouse_id ===
+        (activeWarehouse ? Number(activeWarehouse.id) : 0),
     );
 
     const discrepancies = blindCloseMode
@@ -651,7 +656,7 @@ export default function HandoverTerminalPage() {
           (i) =>
             i.confirmed &&
             i.counted_quantity !== null &&
-            Number(i.counted_quantity) !== Number(i.system_quantity)
+            Number(i.counted_quantity) !== Number(i.system_quantity),
         );
 
     const totalShortageCost = items.reduce((sum, i) => {
@@ -671,7 +676,9 @@ export default function HandoverTerminalPage() {
           <div className="flex items-center gap-6">
             <div>
               <h1 className="text-lg font-black tracking-tight uppercase italic leading-none text-white">
-                {snapshotType === "OPEN" ? "Приемка остатков" : "Сдача остатков"}
+                {snapshotType === "OPEN"
+                  ? "Приемка остатков"
+                  : "Сдача остатков"}
               </h1>
               <div className="flex items-center gap-2 mt-2">
                 <Badge
@@ -680,7 +687,7 @@ export default function HandoverTerminalPage() {
                     "border-zinc-800 text-[9px] font-bold px-2 py-0.5",
                     snapshotType === "OPEN"
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                      : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                      : "bg-blue-500/10 text-blue-400 border-blue-500/20",
                   )}
                 >
                   {snapshotType === "OPEN" ? "ПРИЕМКА" : "СДАЧА"}
@@ -709,7 +716,7 @@ export default function HandoverTerminalPage() {
                     "flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-bold transition-all",
                     step === "SETUP"
                       ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-400"
-                      : "bg-zinc-900 border-zinc-800 text-zinc-500"
+                      : "bg-zinc-900 border-zinc-800 text-zinc-500",
                   )}
                 >
                   <span className="h-2 w-2 rounded-full bg-current" />
@@ -723,11 +730,13 @@ export default function HandoverTerminalPage() {
                 "flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-bold transition-all",
                 step === "COUNTING"
                   ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-400"
-                  : "bg-zinc-900 border-zinc-800 text-zinc-500"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-500",
               )}
             >
               <span className="h-2 w-2 rounded-full bg-current" />
-              {snapshotType === "OPEN" ? "2. ПОДЧЕТ ТОВАРОВ" : "1. ПОДЧЕТ ТОВАРОВ"}
+              {snapshotType === "OPEN"
+                ? "2. ПОДЧЕТ ТОВАРОВ"
+                : "1. ПОДЧЕТ ТОВАРОВ"}
             </div>
             <ChevronRight className="h-4 w-4 text-zinc-800" />
             <div
@@ -735,11 +744,13 @@ export default function HandoverTerminalPage() {
                 "flex items-center gap-2 px-4 py-2 rounded-2xl border text-xs font-bold transition-all",
                 step === "SUMMARY"
                   ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-400"
-                  : "bg-zinc-900 border-zinc-800 text-zinc-500"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-500",
               )}
             >
               <span className="h-2 w-2 rounded-full bg-current" />
-              {snapshotType === "OPEN" ? "3. ИТОГОВЫЙ ОТЧЕТ" : "2. ИТОГОВЫЙ ОТЧЕТ"}
+              {snapshotType === "OPEN"
+                ? "3. ИТОГОВЫЙ ОТЧЕТ"
+                : "2. ИТОГОВЫЙ ОТЧЕТ"}
             </div>
           </div>
 
@@ -768,7 +779,8 @@ export default function HandoverTerminalPage() {
                   У КОГО ПРИНИМАЕТЕ ОСТАТКИ?
                 </h2>
                 <p className="text-zinc-500 text-sm font-medium">
-                  Выберите смену коллеги, которая передает вам бар. Все подсчитанные остатки станут вашей стартовой точкой.
+                  Выберите смену коллеги, которая передает вам бар. Все
+                  подсчитанные остатки станут вашей стартовой точкой.
                 </p>
               </div>
 
@@ -784,7 +796,7 @@ export default function HandoverTerminalPage() {
                         selectedSourceShiftId === c.shift_id
                           ? "bg-emerald-500/5 border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.05)]"
                           : "bg-zinc-900/50 border-zinc-900 text-zinc-400 hover:bg-zinc-900 hover:border-zinc-800",
-                        !c.is_counting_finished && "opacity-75"
+                        !c.is_counting_finished && "opacity-75",
                       )}
                     >
                       <div
@@ -792,7 +804,7 @@ export default function HandoverTerminalPage() {
                           "h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-transform group-active:scale-95",
                           selectedSourceShiftId === c.shift_id
                             ? "bg-emerald-500 text-white"
-                            : "bg-zinc-800 text-zinc-400"
+                            : "bg-zinc-800 text-zinc-400",
                         )}
                       >
                         <User className="h-6 w-6" />
@@ -801,25 +813,32 @@ export default function HandoverTerminalPage() {
                         <div
                           className={cn(
                             "text-base font-black tracking-tight truncate",
-                            selectedSourceShiftId === c.shift_id && "text-emerald-400"
+                            selectedSourceShiftId === c.shift_id &&
+                              "text-emerald-400",
                           )}
                         >
                           {c.employee_name}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-xs">
                           <span className="font-bold text-zinc-500 uppercase tracking-widest">
-                            {new Date(c.check_out!).toLocaleDateString("ru-RU", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "numeric",
-                            })}
+                            {new Date(c.check_out!).toLocaleDateString(
+                              "ru-RU",
+                              {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                              },
+                            )}
                           </span>
                           <span className="text-zinc-600 font-bold">|</span>
                           <span className="text-zinc-500 uppercase tracking-widest">
-                            {new Date(c.check_out!).toLocaleTimeString("ru-RU", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                            {new Date(c.check_out!).toLocaleTimeString(
+                              "ru-RU",
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}
                           </span>
                           {c.shift_type && (
                             <Badge
@@ -828,7 +847,7 @@ export default function HandoverTerminalPage() {
                                 "text-[9px] font-bold px-2 py-0.5 border-zinc-800",
                                 c.shift_type === "NIGHT"
                                   ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-                                  : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                  : "bg-amber-500/10 text-amber-400 border-amber-500/20",
                               )}
                             >
                               {c.shift_type === "NIGHT" ? "НОЧЬ" : "ДЕНЬ"}
@@ -844,17 +863,20 @@ export default function HandoverTerminalPage() {
                           </div>
                         )}
                       </div>
-                      {selectedSourceShiftId === c.shift_id && c.is_counting_finished && (
-                        <Check className="h-6 w-6 text-emerald-400" />
-                      )}
-                      {selectedSourceShiftId === c.shift_id && !c.is_counting_finished && (
-                        <AlertTriangle className="h-6 w-6 text-amber-500" />
-                      )}
+                      {selectedSourceShiftId === c.shift_id &&
+                        c.is_counting_finished && (
+                          <Check className="h-6 w-6 text-emerald-400" />
+                        )}
+                      {selectedSourceShiftId === c.shift_id &&
+                        !c.is_counting_finished && (
+                          <AlertTriangle className="h-6 w-6 text-amber-500" />
+                        )}
                     </button>
                   ))
                 ) : (
                   <div className="p-12 text-center text-zinc-500 text-sm border-2 border-dashed border-zinc-800 rounded-[2.5rem] bg-zinc-900/20">
-                    Подходящих смен для приемки не найдено. Вы можете продолжить без выбора смены.
+                    Подходящих смен для приемки не найдено. Вы можете продолжить
+                    без выбора смены.
                   </div>
                 )}
               </div>
@@ -865,10 +887,12 @@ export default function HandoverTerminalPage() {
                   className="h-16 px-8 rounded-[2rem] bg-zinc-100 hover:bg-white text-zinc-950 font-black text-lg shadow-2xl transition-all flex items-center gap-3 disabled:opacity-50"
                   onClick={() => changeStep("COUNTING")}
                   disabled={Boolean(
-                    (!selectedSourceShiftId && handoverSourceCandidates.length > 0) ||
-                      (selectedSourceShiftId &&
-                        !handoverSourceCandidates.find((c) => c.shift_id === selectedSourceShiftId)
-                          ?.is_counting_finished)
+                    (!selectedSourceShiftId &&
+                      handoverSourceCandidates.length > 0) ||
+                    (selectedSourceShiftId &&
+                      !handoverSourceCandidates.find(
+                        (c) => c.shift_id === selectedSourceShiftId,
+                      )?.is_counting_finished),
                   )}
                 >
                   Далее к подсчету
@@ -904,7 +928,7 @@ export default function HandoverTerminalPage() {
                         "w-full p-4 rounded-2xl border text-left transition-all flex items-center gap-3 group relative overflow-hidden",
                         isActive
                           ? "bg-zinc-900 border-zinc-800 text-white shadow-lg"
-                          : "bg-transparent border-transparent text-zinc-400 hover:bg-zinc-900/30 hover:text-zinc-200"
+                          : "bg-transparent border-transparent text-zinc-400 hover:bg-zinc-900/30 hover:text-zinc-200",
                       )}
                     >
                       {/* Active Left Indicator Bar */}
@@ -918,19 +942,28 @@ export default function HandoverTerminalPage() {
                         </div>
                         <div className="text-[10px] text-zinc-500 font-mono mt-1 uppercase tracking-tight flex items-center justify-between">
                           <span>ПОДТВЕРЖДЕНО</span>
-                          <span className={cn("font-bold font-mono", wh.progress === 100 ? "text-emerald-500 font-black" : "text-zinc-400")}>
+                          <span
+                            className={cn(
+                              "font-bold font-mono",
+                              wh.progress === 100
+                                ? "text-emerald-500 font-black"
+                                : "text-zinc-400",
+                            )}
+                          >
                             {wh.counted} из {wh.total}
                           </span>
                         </div>
                       </div>
-                      
+
                       {/* Small circular/pill progress indicator */}
-                      <div className={cn(
-                        "h-8 px-2 rounded-lg flex items-center justify-center text-xs font-black font-mono tracking-tight",
-                        wh.progress === 100
-                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                          : "bg-zinc-900/80 border border-zinc-850 text-zinc-400"
-                      )}>
+                      <div
+                        className={cn(
+                          "h-8 px-2 rounded-lg flex items-center justify-center text-xs font-black font-mono tracking-tight",
+                          wh.progress === 100
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : "bg-zinc-900/80 border border-zinc-850 text-zinc-400",
+                        )}
+                      >
                         {wh.progress}%
                       </div>
                     </button>
@@ -981,10 +1014,14 @@ export default function HandoverTerminalPage() {
                     </div>
                     <div className="space-y-1">
                       <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider">
-                        {searchQuery ? "ТОВАРЫ НЕ НАЙДЕНЫ" : "СПИСОК ТОВАРОВ ПУСТ"}
+                        {searchQuery
+                          ? "ТОВАРЫ НЕ НАЙДЕНЫ"
+                          : "СПИСОК ТОВАРОВ ПУСТ"}
                       </h3>
                       <p className="text-xs text-zinc-500 max-w-xs font-medium">
-                        {searchQuery ? "Попробуйте изменить поисковый запрос" : "Добавьте товары вручную через кнопку в левом меню"}
+                        {searchQuery
+                          ? "Попробуйте изменить поисковый запрос"
+                          : "Добавьте товары вручную через кнопку в левом меню"}
                       </p>
                     </div>
                   </div>
@@ -994,7 +1031,9 @@ export default function HandoverTerminalPage() {
                     <div className="grid grid-cols-[1fr_120px_160px_80px] gap-4 px-4 text-[9px] font-black text-zinc-500 uppercase tracking-widest pb-1 border-b border-zinc-900/50">
                       <span>Название товара</span>
                       <span className="text-center">Текущий учет</span>
-                      <span className="text-center">Фактическое количество</span>
+                      <span className="text-center">
+                        Фактическое количество
+                      </span>
                       <span className="text-right">Статус</span>
                     </div>
 
@@ -1004,9 +1043,11 @@ export default function HandoverTerminalPage() {
                         const isDiff =
                           !blindCloseMode &&
                           item.counted_quantity !== null &&
-                          Number(item.counted_quantity) !== Number(item.system_quantity);
+                          Number(item.counted_quantity) !==
+                            Number(item.system_quantity);
                         const diffValue =
-                          Number(item.counted_quantity || 0) - Number(item.system_quantity || 0);
+                          Number(item.counted_quantity || 0) -
+                          Number(item.system_quantity || 0);
 
                         const itemId = `${item.warehouse_id}:${item.product_id}`;
                         const isScanned = scannedItemId === itemId;
@@ -1017,9 +1058,13 @@ export default function HandoverTerminalPage() {
                             id={`item-${item.warehouse_id}-${item.product_id}`}
                             className={cn(
                               "grid grid-cols-[1fr_120px_160px_80px] gap-4 items-center p-4 rounded-2xl border transition-all bg-zinc-900/40 hover:bg-zinc-900/70",
-                              isDiff ? "border-amber-500/20" : "border-zinc-900",
-                              isScanned && "animate-scan-flash ring-1 ring-emerald-500",
-                              item.confirmed && "border-zinc-800 bg-zinc-900/80 shadow-md"
+                              isDiff
+                                ? "border-amber-500/20"
+                                : "border-zinc-900",
+                              isScanned &&
+                                "animate-scan-flash ring-1 ring-emerald-500",
+                              item.confirmed &&
+                                "border-zinc-800 bg-zinc-900/80 shadow-md",
                             )}
                           >
                             {/* Product Info Column */}
@@ -1028,7 +1073,9 @@ export default function HandoverTerminalPage() {
                                 {item.product_name}
                               </div>
                               <div className="flex items-center gap-3 mt-1.5">
-                                {(item.barcode || (item.barcodes && item.barcodes.length > 0)) && (
+                                {(item.barcode ||
+                                  (item.barcodes &&
+                                    item.barcodes.length > 0)) && (
                                   <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-1">
                                     <ScanLine className="h-3 w-3 text-zinc-600" />
                                     {item.barcode || item.barcodes?.[0]}
@@ -1040,7 +1087,10 @@ export default function HandoverTerminalPage() {
                                   </span>
                                 )}
                                 <span className="text-emerald-500 font-mono text-[10px] font-black">
-                                  {Number(item.selling_price || 0).toLocaleString()} ₽
+                                  {Number(
+                                    item.selling_price || 0,
+                                  ).toLocaleString()}{" "}
+                                  ₽
                                 </span>
                               </div>
                             </div>
@@ -1055,7 +1105,9 @@ export default function HandoverTerminalPage() {
                                   {item.system_quantity} шт.
                                 </Badge>
                               ) : (
-                                <span className="text-zinc-600 font-bold text-xs uppercase tracking-wider">—</span>
+                                <span className="text-zinc-600 font-bold text-xs uppercase tracking-wider">
+                                  —
+                                </span>
                               )}
                             </div>
 
@@ -1069,7 +1121,7 @@ export default function HandoverTerminalPage() {
                                     updateQuantity(
                                       item.warehouse_id,
                                       item.product_id,
-                                      Number(item.counted_quantity || 0) - 1
+                                      Number(item.counted_quantity || 0) - 1,
                                     )
                                   }
                                 >
@@ -1079,14 +1131,14 @@ export default function HandoverTerminalPage() {
                                   type="number"
                                   className={cn(
                                     "grow bg-transparent text-center text-xs font-black text-emerald-400 focus:outline-none transition-transform min-w-0 w-full px-1 font-mono",
-                                    isScanned && "animate-bump"
+                                    isScanned && "animate-bump",
                                   )}
                                   value={item.counted_quantity ?? ""}
                                   onChange={(e) =>
                                     updateQuantity(
                                       item.warehouse_id,
                                       item.product_id,
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                 />
@@ -1097,7 +1149,7 @@ export default function HandoverTerminalPage() {
                                     updateQuantity(
                                       item.warehouse_id,
                                       item.product_id,
-                                      Number(item.counted_quantity || 0) + 1
+                                      Number(item.counted_quantity || 0) + 1,
                                     )
                                   }
                                 >
@@ -1114,7 +1166,7 @@ export default function HandoverTerminalPage() {
                                     "text-[9px] font-black tracking-wide font-mono px-2 py-0.5 rounded-lg border",
                                     diffValue > 0
                                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                      : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                      : "bg-rose-500/10 text-rose-400 border-rose-500/20",
                                   )}
                                 >
                                   {diffValue > 0 ? "+" : ""}
@@ -1127,9 +1179,14 @@ export default function HandoverTerminalPage() {
                                   "flex items-center justify-center h-9 w-9 rounded-xl border transition-all shrink-0 shadow-lg outline-none active:scale-95",
                                   item.confirmed
                                     ? "bg-emerald-500 text-zinc-950 border-emerald-500 shadow-emerald-500/20"
-                                    : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:text-zinc-200"
+                                    : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:text-zinc-200",
                                 )}
-                                onClick={() => confirmItem(item.warehouse_id, item.product_id)}
+                                onClick={() =>
+                                  confirmItem(
+                                    item.warehouse_id,
+                                    item.product_id,
+                                  )
+                                }
                               >
                                 <Check className="h-4.5 w-4.5 font-bold" />
                               </button>
@@ -1172,7 +1229,10 @@ export default function HandoverTerminalPage() {
                     РАСХОЖДЕНИЯ С УЧЕТОМ
                   </span>
                   {!blindCloseMode && (
-                    <Badge variant="outline" className="border-zinc-855 text-zinc-505 font-mono font-bold text-[9px] px-2 py-0.5">
+                    <Badge
+                      variant="outline"
+                      className="border-zinc-855 text-zinc-505 font-mono font-bold text-[9px] px-2 py-0.5"
+                    >
                       {discrepancies.length} расх.
                     </Badge>
                   )}
@@ -1181,7 +1241,8 @@ export default function HandoverTerminalPage() {
                 <div className="space-y-2">
                   {blindCloseMode ? (
                     <div className="p-4 text-center text-zinc-500 text-xs border border-dashed border-zinc-850 rounded-xl bg-zinc-900/10 leading-relaxed font-medium">
-                      Информация о расхождениях скрыта в режиме слепого подсчета для точности
+                      Информация о расхождениях скрыта в режиме слепого подсчета
+                      для точности
                     </div>
                   ) : discrepancies.length === 0 ? (
                     <div className="p-6 text-center text-emerald-400 text-xs border border-dashed border-emerald-500/20 bg-emerald-500/5 rounded-2xl flex flex-col items-center gap-2 font-medium">
@@ -1193,8 +1254,11 @@ export default function HandoverTerminalPage() {
                       {/* Shortages list */}
                       <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                         {discrepancies.map((i) => {
-                          const diff = Number(i.counted_quantity) - Number(i.system_quantity);
-                          const cost = Math.abs(diff) * Number(i.selling_price || 0);
+                          const diff =
+                            Number(i.counted_quantity) -
+                            Number(i.system_quantity);
+                          const cost =
+                            Math.abs(diff) * Number(i.selling_price || 0);
                           return (
                             <div
                               key={`${i.warehouse_id}:${i.product_id}`}
@@ -1209,7 +1273,9 @@ export default function HandoverTerminalPage() {
                                   {diff < 0 && cost > 0 && (
                                     <>
                                       <span className="w-1 h-1 rounded-full bg-zinc-800" />
-                                      <span className="text-zinc-400 font-bold">{cost.toLocaleString()} ₽</span>
+                                      <span className="text-zinc-400 font-bold">
+                                        {cost.toLocaleString()} ₽
+                                      </span>
                                     </>
                                   )}
                                 </div>
@@ -1217,7 +1283,9 @@ export default function HandoverTerminalPage() {
                               <span
                                 className={cn(
                                   "font-black font-mono tabular-nums shrink-0",
-                                  diff > 0 ? "text-emerald-400" : "text-rose-400"
+                                  diff > 0
+                                    ? "text-emerald-400"
+                                    : "text-rose-400",
                                 )}
                               >
                                 {diff > 0 ? "+" : ""}
@@ -1257,8 +1325,7 @@ export default function HandoverTerminalPage() {
                     className="w-full h-12 rounded-2xl border-zinc-900 bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-850 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
                     onClick={() => changeStep("SETUP")}
                   >
-                    <ChevronLeft className="h-4.5 w-4.5" />
-                    К ВЫБОРУ СМЕНЫ
+                    <ChevronLeft className="h-4.5 w-4.5" />К ВЫБОРУ СМЕНЫ
                   </Button>
                 )}
 
@@ -1287,30 +1354,40 @@ export default function HandoverTerminalPage() {
                     ИТОГОВЫЙ ОТЧЕТ
                   </h2>
                   <p className="text-zinc-500 text-sm font-medium">
-                    Пожалуйста, внимательно ознакомьтесь со сводкой перед отправкой в систему.
+                    Пожалуйста, внимательно ознакомьтесь со сводкой перед
+                    отправкой в систему.
                   </p>
                 </div>
 
                 <div className="bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800 p-6 space-y-5 shadow-lg">
                   <div className="flex items-center justify-between text-sm font-bold border-b border-zinc-900 pb-3">
-                    <span className="text-zinc-500 uppercase tracking-widest text-xs">ТИП ОПЕРАЦИИ</span>
+                    <span className="text-zinc-500 uppercase tracking-widest text-xs">
+                      ТИП ОПЕРАЦИИ
+                    </span>
                     <span className="text-white font-black">
-                      {snapshotType === "OPEN" ? "ПРИЕМКА ОСТАТКОВ" : "СДАЧА ОСТАТКОВ"}
+                      {snapshotType === "OPEN"
+                        ? "ПРИЕМКА ОСТАТКОВ"
+                        : "СДАЧА ОСТАТКОВ"}
                     </span>
                   </div>
 
                   {snapshotType === "OPEN" && (
                     <div className="flex items-center justify-between text-sm font-bold border-b border-zinc-900 pb-3">
-                      <span className="text-zinc-500 uppercase tracking-widest text-xs">ПРИНЯТО ОТ СОТРУДНИКА</span>
+                      <span className="text-zinc-500 uppercase tracking-widest text-xs">
+                        ПРИНЯТО ОТ СОТРУДНИКА
+                      </span>
                       <span className="text-emerald-400 font-black">
-                        {handoverSourceCandidates.find((c) => c.shift_id === selectedSourceShiftId)
-                          ?.employee_name || "—"}
+                        {handoverSourceCandidates.find(
+                          (c) => c.shift_id === selectedSourceShiftId,
+                        )?.employee_name || "—"}
                       </span>
                     </div>
                   )}
 
                   <div className="flex items-center justify-between text-sm font-bold">
-                    <span className="text-zinc-500 uppercase tracking-widest text-xs">ОБРАБОТКА ПОЗИЦИЙ</span>
+                    <span className="text-zinc-500 uppercase tracking-widest text-xs">
+                      ОБРАБОТКА ПОЗИЦИЙ
+                    </span>
                     <span className="text-white font-mono font-bold">
                       {stats.counted} / {stats.total} - 100%
                     </span>
@@ -1322,13 +1399,19 @@ export default function HandoverTerminalPage() {
                   {snapshotType === "OPEN" ? (
                     <>
                       Все зафиксированные расхождения возникли{" "}
-                      <strong className="text-zinc-200">до вашей смены</strong>. Материальную ответственность за них несет сдающий сотрудник.
-                      Фактически принятые вами остатки станут официальными стартовыми остатками вашей смены.
+                      <strong className="text-zinc-200">до вашей смены</strong>.
+                      Материальную ответственность за них несет сдающий
+                      сотрудник. Фактически принятые вами остатки станут
+                      официальными стартовыми остатками вашей смены.
                     </>
                   ) : (
                     <>
                       Зафиксированные расхождения возникли{" "}
-                      <strong className="text-zinc-200">за время вашей смены</strong>. Отчет отправляется управляющему клубом для анализа сменной материальной ответственности.
+                      <strong className="text-zinc-200">
+                        за время вашей смены
+                      </strong>
+                      . Отчет отправляется управляющему клубом для анализа
+                      сменной материальной ответственности.
                     </>
                   )}
                 </div>
@@ -1342,7 +1425,10 @@ export default function HandoverTerminalPage() {
                       ПОДТВЕРЖДЕННЫЕ РАСХОЖДЕНИЯ
                     </span>
                     {!blindCloseMode && (
-                      <Badge variant="outline" className="border-zinc-850 text-zinc-505 font-mono font-bold text-[9px] px-2 py-0.5">
+                      <Badge
+                        variant="outline"
+                        className="border-zinc-850 text-zinc-505 font-mono font-bold text-[9px] px-2 py-0.5"
+                      >
                         {discrepancies.length} позиции
                       </Badge>
                     )}
@@ -1351,7 +1437,8 @@ export default function HandoverTerminalPage() {
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                     {blindCloseMode ? (
                       <div className="p-6 text-center text-zinc-500 text-xs border border-dashed border-zinc-850 rounded-2xl bg-zinc-900/20 font-medium">
-                        Отчет составлен в режиме слепого подсчета. Сравнение произойдет автоматически на сервере.
+                        Отчет составлен в режиме слепого подсчета. Сравнение
+                        произойдет автоматически на сервере.
                       </div>
                     ) : discrepancies.length === 0 ? (
                       <div className="p-8 text-center text-emerald-400 text-xs border border-dashed border-emerald-500/20 bg-emerald-500/5 rounded-3xl flex flex-col items-center gap-2 font-medium">
@@ -1361,8 +1448,11 @@ export default function HandoverTerminalPage() {
                     ) : (
                       <>
                         {discrepancies.map((i) => {
-                          const diff = Number(i.counted_quantity) - Number(i.system_quantity);
-                          const cost = Math.abs(diff) * Number(i.selling_price || 0);
+                          const diff =
+                            Number(i.counted_quantity) -
+                            Number(i.system_quantity);
+                          const cost =
+                            Math.abs(diff) * Number(i.selling_price || 0);
                           return (
                             <div
                               key={`${i.warehouse_id}:${i.product_id}`}
@@ -1373,13 +1463,18 @@ export default function HandoverTerminalPage() {
                                   {i.product_name}
                                 </span>
                                 <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-tight block mt-0.5">
-                                  {i.warehouse_name} &bull; {cost > 0 ? `${cost.toLocaleString()} ₽` : "нет цены"}
+                                  {i.warehouse_name} &bull;{" "}
+                                  {cost > 0
+                                    ? `${cost.toLocaleString()} ₽`
+                                    : "нет цены"}
                                 </span>
                               </div>
                               <span
                                 className={cn(
                                   "font-black font-mono tabular-nums text-sm",
-                                  diff > 0 ? "text-emerald-400" : "text-rose-400"
+                                  diff > 0
+                                    ? "text-emerald-400"
+                                    : "text-rose-400",
                                 )}
                               >
                                 {diff > 0 ? "+" : ""}
