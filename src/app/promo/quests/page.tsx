@@ -15,6 +15,7 @@ import {
   Trash2,
   Lock,
   Zap,
+  Camera,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BottomNav } from "../components/BottomNav";
@@ -116,303 +117,306 @@ export default function QuestsPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {quests.map((quest) => {
-              const progress = quest.current_progress || 0;
-              const target = quest.target_value || 1;
-              const percent = Math.min(
-                100,
-                Math.max(0, (progress / target) * 100),
-              );
-              const isCompleted =
-                quest.status === "completed" || quest.status === "claimed";
-              const isPending = quest.status === "pending_verification";
-              const isLocked = quest.is_level_locked;
+          <div className="space-y-12">
+            {/* Active Quests - Horizontal Scroll */}
+            {quests.some(
+              (q) => q.status !== "completed" && q.status !== "claimed",
+            ) && (
+              <section className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-black uppercase tracking-[0.2em] text-gray-500">
+                    Активные задания
+                  </h3>
+                  <div className="h-px flex-1 bg-white/5 mx-4" />
+                </div>
 
-              // Calculate time until next reset for recurring quests
-              let nextResetText = null;
-              if (
-                isCompleted &&
-                quest.reset_period !== "none" &&
-                quest.period_start
-              ) {
-                const periodStart = new Date(quest.period_start);
-                const now = new Date();
-                let nextResetDate = new Date(periodStart);
+                <div className="flex gap-4 overflow-x-auto pb-6 -mx-6 px-6 snap-x no-scrollbar">
+                  {quests
+                    .filter(
+                      (q) => q.status !== "completed" && q.status !== "claimed",
+                    )
+                    .map((quest) => {
+                      const progress = quest.current_progress || 0;
+                      const target = quest.target_value || 1;
+                      const percent = Math.min(
+                        100,
+                        Math.max(0, (progress / target) * 100),
+                      );
+                      const isPending = quest.status === "pending_verification";
+                      const isLocked = quest.is_level_locked;
 
-                if (quest.reset_period === "daily") {
-                  nextResetDate.setDate(nextResetDate.getDate() + 1);
-                  nextResetDate.setHours(0, 0, 0, 0);
-                } else if (
-                  quest.reset_period === "hours" &&
-                  quest.reset_hours
-                ) {
-                  nextResetDate.setHours(
-                    nextResetDate.getHours() + quest.reset_hours,
-                  );
-                } else if (quest.reset_period === "weekly") {
-                  nextResetDate.setDate(nextResetDate.getDate() + 7);
-                } else if (quest.reset_period === "monthly") {
-                  nextResetDate.setMonth(nextResetDate.getMonth() + 1);
-                }
-
-                const diff = nextResetDate.getTime() - now.getTime();
-                if (diff > 0) {
-                  const h = Math.floor(diff / (1000 * 60 * 60));
-                  const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                  nextResetText = `Доступно через ${h}ч ${m}м`;
-                }
-              }
-
-              return (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  key={quest.id}
-                  className={`bg-white/5 border border-white/10 rounded-3xl p-6 relative overflow-hidden ${isCompleted || isLocked ? "opacity-60" : ""}`}
-                >
-                  {(isLocked || nextResetText) && (
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] z-10 flex items-center justify-center">
-                      <div className="bg-zinc-900/90 border border-white/10 px-6 py-3 rounded-2xl flex items-center gap-3 shadow-2xl">
-                        {isLocked ? (
-                          <>
-                            <Lock className="w-5 h-5 text-orange-500" />
-                            <span className="font-black uppercase italic tracking-tight text-sm">
-                              Нужен {quest.min_level} уровень
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <Clock className="w-5 h-5 text-orange-500" />
-                            <span className="font-black uppercase italic tracking-tight text-sm">
-                              {nextResetText}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex flex-col gap-6">
-                    <div className="flex flex-col sm:flex-row gap-6">
-
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          {isCompleted && (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                      return (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          key={quest.id}
+                          className={cn(
+                            "flex-shrink-0 w-[85vw] sm:w-[320px] bg-white/5 border border-white/10 rounded-[2.5rem] p-6 snap-center relative overflow-hidden flex flex-col justify-between",
+                            isLocked && "grayscale-[0.5] brightness-75",
                           )}
-                          {isPending && (
-                            <Clock className="w-5 h-5 text-yellow-500" />
-                          )}
-                          <h3 className="text-lg font-black uppercase italic tracking-tight">
-                            {quest.title}
-                          </h3>
-                        </div>
-                        <p className="text-gray-400 text-sm mb-4">
-                          {quest.description}
-                        </p>
-
-                        {quest.required_service_name && (
-                          <div className="mb-4">
-                            <div
-                              className={cn(
-                                "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
-                                quest.is_service_purchased
-                                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
-                                  : "bg-rose-500/10 border-rose-500/20 text-rose-500 animate-pulse",
-                              )}
-                            >
-                              <Zap className="w-3 h-3" />
-                              {quest.is_service_purchased
-                                ? `АКТИВИРОВАНО: ${quest.required_service_name}`
-                                : `СНАЧАЛА КУПИ: ${quest.required_service_name}`}
-                            </div>
-                          </div>
-                        )}
-
-                        {(quest.available_days || quest.time_start) && (
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {quest.available_days && (
-                              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-gray-400">
-                                <Calendar className="w-3 h-3 text-orange-500" />
-                                {quest.available_days.length === 7
-                                  ? "Ежедневно"
-                                  : quest.available_days
-                                      .map((d: number) => DAYS_RU[d])
-                                      .join(", ")}
-                              </div>
-                            )}
-                            {quest.time_start && (
-                              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white/5 border border-white/10 rounded-lg text-[10px] font-bold text-gray-400">
-                                <Clock className="w-3 h-3 text-orange-500" />
-                                {quest.time_start.slice(0, 5)} -{" "}
-                                {quest.time_end?.slice(0, 5)}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {!isLocked &&
-                          quest.trigger_type !== "manual_verification" && (
-                            <div className="space-y-3">
-                              <div className="flex justify-between text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
-                                <span className="flex items-center gap-2">
-                                  {!isCompleted && !isPending && (
-                                    <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                                  )}
-                                  {isCompleted
-                                    ? "Завершено"
-                                    : isPending
-                                      ? "На проверке"
-                                      : "Прогресс"}
-                                </span>
-                                <span className="text-white/80">
-                                  {Math.floor(progress)} / {Math.floor(target)}{" "}
-                                  {quest.quest_unit || "шт."}
+                        >
+                          {isLocked && (
+                            <div className="absolute top-4 right-4 z-20">
+                              <div className="bg-zinc-900/90 border border-white/10 px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-2xl backdrop-blur-md">
+                                <Lock className="w-3 h-3 text-orange-500" />
+                                <span className="text-[9px] font-black uppercase tracking-widest text-orange-500">
+                                  Ур. {quest.min_level}
                                 </span>
                               </div>
-                              <div className="w-full bg-black/40 rounded-full h-3 overflow-hidden border border-white/5">
-                                <div
-                                  className={cn(
-                                    "h-full rounded-full transition-all duration-500 ease-out",
-                                    isCompleted
-                                      ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
-                                      : isPending
-                                        ? "bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]"
-                                        : "bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]",
-                                  )}
-                                  style={{ width: `${percent}%` }}
-                                />
-                              </div>
                             </div>
                           )}
 
-                        {isPending && (
-                          <div className="space-y-3">
-                            {quest.verification_photo_url && (
-                              <div className="w-full aspect-video rounded-2xl overflow-hidden border border-white/10">
-                                <img
-                                  src={quest.verification_photo_url}
-                                  className="w-full h-full object-cover"
-                                  alt="Proof"
-                                />
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-start gap-4">
+                              <h3 className="text-lg font-black uppercase italic tracking-tight leading-tight">
+                                {quest.title}
+                              </h3>
+                              <div className="flex gap-1.5 shrink-0">
+                                {quest.reward_xp > 0 && (
+                                  <div className="bg-orange-500/10 border border-orange-500/20 px-2 py-1 rounded-lg">
+                                    <span className="text-[10px] font-black text-orange-500">
+                                      +{Math.floor(quest.reward_xp)}XP
+                                    </span>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            <div className="bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-2xl text-[10px] font-bold text-yellow-500 uppercase tracking-widest text-center">
-                              На проверке администратором
                             </div>
-                          </div>
-                        )}
-                      </div>
 
-                      <div className="flex flex-row gap-2 w-full sm:w-auto">
-                        {quest.reward_xp > 0 && (
-                          <div className="flex-1 bg-orange-500/10 border border-orange-500/20 p-3 rounded-2xl flex flex-col items-center justify-center gap-1 min-w-17.5]">
-                            <span className="text-base font-black text-orange-500 leading-none whitespace-nowrap">
-                              +{Math.floor(quest.reward_xp)}
-                            </span>
-                            <span className="text-[7px] font-black text-orange-500/50 uppercase tracking-widest">
-                              XP
-                            </span>
-                          </div>
-                        )}
-                        {quest.reward_tickets > 0 && (
-                          <div className="flex-1 bg-white/5 border border-white/10 p-3 rounded-2xl flex flex-col items-center justify-center gap-1 min-w-17.5]">
-                            <div className="flex items-center gap-1.5 whitespace-nowrap">
-                              <span className="text-base font-black text-white leading-none">
-                                +{Math.floor(quest.reward_tickets)}
-                              </span>
-                              <Ticket className="w-4 h-4 text-orange-500" />
-                            </div>
-                            <span className="text-[7px] font-black text-gray-500 uppercase tracking-widest">
-                              Билеты
-                            </span>
-                          </div>
-                        )}
-                        {quest.reward_bonus_balance > 0 && (
-                          <div className="flex-1 bg-white/5 border border-white/10 p-3 rounded-2xl flex flex-col items-center justify-center gap-1 min-w-17.5]">
-                            <div className="flex items-center gap-1.5 whitespace-nowrap">
-                              <span className="text-base font-black text-yellow-500 leading-none">
-                                +{Math.floor(quest.reward_bonus_balance)} ₽
-                              </span>
-                              <Coins className="w-4 h-4 text-yellow-500" />
-                            </div>
-                            <span className="text-[7px] font-black text-gray-500 uppercase tracking-widest">
-                              Бонусы
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                            <p className="text-gray-400 text-xs font-medium line-clamp-2">
+                              {quest.description}
+                            </p>
 
-                    {/* Action Area for Manual Quests */}
-                    {!isCompleted &&
-                      !isPending &&
-                      quest.trigger_type === "manual_verification" && (
-                        <div className="border-t border-white/5 pt-6 space-y-4">
-                          {quest.action_button_text && (
-                            <a
-                              href={quest.action_button_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center justify-center gap-2 w-full bg-white text-black py-4 rounded-2xl font-black uppercase italic tracking-tight hover:bg-orange-500 hover:text-white transition-all group"
-                            >
-                              {quest.action_button_text}
-                              <ExternalLink className="w-4 h-4 opacity-50 group-hover:opacity-100" />
-                            </a>
-                          )}
-
-                          {quest.requires_photo_verification && (
-                            <div className="space-y-3">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 text-center">
-                                Прикрепите скриншот для подтверждения
-                              </p>
-                              <div className="relative">
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  capture="environment"
-                                  className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) handleFileUpload(quest.id, file);
-                                  }}
-                                  disabled={uploading === quest.id}
-                                />
-                                <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center gap-3 bg-white/5 hover:bg-white/10 transition-colors">
-                                  {uploading === quest.id ? (
-                                    <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
-                                  ) : (
-                                    <>
-                                      <Camera className="w-8 h-8 text-gray-500" />
-                                      <span className="text-xs font-bold text-gray-400">
-                                        Нажмите, чтобы сделать фото или выбрать
-                                        файл
-                                      </span>
-                                    </>
-                                  )}
+                            <div className="flex flex-wrap gap-2">
+                              {quest.reward_tickets > 0 && (
+                                <div className="flex items-center gap-1 px-2 py-1 bg-white/5 border border-white/10 rounded-lg">
+                                  <Ticket className="w-3 h-3 text-orange-500" />
+                                  <span className="text-[10px] font-black">
+                                    +{Math.floor(quest.reward_tickets)}
+                                  </span>
                                 </div>
-                              </div>
+                              )}
+                              {quest.reward_bonus_balance > 0 && (
+                                <div className="flex items-center gap-1 px-2 py-1 bg-white/5 border border-white/10 rounded-lg">
+                                  <Coins className="w-3 h-3 text-yellow-500" />
+                                  <span className="text-[10px] font-black text-yellow-500">
+                                    +{Math.floor(quest.reward_bonus_balance)}₽
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
 
-                          {!quest.requires_photo_verification && (
-                            <button
-                              onClick={() => handleVerify(quest.id)}
-                              className="w-full bg-orange-500 hover:bg-orange-600 text-white py-4 rounded-2xl font-black uppercase italic tracking-tight shadow-lg shadow-orange-500/20 active:scale-[0.98] transition-all"
-                            >
-                              Я ВЫПОЛНИЛ ЗАДАНИЕ
-                            </button>
-                          )}
-                        </div>
-                      )}
-                  </div>
-                </motion.div>
-              );
-            })}
+                          <div className="mt-8 space-y-3">
+                            {isLocked ? (
+                              <div className="bg-white/5 border border-white/10 p-3 rounded-2xl text-[10px] font-black text-gray-500 uppercase tracking-widest text-center italic">
+                                Заблокировано
+                              </div>
+                            ) : (
+                              <>
+                                {quest.trigger_type !==
+                                  "manual_verification" && (
+                                  <>
+                                    <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-500 px-1">
+                                      <span>
+                                        {isPending ? "На проверке" : "Прогресс"}
+                                      </span>
+                                      <span className="text-white/80">
+                                        {Math.floor(progress)}/
+                                        {Math.floor(target)}
+                                      </span>
+                                    </div>
+                                    <div className="w-full bg-black/40 rounded-full h-2.5 overflow-hidden border border-white/5">
+                                      <div
+                                        className={cn(
+                                          "h-full rounded-full transition-all duration-500 ease-out",
+                                          isPending
+                                            ? "bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]"
+                                            : "bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]",
+                                        )}
+                                        style={{ width: `${percent}%` }}
+                                      />
+                                    </div>
+                                  </>
+                                )}
+
+                                {isPending ? (
+                                  <div className="bg-yellow-500/10 border border-yellow-500/20 p-2.5 rounded-xl text-[9px] font-black text-yellow-500 uppercase tracking-widest text-center italic">
+                                    Ожидает подтверждения
+                                  </div>
+                                ) : quest.trigger_type ===
+                                  "manual_verification" ? (
+                                  <div className="space-y-3 pt-2 border-t border-white/5">
+                                    {quest.action_button_text && (
+                                      <a
+                                        href={quest.action_button_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center justify-center gap-2 w-full bg-white text-black py-2.5 rounded-xl text-[10px] font-black uppercase italic tracking-tight hover:bg-orange-500 hover:text-white transition-all group"
+                                      >
+                                        {quest.action_button_text}
+                                        <ExternalLink className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                                      </a>
+                                    )}
+
+                                    {quest.requires_photo_verification ? (
+                                      <div className="relative">
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          capture="environment"
+                                          className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file)
+                                              handleFileUpload(quest.id, file);
+                                          }}
+                                          disabled={uploading === quest.id}
+                                        />
+                                        <div className="border border-dashed border-white/10 rounded-xl p-4 flex flex-col items-center gap-2 bg-white/5 hover:bg-white/10 transition-colors">
+                                          {uploading === quest.id ? (
+                                            <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
+                                          ) : (
+                                            <>
+                                              <Camera className="w-5 h-5 text-gray-500" />
+                                              <span className="text-[8px] font-black uppercase tracking-widest text-gray-500">
+                                                Прикрепите фото
+                                              </span>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleVerify(quest.id)}
+                                        className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-black uppercase italic tracking-tight text-xs shadow-lg shadow-orange-500/20 transition-all"
+                                      >
+                                        Я выполнил
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                </div>
+              </section>
+            )}
+
+            {/* Completed Quests - Vertical List */}
+            {quests.some(
+              (q) => q.status === "completed" || q.status === "claimed",
+            ) && (
+              <section className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-black uppercase tracking-[0.2em] text-gray-500">
+                    Выполнено
+                  </h3>
+                  <div className="h-px flex-1 bg-white/5 mx-4" />
+                </div>
+
+                <div className="grid gap-3">
+                  {quests
+                    .filter(
+                      (q) => q.status === "completed" || q.status === "claimed",
+                    )
+                    .map((quest) => {
+                      // Calculate time until next reset for recurring quests
+                      let nextResetText = null;
+                      if (quest.reset_period !== "none" && quest.period_start) {
+                        const periodStart = new Date(quest.period_start);
+                        const now = new Date();
+                        let nextResetDate = new Date(periodStart);
+
+                        if (quest.reset_period === "daily") {
+                          nextResetDate.setDate(nextResetDate.getDate() + 1);
+                          nextResetDate.setHours(0, 0, 0, 0);
+                        } else if (
+                          quest.reset_period === "hours" &&
+                          quest.reset_hours
+                        ) {
+                          nextResetDate.setHours(
+                            nextResetDate.getHours() + quest.reset_hours,
+                          );
+                        } else if (quest.reset_period === "weekly") {
+                          nextResetDate.setDate(nextResetDate.getDate() + 7);
+                        } else if (quest.reset_period === "monthly") {
+                          nextResetDate.setMonth(nextResetDate.getMonth() + 1);
+                        }
+
+                        const diff = nextResetDate.getTime() - now.getTime();
+                        if (diff > 0) {
+                          const h = Math.floor(diff / (1000 * 60 * 60));
+                          const m = Math.floor(
+                            (diff % (1000 * 60 * 60)) / (1000 * 60),
+                          );
+                          nextResetText = `Сброс через ${h}ч ${m}м`;
+                        }
+                      }
+
+                      return (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          key={quest.id}
+                          className="bg-white/2 border border-white/5 rounded-3xl p-4 flex items-center justify-between gap-4 group hover:bg-white/5 transition-all"
+                        >
+                          <div className="flex items-center gap-4 min-w-0">
+                            <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-sm font-black uppercase italic tracking-tight truncate group-hover:text-emerald-400 transition-colors">
+                                {quest.title}
+                              </h4>
+                              {nextResetText && (
+                                <p className="text-[10px] font-bold text-orange-500 uppercase tracking-widest mt-0.5">
+                                  {nextResetText}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            {quest.reward_xp > 0 && (
+                              <div className="bg-orange-500/10 border border-orange-500/20 px-2 py-1 rounded-lg flex items-center gap-1">
+                                <Zap className="w-2.5 h-2.5 text-orange-500" />
+                                <span className="text-[9px] font-black text-orange-500">
+                                  +{Math.floor(quest.reward_xp)}
+                                </span>
+                              </div>
+                            )}
+                            {quest.reward_tickets > 0 && (
+                              <div className="bg-white/5 border border-white/10 px-2 py-1 rounded-lg flex items-center gap-1">
+                                <Ticket className="w-2.5 h-2.5 text-gray-500" />
+                                <span className="text-[9px] font-black">
+                                  +{Math.floor(quest.reward_tickets)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </main>
       <BottomNav />
+
+      <style jsx global>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   );
 }

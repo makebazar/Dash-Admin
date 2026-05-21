@@ -43,7 +43,9 @@ export default function PromoProfile() {
 
   // Referral states
   const [referralData, setReferralData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<"invite" | "friends" | "history">("invite");
+  const [activeTab, setActiveTab] = useState<"invite" | "friends" | "history">(
+    "invite",
+  );
   const [copied, setCopied] = useState(false);
 
   // PWA states
@@ -79,9 +81,10 @@ export default function PromoProfile() {
   const handleCopyLink = () => {
     if (!referralData?.referralCode) return;
     const link = `${window.location.origin}/promo/login?ref=${referralData.referralCode}`;
-    
+
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(link)
+      navigator.clipboard
+        .writeText(link)
         .then(() => {
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
@@ -100,7 +103,9 @@ export default function PromoProfile() {
       const [playerRes, clubsRes, referralsRes] = await Promise.all([
         fetch("/api/promo/player"),
         fetch("/api/promo/player/clubs"),
-        fetch("/api/promo/player/referrals").then((res) => (res.ok ? res.json() : null)),
+        fetch("/api/promo/player/referrals").then((res) =>
+          res.ok ? res.json() : null,
+        ),
       ]);
 
       if (playerRes.status === 401) {
@@ -129,10 +134,13 @@ export default function PromoProfile() {
 
   useEffect(() => {
     // Check if running in standalone mode
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
-    
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as any).standalone;
+
     // Check if iOS device
-    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    const ios =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
     setIsIOS(ios);
 
     if (!isStandalone) {
@@ -145,9 +153,12 @@ export default function PromoProfile() {
       const handlePrompt = () => {
         setShowInstallBtn(true);
       };
-      window.addEventListener('pwa-install-prompt-available', handlePrompt);
+      window.addEventListener("pwa-install-prompt-available", handlePrompt);
       return () => {
-        window.removeEventListener('pwa-install-prompt-available', handlePrompt);
+        window.removeEventListener(
+          "pwa-install-prompt-available",
+          handlePrompt,
+        );
       };
     }
   }, []);
@@ -329,27 +340,27 @@ export default function PromoProfile() {
 
         {/* PWA Install Banner */}
         {showInstallBtn && (
-          <div className="bg-[#151515] border border-orange-500/20 rounded-[2.5rem] p-6 mb-10 relative overflow-hidden shadow-2xl">
+          <div className="bg-[#151515] border border-orange-500/20 rounded-[2.5rem] p-5 sm:p-6 mb-10 relative overflow-hidden shadow-2xl">
             {/* Background glowing gradient */}
             <div className="absolute -right-20 -bottom-20 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
-            
-            <div className="flex items-center gap-4 relative z-10">
-              <div className="w-12 h-12 bg-orange-500/10 rounded-2xl flex items-center justify-center shrink-0 border border-orange-500/20">
-                <Smartphone className="w-6 h-6 text-orange-500" />
+
+            <div className="flex items-center gap-3 sm:gap-4 relative z-10">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-500/10 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 border border-orange-500/20">
+                <Smartphone className="w-5 h-5 sm:w-6 sm:h-6 text-orange-500" />
               </div>
-              <div className="flex-1">
-                <h3 className="text-base font-black uppercase italic tracking-tight text-white">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm sm:text-base font-black uppercase italic tracking-tight text-white leading-tight">
                   Установи <span className="text-orange-500">Приложение</span>
                 </h3>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">
-                  Быстрый доступ с экрана домой и оффлайн-режим
+                <p className="text-[9px] sm:text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5 truncate">
+                  Быстрый доступ и оффлайн-режим
                 </p>
               </div>
               <button
                 onClick={handleInstallClick}
-                className="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-[0_4px_15px_rgba(234,88,12,0.3)] shrink-0 flex items-center gap-2"
+                className="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-wider transition-all shadow-[0_4px_15px_rgba(234,88,12,0.3)] shrink-0 flex items-center gap-1.5 sm:gap-2"
               >
-                <Download className="w-4 h-4" /> Скачать
+                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Скачать
               </button>
             </div>
           </div>
@@ -376,24 +387,36 @@ export default function PromoProfile() {
             {/* Tabs */}
             <div className="flex bg-black/40 p-1.5 rounded-2xl mb-6">
               {(["invite", "friends", "history"] as const).map((tab) => {
-                const label = tab === "invite" ? "Инфо" : tab === "friends" ? "Друзья" : "История";
+                const label =
+                  tab === "invite"
+                    ? "Инфо"
+                    : tab === "friends"
+                      ? "Друзья"
+                      : "История";
                 const isSelected = activeTab === tab;
                 return (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
                     className={`flex-1 py-2 text-center text-xs font-black uppercase tracking-wider rounded-xl transition-all relative ${
-                      isSelected ? "bg-orange-500 text-white" : "text-gray-400 hover:text-white"
+                      isSelected
+                        ? "bg-orange-500 text-white"
+                        : "text-gray-400 hover:text-white"
                     }`}
                   >
                     {label}
-                    {tab === "friends" && referralData.stats.friendsCount > 0 && (
-                      <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-black ${
-                        isSelected ? "bg-white text-orange-500" : "bg-white/10 text-gray-400"
-                      }`}>
-                        {referralData.stats.friendsCount}
-                      </span>
-                    )}
+                    {tab === "friends" &&
+                      referralData.stats.friendsCount > 0 && (
+                        <span
+                          className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                            isSelected
+                              ? "bg-white text-orange-500"
+                              : "bg-white/10 text-gray-400"
+                          }`}
+                        >
+                          {referralData.stats.friendsCount}
+                        </span>
+                      )}
                   </button>
                 );
               })}
@@ -426,11 +449,11 @@ export default function PromoProfile() {
                   )}
 
                   {/* Share Link Card */}
-                  <div className="bg-black/40 border border-white/5 rounded-2xl p-5 space-y-4">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                  <div className="bg-black/40 border border-white/5 rounded-2xl p-4 sm:p-5 space-y-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">
                       Твоя ссылка для приглашения
                     </div>
-                    <div className="flex items-center gap-3 bg-black/60 rounded-xl p-3 border border-white/5">
+                    <div className="flex items-center gap-2 sm:gap-3 bg-black/60 rounded-xl p-2.5 sm:p-3 border border-white/5 overflow-hidden">
                       <input
                         type="text"
                         readOnly
@@ -439,11 +462,11 @@ export default function PromoProfile() {
                             ? `${window.location.origin}/promo/login?ref=${referralData.referralCode}`
                             : `.../promo/login?ref=${referralData.referralCode}`
                         }
-                        className="bg-transparent flex-1 outline-none text-xs font-mono text-gray-400 truncate"
+                        className="bg-transparent flex-1 min-w-0 outline-none text-[10px] sm:text-xs font-mono text-gray-400 truncate"
                       />
                       <button
                         onClick={handleCopyLink}
-                        className={`px-4 py-2 rounded-lg font-black text-xs uppercase transition-all active:scale-95 shrink-0 ${
+                        className={`px-3 sm:px-4 py-2 rounded-lg font-black text-[10px] sm:text-xs uppercase transition-all active:scale-95 shrink-0 ${
                           copied
                             ? "bg-emerald-500 text-white"
                             : "bg-orange-500 hover:bg-orange-600 text-white"
@@ -451,17 +474,20 @@ export default function PromoProfile() {
                       >
                         {copied ? (
                           <div className="flex items-center gap-1">
-                            <Check className="w-3.5 h-3.5" /> Коп.
+                            <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Коп.
                           </div>
                         ) : (
                           <div className="flex items-center gap-1">
-                            <Copy className="w-3.5 h-3.5" /> Коп.
+                            <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Коп.
                           </div>
                         )}
                       </button>
                     </div>
                     <div className="text-center text-[10px] text-gray-600 font-bold uppercase tracking-wider">
-                      Код приглашения: <span className="text-orange-500/80 font-mono tracking-normal">{referralData.referralCode}</span>
+                      Код приглашения:{" "}
+                      <span className="text-orange-500/80 font-mono tracking-normal">
+                        {referralData.referralCode}
+                      </span>
                     </div>
                   </div>
 
@@ -477,10 +503,12 @@ export default function PromoProfile() {
                         </div>
                         <div>
                           <div className="text-xs font-black uppercase tracking-wide text-white">
-                            {referralData.settings.recurring_percent || 10}% от пополнений
+                            {referralData.settings.recurring_percent || 10}% от
+                            пополнений
                           </div>
                           <p className="text-[10px] text-gray-500 font-bold mt-1 leading-relaxed">
-                            Получай постоянный кэшбек на бонусный баланс от каждого пополнения приглашенного друга.
+                            Получай постоянный кэшбек на бонусный баланс от
+                            каждого пополнения приглашенного друга.
                           </p>
                         </div>
                       </div>
@@ -491,10 +519,13 @@ export default function PromoProfile() {
                         </div>
                         <div>
                           <div className="text-xs font-black uppercase tracking-wide text-white">
-                            +{referralData.settings.fixed_reward_tickets || 5} билетов разово
+                            +{referralData.settings.fixed_reward_tickets || 5}{" "}
+                            билетов разово
                           </div>
                           <p className="text-[10px] text-gray-500 font-bold mt-1 leading-relaxed">
-                            Начисляется в личный кабинет, когда суммарные депозиты друга достигают {referralData.settings.threshold || 1000} ₽.
+                            Начисляется в личный кабинет, когда суммарные
+                            депозиты друга достигают{" "}
+                            {referralData.settings.threshold || 1000} ₽.
                           </p>
                         </div>
                       </div>
@@ -516,14 +547,22 @@ export default function PromoProfile() {
                   </div>
                   {referralData.referredFriends.length === 0 ? (
                     <div className="bg-black/20 border border-white/5 rounded-2xl p-6 text-center text-gray-500 text-xs font-bold uppercase tracking-wider">
-                      У тебя пока нет рефералов. Отправь ссылку другу, чтобы начать получать бонусы!
+                      У тебя пока нет рефералов. Отправь ссылку другу, чтобы
+                      начать получать бонусы!
                     </div>
                   ) : (
                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
                       {referralData.referredFriends.map((friend: any) => {
-                        const threshold = parseFloat(referralData.settings.threshold || "1000");
-                        const progressPercent = Math.min(100, (friend.totalReferredDeposits / threshold) * 100);
-                        const isReached = friend.status === "threshold_reached" || friend.totalReferredDeposits >= threshold;
+                        const threshold = parseFloat(
+                          referralData.settings.threshold || "1000",
+                        );
+                        const progressPercent = Math.min(
+                          100,
+                          (friend.totalReferredDeposits / threshold) * 100,
+                        );
+                        const isReached =
+                          friend.status === "threshold_reached" ||
+                          friend.totalReferredDeposits >= threshold;
 
                         return (
                           <div
@@ -539,11 +578,13 @@ export default function PromoProfile() {
                                   {friend.fullName}
                                 </div>
                               </div>
-                              <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                                isReached
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                              }`}>
+                              <span
+                                className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                  isReached
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                                }`}
+                              >
                                 {isReached ? "Условия выполнены" : "В процессе"}
                               </span>
                             </div>
@@ -552,14 +593,23 @@ export default function PromoProfile() {
                             <div className="space-y-1.5">
                               <div className="flex justify-between text-[9px] font-bold text-gray-500 uppercase tracking-widest">
                                 <span>Пополнения друга:</span>
-                                <span className={isReached ? "text-emerald-400" : "text-gray-400"}>
-                                  {Math.floor(friend.totalReferredDeposits)} / {threshold} ₽
+                                <span
+                                  className={
+                                    isReached
+                                      ? "text-emerald-400"
+                                      : "text-gray-400"
+                                  }
+                                >
+                                  {Math.floor(friend.totalReferredDeposits)} /{" "}
+                                  {threshold} ₽
                                 </span>
                               </div>
                               <div className="w-full bg-black/60 rounded-full h-1.5 overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all ${
-                                    isReached ? "bg-emerald-500" : "bg-orange-500"
+                                    isReached
+                                      ? "bg-emerald-500"
+                                      : "bg-orange-500"
                                   }`}
                                   style={{ width: `${progressPercent}%` }}
                                 />
@@ -599,18 +649,23 @@ export default function PromoProfile() {
                           >
                             <div className="space-y-1">
                               <div className="text-xs font-black uppercase tracking-wide text-white">
-                                {isFixed ? "Разовый бонус" : `Комиссия ${item.percent}%`}
+                                {isFixed
+                                  ? "Разовый бонус"
+                                  : `Комиссия ${item.percent}%`}
                               </div>
                               <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
                                 от друга: {item.friendName}
                               </div>
                               <div className="text-[9px] text-gray-600 font-bold">
-                                {new Date(item.createdAt).toLocaleDateString("ru-RU", {
-                                  day: "numeric",
-                                  month: "short",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
+                                {new Date(item.createdAt).toLocaleDateString(
+                                  "ru-RU",
+                                  {
+                                    day: "numeric",
+                                    month: "short",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  },
+                                )}
                               </div>
                             </div>
                             <div className="text-right">
@@ -839,7 +894,8 @@ export default function PromoProfile() {
               </div>
 
               <h2 className="text-2xl font-black uppercase italic tracking-tight mb-2 text-white text-left">
-                Установка на <span className="text-orange-500">iOS / Safari</span>
+                Установка на{" "}
+                <span className="text-orange-500">iOS / Safari</span>
               </h2>
               <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-8 text-left leading-relaxed">
                 Добавьте приложение на экран «Домой» за пару простых шагов:
@@ -855,7 +911,9 @@ export default function PromoProfile() {
                       Нажмите кнопку «Поделиться»
                     </p>
                     <p className="text-[10px] text-gray-500 font-bold mt-1">
-                      Она находится на нижней панели браузера Safari (иконка с вылетающей стрелкой <span className="text-orange-500">📤</span>)
+                      Она находится на нижней панели браузера Safari (иконка с
+                      вылетающей стрелкой{" "}
+                      <span className="text-orange-500">📤</span>)
                     </p>
                   </div>
                 </div>
@@ -869,7 +927,9 @@ export default function PromoProfile() {
                       Выберите «На экран Домой»
                     </p>
                     <p className="text-[10px] text-gray-500 font-bold mt-1">
-                      Прокрутите меню вниз и выберите опцию «На экран „Домой“» или «Добавить на экран Домой» (<span className="text-orange-500">📱</span>)
+                      Прокрутите меню вниз и выберите опцию «На экран „Домой“»
+                      или «Добавить на экран Домой» (
+                      <span className="text-orange-500">📱</span>)
                     </p>
                   </div>
                 </div>
