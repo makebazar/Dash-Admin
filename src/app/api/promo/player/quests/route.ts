@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { cookies } from "next/headers";
+import { checkAndResetPlayerQuests } from "@/lib/promo-quests";
 
 export async function GET(request: Request) {
   const client = await getClient();
@@ -12,6 +13,9 @@ export async function GET(request: Request) {
     if (!playerId || !activeClubId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Auto-reset repeatable/cooldown quests in real-time when PWA loads
+    await checkAndResetPlayerQuests(client, activeClubId, playerId);
 
     const res = await client.query(
       `SELECT

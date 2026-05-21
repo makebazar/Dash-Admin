@@ -186,6 +186,38 @@ export default function LuckyCardsGame() {
     return newCards;
   }, []);
 
+  const getLevelCards = useCallback((prizesList: any[], level: number): Card[] => {
+    // Filter for current level
+    const levelPrizes = prizesList.filter(
+      (p: any) => (p.target_level || 1) === level,
+    );
+
+    // Map and limit to 5
+    let mapped = levelPrizes.map((p: any, i: number) =>
+      mapPrizeToCard(p, i),
+    );
+
+    if (mapped.length > 5) {
+      mapped = mapped.slice(0, 5);
+    }
+
+    // Ensure at least 3 cards for a good look
+    if (mapped.length < 3) {
+      const needed = 3 - mapped.length;
+      for (let i = 0; i < needed; i++) {
+        mapped.push({
+          id: mapped.length + 1,
+          prizeId: `empty-${i}`,
+          value: "❌",
+          type: "lose",
+          label: "Пусто",
+          color: "from-gray-600 to-gray-800",
+        });
+      }
+    }
+    return mapped;
+  }, [mapPrizeToCard]);
+
   // Fetch initial data
   useEffect(() => {
     async function fetchData() {
@@ -211,34 +243,8 @@ export default function LuckyCardsGame() {
           // Get player level
           const currentLevel = playerData.player?.level?.currentLevel || 1;
 
-          // Filter for current level
-          const wheelPrizes = allPrizes.filter(
-            (p: any) => (p.target_level || 1) === currentLevel,
-          );
-
-          // Map and limit to 5
-          let mapped = wheelPrizes.map((p: any, i: number) =>
-            mapPrizeToCard(p, i),
-          );
-
-          if (mapped.length > 5) {
-            mapped = mapped.slice(0, 5);
-          }
-
-          // Ensure at least 3 cards for a good look
-          if (mapped.length < 3) {
-            const needed = 3 - mapped.length;
-            for (let i = 0; i < needed; i++) {
-              mapped.push({
-                id: mapped.length + 1,
-                prizeId: `empty-${i}`,
-                value: "❌",
-                type: "lose",
-                label: "Пусто",
-                color: "from-gray-600 to-gray-800",
-              });
-            }
-          }
+          // Map and filter prizes for level using helper
+          const mapped = getLevelCards(allPrizes, currentLevel);
 
           setCards(mapped);
         } else {
@@ -252,9 +258,13 @@ export default function LuckyCardsGame() {
       }
     }
     fetchData();
-  }, [generateDefaultCards, mapPrizeToCard]);
+  }, [generateDefaultCards, getLevelCards]);
 
-  const cardCount = rawPrizes.length > 0 ? rawPrizes.length : 3;
+  const currentLevel = player?.level?.currentLevel || 1;
+  const levelPrizesCount = rawPrizes.filter(
+    (p: any) => (p.target_level || 1) === currentLevel,
+  ).length;
+  const cardCount = Math.min(5, Math.max(3, levelPrizesCount));
 
   const startGameSequence = async () => {
     if (gameState !== "idle" && gameState !== "result") return;
@@ -285,10 +295,11 @@ export default function LuckyCardsGame() {
       setServerResult(data);
       setTickets((prev) => prev - 1);
 
-      // Setup initial face-up cards based on raw prizes
+      // Setup initial face-up cards based on raw prizes filtered by level
+      const currentLevel = player?.level?.currentLevel || 1;
       let initialCards =
         rawPrizes.length > 0
-          ? rawPrizes.map((p, i) => mapPrizeToCard(p, i))
+          ? getLevelCards(rawPrizes, currentLevel)
           : generateDefaultCards(cardCount);
 
       setCards(initialCards);
@@ -340,12 +351,19 @@ export default function LuckyCardsGame() {
     // receives the `serverResult.prize` (if any), and the other cards receive the remaining prizes.
 
     let wonPrize = serverResult.prize;
+    
+    // Filter level prizes for correct fallback and remaining prize distribution
+    const currentLevel = player?.level?.currentLevel || 1;
+    const levelPrizes = rawPrizes.filter(
+      (p: any) => (p.target_level || 1) === currentLevel,
+    );
+
     // If somehow the server didn't return a prize (e.g. lost and no generic 'lose' prize returned),
     // we fallback to the first 'lose' prize or generic empty
     if (!wonPrize) {
       wonPrize =
-        rawPrizes.find((p) => p.name.toLowerCase().includes("пусто")) ||
-        rawPrizes[0];
+        levelPrizes.find((p) => p.name.toLowerCase().includes("пусто")) ||
+        levelPrizes[0];
     }
 
     const wonCard = wonPrize
@@ -353,8 +371,12 @@ export default function LuckyCardsGame() {
       : generateDefaultCards(1)[0];
     wonCard.id = id; // Give it the ID of the clicked card so Framer Motion maps it correctly
 
-    // Distribute remaining prizes to other cards
-    const remainingPrizes = rawPrizes.filter((p) => p.id !== wonPrize?.id);
+    // Get up to 5 active prizes for level, filter out the won prize
+    let activePrizes = levelPrizes;
+    if (activePrizes.length > 5) {
+      activePrizes = activePrizes.slice(0, 5);
+    }
+    const remainingPrizes = activePrizes.filter((p) => p.id !== wonPrize?.id);
     const newCardsState = cards.map((c) => {
       if (c.id === id) {
         return wonCard;
@@ -365,7 +387,15 @@ export default function LuckyCardsGame() {
           mapped.id = c.id;
           return mapped;
         } else {
-          return c; // Should not happen if lengths match
+          // If we run out of level prizes, fill with a "lose" (empty) card
+          return {
+            id: c.id,
+            prizeId: `empty-reveal-${c.id}`,
+            value: "❌",
+            type: "lose" as const,
+            label: "Пусто",
+            color: "from-gray-600 to-gray-800",
+          };
         }
       }
     });
@@ -440,9 +470,10 @@ export default function LuckyCardsGame() {
     setSelectedId(null);
     setGameMessage(null);
     setServerResult(null);
+    const currentLevel = player?.level?.currentLevel || 1;
     setCards(
       rawPrizes.length > 0
-        ? rawPrizes.map((p, i) => mapPrizeToCard(p, i))
+        ? getLevelCards(rawPrizes, currentLevel)
         : generateDefaultCards(cardCount),
     );
   };

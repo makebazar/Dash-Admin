@@ -11,15 +11,47 @@ export default function PromoLogin() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [pin, setPin] = useState("");
   const [fullName, setFullName] = useState("");
+  const [clubCode, setClubCode] = useState("");
   const [step, setStep] = useState<"phone" | "pin" | "register">("phone");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const clubId = searchParams.get("clubId");
 
+  const formatPhoneInput = (value: string): string => {
+    // Strip all non-digits
+    let cleaned = value.replace(/\D/g, "");
+
+    // If starts with 7 or 8, remove the country code prefix to format the rest
+    if (cleaned.startsWith("7") || cleaned.startsWith("8")) {
+      cleaned = cleaned.slice(1);
+    }
+
+    // Limit to 10 digits (main body of the Russian phone number)
+    cleaned = cleaned.slice(0, 10);
+
+    // Build the format "+7 (XXX) XXX-XX-XX"
+    let formatted = "+7";
+    if (cleaned.length > 0) {
+      formatted += " (" + cleaned.slice(0, 3);
+    }
+    if (cleaned.length > 3) {
+      formatted += ") " + cleaned.slice(3, 6);
+    }
+    if (cleaned.length > 6) {
+      formatted += "-" + cleaned.slice(6, 8);
+    }
+    if (cleaned.length > 8) {
+      formatted += "-" + cleaned.slice(8, 10);
+    }
+
+    return formatted;
+  };
+
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (phoneNumber.length < 10) {
+    const digitsOnly = phoneNumber.replace(/\D/g, "");
+    if (digitsOnly.length < 11) {
       setError("Введите корректный номер телефона");
       return;
     }
@@ -27,8 +59,11 @@ export default function PromoLogin() {
     setLoading(true);
 
     try {
+      const activeClubId = clubId || clubCode;
+      const refCode = searchParams.get("ref");
       const body: any = { phoneNumber };
-      if (clubId) body.clubId = clubId;
+      if (activeClubId) body.clubId = activeClubId;
+      if (refCode) body.refCode = refCode;
 
       const res = await fetch("/api/promo/auth/login", {
         method: "POST",
@@ -37,7 +72,11 @@ export default function PromoLogin() {
       const data = await res.json();
 
       if (res.status !== 200 && !data.requiresRegistration) {
-        setError(data.error || "Ошибка");
+        let errorMsg = data.error || "Ошибка";
+        if (errorMsg.includes("отсканировать QR-код")) {
+          errorMsg = "Для регистрации необходимо ввести код клуба или отсканировать QR-код в клубе";
+        }
+        setError(errorMsg);
         setLoading(false);
         return;
       }
@@ -60,8 +99,11 @@ export default function PromoLogin() {
     setLoading(true);
 
     try {
+      const activeClubId = clubId || clubCode;
+      const refCode = searchParams.get("ref");
       const body: any = { phoneNumber, pin, fullName };
-      if (clubId) body.clubId = clubId;
+      if (activeClubId) body.clubId = activeClubId;
+      if (refCode) body.refCode = refCode;
 
       const res = await fetch("/api/promo/auth/login", {
         method: "POST",
@@ -74,7 +116,7 @@ export default function PromoLogin() {
         if (action) {
           router.push(
             `/promo?${new URLSearchParams({
-              ...(clubId && { clubId }),
+              ...(activeClubId && { clubId: activeClubId }),
               ...(action && { action }),
             }).toString()}`,
           );
@@ -130,7 +172,7 @@ export default function PromoLogin() {
                     <input
                       type="tel"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      onChange={(e) => setPhoneNumber(formatPhoneInput(e.target.value))}
                       placeholder="+7 (999) 000-00-00"
                       className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-14 pr-6 focus:border-orange-500/50 outline-none transition-all text-lg font-bold"
                       autoFocus
@@ -170,22 +212,48 @@ export default function PromoLogin() {
                 className="space-y-6"
               >
                 {step === "register" && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 ml-4">
-                      Ваше Имя
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600" />
-                      <input
-                        type="text"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        placeholder="Александр"
-                        className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-14 pr-6 focus:border-orange-500/50 outline-none transition-all text-lg font-bold"
-                        autoFocus
-                      />
+                  <>
+                    <div className="space-y-2 animate-in fade-in duration-300">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 ml-4">
+                        Ваше Имя
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600" />
+                        <input
+                          type="text"
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          placeholder="Александр"
+                          className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-14 pr-6 focus:border-orange-500/50 outline-none transition-all text-lg font-bold"
+                          autoFocus
+                        />
+                      </div>
                     </div>
-                  </div>
+
+                    {!clubId && !searchParams.get("ref") && (
+                      <div className="space-y-2 animate-in fade-in duration-300">
+                        <div className="flex justify-between items-center px-4">
+                          <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
+                            Код клуба
+                          </label>
+                          <span className="text-[9px] font-black uppercase tracking-wider text-orange-500/60">
+                            для новых игроков
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600" />
+                          <input
+                            type="text"
+                            maxLength={4}
+                            value={clubCode}
+                            onChange={(e) => setClubCode(e.target.value.toUpperCase())}
+                            placeholder="ABCD"
+                            className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-14 pr-6 focus:border-orange-500/50 outline-none transition-all text-lg font-bold tracking-[0.25em] uppercase"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <div className="space-y-2">

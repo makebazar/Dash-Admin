@@ -12,8 +12,6 @@ import {
   Clock,
   Calendar,
   ExternalLink,
-  ImagePlus,
-  Camera,
   Trash2,
   Lock,
   Zap,
@@ -196,15 +194,7 @@ export default function QuestsPage() {
                   )}
                   <div className="flex flex-col gap-6">
                     <div className="flex flex-col sm:flex-row gap-6">
-                      {quest.image_url && (
-                        <div className="w-full sm:w-24 h-48 sm:h-24 rounded-[2rem] overflow-hidden border border-white/10 shrink-0">
-                          <img
-                            src={quest.image_url}
-                            className="w-full h-full object-cover"
-                            alt={quest.title}
-                          />
-                        </div>
-                      )}
+
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           {isCompleted && (

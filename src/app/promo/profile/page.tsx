@@ -18,6 +18,14 @@ import {
   ArrowRight,
   Wallet,
   ShoppingCart,
+  Share2,
+  Copy,
+  Check,
+  Users,
+  Award,
+  Clock,
+  Smartphone,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import { getPhoneDisplay } from "@/lib/phone-utils";
@@ -33,11 +41,66 @@ export default function PromoProfile() {
   const [addError, setAddError] = useState("");
   const router = useRouter();
 
+  // Referral states
+  const [referralData, setReferralData] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<"invite" | "friends" | "history">("invite");
+  const [copied, setCopied] = useState(false);
+
+  // PWA states
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showIOSGuide, setShowIOSGuide] = useState(false);
+
+  const fallbackCopyText = (text: string) => {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.top = "0";
+      textArea.style.left = "0";
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand("copy");
+      document.body.removeChild(textArea);
+      if (successful) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        alert(`Не удалось скопировать автоматически. Ссылка: ${text}`);
+      }
+    } catch (err) {
+      console.error("Fallback copy failed", err);
+      alert(`Не удалось скопировать автоматически. Ссылка: ${text}`);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (!referralData?.referralCode) return;
+    const link = `${window.location.origin}/promo/login?ref=${referralData.referralCode}`;
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(link)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        })
+        .catch((err) => {
+          console.error("Failed to copy using clipboard API", err);
+          fallbackCopyText(link);
+        });
+    } else {
+      fallbackCopyText(link);
+    }
+  };
+
   const fetchData = async () => {
     try {
-      const [playerRes, clubsRes] = await Promise.all([
+      const [playerRes, clubsRes, referralsRes] = await Promise.all([
         fetch("/api/promo/player"),
         fetch("/api/promo/player/clubs"),
+        fetch("/api/promo/player/referrals").then((res) => (res.ok ? res.json() : null)),
       ]);
 
       if (playerRes.status === 401) {
@@ -50,6 +113,9 @@ export default function PromoProfile() {
 
       setPlayer({ ...playerData.player, activeTickets: playerData.tickets });
       setClubs(clubsData.clubs || []);
+      if (referralsRes) {
+        setReferralData(referralsRes);
+      }
     } catch (err) {
       console.error("Failed to fetch profile data", err);
     } finally {
@@ -60,6 +126,49 @@ export default function PromoProfile() {
   useEffect(() => {
     fetchData();
   }, [router]);
+
+  useEffect(() => {
+    // Check if running in standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+    
+    // Check if iOS device
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIOS(ios);
+
+    if (!isStandalone) {
+      if ((window as any).deferredPrompt) {
+        setShowInstallBtn(true);
+      } else if (ios) {
+        setShowInstallBtn(true);
+      }
+
+      const handlePrompt = () => {
+        setShowInstallBtn(true);
+      };
+      window.addEventListener('pwa-install-prompt-available', handlePrompt);
+      return () => {
+        window.removeEventListener('pwa-install-prompt-available', handlePrompt);
+      };
+    }
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (isIOS) {
+      setShowIOSGuide(true);
+      return;
+    }
+
+    const promptEvent = (window as any).deferredPrompt;
+    if (!promptEvent) return;
+
+    promptEvent.prompt();
+
+    const { outcome } = await promptEvent.userChoice;
+    console.log(`User response to install prompt: ${outcome}`);
+
+    (window as any).deferredPrompt = null;
+    setShowInstallBtn(false);
+  };
 
   const handleAddClub = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,6 +326,315 @@ export default function PromoProfile() {
             </div>
           </div>
         </div>
+
+        {/* PWA Install Banner */}
+        {showInstallBtn && (
+          <div className="bg-[#151515] border border-orange-500/20 rounded-[2.5rem] p-6 mb-10 relative overflow-hidden shadow-2xl">
+            {/* Background glowing gradient */}
+            <div className="absolute -right-20 -bottom-20 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+            
+            <div className="flex items-center gap-4 relative z-10">
+              <div className="w-12 h-12 bg-orange-500/10 rounded-2xl flex items-center justify-center shrink-0 border border-orange-500/20">
+                <Smartphone className="w-6 h-6 text-orange-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-black uppercase italic tracking-tight text-white">
+                  Установи <span className="text-orange-500">Приложение</span>
+                </h3>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">
+                  Быстрый доступ с экрана домой и оффлайн-режим
+                </p>
+              </div>
+              <button
+                onClick={handleInstallClick}
+                className="bg-orange-500 hover:bg-orange-600 active:scale-95 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-[0_4px_15px_rgba(234,88,12,0.3)] shrink-0 flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" /> Скачать
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Referral Program */}
+        {referralData && (
+          <div className="bg-[#151515] border border-white/5 rounded-[2.5rem] p-6 mb-10 relative overflow-hidden shadow-2xl">
+            {/* Title */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center">
+                <Share2 className="w-5 h-5 text-orange-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black uppercase italic tracking-tight text-white">
+                  Пригласи <span className="text-orange-500">Друга</span>
+                </h3>
+                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                  Получай бонусы от игр друзей
+                </p>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex bg-black/40 p-1.5 rounded-2xl mb-6">
+              {(["invite", "friends", "history"] as const).map((tab) => {
+                const label = tab === "invite" ? "Инфо" : tab === "friends" ? "Друзья" : "История";
+                const isSelected = activeTab === tab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`flex-1 py-2 text-center text-xs font-black uppercase tracking-wider rounded-xl transition-all relative ${
+                      isSelected ? "bg-orange-500 text-white" : "text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    {label}
+                    {tab === "friends" && referralData.stats.friendsCount > 0 && (
+                      <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                        isSelected ? "bg-white text-orange-500" : "bg-white/10 text-gray-400"
+                      }`}>
+                        {referralData.stats.friendsCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tab content */}
+            <AnimatePresence mode="wait">
+              {activeTab === "invite" && (
+                <motion.div
+                  key="invite"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-6"
+                >
+                  {referralData?.invitedBy && (
+                    <div className="bg-orange-500/5 border border-orange-500/20 rounded-2xl p-4 flex items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                      <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(234,88,12,0.15)]">
+                        <Award className="w-5 h-5 text-orange-500" />
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-black uppercase tracking-widest text-orange-500/80">
+                          Вас пригласил(а)
+                        </div>
+                        <div className="text-sm font-black text-white mt-0.5">
+                          {referralData.invitedBy.fullName}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Share Link Card */}
+                  <div className="bg-black/40 border border-white/5 rounded-2xl p-5 space-y-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                      Твоя ссылка для приглашения
+                    </div>
+                    <div className="flex items-center gap-3 bg-black/60 rounded-xl p-3 border border-white/5">
+                      <input
+                        type="text"
+                        readOnly
+                        value={
+                          typeof window !== "undefined"
+                            ? `${window.location.origin}/promo/login?ref=${referralData.referralCode}`
+                            : `.../promo/login?ref=${referralData.referralCode}`
+                        }
+                        className="bg-transparent flex-1 outline-none text-xs font-mono text-gray-400 truncate"
+                      />
+                      <button
+                        onClick={handleCopyLink}
+                        className={`px-4 py-2 rounded-lg font-black text-xs uppercase transition-all active:scale-95 shrink-0 ${
+                          copied
+                            ? "bg-emerald-500 text-white"
+                            : "bg-orange-500 hover:bg-orange-600 text-white"
+                        }`}
+                      >
+                        {copied ? (
+                          <div className="flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Коп.
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <Copy className="w-3.5 h-3.5" /> Коп.
+                          </div>
+                        )}
+                      </button>
+                    </div>
+                    <div className="text-center text-[10px] text-gray-600 font-bold uppercase tracking-wider">
+                      Код приглашения: <span className="text-orange-500/80 font-mono tracking-normal">{referralData.referralCode}</span>
+                    </div>
+                  </div>
+
+                  {/* Program Rules */}
+                  <div className="space-y-4">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                      Условия программы
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className="flex gap-4 bg-white/5 border border-white/5 rounded-2xl p-4">
+                        <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center shrink-0">
+                          <Wallet className="w-5 h-5 text-orange-500" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black uppercase tracking-wide text-white">
+                            {referralData.settings.recurring_percent || 10}% от пополнений
+                          </div>
+                          <p className="text-[10px] text-gray-500 font-bold mt-1 leading-relaxed">
+                            Получай постоянный кэшбек на бонусный баланс от каждого пополнения приглашенного друга.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-4 bg-white/5 border border-white/5 rounded-2xl p-4">
+                        <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center shrink-0">
+                          <Ticket className="w-5 h-5 text-orange-500" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-black uppercase tracking-wide text-white">
+                            +{referralData.settings.fixed_reward_tickets || 5} билетов разово
+                          </div>
+                          <p className="text-[10px] text-gray-500 font-bold mt-1 leading-relaxed">
+                            Начисляется в личный кабинет, когда суммарные депозиты друга достигают {referralData.settings.threshold || 1000} ₽.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {activeTab === "friends" && (
+                <motion.div
+                  key="friends"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-4"
+                >
+                  <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                    Приглашенные друзья ({referralData.referredFriends.length})
+                  </div>
+                  {referralData.referredFriends.length === 0 ? (
+                    <div className="bg-black/20 border border-white/5 rounded-2xl p-6 text-center text-gray-500 text-xs font-bold uppercase tracking-wider">
+                      У тебя пока нет рефералов. Отправь ссылку другу, чтобы начать получать бонусы!
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                      {referralData.referredFriends.map((friend: any) => {
+                        const threshold = parseFloat(referralData.settings.threshold || "1000");
+                        const progressPercent = Math.min(100, (friend.totalReferredDeposits / threshold) * 100);
+                        const isReached = friend.status === "threshold_reached" || friend.totalReferredDeposits >= threshold;
+
+                        return (
+                          <div
+                            key={friend.id}
+                            className="bg-black/30 border border-white/5 rounded-2xl p-4 space-y-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 bg-white/5 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">
+                                  {friend.fullName[0]?.toUpperCase() || "?"}
+                                </div>
+                                <div className="text-xs font-black uppercase tracking-wide text-white">
+                                  {friend.fullName}
+                                </div>
+                              </div>
+                              <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                isReached
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  : "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                              }`}>
+                                {isReached ? "Условия выполнены" : "В процессе"}
+                              </span>
+                            </div>
+
+                            {/* Progress bar */}
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-[9px] font-bold text-gray-500 uppercase tracking-widest">
+                                <span>Пополнения друга:</span>
+                                <span className={isReached ? "text-emerald-400" : "text-gray-400"}>
+                                  {Math.floor(friend.totalReferredDeposits)} / {threshold} ₽
+                                </span>
+                              </div>
+                              <div className="w-full bg-black/60 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    isReached ? "bg-emerald-500" : "bg-orange-500"
+                                  }`}
+                                  style={{ width: `${progressPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {activeTab === "history" && (
+                <motion.div
+                  key="history"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="space-y-4"
+                >
+                  <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                    История реферальных начислений
+                  </div>
+                  {referralData.history.length === 0 ? (
+                    <div className="bg-black/20 border border-white/5 rounded-2xl p-6 text-center text-gray-500 text-xs font-bold uppercase tracking-wider">
+                      История начислений пока пуста
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                      {referralData.history.map((item: any) => {
+                        const isFixed = item.type === "REFERRAL_FIXED_AWARD";
+                        return (
+                          <div
+                            key={item.id}
+                            className="bg-black/30 border border-white/5 rounded-2xl p-4 flex justify-between items-center"
+                          >
+                            <div className="space-y-1">
+                              <div className="text-xs font-black uppercase tracking-wide text-white">
+                                {isFixed ? "Разовый бонус" : `Комиссия ${item.percent}%`}
+                              </div>
+                              <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                                от друга: {item.friendName}
+                              </div>
+                              <div className="text-[9px] text-gray-600 font-bold">
+                                {new Date(item.createdAt).toLocaleDateString("ru-RU", {
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              {item.amount > 0 && (
+                                <div className="text-emerald-400 text-sm font-black italic">
+                                  +{Math.floor(item.amount)} БОН.
+                                </div>
+                              )}
+                              {item.tickets > 0 && (
+                                <div className="text-orange-500 text-sm font-black italic flex items-center justify-end gap-1">
+                                  +{item.tickets} БИЛ.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
 
         {/* Clubs List */}
         <div className="mb-6 flex items-center justify-between px-2">
@@ -388,6 +806,81 @@ export default function PromoProfile() {
                   )}
                 </button>
               </form>
+            </motion.div>
+          </>
+        )}
+
+        {/* iOS Installation Guide Modal */}
+        {showIOSGuide && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowIOSGuide(false)}
+              className="fixed inset-0 bg-black/80 backdrop-blur-md z-60"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[22rem] bg-[#151515] border border-white/10 rounded-[2.5rem] p-8 z-70 shadow-2xl text-center"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div className="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center">
+                  <Smartphone className="w-6 h-6 text-orange-500" />
+                </div>
+                <button
+                  onClick={() => setShowIOSGuide(false)}
+                  className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-gray-500 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <h2 className="text-2xl font-black uppercase italic tracking-tight mb-2 text-white text-left">
+                Установка на <span className="text-orange-500">iOS / Safari</span>
+              </h2>
+              <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-8 text-left leading-relaxed">
+                Добавьте приложение на экран «Домой» за пару простых шагов:
+              </p>
+
+              <div className="space-y-4 text-left mb-8">
+                <div className="flex items-start gap-4 bg-white/5 border border-white/5 rounded-2xl p-4">
+                  <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500 font-black text-sm shrink-0">
+                    1
+                  </div>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-white">
+                      Нажмите кнопку «Поделиться»
+                    </p>
+                    <p className="text-[10px] text-gray-500 font-bold mt-1">
+                      Она находится на нижней панели браузера Safari (иконка с вылетающей стрелкой <span className="text-orange-500">📤</span>)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4 bg-white/5 border border-white/5 rounded-2xl p-4">
+                  <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500 font-black text-sm shrink-0">
+                    2
+                  </div>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wide text-white">
+                      Выберите «На экран Домой»
+                    </p>
+                    <p className="text-[10px] text-gray-500 font-bold mt-1">
+                      Прокрутите меню вниз и выберите опцию «На экран „Домой“» или «Добавить на экран Домой» (<span className="text-orange-500">📱</span>)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowIOSGuide(false)}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 transition-all active:scale-95 shadow-[0_10px_20px_rgba(234,88,12,0.3)]"
+              >
+                ПОНЯТНО
+              </button>
             </motion.div>
           </>
         )}

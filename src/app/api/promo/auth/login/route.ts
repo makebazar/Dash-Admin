@@ -3,12 +3,13 @@ import { getClient } from "@/db";
 import { cookies } from "next/headers";
 import bcrypt from "bcrypt";
 import { normalizePhone } from "@/lib/phone-utils";
+import crypto from "crypto";
 
 export async function POST(request: Request) {
   let client;
   try {
     const body = await request.json().catch(() => ({}));
-    const { phoneNumber, pin, fullName, clubId } = body;
+    const { phoneNumber, pin, fullName, clubId, refCode } = body;
 
     if (!phoneNumber) {
       return NextResponse.json(
@@ -28,6 +29,22 @@ export async function POST(request: Request) {
     client = await getClient();
     await client.query("BEGIN");
 
+    let activeClubId = clubId;
+    if (!activeClubId && refCode) {
+      const referrerClubRes = await client.query(
+        `SELECT b.club_id 
+         FROM promo_player_balances b
+         JOIN promo_players p ON p.id = b.player_id
+         WHERE p.referral_code = $1
+         ORDER BY b.updated_at DESC
+         LIMIT 1`,
+        [String(refCode).trim()]
+      );
+      if (referrerClubRes.rowCount && referrerClubRes.rowCount > 0) {
+        activeClubId = referrerClubRes.rows[0].club_id;
+      }
+    }
+
     // 1. Find player by phone globally
     const playerResult = await client.query(
       `SELECT id, pin_hash, full_name FROM promo_players WHERE phone_number = $1`,
@@ -39,18 +56,20 @@ export async function POST(request: Request) {
 
     if (!playerResult.rowCount) {
       isNewUser = true;
-      if (!clubId) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "Для регистрации необходимо отсканировать QR-код в клубе" },
-          { status: 400 },
-        );
-      }
 
-      // New player registration
+      // New player registration check
       if (!fullName) {
         await client.query("ROLLBACK");
         return NextResponse.json({ requiresRegistration: true });
+      }
+
+      // If we are actually registering (have fullName), we must have a clubId
+      if (!activeClubId) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "Для регистрации необходимо ввести код клуба или отсканировать QR-код в клубе" },
+          { status: 400 },
+        );
       }
 
       if (!pin || String(pin).length < 4) {
@@ -62,14 +81,34 @@ export async function POST(request: Request) {
       }
 
       const pinHash = await bcrypt.hash(String(pin), 10);
+      const selfReferralCode = "INV-" + crypto.randomBytes(3).toString("hex").toUpperCase();
 
       try {
         const newUser = await client.query(
-          `INSERT INTO promo_players (phone_number, full_name, pin_hash)
-                     VALUES ($1, $2, $3) RETURNING id`,
-          [normalizedPhone, fullName, pinHash],
+          `INSERT INTO promo_players (phone_number, full_name, pin_hash, referral_code)
+                      VALUES ($1, $2, $3, $4) RETURNING id`,
+          [normalizedPhone, fullName, pinHash, selfReferralCode],
         );
         playerId = newUser.rows[0].id;
+
+        // Bind referral code if provided
+        if (refCode) {
+          const referrerRes = await client.query(
+            `SELECT id FROM promo_players WHERE referral_code = $1`,
+            [String(refCode).trim()]
+          );
+          if (referrerRes.rowCount && referrerRes.rowCount > 0) {
+            const referrerId = referrerRes.rows[0].id;
+            if (referrerId !== playerId) {
+              await client.query(
+                `INSERT INTO promo_referrals (referrer_id, referred_id, status)
+                 VALUES ($1, $2, 'registered')
+                 ON CONFLICT (referred_id) DO NOTHING`,
+                [referrerId, playerId]
+              );
+            }
+          }
+        }
       } catch (err: any) {
         if (err.code === "23505") {
           // Unique violation
@@ -120,11 +159,11 @@ export async function POST(request: Request) {
 
     let numericClubId;
 
-    if (clubId) {
+    if (activeClubId) {
       // Resolve clubId to internal numeric ID if it's a public_id or string ID
       const clubRes = await client.query(
         `SELECT id FROM clubs WHERE id::text = $1 OR UPPER(public_id) = UPPER($1)`,
-        [String(clubId)],
+        [String(activeClubId)],
       );
 
       if (clubRes.rowCount === 0) {
@@ -152,7 +191,7 @@ export async function POST(request: Request) {
 
     // 2. Ensure balance record exists for THIS club
     // (Club already verified if clubId was provided above, but we still need it for consistency or when clubId was NOT provided)
-    if (!clubId) {
+    if (!activeClubId) {
       const clubCheck = await client.query(
         "SELECT id FROM clubs WHERE id = $1",
         [numericClubId],

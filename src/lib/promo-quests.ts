@@ -57,14 +57,15 @@ export async function processReceiptEvent(
       today.setHours(0, 0, 0, 0);
 
       const serviceRes = await client.query(
-        `SELECT id FROM shift_sales
+        `SELECT id FROM promo_history
          WHERE player_id = $1::uuid
-           AND (rule_id = $2::int OR $2 IS NULL)
+           AND game_type = 'SERVICE_AWARD'
+           AND (result_data->>'rule_id' = $2::text OR $2 IS NULL)
            AND created_at >= $3
          LIMIT 1`,
         [
           playerId,
-          quest.target_service_id ? Number(quest.target_service_id) : null,
+          quest.target_service_id ? String(quest.target_service_id) : null,
           today,
         ],
       );
@@ -255,6 +256,98 @@ export async function processServiceAwardEvent(
   }
 }
 
+export function getWeekNumber(d: Date) {
+  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+/**
+ * Checks and resets player quests that have reached their cooldown/reset period.
+ * This is executed in real-time when the PWA fetches quests, and when triggers occur.
+ */
+export async function checkAndResetPlayerQuests(
+  client: PoolClient,
+  clubId: number | string,
+  playerId: string,
+) {
+  const res = await client.query(
+    `SELECT
+       pq.id as player_quest_id,
+       pq.current_progress,
+       pq.status,
+       pq.period_start,
+       pq.completed_at,
+       pq.claimed_at,
+       q.id as quest_id,
+       q.reset_period,
+       q.reset_hours,
+       COALESCE(c.timezone, 'Europe/Moscow') as timezone
+     FROM promo_player_quests pq
+     JOIN promo_quests q ON pq.quest_id = q.id
+     JOIN clubs c ON c.id = pq.club_id
+     WHERE pq.player_id = $1::uuid
+       AND pq.club_id = $2::int
+       AND q.reset_period != 'none'
+       AND pq.status IN ('completed', 'claimed')`,
+    [playerId, clubId],
+  );
+
+  const now = new Date();
+
+  for (const row of res.rows) {
+    let needsReset = false;
+    const periodStart = new Date(row.period_start);
+    
+    // Determine the base time for cooldown. If completed_at exists, use it. Otherwise claimed_at, otherwise period_start
+    const completedTime = row.completed_at ? new Date(row.completed_at) : null;
+    const claimedTime = row.claimed_at ? new Date(row.claimed_at) : null;
+    const baseCooldownTime = claimedTime || completedTime || periodStart;
+
+    if (row.reset_period === "always") {
+      needsReset = true;
+    } else if (row.reset_period === "hours" && row.reset_hours) {
+      const diffMs = now.getTime() - baseCooldownTime.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+      if (diffHours >= row.reset_hours) {
+        needsReset = true;
+      }
+    } else if (row.reset_period === "daily") {
+      const tz = row.timezone;
+      const nowStr = now.toLocaleDateString("en-US", { timeZone: tz });
+      const startStr = periodStart.toLocaleDateString("en-US", { timeZone: tz });
+      if (nowStr !== startStr) {
+        needsReset = true;
+      }
+    } else if (row.reset_period === "weekly") {
+      const startWeek = getWeekNumber(periodStart);
+      const nowWeek = getWeekNumber(now);
+      if (startWeek !== nowWeek || periodStart.getFullYear() !== now.getFullYear()) {
+        needsReset = true;
+      }
+    } else if (row.reset_period === "monthly") {
+      if (periodStart.getMonth() !== now.getMonth() || periodStart.getFullYear() !== now.getFullYear()) {
+        needsReset = true;
+      }
+    }
+
+    if (needsReset) {
+      await client.query(
+        `UPDATE promo_player_quests
+         SET current_progress = 0,
+             status = 'active',
+             completed_at = NULL,
+             claimed_at = NULL,
+             verification_photo_url = NULL,
+             period_start = NOW()
+         WHERE id = $1::uuid`,
+        [row.player_quest_id],
+      );
+    }
+  }
+}
+
 /**
  * Helper to fetch active quests that the player hasn't completed yet.
  */
@@ -263,9 +356,12 @@ async function getActiveQuestsForPlayer(
   clubId: number | string,
   playerId: string,
 ) {
+  // First, check and reset any completed/claimed recurring quests
+  await checkAndResetPlayerQuests(client, clubId, playerId);
+
   // We need to fetch quests that are active in the club,
   // and join with player progress to ensure they aren't already completed/claimed.
-  // If the player doesn't have a progress row yet, we create it dynamically or just treat progress as 0.
+  // If the player doesn't have a progress row yet, we treat progress as 0.
   const res = await client.query(
     `SELECT
        q.id as quest_id,
@@ -281,7 +377,8 @@ async function getActiveQuestsForPlayer(
        pq.id as player_quest_id,
        pq.period_start,
        q.reset_period,
-       q.min_level
+       q.min_level,
+       q.target_service_id
        FROM promo_quests q
        LEFT JOIN promo_player_quests pq ON pq.quest_id = q.id AND pq.player_id = $1::uuid
        JOIN promo_player_balances pb ON pb.player_id = $1::uuid AND pb.club_id = $2::int
@@ -295,78 +392,14 @@ async function getActiveQuestsForPlayer(
        ) AS current_lvl ON TRUE
        WHERE q.club_id = $2::int
          AND q.is_active = TRUE
-         AND (pq.id IS NULL OR pq.status = 'active' OR pq.status = 'pending_verification' OR (q.reset_period != 'none' AND (pq.status = 'completed' OR pq.status = 'claimed')))
+         AND (pq.id IS NULL OR pq.status = 'active' OR pq.status = 'pending_verification')
          AND q.min_level <= COALESCE(current_lvl.level_number, 1)
          AND (q.available_days IS NULL OR (EXTRACT(DOW FROM timezone(COALESCE(c.timezone, 'Europe/Moscow'), now()))) = ANY(q.available_days))
          AND (q.time_start IS NULL OR (timezone(COALESCE(c.timezone, 'Europe/Moscow'), now()))::TIME >= q.time_start)
          AND (q.time_end IS NULL OR (timezone(COALESCE(c.timezone, 'Europe/Moscow'), now()))::TIME <= q.time_end)`,
     [playerId, clubId],
   );
-  const quests = res.rows;
-
-  // Apply reset logic
-  for (const quest of quests) {
-    if (quest.player_quest_id && quest.reset_period !== "none") {
-      const periodStart = new Date(quest.period_start);
-      const now = new Date();
-      let needsReset = false;
-
-      if (quest.reset_period === "always") {
-        needsReset = true;
-      } else if (quest.reset_period === "hours" && quest.reset_hours) {
-        const diffMs = now.getTime() - periodStart.getTime();
-        const diffHours = diffMs / (1000 * 60 * 60);
-        if (diffHours >= quest.reset_hours) needsReset = true;
-      } else if (quest.reset_period === "daily") {
-        if (
-          periodStart.getDate() !== now.getDate() ||
-          periodStart.getMonth() !== now.getMonth() ||
-          periodStart.getFullYear() !== now.getFullYear()
-        )
-          needsReset = true;
-      } else if (quest.reset_period === "weekly") {
-        // Check if different week
-        const startWeek = getWeekNumber(periodStart);
-        const nowWeek = getWeekNumber(now);
-        if (
-          startWeek !== nowWeek ||
-          periodStart.getFullYear() !== now.getFullYear()
-        )
-          needsReset = true;
-      } else if (quest.reset_period === "monthly") {
-        if (
-          periodStart.getMonth() !== now.getMonth() ||
-          periodStart.getFullYear() !== now.getFullYear()
-        )
-          needsReset = true;
-      }
-
-      if (needsReset) {
-        await client.query(
-          `UPDATE promo_player_quests
-           SET current_progress = 0,
-               status = 'active',
-               completed_at = NULL,
-               claimed_at = NULL,
-               verification_photo_url = NULL,
-               period_start = NOW()
-           WHERE id = $1::uuid`,
-          [quest.player_quest_id],
-        );
-        quest.current_progress = 0;
-        quest.status = "active";
-      }
-    }
-  }
-
-  return quests;
-}
-
-function getWeekNumber(d: Date) {
-  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return res.rows;
 }
 /**
  * Increments progress and handles quest completion.

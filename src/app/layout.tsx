@@ -45,6 +45,29 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         {children}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(
+                    function(reg) {
+                      console.log('SW registered:', reg.scope);
+                    },
+                    function(err) {
+                      console.log('SW registration failed:', err);
+                    }
+                  );
+                });
+              }
+              window.addEventListener('beforeinstallprompt', function(e) {
+                e.preventDefault();
+                window.deferredPrompt = e;
+                window.dispatchEvent(new CustomEvent('pwa-install-prompt-available'));
+              });
+            `,
+          }}
+        />
       </body>
     </html>
   );
