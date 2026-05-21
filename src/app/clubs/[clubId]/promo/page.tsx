@@ -15,6 +15,7 @@ import {
   Target,
   CheckCircle2,
   ShoppingCart,
+  Users,
 } from "lucide-react";
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -32,6 +33,7 @@ import { BattlePassTab } from "@/app/clubs/[clubId]/promo/_components/BattlePass
 import { ServicesTab } from "@/app/clubs/[clubId]/promo/_components/ServicesTab";
 import { AccrualTab } from "@/app/clubs/[clubId]/promo/_components/AccrualTab";
 import { BarTab } from "@/app/clubs/[clubId]/promo/_components/BarTab";
+import { ReferralsTab } from "@/app/clubs/[clubId]/promo/_components/ReferralsTab";
 import {
   GamesTab,
   type Prize,
@@ -57,6 +59,7 @@ export default function PromotionsPage() {
     | "verification"
     | "battlepass"
     | "accrual"
+    | "referrals"
   >("queue");
 
   const [settings, setSettings] = useState<any>(null);
@@ -244,6 +247,12 @@ export default function PromotionsPage() {
                 color: "emerald",
               },
               {
+                id: "referrals",
+                label: "Рефералы",
+                icon: Users,
+                color: "orange",
+              },
+              {
                 id: "general",
                 label: "Настройки",
                 icon: Settings,
@@ -340,6 +349,9 @@ export default function PromotionsPage() {
               products={products}
               categories={categories}
             />
+          )}
+          {activeTab === "referrals" && (
+            <ReferralsTab settings={settings} saveSettings={saveSettings} />
           )}
         </AnimatePresence>
       </div>

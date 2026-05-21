@@ -5807,6 +5807,129 @@ export async function bulkAccruePromoSafe(
         data.player_id,
         data.topup_amount,
       );
+
+      // Referral Accruals
+      const refCheck = await client.query(
+        `SELECT id, referrer_id, status, total_referred_deposits 
+         FROM promo_referrals 
+         WHERE referred_id = $1::uuid`,
+        [data.player_id]
+      );
+
+      if (refCheck.rowCount && refCheck.rowCount > 0) {
+        const referral = refCheck.rows[0];
+        const referrerId = referral.referrer_id;
+        const currentStatus = referral.status;
+        const prevDeposits = parseFloat(referral.total_referred_deposits || "0");
+        const newDeposits = prevDeposits + data.topup_amount;
+
+        // Update the accumulated deposits for this referred user
+        await client.query(
+          `UPDATE promo_referrals 
+           SET total_referred_deposits = $1
+           WHERE referred_id = $2::uuid`,
+          [newDeposits, data.player_id]
+        );
+
+        const refSettings = settings.referral_settings || {
+          enabled: true,
+          threshold: 1000.0,
+          fixed_reward_tickets: 5,
+          fixed_reward_bonus: 0.0,
+          recurring_percent: 10.0,
+        };
+
+        if (refSettings.enabled !== false) {
+          // Ensure referrer balance record exists
+          await client.query(
+            `INSERT INTO promo_player_balances (player_id, club_id, bonus_balance)
+             VALUES ($1::uuid, $2::int, 0)
+             ON CONFLICT (player_id, club_id) DO NOTHING`,
+            [referrerId, clubId]
+          );
+
+          // One-time threshold reward check
+          const threshold = parseFloat(refSettings.threshold ?? "1000");
+          const fixedRewardTickets = parseInt(refSettings.fixed_reward_tickets ?? "5");
+          const fixedRewardBonus = parseFloat(refSettings.fixed_reward_bonus ?? "0");
+
+          if (currentStatus === "registered" && newDeposits >= threshold) {
+            // Update status to threshold_reached
+            await client.query(
+              `UPDATE promo_referrals 
+               SET status = 'threshold_reached'
+               WHERE referred_id = $1::uuid`,
+              [data.player_id]
+            );
+
+            // Record fixed reward event
+            const refFixedHistoryRes = await client.query(
+              `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+               VALUES ($1::uuid, $2::int, 'REFERRAL_FIXED_AWARD', $3::jsonb)
+               RETURNING id`,
+              [
+                referrerId,
+                clubId,
+                JSON.stringify({
+                  referred_friend_id: data.player_id,
+                  tickets: fixedRewardTickets,
+                  bonus_amount: fixedRewardBonus,
+                }),
+              ]
+            );
+
+            // Award tickets
+            if (fixedRewardTickets > 0) {
+              await client.query(
+                `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at, history_id)
+                 SELECT $1::uuid, $2::int, 'available', 'referral_fixed_award', NULL, $3::uuid
+                 FROM generate_series(1, $4)`,
+                [referrerId, clubId, refFixedHistoryRes.rows[0].id, fixedRewardTickets]
+              );
+            }
+
+            // Award bonus balance
+            if (fixedRewardBonus > 0) {
+              await client.query(
+                `UPDATE promo_player_balances
+                 SET bonus_balance = bonus_balance + $1, updated_at = NOW()
+                 WHERE player_id = $2 AND club_id = $3`,
+                [fixedRewardBonus, referrerId, clubId]
+              );
+            }
+          }
+
+          // Recurring percentage award
+          const recurringPercent = parseFloat(refSettings.recurring_percent ?? "10");
+          if (recurringPercent > 0) {
+            const percentBonus = Number((data.topup_amount * (recurringPercent / 100)).toFixed(2));
+            if (percentBonus > 0) {
+              const refPercentHistoryRes = await client.query(
+                `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+                 VALUES ($1::uuid, $2::int, 'REFERRAL_PERCENT_AWARD', $3::jsonb)
+                 RETURNING id`,
+                [
+                  referrerId,
+                  clubId,
+                  JSON.stringify({
+                    referred_friend_id: data.player_id,
+                    deposit_amount: data.topup_amount,
+                    bonus_amount: percentBonus,
+                    percent: recurringPercent,
+                  }),
+                ]
+              );
+
+              await client.query(
+                `UPDATE promo_player_balances
+                 SET bonus_balance = bonus_balance + $1, updated_at = NOW()
+                 WHERE player_id = $2 AND club_id = $3`,
+                [percentBonus, referrerId, clubId]
+              );
+            }
+          }
+        }
+      }
     }
 
     // 4. Handle Service Rules
