@@ -64,16 +64,24 @@ export async function GET(
 
     const effectiveEquipmentAssigneeSql = `
             CASE
-                WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE THEN e.assigned_user_id
                 ELSE NULL
             END
         `;
 
     const effectiveTaskAssigneeSql = `
-            COALESCE(
-                mt.assigned_user_id,
-                ${effectiveEquipmentAssigneeSql}
-            )
+            CASE
+                WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE THEN mt.assigned_user_id
+                ELSE ${effectiveEquipmentAssigneeSql}
+            END
+        `;
+
+    const effectiveStatusSql = `
+            CASE
+                WHEN mt.status = 'IN_PROGRESS' AND (mt.assigned_user_id IS NOT NULL AND ce_task.is_active = FALSE) THEN
+                    CASE WHEN mt.verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
+                ELSE mt.status
+            END
         `;
 
     let sql = `
@@ -82,7 +90,7 @@ export async function GET(
                 mt.equipment_id,
                 mt.session_id,
                 mt.task_type,
-                mt.status,
+                ${effectiveStatusSql} as status,
                 mt.due_date,
                 mt.completed_at,
                 mt.completed_by,
@@ -112,7 +120,11 @@ export async function GET(
                 w.id as workstation_id,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
-                COALESCE(u.full_name, eu.full_name) as assigned_to_name,
+                CASE 
+                    WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE THEN u.full_name
+                    WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE THEN eu.full_name
+                    ELSE NULL
+                END as assigned_to_name,
                 cu.full_name as completed_by_name,
                 cu_v.full_name as verified_by_name,
                 (
@@ -136,6 +148,8 @@ export async function GET(
             LEFT JOIN users wu ON w.assigned_user_id = wu.id
             LEFT JOIN users cu ON mt.completed_by = cu.id
             LEFT JOIN users cu_v ON mt.verified_by = cu_v.id
+            LEFT JOIN club_employees ce_task ON ce_task.user_id = mt.assigned_user_id AND ce_task.club_id = e.club_id
+            LEFT JOIN club_employees ce_equip ON ce_equip.user_id = e.assigned_user_id AND ce_equip.club_id = e.club_id
             WHERE e.club_id = $1
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
               AND e.parent_equipment_id IS NULL
@@ -161,10 +175,10 @@ export async function GET(
     if (status) {
       const statusList = status.split(",");
       if (statusList.length > 1) {
-        sql += ` AND mt.status = ANY($${paramIndex})`;
+        sql += ` AND ${effectiveStatusSql} = ANY($${paramIndex})`;
         queryParams.push(statusList);
       } else {
-        sql += ` AND mt.status = $${paramIndex}`;
+        sql += ` AND ${effectiveStatusSql} = $${paramIndex}`;
         queryParams.push(status);
       }
       paramIndex++;
@@ -190,8 +204,8 @@ export async function GET(
       if (includeOverdue) {
         sql += ` AND (
                     mt.due_date >= $${paramIndex}
-                    OR (mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $${paramIndex})
-                    OR mt.status IN ('IN_PROGRESS', 'REWORK')
+                    OR (${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $${paramIndex})
+                    OR ${effectiveStatusSql} IN ('IN_PROGRESS', 'REWORK')
                 )`;
         queryParams.push(dateFrom);
         paramIndex++;
@@ -204,7 +218,7 @@ export async function GET(
 
     if (dateTo) {
       if (includeOverdue) {
-        sql += ` AND (mt.due_date <= $${paramIndex} OR mt.status IN ('IN_PROGRESS', 'REWORK'))`;
+        sql += ` AND (mt.due_date <= $${paramIndex} OR ${effectiveStatusSql} IN ('IN_PROGRESS', 'REWORK'))`;
       } else {
         sql += ` AND mt.due_date <= $${paramIndex}`;
       }
@@ -268,7 +282,7 @@ export async function GET(
       if (includeOverdue) {
         statsConditions.push(`(
                     mt.due_date >= $${statsParamIndex}
-                    OR (mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $${statsParamIndex})
+                    OR (${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $${statsParamIndex})
                     OR (
                         mt.status = 'COMPLETED'
                         AND mt.completed_at >= $${statsParamIndex}::date
@@ -290,13 +304,13 @@ export async function GET(
 
     const statsResult = await query(
       `SELECT
-                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $2) as overdue_count,
-                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date = $2) as due_today_count,
-                COUNT(*) FILTER (WHERE mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date > $2) as upcoming_count,
-                COUNT(*) FILTER (WHERE mt.status IN ('IN_PROGRESS', 'REWORK')) as in_progress_count,
-                COUNT(*) FILTER (WHERE mt.status = 'REWORK' OR (mt.status = 'IN_PROGRESS' AND mt.verification_status = 'REJECTED')) as rework_count,
+                COUNT(*) FILTER (WHERE ${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $2) as overdue_count,
+                COUNT(*) FILTER (WHERE ${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date = $2) as due_today_count,
+                COUNT(*) FILTER (WHERE ${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date > $2) as upcoming_count,
+                COUNT(*) FILTER (WHERE ${effectiveStatusSql} IN ('IN_PROGRESS', 'REWORK')) as in_progress_count,
+                COUNT(*) FILTER (WHERE ${effectiveStatusSql} = 'REWORK' OR (${effectiveStatusSql} = 'IN_PROGRESS' AND mt.verification_status = 'REJECTED')) as rework_count,
                 COUNT(*) FILTER (
-                    WHERE (mt.status = 'REWORK' OR (mt.status = 'IN_PROGRESS' AND mt.verification_status = 'REJECTED'))
+                    WHERE (${effectiveStatusSql} = 'REWORK' OR (${effectiveStatusSql} = 'IN_PROGRESS' AND mt.verification_status = 'REJECTED'))
                       AND COALESCE(mt.verified_at::date, CURRENT_DATE) <= CURRENT_DATE - 3
                 ) as stale_rework_count,
                 COUNT(*) FILTER (
@@ -324,6 +338,8 @@ export async function GET(
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
+            LEFT JOIN club_employees ce_task ON ce_task.user_id = mt.assigned_user_id AND ce_task.club_id = e.club_id
+            LEFT JOIN club_employees ce_equip ON ce_equip.user_id = e.assigned_user_id AND ce_equip.club_id = e.club_id
             WHERE ${statsConditions.join(" AND ")}`,
       statsParams,
     );

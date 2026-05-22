@@ -4116,7 +4116,7 @@ function getProcurementCandidate(
   } satisfies ProcurementCandidate;
 }
 
-export async function getSalesAnalytics(clubId: string, limit: number = 500) {
+export async function getSalesAnalytics(clubId: string, limit: number = 500, monthStr?: string) {
   await requireClubAccess(clubId);
   let preferredMetricKey: string | null = null;
   try {
@@ -4192,10 +4192,11 @@ export async function getSalesAnalytics(clubId: string, limit: number = 500) {
           AND sm.type IN ('SALE', 'RETURN')  -- Include both sales and returns
           AND COALESCE(sm.related_entity_type, '') != 'SHIFT_RECEIPT_VOID'
           AND (sr.id IS NULL OR sr.voided_at IS NULL)
+          AND ($4::text IS NULL OR TO_CHAR(sm.created_at, 'YYYY-MM') = $4::text)
         ORDER BY sm.created_at DESC
         LIMIT $2
     `,
-    [clubId, limit, preferredMetricKey],
+    [clubId, limit, preferredMetricKey, monthStr || null],
   );
   return res.rows;
 }

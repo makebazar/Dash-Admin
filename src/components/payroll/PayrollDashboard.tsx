@@ -2837,15 +2837,27 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 className="flex items-start justify-between gap-3"
                                               >
                                                 <div className="min-w-0">
-                                                  <span className="font-bold text-slate-900 wrap-break-word">
-                                                    {item.product_name}
-                                                  </span>
-                                                  {Number(item.quantity || 1) >
-                                                  1 ? (
-                                                    <span className="ml-1 text-muted-foreground">
-                                                      × {item.quantity}
+                                                  <div>
+                                                    <span className="font-bold text-slate-900 wrap-break-word">
+                                                      {item.product_name}
                                                     </span>
-                                                  ) : null}
+                                                    {Number(item.quantity || 1) >
+                                                    1 ? (
+                                                      <span className="ml-1 text-muted-foreground">
+                                                        × {item.quantity}
+                                                      </span>
+                                                    ) : null}
+                                                  </div>
+                                                  <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
+                                                    <span>Чек №{item.id}</span>
+                                                    <span className="w-1 h-1 rounded-full bg-slate-300"></span>
+                                                    <span>
+                                                      {new Date(item.date).toLocaleTimeString("ru-RU", {
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                      })}
+                                                    </span>
+                                                  </div>
                                                 </div>
                                                 <Button
                                                   variant="ghost"

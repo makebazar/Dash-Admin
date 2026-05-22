@@ -13,6 +13,7 @@ import {
   Calendar,
   ShoppingCart,
   Clock,
+  ChevronLeft,
   ChevronRight,
   Link,
   Unlink,
@@ -24,6 +25,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import React, { useState, useMemo, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -70,6 +72,7 @@ interface SalesTabProps {
   products: Product[];
   currentUserId: string;
   inventorySettings?: any;
+  currentMonth?: string;
 }
 
 export function SalesTab({
@@ -80,12 +83,47 @@ export function SalesTab({
   products,
   currentUserId,
   inventorySettings,
+  currentMonth,
 }: SalesTabProps) {
   const [expandedShifts, setExpandedShifts] = useState<Record<string, boolean>>(
     {},
   );
   const [isPending, startTransition] = useTransition();
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Determine current display month
+  const defaultMonth = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+  const displayMonth = currentMonth || defaultMonth;
+
+  const [yearStr, monthStr] = displayMonth.split("-");
+  const displayDate = useMemo(() => new Date(Number(yearStr), Number(monthStr) - 1), [yearStr, monthStr]);
+  const formattedMonth = useMemo(() => displayDate.toLocaleString("ru-RU", {
+    month: "long",
+    year: "numeric",
+  }), [displayDate]);
+  const capitalizedMonth = useMemo(() => formattedMonth.charAt(0).toUpperCase() + formattedMonth.slice(1), [formattedMonth]);
+
+  const navigateMonth = (direction: "prev" | "next") => {
+    const date = new Date(Number(yearStr), Number(monthStr) - 1);
+    if (direction === "prev") {
+      date.setMonth(date.getMonth() - 1);
+    } else {
+      date.setMonth(date.getMonth() + 1);
+    }
+    const newVal = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+    const newParams = new URLSearchParams(searchParams.toString());
+    newParams.set("month", newVal);
+    newParams.set("tab", "sales");
+    router.push(`${pathname}?${newParams.toString()}`, { scroll: false });
+  };
 
   // Редактирование
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -367,29 +405,203 @@ export function SalesTab({
 
   if (sales.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-card text-muted-foreground shadow-sm">
-        <ShoppingCart className="h-12 w-12 mb-4 text-slate-200" />
-        <p className="text-lg font-medium">Продаж пока нет</p>
-        <p className="text-sm">Они появятся после закрытия инвентаризаций.</p>
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-card p-4 rounded-xl border shadow-sm gap-4">
+          <div className="flex flex-col">
+            <h3 className="font-bold text-foreground">Управление продажами</h3>
+            <p className="text-xs text-muted-foreground">
+              Ручное добавление и корректировка истории
+            </p>
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto self-stretch sm:self-auto justify-between sm:justify-end">
+            {/* Month Picker */}
+            <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm w-44 h-9">
+                <button 
+                    onClick={() => navigateMonth('prev')}
+                    className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none"
+                >
+                    <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs font-bold text-slate-700 px-1 select-none whitespace-nowrap">
+                    {capitalizedMonth}
+                </span>
+                <button 
+                    onClick={() => navigateMonth('next')}
+                    className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none"
+                >
+                    <ChevronRight className="h-4 w-4" />
+                </button>
+            </div>
+            <Button
+              onClick={() => setIsAddDialogOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 h-9 text-xs"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Добавить продажу
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-card text-muted-foreground shadow-sm">
+          <ShoppingCart className="h-12 w-12 mb-4 text-slate-200" />
+          <p className="text-lg font-medium">Продаж пока нет</p>
+          <p className="text-sm">Они появятся после закрытия инвентаризаций.</p>
+        </div>
+
+        {/* Dialog for manual sale in case they want to add a sale when empty */}
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Добавить продажу вручную</DialogTitle>
+              <DialogDescription>
+                Создать запись о продаже/возврате товара вне кассового терминала
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="product">Товар</Label>
+                <Select
+                  value={newSale.product_id}
+                  onValueChange={(val) =>
+                    setNewSale((prev) => ({ ...prev, product_id: val }))
+                  }
+                >
+                  <SelectTrigger id="product">
+                    <SelectValue placeholder="Выберите товар" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-80">
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={p.id.toString()}>
+                        {p.name} ({p.current_stock} шт) · {Number(p.selling_price || 0).toLocaleString("ru-RU")} ₽
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="quantity">Количество</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    value={newSale.quantity}
+                    onChange={(e) =>
+                      setNewSale((prev) => ({ ...prev, quantity: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="warehouse">Склад списания</Label>
+                  <Select
+                    value={newSale.warehouse_id}
+                    onValueChange={(val) =>
+                      setNewSale((prev) => ({ ...prev, warehouse_id: val }))
+                    }
+                  >
+                    <SelectTrigger id="warehouse">
+                      <SelectValue placeholder="Склад" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses.map((w) => (
+                        <SelectItem key={w.id} value={w.id.toString()}>
+                          {w.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="shift">Привязать к смене</Label>
+                <Select
+                  value={newSale.shift_id}
+                  onValueChange={(val) =>
+                    setNewSale((prev) => ({ ...prev, shift_id: val }))
+                  }
+                >
+                  <SelectTrigger id="shift">
+                    <SelectValue placeholder="Смена" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    <SelectItem value="none">Без привязки к смене</SelectItem>
+                    {shifts.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.employee_name} ({new Date(s.check_in).toLocaleDateString("ru-RU")} #{s.id})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="notes">Примечание / Причина</Label>
+                <Input
+                  id="notes"
+                  placeholder="Например: Продажа за наличные, списано на инвентарь..."
+                  value={newSale.notes}
+                  onChange={(e) =>
+                    setNewSale((prev) => ({ ...prev, notes: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                Отмена
+              </Button>
+              <Button
+                onClick={handleCreateManualSale}
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={isPending}
+              >
+                {isPending && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                Добавить
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {Dialogs}
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center bg-card p-4 rounded-xl border shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-card p-4 rounded-xl border shadow-sm gap-4">
         <div className="flex flex-col">
           <h3 className="font-bold text-foreground">Управление продажами</h3>
           <p className="text-xs text-muted-foreground">
             Ручное добавление и корректировка истории
           </p>
         </div>
-        <Button
-          onClick={() => setIsAddDialogOpen(true)}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4 mr-2" /> Добавить продажу
-        </Button>
+        <div className="flex items-center gap-3 w-full sm:w-auto self-stretch sm:self-auto justify-between sm:justify-end">
+          {/* Month Picker */}
+          <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm w-44 h-9">
+              <button 
+                  onClick={() => navigateMonth('prev')}
+                  className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none"
+              >
+                  <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-xs font-bold text-slate-700 px-1 select-none whitespace-nowrap">
+                  {capitalizedMonth}
+              </span>
+              <button 
+                  onClick={() => navigateMonth('next')}
+                  className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-none"
+              >
+                  <ChevronRight className="h-4 w-4" />
+              </button>
+          </div>
+          <Button
+            onClick={() => setIsAddDialogOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 h-9 text-xs"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" /> Добавить продажу
+          </Button>
+        </div>
       </div>
 
       {/* Mass Actions Bar */}

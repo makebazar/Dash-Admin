@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
   require_notes_on_completion: false,
   block_desktop_access: false,
   instruction_step_order: "BEFORE_PHOTOS",
+  desktop_completion_mode: "QR",
 };
 
 export async function GET(
@@ -43,7 +44,8 @@ export async function GET(
                 require_notes_on_completion,
                 block_desktop_access,
                 instruction_step_order,
-                require_photos_on_completion, min_photos
+                require_photos_on_completion, min_photos,
+                desktop_completion_mode
              FROM club_maintenance_settings
              WHERE club_id = $1`,
       [clubId],
@@ -67,6 +69,7 @@ export async function GET(
       require_notes_on_completion: row.require_notes_on_completion === true,
       block_desktop_access: row.block_desktop_access === true,
       instruction_step_order: row.instruction_step_order || "BEFORE_PHOTOS",
+      desktop_completion_mode: row.desktop_completion_mode || "QR",
     });
   } catch (error) {
     console.error("Get Maintenance Settings Error:", error);
@@ -106,6 +109,7 @@ export async function PUT(
     const requireNotes = body.require_notes_on_completion === true;
     const blockDesktopAccess = body.block_desktop_access === true;
     const instructionStepOrder = body.instruction_step_order || "BEFORE_PHOTOS";
+    const desktopCompletionMode = body.desktop_completion_mode || "QR";
 
     const result = await query(
       `INSERT INTO club_maintenance_settings (
@@ -115,9 +119,10 @@ export async function PUT(
                 require_notes_on_completion,
                 block_desktop_access,
                 instruction_step_order,
+                desktop_completion_mode,
                 -- Keep legacy fields in sync
                 require_photos_on_completion, min_photos
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $4, $5)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $4, $5)
             ON CONFLICT (club_id) DO UPDATE SET
                 require_photo_before = EXCLUDED.require_photo_before,
                 min_photos_before = EXCLUDED.min_photos_before,
@@ -126,6 +131,7 @@ export async function PUT(
                 require_notes_on_completion = EXCLUDED.require_notes_on_completion,
                 block_desktop_access = EXCLUDED.block_desktop_access,
                 instruction_step_order = EXCLUDED.instruction_step_order,
+                desktop_completion_mode = EXCLUDED.desktop_completion_mode,
                 require_photos_on_completion = EXCLUDED.require_photo_after,
                 min_photos = EXCLUDED.min_photos_after,
                 updated_at = NOW()
@@ -139,6 +145,7 @@ export async function PUT(
         requireNotes,
         blockDesktopAccess,
         instructionStepOrder,
+        desktopCompletionMode,
       ],
     );
 
@@ -151,6 +158,7 @@ export async function PUT(
       require_notes_on_completion: row.require_notes_on_completion,
       block_desktop_access: row.block_desktop_access,
       instruction_step_order: row.instruction_step_order,
+      desktop_completion_mode: row.desktop_completion_mode,
     });
   } catch (error) {
     console.error("Update Maintenance Settings Error:", error);

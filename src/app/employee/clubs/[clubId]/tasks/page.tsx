@@ -18,6 +18,12 @@ import {
   Info,
   QrCode as QrIcon,
   Undo2,
+  Upload,
+  Trash2,
+  AlertTriangle,
+  Image as ImageIcon,
+  MessageSquare,
+  Wrench,
 } from "lucide-react";
 
 import { format } from "date-fns";
@@ -28,9 +34,17 @@ import {
   cn,
   formatDateKeyInTimezone,
   getMonthRangeInTimezone,
+  isLaundryEquipmentType,
+  optimizeFileBeforeUpload,
 } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { QRCode } from "@/components/qr/QRCode";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface MaintenanceTask {
   id: string;
@@ -110,6 +124,36 @@ function EmployeeTasksContent() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  // Modal completion mode state
+  const [maintenanceSettings, setMaintenanceSettings] = useState<any>(null);
+  const [selectedTaskForModal, setSelectedTaskForModal] = useState<string | null>(null);
+  const [modalTaskDetails, setModalTaskDetails] = useState<any>(null);
+  const [isModalDetailsLoading, setIsModalDetailsLoading] = useState(false);
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
+
+  // Form states
+  const [photosBefore, setPhotosBefore] = useState<string[]>([]);
+  const [photosAfter, setPhotosAfter] = useState<string[]>([]);
+  const [isUploadingBefore, setIsUploadingBefore] = useState(false);
+  const [isUploadingAfter, setIsUploadingAfter] = useState(false);
+  const [completionNotes, setCompletionNotes] = useState("");
+  const [completionStatus, setCompletionStatus] = useState<"OK" | "ISSUE" | "LAUNDRY">("OK");
+  const [issueTitle, setIssueTitle] = useState("");
+  const [issueDescription, setIssueDescription] = useState("");
+
+  // Toast notification state
+  const [successToast, setSuccessToast] = useState<{ show: boolean; message: string }>({
+    show: false,
+    message: "",
+  });
+
+  const showSuccessToast = (message: string) => {
+    setSuccessToast({ show: true, message });
+    setTimeout(() => {
+      setSuccessToast((prev) => ({ ...prev, show: false }));
+    }, 4000);
+  };
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
@@ -284,13 +328,247 @@ function EmployeeTasksContent() {
     fetchData();
   }, [fetchData, clubTimezone]);
 
+  // Load maintenance settings
+  useEffect(() => {
+    if (!clubId) return;
+    fetch(`/api/clubs/${clubId}/settings/maintenance`)
+      .then((res) => res.json())
+      .then((data) => {
+        setMaintenanceSettings(data);
+      })
+      .catch((err) => console.error("Error fetching maintenance settings:", err));
+  }, [clubId]);
+
+  const isModalMode = useMemo(() => {
+    return maintenanceSettings?.desktop_completion_mode === "MODAL";
+  }, [maintenanceSettings]);
+
+  // Load single task details when selected for modal
+  useEffect(() => {
+    if (!selectedTaskForModal) {
+      setModalTaskDetails(null);
+      setPhotosBefore([]);
+      setPhotosAfter([]);
+      setCompletionNotes("");
+      setCompletionStatus("OK");
+      setIssueTitle("");
+      setIssueDescription("");
+      return;
+    }
+
+    const fetchDetails = async () => {
+      setIsModalDetailsLoading(true);
+      try {
+        const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${selectedTaskForModal}`);
+        if (res.ok) {
+          const data = await res.json();
+          setModalTaskDetails(data);
+          setPhotosBefore(data.task.photos_before || []);
+          setPhotosAfter(data.task.photos_after || []);
+          setCompletionNotes(data.task.notes || "");
+        } else {
+          alert("Не удалось загрузить детали задачи");
+          setSelectedTaskForModal(null);
+        }
+      } catch (err) {
+        console.error(err);
+        setSelectedTaskForModal(null);
+      } finally {
+        setIsModalDetailsLoading(false);
+      }
+    };
+
+    fetchDetails();
+  }, [selectedTaskForModal, clubId]);
+
+  // Handle file uploads with image optimization
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "BEFORE" | "AFTER") => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
+
+    if (type === "BEFORE") setIsUploadingBefore(true);
+    else setIsUploadingAfter(true);
+
+    try {
+      const urls = await Promise.all(
+        files.map(async (file) => {
+          const optimized = await optimizeFileBeforeUpload(file, { maxDimension: 1200, quality: 0.82 });
+          const formData = new FormData();
+          formData.append("file", optimized);
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            return data.url;
+          }
+          return null;
+        })
+      );
+
+      const validUrls = urls.filter(Boolean) as string[];
+      if (type === "BEFORE") {
+        setPhotosBefore((prev) => [...prev, ...validUrls]);
+      } else {
+        setPhotosAfter((prev) => [...prev, ...validUrls]);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка при загрузке фото");
+    } finally {
+      if (type === "BEFORE") setIsUploadingBefore(false);
+      else setIsUploadingAfter(false);
+    }
+  };
+
+  const removePhoto = (index: number, type: "BEFORE" | "AFTER") => {
+    if (type === "BEFORE") {
+      setPhotosBefore((prev) => prev.filter((_, i) => i !== index));
+    } else {
+      setPhotosAfter((prev) => prev.filter((_, i) => i !== index));
+    }
+  };
+
+  // Start task in modal (IN_PROGRESS)
+  const handleStartTask = async () => {
+    if (!selectedTaskForModal) return;
+    setIsModalDetailsLoading(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${selectedTaskForModal}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "IN_PROGRESS" }),
+      });
+      if (res.ok) {
+        // Fetch updated details
+        const detailsRes = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${selectedTaskForModal}`);
+        if (detailsRes.ok) {
+          const data = await detailsRes.json();
+          setModalTaskDetails(data);
+          setPhotosBefore(data.task.photos_before || []);
+          setPhotosAfter(data.task.photos_after || []);
+        }
+        fetchData(false);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Не удалось начать обслуживание");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка при начале обслуживания");
+    } finally {
+      setIsModalDetailsLoading(false);
+    }
+  };
+
+  // Complete task in modal (COMPLETED)
+  const handleCompleteTask = async () => {
+    if (!selectedTaskForModal || !modalTaskDetails) return;
+
+    const taskSettings = modalTaskDetails.settings;
+    
+    // Validations
+    if (taskSettings.require_photo_before && photosBefore.length < taskSettings.min_photos_before) {
+      alert(`Необходимо приложить фото "ДО" (минимум: ${taskSettings.min_photos_before})`);
+      return;
+    }
+
+    if (taskSettings.require_photo_after && photosAfter.length < taskSettings.min_photos_after) {
+      alert(`Необходимо приложить фото "ПОСЛЕ" (минимум: ${taskSettings.min_photos_after})`);
+      return;
+    }
+
+    if (taskSettings.require_notes_on_completion && !completionNotes.trim()) {
+      alert("Комментарий к обслуживанию обязателен");
+      return;
+    }
+
+    if ((completionStatus === "ISSUE" || completionStatus === "LAUNDRY") && !issueTitle.trim()) {
+      alert("Необходимо указать название инцидента / причину стирки");
+      return;
+    }
+
+    setIsSubmittingTask(true);
+    try {
+      // 1. Submit completion
+      const completeRes = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${selectedTaskForModal}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          photos_before: photosBefore,
+          photos_after: photosAfter,
+          photos: [...photosBefore, ...photosAfter], // ensure standard photo lists are filled
+          notes: completionNotes,
+        }),
+      });
+
+      if (!completeRes.ok) {
+        const errData = await completeRes.json();
+        throw new Error(errData.error || "Ошибка при завершении задачи");
+      }
+
+      // 2. Submit issue or laundry if selected
+      const equipmentId = modalTaskDetails.equipment.id;
+      if (completionStatus === "ISSUE") {
+        const issueRes = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}/issues`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: issueTitle,
+            description: issueDescription || null,
+            severity: "MEDIUM",
+            maintenance_task_id: selectedTaskForModal,
+          }),
+        });
+        if (!issueRes.ok) {
+          console.error("Failed to create issue automatically");
+        }
+      } else if (completionStatus === "LAUNDRY") {
+        const laundryRes = await fetch(`/api/clubs/${clubId}/laundry`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            equipment_id: equipmentId,
+            maintenance_task_id: selectedTaskForModal,
+            title: issueTitle,
+            description: issueDescription || null,
+            photos: photosAfter,
+            source: "EMPLOYEE_SERVICE",
+          }),
+        });
+        if (!laundryRes.ok) {
+          console.error("Failed to create laundry request automatically");
+        }
+      }
+
+      // Successful completion
+      setSelectedTaskForModal(null);
+      fetchData(false);
+      if (isModalMode) {
+        showSuccessToast("Обслуживание успешно завершено!");
+      } else {
+        alert("Обслуживание успешно завершено!");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Ошибка при завершении обслуживания");
+    } finally {
+      setIsSubmittingTask(false);
+    }
+  };
+
   useEffect(() => {
     if (isSuccess) {
-      alert("Обслуживание успешно завершено");
+      if (isModalMode) {
+        showSuccessToast("Обслуживание успешно завершено");
+      } else {
+        alert("Обслуживание успешно завершено");
+      }
       setSelectedTaskIds([]);
       setSessionId(null);
     }
-  }, [isSuccess]);
+  }, [isSuccess, isModalMode]);
 
   const createSession = async (taskIds: string[]) => {
     if (taskIds.length === 0) return;
@@ -496,9 +774,14 @@ function EmployeeTasksContent() {
           showAsCompleted && "bg-accent/30",
           isRejected && "ring-1 ring-rose-500/30 bg-rose-500/[0.02]",
         )}
-        onClick={() =>
-          !isFree && !showAsCompleted && toggleTaskSelection(task.id)
-        }
+        onClick={() => {
+          if (isFree || showAsCompleted) return;
+          if (isModalMode) {
+            setSelectedTaskForModal(task.id);
+          } else {
+            toggleTaskSelection(task.id);
+          }
+        }}
       >
         <CardContent className="p-0">
           <div className="flex items-stretch min-h-[72px]">
@@ -533,7 +816,8 @@ function EmployeeTasksContent() {
                   {!isMobile &&
                     !isFree &&
                     !showAsCompleted &&
-                    !isInCurrentSession && (
+                    !isInCurrentSession &&
+                    !isModalMode && (
                       <div className="shrink-0 pt-1">
                         <div
                           className={cn(
@@ -618,7 +902,7 @@ function EmployeeTasksContent() {
                           {format(new Date(task.due_date), "dd.MM")}
                         </span>
                       </div>
-                    ) : isInCurrentSession ? (
+                    ) : isInCurrentSession && !isModalMode ? (
                       <div className="flex items-center gap-2">
                         <Button
                           size="sm"
@@ -687,7 +971,9 @@ function EmployeeTasksContent() {
                           )}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (isInProgress || isRework) {
+                            if (isModalMode) {
+                              setSelectedTaskForModal(task.id);
+                            } else if (isInProgress || isRework) {
                               if (isMobile && sessionId) {
                                 window.open(terminalUrl, "_self");
                               } else {
@@ -712,9 +998,11 @@ function EmployeeTasksContent() {
                               {sessionId
                                 ? "Добавить"
                                 : isInProgress || isRework
-                                  ? isMobile
-                                    ? "Открыть"
-                                    : "QR-код"
+                                  ? isModalMode
+                                    ? "Продолжить"
+                                    : isMobile
+                                      ? "Открыть"
+                                      : "QR-код"
                                   : "Начать"}
                             </>
                           )}
@@ -1001,7 +1289,10 @@ function EmployeeTasksContent() {
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 items-start">
+        <div className={cn(
+          "grid gap-8 items-start",
+          isModalMode ? "grid-cols-1 max-w-4xl mx-auto" : "grid-cols-1 lg:grid-cols-[1fr_320px]"
+        )}>
           <div className="space-y-10">
             {groupedTasks.length === 0 ? (
               <div className="text-center py-20 bg-card rounded-2xl border border-border">
@@ -1083,125 +1374,127 @@ function EmployeeTasksContent() {
           </div>
 
           {/* Terminal Sidebar */}
-          <div className="hidden lg:block sticky top-24 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-            <Card className="bg-zinc-950 border-zinc-800 shadow-2xl overflow-hidden rounded-[2rem]">
-              <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-white tracking-tight">
-                      Обслуживание
-                    </h3>
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">
-                      Сессия через QR
-                    </p>
+          {!isModalMode && (
+            <div className="hidden lg:block sticky top-24 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+              <Card className="bg-zinc-950 border-zinc-800 shadow-2xl overflow-hidden rounded-[2rem]">
+                <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <h3 className="text-sm font-bold text-white tracking-tight">
+                        Обслуживание
+                      </h3>
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">
+                        Сессия через QR
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <CardContent className="p-8">
-                <div className="space-y-8">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
-                      Выбрано устройств:
-                    </span>
-                    <span className="text-xs font-mono font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
-                      {String(inProgressTaskIds.length).padStart(2, "0")}
-                    </span>
-                  </div>
+                <CardContent className="p-8">
+                  <div className="space-y-8">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                        Выбрано устройств:
+                      </span>
+                      <span className="text-xs font-mono font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
+                        {String(inProgressTaskIds.length).padStart(2, "0")}
+                      </span>
+                    </div>
 
-                  {sessionId ? (
-                    <div className="space-y-8 py-2 animate-in zoom-in-95 duration-500">
-                      <div className="bg-white p-5 rounded-[2rem] flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.1)] border-4 border-zinc-900">
-                        <QRCode value={terminalUrl} size={180} />
-                      </div>
-                      <div className="text-center space-y-3">
-                        <p className="text-xs font-black text-emerald-500 uppercase tracking-widest italic">
-                          Готов к сканированию
-                        </p>
-                        <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
-                          Отсканируйте камерой телефона для запуска пошагового
-                          мастера обслуживания
-                        </p>
-                      </div>
+                    {sessionId ? (
+                      <div className="space-y-8 py-2 animate-in zoom-in-95 duration-500">
+                        <div className="bg-white p-5 rounded-[2rem] flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.1)] border-4 border-zinc-900">
+                          <QRCode value={terminalUrl} size={180} />
+                        </div>
+                        <div className="text-center space-y-3">
+                          <p className="text-xs font-black text-emerald-500 uppercase tracking-widest italic">
+                            Готов к сканированию
+                          </p>
+                          <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
+                            Отсканируйте камерой телефона для запуска пошагового
+                            мастера обслуживания
+                          </p>
+                        </div>
 
-                      {selectedTaskIds.length > 0 && (
+                        {selectedTaskIds.length > 0 && (
+                          <Button
+                            className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-black uppercase italic tracking-tighter shadow-lg transition-all active:scale-[0.98]"
+                            onClick={() => createSession(selectedTaskIds)}
+                            disabled={isCreatingSession}
+                          >
+                            {isCreatingSession ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : (
+                              <>
+                                Добавить выбранные ({selectedTaskIds.length})
+                                <ChevronRight className="ml-2 h-5 w-5" />
+                              </>
+                            )}
+                          </Button>
+                        )}
+
                         <Button
-                          className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-black uppercase italic tracking-tighter shadow-lg transition-all active:scale-[0.98]"
-                          onClick={() => createSession(selectedTaskIds)}
-                          disabled={isCreatingSession}
+                          className="w-full h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase italic tracking-tighter shadow-lg transition-all active:scale-[0.98]"
+                          onClick={() => window.open(terminalUrl, "_blank")}
+                        >
+                          Открыть в браузере
+                          <ChevronRight className="ml-2 h-5 w-5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="py-4 text-center space-y-8">
+                        <div className="h-20 w-20 bg-zinc-900 border border-zinc-800 rounded-3xl flex items-center justify-center mx-auto text-zinc-600 shadow-inner">
+                          <QrIcon className="h-10 w-10" />
+                        </div>
+                        <div className="space-y-3 px-2">
+                          <p className="text-xs text-zinc-400 font-bold leading-relaxed">
+                            Нажмите кнопку ниже, чтобы сгенерировать QR-код для
+                            продолжения на телефоне
+                          </p>
+                        </div>
+                        <Button
+                          className="w-full h-16 rounded-[2rem] bg-zinc-100 text-zinc-950 hover:bg-white font-black uppercase italic tracking-tighter shadow-2xl transition-all active:scale-[0.98]"
+                          onClick={handleCreateTerminalSession}
+                          disabled={
+                            (selectedTaskIds.length === 0 &&
+                              inProgressTaskIds.length === 0) ||
+                            isCreatingSession
+                          }
                         >
                           {isCreatingSession ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <Loader2 className="h-6 w-6 animate-spin" />
                           ) : (
                             <>
-                              Добавить выбранные ({selectedTaskIds.length})
-                              <ChevronRight className="ml-2 h-5 w-5" />
+                              {selectedTaskIds.length > 0
+                                ? "Начать обслуживание"
+                                : "Создать QR-код"}
+                              <ChevronRight className="ml-2 h-6 w-6" />
                             </>
                           )}
                         </Button>
-                      )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-                      <Button
-                        className="w-full h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase italic tracking-tighter shadow-lg transition-all active:scale-[0.98]"
-                        onClick={() => window.open(terminalUrl, "_blank")}
-                      >
-                        Открыть в браузере
-                        <ChevronRight className="ml-2 h-5 w-5" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="py-4 text-center space-y-8">
-                      <div className="h-20 w-20 bg-zinc-900 border border-zinc-800 rounded-3xl flex items-center justify-center mx-auto text-zinc-600 shadow-inner">
-                        <QrIcon className="h-10 w-10" />
-                      </div>
-                      <div className="space-y-3 px-2">
-                        <p className="text-xs text-zinc-400 font-bold leading-relaxed">
-                          Нажмите кнопку ниже, чтобы сгенерировать QR-код для
-                          продолжения на телефоне
-                        </p>
-                      </div>
-                      <Button
-                        className="w-full h-16 rounded-[2rem] bg-zinc-100 text-zinc-950 hover:bg-white font-black uppercase italic tracking-tighter shadow-2xl transition-all active:scale-[0.98]"
-                        onClick={handleCreateTerminalSession}
-                        disabled={
-                          (selectedTaskIds.length === 0 &&
-                            inProgressTaskIds.length === 0) ||
-                          isCreatingSession
-                        }
-                      >
-                        {isCreatingSession ? (
-                          <Loader2 className="h-6 w-6 animate-spin" />
-                        ) : (
-                          <>
-                            {selectedTaskIds.length > 0
-                              ? "Начать обслуживание"
-                              : "Создать QR-код"}
-                            <ChevronRight className="ml-2 h-6 w-6" />
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
+              <div className="p-6 rounded-[2rem] bg-zinc-900/50 border border-zinc-800 flex gap-4 items-start shadow-sm">
+                <div className="h-8 w-8 rounded-2xl bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-center justify-center shrink-0">
+                  <Info className="h-4 w-4" />
                 </div>
-              </CardContent>
-            </Card>
-
-            <div className="p-6 rounded-[2rem] bg-zinc-900/50 border border-zinc-800 flex gap-4 items-start shadow-sm">
-              <div className="h-8 w-8 rounded-2xl bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-center justify-center shrink-0">
-                <Info className="h-4 w-4" />
+                <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
+                  Мобильный терминал позволяет загружать фотографии и отчеты
+                  <span className="text-zinc-300 font-bold ml-1">
+                    прямо с места обслуживания
+                  </span>
+                  . Рекомендуется использовать смартфон.
+                </p>
               </div>
-              <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
-                Мобильный терминал позволяет загружать фотографии и отчеты
-                <span className="text-zinc-300 font-bold ml-1">
-                  прямо с места обслуживания
-                </span>
-                . Рекомендуется использовать смартфон.
-              </p>
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {isMobile && (selectedTaskIds.length >= 2 || sessionId) && (
+      {!isModalMode && isMobile && (selectedTaskIds.length >= 2 || sessionId) && (
         <div className="fixed bottom-6 left-4 right-4 z-50 animate-in slide-in-from-bottom-10 duration-500">
           <Button
             className="w-full h-16 rounded-[2rem] bg-primary text-primary-foreground font-black uppercase italic tracking-tighter shadow-[0_20px_50px_rgba(0,0,0,0.5)] active:scale-[0.98] transition-all border border-white/10"
@@ -1227,6 +1520,375 @@ function EmployeeTasksContent() {
               </>
             )}
           </Button>
+        </div>
+      )}
+
+      {/* Premium Inline Task Completion Dialog Modal */}
+      <Dialog
+        open={!!selectedTaskForModal}
+        onOpenChange={(open) => {
+          if (!open && !isSubmittingTask) setSelectedTaskForModal(null);
+        }}
+      >
+        <DialogContent className="max-w-4xl bg-zinc-950 border-zinc-900 text-zinc-100 p-0 overflow-hidden rounded-[2rem] shadow-2xl">
+          <DialogTitle className="sr-only">
+            Выполнение задачи {modalTaskDetails?.equipment?.name || ""}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Детальная информация о задаче обслуживания оборудования с инструкцией и формой загрузки отчета.
+          </DialogDescription>
+          {isModalDetailsLoading ? (
+            <div className="h-[550px] flex flex-col items-center justify-center gap-4 bg-zinc-950">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <p className="text-zinc-400 font-black text-xs uppercase tracking-widest animate-pulse">
+                Загрузка деталей задачи...
+              </p>
+            </div>
+          ) : modalTaskDetails ? (
+            <div className="flex flex-col h-[650px] max-h-[85vh] overflow-hidden">
+              {/* Modal Header */}
+              <div className="p-6 border-b border-zinc-900 bg-zinc-900/30 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black tracking-tight text-white">
+                      {modalTaskDetails.equipment.name}
+                    </h3>
+                    <Badge className="bg-primary/10 text-primary border-primary/20 font-black uppercase text-[9px] tracking-tighter">
+                      {modalTaskDetails.equipment.type_name || modalTaskDetails.equipment.type}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-1 flex items-center gap-1.5 font-bold">
+                    <MapPin className="h-3 w-3 text-zinc-500" />
+                    {modalTaskDetails.equipment.workstation_name || "Склад"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Modal Two-Column Body */}
+              <div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-zinc-900">
+                {/* Left Column: Metadata and Instructions */}
+                <div className="p-6 space-y-6 overflow-y-auto">
+                  {/* Equipment Metadata */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Информация об устройстве</h4>
+                    <div className="grid grid-cols-2 gap-3 bg-zinc-900/20 border border-zinc-900 rounded-2xl p-4">
+                      <div>
+                        <span className="text-[9px] font-bold text-zinc-500 block uppercase">Бренд / Модель</span>
+                        <span className="text-sm font-extrabold text-zinc-200">
+                          {modalTaskDetails.equipment.brand || "—"} / {modalTaskDetails.equipment.model || "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-zinc-500 block uppercase">Идентификатор</span>
+                        <span className="text-sm font-mono font-extrabold text-zinc-200">
+                          {modalTaskDetails.equipment.identifier || "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rejection comment if status is REWORK */}
+                  {modalTaskDetails.task.status === "REWORK" && (
+                    <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 space-y-2">
+                      <div className="flex items-center gap-2 text-rose-400">
+                        <AlertTriangle className="h-4 w-4" />
+                        <h5 className="text-[10px] font-black uppercase tracking-widest">Причина возврата</h5>
+                      </div>
+                      <p className="text-xs text-rose-300 font-medium italic leading-relaxed">
+                        "{modalTaskDetails.task.rejection_reason || modalTaskDetails.task.latest_rejection?.note || "Требуется доработка"}"
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Instructions */}
+                  <div className="space-y-3">
+                    <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <Info className="h-3.5 w-3.5" />
+                      Инструкция по обслуживанию
+                    </h4>
+                    <div className="bg-zinc-900/20 border border-zinc-900 rounded-2xl p-5 space-y-4">
+                      {Array.isArray(modalTaskDetails.instructions) ? (
+                        <ol className="space-y-3 list-decimal list-inside text-xs text-zinc-300 font-medium">
+                          {modalTaskDetails.instructions.map((step: any, idx: number) => (
+                            <li key={idx} className="leading-relaxed">
+                              {typeof step === "string" ? step : step.text || step.description}
+                            </li>
+                          ))}
+                        </ol>
+                      ) : typeof modalTaskDetails.instructions === "string" && modalTaskDetails.instructions.trim() ? (
+                        <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed font-medium">
+                          {modalTaskDetails.instructions}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-zinc-500 italic">
+                          Инструкции по регламенту отсутствуют для данного типа устройств.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Execution Form */}
+                <div className="p-6 space-y-6 overflow-y-auto bg-zinc-950/40">
+                  {modalTaskDetails.task.status === "PENDING" ? (
+                    /* Initial Pending Screen: Start Button */
+                    <div className="h-full flex flex-col items-center justify-center text-center space-y-6 py-12">
+                      <div className="h-16 w-16 bg-primary/10 border border-primary/20 rounded-3xl flex items-center justify-center text-primary shadow-[0_0_30px_rgba(235,94,40,0.05)]">
+                        <Wrench className="h-8 w-8 animate-pulse" />
+                      </div>
+                      <div className="space-y-2 max-w-sm">
+                        <h4 className="text-sm font-black text-white uppercase tracking-tight">Обслуживание не начато</h4>
+                        <p className="text-xs text-zinc-400 leading-relaxed font-medium">
+                          Нажмите кнопку ниже, чтобы перевести задачу в статус выполнения. Это закрепит задачу за вами.
+                        </p>
+                      </div>
+                      <Button
+                        className="w-full max-w-xs h-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-tight shadow-lg transition-all active:scale-[0.98] text-xs flex items-center justify-center gap-2"
+                        onClick={handleStartTask}
+                      >
+                        <Play className="h-4 w-4 fill-current" />
+                        Взять в работу
+                      </Button>
+                    </div>
+                  ) : (
+                    /* In Progress Form */
+                    <div className="space-y-6">
+                      {/* Photo Before Upload */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                            Фото "ДО" {modalTaskDetails.settings.require_photo_before && <span className="text-rose-500">*</span>}
+                          </label>
+                          <span className="text-[10px] text-zinc-500 font-bold">
+                            мин: {modalTaskDetails.settings.min_photos_before}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-2">
+                          {photosBefore.map((url, idx) => (
+                            <div key={idx} className="relative group aspect-square bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-inner">
+                              <img src={url} alt="ДО" className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                className="absolute top-1 right-1 h-6 w-6 bg-zinc-950/80 border border-zinc-800 rounded-full flex items-center justify-center text-rose-500 hover:bg-zinc-950 transition-all opacity-0 group-hover:opacity-100 shadow-md"
+                                onClick={() => removePhoto(idx, "BEFORE")}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                          
+                          {photosBefore.length < 3 && (
+                            <label className="relative flex flex-col items-center justify-center aspect-square border border-dashed border-zinc-800 hover:border-zinc-700 bg-zinc-900/20 hover:bg-zinc-900/40 rounded-xl cursor-pointer transition-all group">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={(e) => handlePhotoUpload(e, "BEFORE")}
+                                disabled={isUploadingBefore}
+                              />
+                              {isUploadingBefore ? (
+                                <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+                              ) : (
+                                <>
+                                  <Upload className="h-5 w-5 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+                                  <span className="text-[9px] text-zinc-600 font-black uppercase mt-2 group-hover:text-zinc-400 transition-colors">Загрузить</span>
+                                </>
+                              )}
+                            </label>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Photo After Upload */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                            Фото "ПОСЛЕ" {modalTaskDetails.settings.require_photo_after && <span className="text-rose-500">*</span>}
+                          </label>
+                          <span className="text-[10px] text-zinc-500 font-bold">
+                            мин: {modalTaskDetails.settings.min_photos_after}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-2">
+                          {photosAfter.map((url, idx) => (
+                            <div key={idx} className="relative group aspect-square bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden shadow-inner">
+                              <img src={url} alt="ПОСЛЕ" className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                className="absolute top-1 right-1 h-6 w-6 bg-zinc-950/80 border border-zinc-800 rounded-full flex items-center justify-center text-rose-500 hover:bg-zinc-950 transition-all opacity-0 group-hover:opacity-100 shadow-md"
+                                onClick={() => removePhoto(idx, "AFTER")}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                          
+                          {photosAfter.length < 3 && (
+                            <label className="relative flex flex-col items-center justify-center aspect-square border border-dashed border-zinc-800 hover:border-zinc-700 bg-zinc-900/20 hover:bg-zinc-900/40 rounded-xl cursor-pointer transition-all group">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={(e) => handlePhotoUpload(e, "AFTER")}
+                                disabled={isUploadingAfter}
+                              />
+                              {isUploadingAfter ? (
+                                <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+                              ) : (
+                                <>
+                                  <Upload className="h-5 w-5 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+                                  <span className="text-[9px] text-zinc-600 font-black uppercase mt-2 group-hover:text-zinc-400 transition-colors">Загрузить</span>
+                                </>
+                              )}
+                            </label>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Status Selector */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Результат проверки</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={completionStatus === "OK" ? "default" : "outline"}
+                            className={cn(
+                              "h-11 rounded-xl text-xs font-black uppercase tracking-tight transition-all",
+                              completionStatus === "OK" 
+                                ? "bg-emerald-600 hover:bg-emerald-500 text-white border-none shadow-md" 
+                                : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"
+                            )}
+                            onClick={() => setCompletionStatus("OK")}
+                          >
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            ОК
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={completionStatus === "ISSUE" ? "default" : "outline"}
+                            className={cn(
+                              "h-11 rounded-xl text-xs font-black uppercase tracking-tight transition-all",
+                              completionStatus === "ISSUE" 
+                                ? "bg-rose-600 hover:bg-rose-500 text-white border-none shadow-md" 
+                                : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"
+                            )}
+                            onClick={() => setCompletionStatus("ISSUE")}
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                            Поломка
+                          </Button>
+                          {isLaundryEquipmentType(modalTaskDetails.equipment.type) && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={completionStatus === "LAUNDRY" ? "default" : "outline"}
+                              className={cn(
+                                "h-11 rounded-xl text-xs font-black uppercase tracking-tight transition-all",
+                                completionStatus === "LAUNDRY" 
+                                  ? "bg-blue-600 hover:bg-blue-500 text-white border-none shadow-md" 
+                                  : "border-zinc-800 text-zinc-400 hover:bg-zinc-900"
+                              )}
+                              onClick={() => setCompletionStatus("LAUNDRY")}
+                            >
+                              <Wrench className="h-3.5 w-3.5 mr-1" />
+                              Стирка
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Incident / Laundry Details */}
+                      {(completionStatus === "ISSUE" || completionStatus === "LAUNDRY") && (
+                        <div className="space-y-3 p-4 bg-zinc-900/30 border border-zinc-900 rounded-2xl animate-in slide-in-from-top-2 duration-300">
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">
+                              Тема {completionStatus === "LAUNDRY" ? "стирки" : "инцидента"} <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={issueTitle}
+                              onChange={(e) => setIssueTitle(e.target.value)}
+                              placeholder={completionStatus === "LAUNDRY" ? "Грязный / С пятнами" : "Залипает левый Shift"}
+                              className="w-full h-11 px-4 bg-zinc-900/80 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-600 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all font-semibold outline-none"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">Описание (необязательно)</label>
+                            <textarea
+                              value={issueDescription}
+                              onChange={(e) => setIssueDescription(e.target.value)}
+                              placeholder="Опишите детали неисправности..."
+                              rows={2}
+                              className="w-full p-4 bg-zinc-900/80 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-600 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all font-medium outline-none resize-none"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Comment Input */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                          Комментарий {modalTaskDetails.settings.require_notes_on_completion && <span className="text-rose-500">*</span>}
+                        </label>
+                        <textarea
+                          value={completionNotes}
+                          onChange={(e) => setCompletionNotes(e.target.value)}
+                          placeholder="Что было сделано или замечено при чистке..."
+                          rows={3}
+                          className="w-full p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl text-xs text-white placeholder-zinc-600 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all font-medium outline-none resize-none"
+                        />
+                      </div>
+
+                      {/* Complete Submit Button */}
+                      <Button
+                        className="w-full h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-wider shadow-lg shadow-emerald-950/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 border-none mt-2"
+                        onClick={handleCompleteTask}
+                        disabled={isSubmittingTask}
+                      >
+                        {isSubmittingTask ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Сохранение...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="h-4 w-4 stroke-[3px]" />
+                            Завершить обслуживание
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Toast Notification */}
+      {successToast.show && (
+        <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-[100] animate-in fade-in slide-in-from-bottom-5 duration-300 flex items-center gap-3 w-80 md:w-96 p-4 rounded-2xl bg-zinc-950/90 backdrop-blur-xl border border-emerald-500/20 shadow-2xl shadow-emerald-950/10">
+          <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 animate-bounce" />
+          </div>
+          <div className="flex-1">
+            <h4 className="text-sm font-bold text-white">Успешно!</h4>
+            <p className="text-xs text-zinc-400 mt-0.5">{successToast.message}</p>
+          </div>
+          <button 
+            onClick={() => setSuccessToast((prev) => ({ ...prev, show: false }))}
+            className="flex-shrink-0 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 rounded-lg p-1.5 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
     </div>

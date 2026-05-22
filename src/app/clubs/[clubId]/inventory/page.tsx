@@ -20,6 +20,10 @@ import { Package } from "lucide-react"
 export default async function InventoryPage({ params, searchParams }: { params: Promise<{ clubId: string }>, searchParams: Promise<{ tab?: string, month?: string }> }) {
     const { clubId } = await params
     const { tab, month } = await searchParams
+    const displayMonth = month || (() => {
+        const now = new Date()
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    })()
     const userId = (await cookies()).get("session_user_id")?.value
 
     if (!userId) return <div className="p-8 text-red-500">Доступ запрещен. Пожалуйста, авторизуйтесь.</div>
@@ -54,9 +58,9 @@ export default async function InventoryPage({ params, searchParams }: { params: 
             getProcurementLists(clubId),
             getSuppliersForSelect(clubId),
             getClubSettings(clubId),
-            getSalesAnalytics(clubId),
+            getSalesAnalytics(clubId, 10000, displayMonth),
             getActiveShiftsForClub(clubId),
-            getShiftZoneOverview(clubId, month)
+            getShiftZoneOverview(clubId, displayMonth)
         ])
     } catch (error: any) {
         const message = error?.message || "Не удалось загрузить данные склада"
@@ -199,6 +203,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                             products={products}
                             currentUserId={userId}
                             inventorySettings={inventorySettings}
+                            currentMonth={displayMonth}
                         />
                     </TabsContent>
                 )}

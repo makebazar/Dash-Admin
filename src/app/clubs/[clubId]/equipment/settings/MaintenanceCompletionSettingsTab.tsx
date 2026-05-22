@@ -29,6 +29,7 @@ type MaintenanceSettings = {
   require_notes_on_completion: boolean;
   block_desktop_access: boolean;
   instruction_step_order: "BEFORE_PHOTOS" | "AFTER_PHOTO_BEFORE" | "AFTER_PHOTOS";
+  desktop_completion_mode: "QR" | "TAB" | "MODAL";
 };
 
 type TypeSettings = {
@@ -55,6 +56,7 @@ const DEFAULT_SETTINGS: MaintenanceSettings = {
   require_notes_on_completion: false,
   block_desktop_access: false,
   instruction_step_order: "BEFORE_PHOTOS",
+  desktop_completion_mode: "QR",
 };
 
 export function MaintenanceCompletionSettingsTab({
@@ -96,6 +98,7 @@ export function MaintenanceCompletionSettingsTab({
             !!settingsData.require_notes_on_completion,
           block_desktop_access: !!settingsData.block_desktop_access,
           instruction_step_order: settingsData.instruction_step_order || "BEFORE_PHOTOS",
+          desktop_completion_mode: settingsData.desktop_completion_mode || "QR",
         });
       }
 
@@ -376,6 +379,37 @@ export function MaintenanceCompletionSettingsTab({
                 }))
               }
             />
+          </div>
+
+          <div className="h-px bg-border" />
+
+          <div className="flex flex-col gap-4">
+            <div className="space-y-1">
+              <Label className="text-base font-semibold">
+                Способ завершения задач на ПК
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Выберите, как сотрудники будут выполнять обслуживание при работе за ПК:
+              </p>
+            </div>
+            <Select
+              value={settings.desktop_completion_mode}
+              onValueChange={(val: "QR" | "TAB" | "MODAL") =>
+                setSettings((prev) => ({
+                  ...prev,
+                  desktop_completion_mode: val,
+                }))
+              }
+            >
+              <SelectTrigger className="w-full sm:w-[350px] rounded-xl h-10">
+                <SelectValue placeholder="Выберите режим" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="QR">Мобильный терминал по QR-коду (боковая панель)</SelectItem>
+                <SelectItem value="TAB">На ПК в отдельной вкладке</SelectItem>
+                <SelectItem value="MODAL">На ПК прямо на этой странице (в модальном окне)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="h-px bg-border" />
