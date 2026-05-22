@@ -403,15 +403,15 @@ export async function PATCH(
         `UPDATE equipment_maintenance_tasks
          SET assigned_user_id = $1
          WHERE equipment_id = $2 
-           AND status IN ('PENDING', 'IN_PROGRESS')
-           AND (due_date >= $3 OR status = 'IN_PROGRESS')`,
+           AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
+           AND (due_date >= $3 OR status = 'IN_PROGRESS' OR status = 'REWORK')`,
         [effectiveAssignedUserId, equipmentId, todayDate],
       );
 
       // 3. Check if ANY active task exists (PENDING/IN_PROGRESS)
       const activeTaskCheck = await query(
         `SELECT id FROM equipment_maintenance_tasks
-                 WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')
+                 WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
                  LIMIT 1`,
         [equipmentId],
       );
@@ -472,8 +472,8 @@ export async function PATCH(
         `UPDATE equipment_maintenance_tasks
          SET assigned_user_id = $1
          WHERE equipment_id = $2
-           AND status IN ('PENDING', 'IN_PROGRESS')
-           AND (due_date >= $3 OR status = 'IN_PROGRESS')`,
+           AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
+           AND (due_date >= $3 OR status = 'IN_PROGRESS' OR status = 'REWORK')`,
         [effectiveAssignedUserId, equipmentId, todayDate],
       );
     }
@@ -527,7 +527,7 @@ export async function DELETE(
       `UPDATE equipment_maintenance_tasks
              SET status = 'CANCELLED',
                  notes = COALESCE(notes || E'\n', '') || '[Система] Оборудование удалено'
-             WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS')`,
+             WHERE equipment_id = $1 AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
       [equipmentId],
     );
 

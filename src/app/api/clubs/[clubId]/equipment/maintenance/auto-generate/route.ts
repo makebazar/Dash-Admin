@@ -58,7 +58,7 @@ export async function POST(
              FROM equipment_maintenance_tasks
              WHERE equipment_id = ANY($1)
                AND task_type = 'CLEANING'
-               AND status IN ('PENDING', 'IN_PROGRESS')`,
+               AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
       [equipmentIds],
     );
     const existingPendingTasks = new Set(

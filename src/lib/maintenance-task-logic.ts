@@ -300,7 +300,7 @@ export async function completeMaintenanceTask(params: {
       const existingTask = await query(
         `SELECT id FROM equipment_maintenance_tasks
                  WHERE equipment_id = $1 AND task_type = 'CLEANING'
-                 AND status IN ('PENDING', 'IN_PROGRESS')
+                 AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
                  LIMIT 1`,
         [equipmentId],
       );

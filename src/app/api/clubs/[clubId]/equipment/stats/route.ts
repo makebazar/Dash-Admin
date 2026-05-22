@@ -47,8 +47,8 @@ export async function GET(
                 (SELECT COUNT(*) FROM equipment WHERE club_id = $1 AND ${storageEquipmentCondition}) as storage_count,
                 (SELECT COUNT(*) FROM equipment WHERE club_id = $1 AND ${repairEquipmentCondition}) as repair_count,
                 (SELECT COUNT(*) FROM equipment_issues i JOIN equipment e ON i.equipment_id = e.id WHERE e.club_id = $1 AND i.status IN ('OPEN', 'IN_PROGRESS')) as active_issues,
-                (SELECT COUNT(*) FROM equipment_maintenance_tasks t JOIN equipment e ON t.equipment_id = e.id WHERE e.club_id = $1 AND t.due_date < CURRENT_DATE AND t.status IN ('PENDING', 'IN_PROGRESS')) as overdue_tasks,
-                (SELECT COUNT(*) FROM equipment_maintenance_tasks t JOIN equipment e ON t.equipment_id = e.id WHERE e.club_id = $1 AND t.due_date = CURRENT_DATE AND t.status IN ('PENDING', 'IN_PROGRESS')) as due_today_tasks,
+                (SELECT COUNT(*) FROM equipment_maintenance_tasks t JOIN equipment e ON t.equipment_id = e.id WHERE e.club_id = $1 AND t.due_date < CURRENT_DATE AND t.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')) as overdue_tasks,
+                (SELECT COUNT(*) FROM equipment_maintenance_tasks t JOIN equipment e ON t.equipment_id = e.id WHERE e.club_id = $1 AND t.due_date = CURRENT_DATE AND t.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')) as due_today_tasks,
                 (SELECT COUNT(*) FROM equipment WHERE club_id = $1 AND warranty_expires >= CURRENT_DATE AND warranty_expires < CURRENT_DATE + INTERVAL '30 days') as expiring_warranty
             FROM (SELECT 1) dummy
         `;

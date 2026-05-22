@@ -1945,6 +1945,8 @@ export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
         resolvedKeys.add(`${res.warehouse_id}:${res.product_id}`);
       }
       const unresolvedCount = discrepancyRows.filter((row) => {
+        const diff = Number(row.difference_quantity || 0);
+        if (diff > 0) return false;
         const key = `${row.warehouse_id}:${row.product_id}`;
         return !resolvedKeys.has(key);
       }).length;
@@ -4921,10 +4923,10 @@ async function resolvePosWarehousesForItems(
         .map((value) => Number(value))
         .filter((value) => Number.isInteger(value) && value > 0)
     : [];
-  const effectiveEmployeeAllowedWarehouseIds = !scope.canManageInventory
-    ? cashboxWarehouseIds.length > 0
-      ? cashboxWarehouseIds
-      : scope.allowedWarehouseIds
+
+  const allowedSet = new Set(scope.allowedWarehouseIds);
+  const effectiveEmployeeAllowedWarehouseIds = cashboxWarehouseIds.length > 0
+    ? cashboxWarehouseIds.filter(id => allowedSet.has(id))
     : scope.allowedWarehouseIds;
 
   if (effectiveEmployeeAllowedWarehouseIds.length === 0) {

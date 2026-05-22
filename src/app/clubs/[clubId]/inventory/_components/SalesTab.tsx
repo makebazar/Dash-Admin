@@ -69,6 +69,7 @@ interface SalesTabProps {
   warehouses: Warehouse[];
   products: Product[];
   currentUserId: string;
+  inventorySettings?: any;
 }
 
 export function SalesTab({
@@ -78,6 +79,7 @@ export function SalesTab({
   warehouses,
   products,
   currentUserId,
+  inventorySettings,
 }: SalesTabProps) {
   const [expandedShifts, setExpandedShifts] = useState<Record<string, boolean>>(
     {},
@@ -99,15 +101,17 @@ export function SalesTab({
   const [selectedRevertWarehouse, setSelectedRevertWarehouse] =
     useState<string>("");
 
+  const defaultCashboxIds = inventorySettings?.cashbox_warehouse_ids || [];
+  const defaultWarehouseId = defaultCashboxIds.length > 0 
+    ? defaultCashboxIds[0].toString() 
+    : (warehouses.find((w) => w.is_default)?.id.toString() || warehouses[0]?.id.toString() || "");
+
   // Ручное добавление
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newSale, setNewSale] = useState({
     product_id: "",
     quantity: "1",
-    warehouse_id:
-      warehouses.find((w) => w.is_default)?.id.toString() ||
-      warehouses[0]?.id.toString() ||
-      "",
+    warehouse_id: defaultWarehouseId,
     shift_id: "none",
     notes: "",
   });

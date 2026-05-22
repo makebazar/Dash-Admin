@@ -268,7 +268,7 @@ export async function GET(
       if (includeOverdue) {
         statsConditions.push(`(
                     mt.due_date >= $${statsParamIndex}
-                    OR (mt.status IN ('PENDING', 'IN_PROGRESS') AND mt.due_date < $${statsParamIndex})
+                    OR (mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $${statsParamIndex})
                     OR (
                         mt.status = 'COMPLETED'
                         AND mt.completed_at >= $${statsParamIndex}::date
@@ -556,10 +556,10 @@ export async function POST(
                  FROM equipment_maintenance_tasks
                  WHERE equipment_id = ANY($1)
                    AND task_type = $2
-                   AND status IN ('PENDING', 'IN_PROGRESS')
+                   AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
                  ORDER BY
                     equipment_id,
-                    CASE status WHEN 'IN_PROGRESS' THEN 0 ELSE 1 END,
+                    CASE status WHEN 'IN_PROGRESS' THEN 0 WHEN 'REWORK' THEN 1 ELSE 2 END,
                     due_date ASC,
                     created_at ASC`,
           [equipmentIds, task_type],

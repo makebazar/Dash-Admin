@@ -73,7 +73,7 @@ export async function POST(
                  notes = COALESCE(notes || E'\n', '') || $1,
                  updated_at = CURRENT_TIMESTAMP
              WHERE equipment_id = $2
-               AND status IN ('PENDING', 'IN_PROGRESS')`,
+               AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
       [`[Система] Задача отменена: ${normalizedReason}`, equipment_id],
     );
 

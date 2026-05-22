@@ -529,10 +529,28 @@ export async function GET(
             ])
         );
 
-        const enrichedShiftZoneDiscrepancies = shiftZoneDiscrepancies.map((row: any) => ({
-            ...row,
-            resolution: resolutionMap.get(`${row.warehouse_id}:${row.product_id}`) || null,
-        }))
+        const enrichedShiftZoneDiscrepancies = shiftZoneDiscrepancies.map((row: any) => {
+            let resolution = resolutionMap.get(`${row.warehouse_id}:${row.product_id}`) || null;
+            if (!resolution && Number(row.difference_quantity || 0) > 0) {
+                resolution = {
+                    id: -1,
+                    resolution_type: 'NO_DEDUCTION',
+                    resolution_amount: 0,
+                    discrepancy_quantity: Number(row.difference_quantity),
+                    unit_price: 0,
+                    notes: 'Излишек (автоматически учтен)',
+                    salary_payment_id: null,
+                    finance_transaction_id: null,
+                    resolved_by: null,
+                    resolved_by_name: 'Система',
+                    resolved_at: row.movement_window_ended_at || new Date().toISOString(),
+                };
+            }
+            return {
+                ...row,
+                resolution,
+            };
+        });
 
         // Create a map of metric key -> label
         const metricLabels: Record<string, string> = {};
@@ -708,6 +726,21 @@ export async function POST(
         let salaryPaymentId: number | null = null
         let financeTransactionId: number | null = null
 
+        let targetUserId = shift.user_id;
+
+        if (row.responsibility_type === 'INHERITED_FROM_PREVIOUS_SHIFT') {
+            const handoverSourceRes = await query(
+                `SELECT accepted_from_employee_id
+                 FROM shift_zone_snapshots
+                 WHERE club_id = $1 AND shift_id = $2 AND snapshot_type = 'OPEN' AND warehouse_id = $3
+                 ORDER BY created_at DESC LIMIT 1`,
+                [clubId, shiftId, warehouseId]
+            );
+            if ((handoverSourceRes.rowCount || 0) > 0 && handoverSourceRes.rows[0].accepted_from_employee_id) {
+                targetUserId = handoverSourceRes.rows[0].accepted_from_employee_id;
+            }
+        }
+
         if (resolutionType === 'SALARY_DEDUCTION') {
             const salaryPaymentRes = await query(
                 `INSERT INTO salary_payments
@@ -716,7 +749,7 @@ export async function POST(
                  RETURNING id`,
                 [
                     clubId,
-                    shift.user_id,
+                    targetUserId,
                     resolutionAmount,
                     note || `Удержание по расхождению зоны: ${row.warehouse_name} / ${row.product_name}`,
                     userId

@@ -884,11 +884,10 @@ export async function generateMonthlySalaryReport(
                     COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status != 'CANCELLED' AND (effective_assignee = $1 OR status = 'COMPLETED')) as total_tasks,
                     COUNT(*) FILTER (WHERE due_date >= $2 AND due_date <= $3 AND status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3) as completed_tasks,
                     COUNT(*) FILTER (WHERE status = 'COMPLETED' AND completed_at >= $2 AND completed_at <= $3 AND due_date < $2) as old_debt_closed_tasks,
-                    COUNT(*) FILTER (WHERE status IN ('PENDING', 'IN_PROGRESS') AND due_date < CURRENT_DATE AND effective_assignee = $1) as overdue_open_tasks,
-                    COUNT(*) FILTER (WHERE status = 'IN_PROGRESS' AND verification_status = 'REJECTED' AND effective_assignee = $1) as rework_open_tasks,
+                    COUNT(*) FILTER (WHERE status IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND due_date < CURRENT_DATE AND effective_assignee = $1) as overdue_open_tasks,
+                    COUNT(*) FILTER (WHERE (status = 'REWORK' OR (status = 'IN_PROGRESS' AND verification_status = 'REJECTED')) AND effective_assignee = $1) as rework_open_tasks,
                     COUNT(*) FILTER (
-                        WHERE status = 'IN_PROGRESS'
-                          AND verification_status = 'REJECTED'
+                        WHERE (status = 'REWORK' OR (status = 'IN_PROGRESS' AND verification_status = 'REJECTED'))
                           AND effective_assignee = $1
                           AND COALESCE(verified_at::date, CURRENT_DATE) <= CURRENT_DATE - 3
                     ) as stale_rework_tasks

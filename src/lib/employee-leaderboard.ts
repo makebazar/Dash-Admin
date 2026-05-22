@@ -443,8 +443,8 @@ async function getLiveClubEmployeeLeaderboard(clubId: string | number, year: num
         const completedAt = task.completed_at ? new Date(task.completed_at) : null;
         const isDueThisMonth = !!(dueDate && dueDate >= start && dueDate <= end);
         const isCompletedThisMonth = !!(completedAt && completedAt >= start && completedAt <= end);
-        const isOverdueOpen = ['PENDING', 'IN_PROGRESS'].includes(task.status) && dueDate && dueDate < today;
-        const isReworkOpen = task.status === 'IN_PROGRESS' && task.verification_status === 'REJECTED';
+        const isOverdueOpen = ['PENDING', 'IN_PROGRESS', 'REWORK'].includes(task.status) && dueDate && dueDate < today;
+        const isReworkOpen = task.status === 'REWORK' || (task.status === 'IN_PROGRESS' && task.verification_status === 'REJECTED');
         const verifiedAtDate = task.verified_at ? new Date(task.verified_at) : today;
         const isStaleRework = isReworkOpen && verifiedAtDate <= new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000);
 

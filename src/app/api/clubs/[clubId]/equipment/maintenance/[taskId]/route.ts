@@ -303,7 +303,7 @@ export async function PATCH(
                 `DELETE FROM equipment_maintenance_tasks
                                  WHERE equipment_id = $1
                                    AND task_type = $2
-                                   AND status IN ('PENDING', 'IN_PROGRESS')
+                                   AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
                                    AND id != $3`,
                 [task.equipment_id, task.task_type, taskId],
               );

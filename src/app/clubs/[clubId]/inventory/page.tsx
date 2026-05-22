@@ -198,6 +198,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                             warehouses={warehouses} 
                             products={products}
                             currentUserId={userId}
+                            inventorySettings={inventorySettings}
                         />
                     </TabsContent>
                 )}
