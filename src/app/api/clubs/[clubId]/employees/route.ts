@@ -316,38 +316,7 @@ export async function POST(
       }
     }
 
-    const hasSubscriptionStatus = await hasColumn(
-      "users",
-      "subscription_status",
-    );
-    const subscriptionResult = await query(
-      `SELECT
-                c.owner_id,
-                u.subscription_plan,
-                ${hasSubscriptionStatus ? "u.subscription_status" : "NULL::varchar as subscription_status"},
-                u.subscription_ends_at
-             FROM clubs c
-             JOIN users u ON u.id = c.owner_id
-             WHERE c.id = $1`,
-      [clubId],
-    );
-
-    if (subscriptionResult.rowCount === 0) {
-      return NextResponse.json({ error: "Club not found" }, { status: 404 });
-    }
-
-    const ownerSubscription = subscriptionResult.rows[0];
-    const subscriptionState = resolveSubscriptionState(ownerSubscription);
-
-    if (!subscriptionState.isActive) {
-      return NextResponse.json(
-        {
-          error:
-            "Подписка владельца клуба неактивна. Добавление сотрудников недоступно.",
-        },
-        { status: 403 },
-      );
-    }
+    // Link is established, subscription check is already performed by the guard above.
 
     const memberExistsResult = await query(
       `SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,

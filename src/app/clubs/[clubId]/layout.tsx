@@ -20,13 +20,10 @@ export default async function ClubLayout({
         redirect('/login')
     }
 
-    const hasSubscriptionStatus = await hasColumn('users', 'subscription_status')
-    
-    // Check if user is owner or employee of the club
+    // Check if user is owner or employee of the club and check the club's own subscription status
     const accessCheck = await query(
-        `SELECT c.owner_id, u.subscription_plan, u.subscription_status, u.subscription_ends_at
+        `SELECT c.owner_id, c.subscription_plan, c.subscription_status, c.subscription_ends_at, c.grace_period_days
          FROM clubs c
-         JOIN users u ON u.id = c.owner_id
          WHERE c.id = $1
            AND (
                c.owner_id = $2
@@ -45,8 +42,8 @@ export default async function ClubLayout({
         redirect('/dashboard')
     }
     
-    const clubOwner = accessCheck.rows[0]
-    const subscriptionState = resolveSubscriptionState(clubOwner)
+    const clubSub = accessCheck.rows[0]
+    const subscriptionState = resolveSubscriptionState(clubSub)
     if (!subscriptionState.isActive) {
         redirect('/dashboard')
     }

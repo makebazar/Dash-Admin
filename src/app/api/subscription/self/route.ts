@@ -110,6 +110,26 @@ export async function POST(request: Request) {
       .toLowerCase();
     const clubId = body?.club_id ? Number(body.club_id) : null;
 
+    if (!clubId) {
+      return NextResponse.json(
+        { error: "Club ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Проверяем, что пользователь является владельцем клуба
+    const clubCheck = await query(
+      `SELECT id FROM clubs WHERE id = $1 AND owner_id = $2 LIMIT 1`,
+      [clubId, userId]
+    );
+
+    if ((clubCheck.rowCount || 0) === 0) {
+      return NextResponse.json(
+        { error: "У вас нет прав для управления подпиской этого клуба." },
+        { status: 403 }
+      );
+    }
+
     if (!planCode) {
       return NextResponse.json(
         { error: "Plan code is required" },
@@ -153,62 +173,64 @@ export async function POST(request: Request) {
         ? plan.price_per_extra_club
         : plan.price_amount;
 
-    const now = new Date();
-    const nextEndsAt = addPeriod(
-      now,
-      normalizePeriodUnit(plan.period_unit),
-      Number(plan.period_value || 1),
+    const userResult = await query(
+      `SELECT phone_number, full_name FROM users WHERE id = $1 LIMIT 1`,
+      [userId]
     );
-    const nextStatus = planCode === "new_user" ? "trialing" : "active";
 
-    // 1. Создаем заказ (Order) - пока что он сразу "оплачен", так как у нас заглушка
+    if ((userResult.rowCount || 0) === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const owner = userResult.rows[0];
+
+    // 1. Создаем заказ (Order) со статусом 'pending'
     const orderResult = await query(
       `INSERT INTO subscription_orders
-             (club_id, user_id, plan_code, amount, status, paid_at, period_unit, period_value)
-             VALUES ($1, $2, $3, $4, 'paid', NOW(), $5, $6)
+             (club_id, user_id, plan_code, amount, status, period_unit, period_value, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, 'pending', $5, $6, NOW(), NOW())
              RETURNING id`,
-      [clubId, userId, planCode, amount, plan.period_unit, plan.period_value],
+      [clubId, userId, planCode, amount, plan.period_unit, plan.period_value]
     );
 
-    // 2. Обновляем подписку клуба
-    let updatedCount = 0;
-    if (clubId) {
-      const res = await query(
-        `UPDATE clubs
-                 SET subscription_plan = $1,
-                     subscription_status = $2,
-                     subscription_started_at = CASE WHEN subscription_status = 'trialing' THEN NOW() ELSE subscription_started_at END,
-                     subscription_ends_at = $3,
-                     subscription_canceled_at = NULL
-                 WHERE id = $4 AND owner_id = $5`,
-        [planCode, nextStatus, nextEndsAt.toISOString(), clubId, userId],
-      );
-      updatedCount = res.rowCount || 0;
-    } else {
-      // Если clubId не передан, обновляем все клубы владельца (Legacy behavior)
-      const res = await query(
-        `UPDATE clubs
-                 SET subscription_plan = $1,
-                     subscription_status = $2,
-                     subscription_ends_at = $3,
-                     subscription_canceled_at = NULL
-                 WHERE owner_id = $4`,
-        [planCode, nextStatus, nextEndsAt.toISOString(), userId],
-      );
-      updatedCount = res.rowCount || 0;
-    }
+    const orderId = orderResult.rows[0].id;
+    const vat = Number(process.env.CLOUDKASSIR_VAT ?? -1);
+    const taxationSystem = Number(process.env.CLOUDKASSIR_TAXATION_SYSTEM ?? 1);
+
+    // 2. Формируем чек для CloudKassir (54-ФЗ)
+    const receipt = {
+      Items: [
+        {
+          label: `Подписка DashAdmin: тариф "${plan.name}"`,
+          price: Number(amount),
+          quantity: 1.00,
+          amount: Number(amount),
+          vat: vat,
+          method: 0, // Предоплата 100%
+          object: 4  // Услуга
+        }
+      ],
+      taxationSystem: taxationSystem,
+      phone: owner.phone_number,
+      amounts: {
+        electronic: Number(amount)
+      }
+    };
 
     return NextResponse.json({
       success: true,
-      order_id: orderResult.rows[0].id,
+      order_id: orderId,
+      amount: amount,
+      plan_code: planCode,
+      phone_number: owner.phone_number,
+      publicTerminalId: process.env.NEXT_PUBLIC_CLOUDPAYMENTS_PUBLIC_ID ?? "test_api_00000000000000000000002",
+      publicId: process.env.NEXT_PUBLIC_CLOUDPAYMENTS_PUBLIC_ID ?? "test_api_00000000000000000000002",
+      receipt: receipt,
       plan: {
         code: plan.code,
         name: plan.name,
         amount: amount,
-      },
-      updated_clubs_count: updatedCount,
-      subscription_status: nextStatus,
-      subscription_ends_at: nextEndsAt.toISOString(),
+      }
     });
   } catch (error) {
     console.error("Change Subscription Error:", error);

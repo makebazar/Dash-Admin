@@ -243,18 +243,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const subscriptionState = resolveSubscriptionState({
-      subscription_plan: planToApply,
-      subscription_status: statusToApply,
-      subscription_ends_at: endsAtToApply,
-    });
-
-    if (!subscriptionState.isActive) {
-      return NextResponse.json(
-        { error: "Подписка неактивна. Создание клуба недоступно." },
-        { status: 403 },
-      );
-    }
+    // Club creation is always allowed, as each new club starts on a 14-day trial on the club level.
 
     const setParts: string[] = [];
     const params: any[] = [];

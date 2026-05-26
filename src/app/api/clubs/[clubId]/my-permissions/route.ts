@@ -25,18 +25,14 @@ export async function GET(
       JSON.stringify(access.permissions.modules),
     );
 
-    const hasSubscriptionStatus = await hasColumn(
-      "users",
-      "subscription_status",
-    );
     const ownerSubscriptionRes = await query(
       `SELECT
-                u.subscription_plan,
-                ${hasSubscriptionStatus ? "u.subscription_status" : "NULL::varchar as subscription_status"},
-                u.subscription_ends_at
-             FROM clubs c
-             JOIN users u ON u.id = c.owner_id
-             WHERE c.id = $1`,
+                subscription_plan,
+                subscription_status,
+                subscription_ends_at,
+                grace_period_days
+             FROM clubs
+             WHERE id = $1`,
       [clubId],
     );
     if ((ownerSubscriptionRes.rowCount || 0) === 0) {
@@ -45,10 +41,16 @@ export async function GET(
     const ownerSubscription = resolveSubscriptionState(
       ownerSubscriptionRes.rows[0],
     );
+    const graceDaysLeft = ownerSubscription.isInGracePeriod && ownerSubscription.endsAt
+      ? Math.max(0, Math.ceil((new Date(ownerSubscription.endsAt.getTime() + ownerSubscription.gracePeriodDays * 24 * 60 * 60 * 1000).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+      : null;
+
     const subscriptionMeta = {
       subscription_status: ownerSubscription.status,
       subscription_is_active: ownerSubscription.isActive,
       subscription_ends_at: ownerSubscription.endsAt,
+      is_in_grace_period: ownerSubscription.isInGracePeriod,
+      grace_days_left: graceDaysLeft,
     };
 
     // Use the new flag system universally

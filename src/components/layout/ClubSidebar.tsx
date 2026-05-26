@@ -61,6 +61,8 @@ export function ClubSidebarContent({
   const [subscriptionStatus, setSubscriptionStatus] =
     useState<string>("active");
   const [subscriptionIsActive, setSubscriptionIsActive] = useState(true);
+  const [isInGracePeriod, setIsInGracePeriod] = useState(false);
+  const [graceDaysLeft, setGraceDaysLeft] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
 
@@ -75,6 +77,8 @@ export function ClubSidebarContent({
           setIsFullAccess(data.isFullAccess || false);
           setSubscriptionStatus(data.subscription_status || "active");
           setSubscriptionIsActive(data.subscription_is_active !== false);
+          setIsInGracePeriod(data.is_in_grace_period === true);
+          setGraceDaysLeft(data.grace_days_left ?? null);
           setUserRole(data.user_role || null);
         }
       } catch (error) {
@@ -371,6 +375,11 @@ export function ClubSidebarContent({
             {!subscriptionIsActive && (
               <span className="mt-3 rounded-lg bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-rose-700 block w-fit">
                 Подписка истекла
+              </span>
+            )}
+            {subscriptionIsActive && isInGracePeriod && graceDaysLeft !== null && (
+              <span className="mt-3 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-amber-700 block w-fit animate-pulse">
+                Льготный период: {graceDaysLeft} дн.
               </span>
             )}
             {userRole && userRole !== "Сотрудник" && (

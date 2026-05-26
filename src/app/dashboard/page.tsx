@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -142,13 +143,10 @@ export default function DashboardPage() {
   // Form state
   const [clubName, setClubName] = useState("");
   const [address, setAddress] = useState("");
-  const hasActiveSubscription = userData
-    ? userData.subscription_status === "active" ||
-      userData.subscription_status === "trialing"
-    : true;
+  const hasActiveSubscription = true; // Subscriptions are club-level, so club creation is always permitted
   const clubLimit = userData?.subscription_limits?.max_clubs ?? null;
   const reachedClubLimit = clubLimit !== null && clubs.length >= clubLimit;
-  const isCreateClubDisabled = !hasActiveSubscription || reachedClubLimit;
+  const isCreateClubDisabled = reachedClubLimit;
   const currentPlanOption = planOptions.find(
     (plan) => plan.code === clubSubscription?.subscription_plan,
   );
@@ -280,9 +278,40 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan_code: planCode, club_id: selectedClubId }),
       });
-      if (res.ok) {
-        await fetchPlanOptions(selectedClubId);
-        await fetchUserData();
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const cp = (window as any).cp;
+        if (!cp) {
+          alert("Не удалось загрузить платежный виджет CloudPayments. Пожалуйста, перезагрузите страницу и попробуйте снова.");
+          setIsChangingPlan(false);
+          return;
+        }
+
+        const widget = new cp.CloudPayments();
+        widget.pay('charge', {
+          publicId: data.publicId || data.publicTerminalId, // Mandatory Public ID
+          description: `Оплата тарифа "${data.plan.name}" для клуба`,
+          amount: Number(data.plan.amount),
+          currency: 'RUB',
+          invoiceId: data.order_id.toString(),
+          accountId: userData?.id || '',
+          phone: data.phone_number,
+          data: {
+            customerReceipt: data.receipt // CloudKassir 54-ФЗ
+          }
+        }, {
+          onSuccess: async (options: any) => {
+            console.log("Успешный платеж CloudPayments:", options);
+            // После закрытия успешного платежного виджета обновляем данные
+            await fetchPlanOptions(selectedClubId);
+            await fetchUserData();
+          },
+          onFail: (reason: any, options: any) => {
+            console.log("Платеж отклонен или виджет закрыт:", reason, options);
+          }
+        });
+      } else {
+        alert(data.error || "Не удалось создать заказ на подписку");
       }
     } catch (error) {
       console.error("Error changing subscription:", error);
@@ -354,7 +383,12 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50">
+    <>
+      <Script
+        src="https://widget.cloudpayments.ru/bundles/cloudpayments.js"
+        strategy="lazyOnload"
+      />
+      <div className="min-h-screen bg-slate-50/50">
       <header className="sticky top-0 z-30 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
@@ -923,5 +957,6 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }
