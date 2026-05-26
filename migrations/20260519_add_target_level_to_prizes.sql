@@ -1,0 +1,1 @@
+ALTER TABLE promo_prizes ADD COLUMN target_level INTEGER DEFAULT NULL;

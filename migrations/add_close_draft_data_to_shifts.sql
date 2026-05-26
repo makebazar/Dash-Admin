@@ -1,0 +1,1 @@
+ALTER TABLE shifts ADD COLUMN IF NOT EXISTS close_draft_data JSONB;

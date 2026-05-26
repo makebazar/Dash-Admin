@@ -45,3 +45,25 @@ next-env.d.ts
 graphify-out/cache/
 graphify-out/.graphify_python
 .DS_Store
+
+# electron build artifacts
+/dist-electron/
+/dist-electron-mac-safe/
+/dist-electron-win-safe/
+/.electron-app/
+/.electron-data-debug/
+
+# player-app build
+/player-app/dist/
+
+# scratch & temp
+/scratch/
+wizard_full.txt
+
+# logs
+*.log
+next.log
+vite.log
+
+# archives
+*.zip
