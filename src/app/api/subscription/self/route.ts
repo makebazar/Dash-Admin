@@ -210,10 +210,23 @@ export async function POST(request: Request) {
           object: 4  // Услуга
         }
       ],
+      items: [
+        {
+          label: `Подписка DashAdmin: тариф "${plan.name}"`,
+          price: Number(amount),
+          quantity: 1.00,
+          amount: Number(amount),
+          vat: vat,
+          method: 0, // Предоплата 100%
+          object: 4  // Услуга
+        }
+      ],
       taxationSystem: taxationSystem,
+      taxationsystem: taxationSystem,
       phone: owner.phone_number,
       amounts: {
-        electronic: Number(amount)
+        electronic: Number(amount),
+        Electronic: Number(amount)
       }
     };
 

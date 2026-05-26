@@ -315,6 +315,9 @@ export default function DashboardPage() {
           accountId: userData?.id || '',
           phone: data.phone_number,
           
+          // Root level receipt fallback (for start() and direct integration)
+          receipt: data.receipt,
+          
           // Root level fallback
           recurrent: {
             interval: cpInterval,
@@ -323,19 +326,24 @@ export default function DashboardPage() {
           
           data: {
             customerReceipt: data.receipt, // CloudKassir 54-ФЗ
+            CustomerReceipt: data.receipt,
             
             // All API and SDK casing variations to ensure 100% gateway compatibility
             cloudpayments: {
               recurrent: {
                 interval: cpInterval,
                 period: cpPeriod
-              }
+              },
+              customerReceipt: data.receipt,
+              CustomerReceipt: data.receipt
             },
             cloudPayments: {
               recurrent: {
                 interval: cpInterval,
                 period: cpPeriod
-              }
+              },
+              customerReceipt: data.receipt,
+              CustomerReceipt: data.receipt
             },
             recurrent: {
               interval: cpInterval,
