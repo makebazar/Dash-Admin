@@ -287,6 +287,24 @@ export default function DashboardPage() {
           return;
         }
 
+        // Map billing period to CloudPayments recurrent structure
+        let cpInterval = "Month";
+        let cpPeriod = 1;
+
+        if (data.plan.period_unit === "day") {
+          cpInterval = "Day";
+          cpPeriod = Number(data.plan.period_value || 1);
+        } else if (data.plan.period_unit === "week") {
+          cpInterval = "Week";
+          cpPeriod = Number(data.plan.period_value || 1);
+        } else if (data.plan.period_unit === "year") {
+          cpInterval = "Month";
+          cpPeriod = Number(data.plan.period_value || 1) * 12; // 1 year = 12 months
+        } else {
+          cpInterval = "Month";
+          cpPeriod = Number(data.plan.period_value || 1);
+        }
+
         const widget = new cp.CloudPayments();
         widget.pay('charge', {
           publicId: data.publicId || data.publicTerminalId, // Mandatory Public ID
@@ -297,7 +315,14 @@ export default function DashboardPage() {
           accountId: userData?.id || '',
           phone: data.phone_number,
           data: {
-            customerReceipt: data.receipt // CloudKassir 54-ФЗ
+            customerReceipt: data.receipt, // CloudKassir 54-ФЗ
+            cloudPayments: {
+              customerReceipt: data.receipt,
+              recurrent: {
+                interval: cpInterval,
+                period: cpPeriod
+              }
+            }
           }
         }, {
           onSuccess: async (options: any) => {

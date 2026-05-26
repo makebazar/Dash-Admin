@@ -230,6 +230,8 @@ export async function POST(request: Request) {
         code: plan.code,
         name: plan.name,
         amount: amount,
+        period_unit: plan.period_unit,
+        period_value: plan.period_value
       }
     });
   } catch (error) {
