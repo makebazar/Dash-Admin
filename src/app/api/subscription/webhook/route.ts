@@ -70,6 +70,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Bad Request" }, { status: 400 });
     }
 
+    // 0. Handle RECURRENT status changes separately (since they might not contain a specific transaction InvoiceId)
+    if (event === "recurrent") {
+      const subscriptionStatus = String(data.Status || data.status || "").toLowerCase();
+      const accountId = data.AccountId || data.accountId;
+      console.log(`Recurrent webhook received: status = ${subscriptionStatus}, accountId = ${accountId}`);
+
+      if (subscriptionStatus === "cancelled" || subscriptionStatus === "rejected" || subscriptionStatus === "expired" || subscriptionStatus === "pastdue") {
+        const nextStatus = "expired"; // Force status to expired to restrict access
+        if (accountId) {
+          await query(
+            `UPDATE clubs
+             SET subscription_status = $1,
+                 subscription_ends_at = NOW()
+             WHERE owner_id = $2`,
+            [nextStatus, accountId]
+          );
+          console.log(`Updated clubs for owner ${accountId} to expired due to recurrent status: ${subscriptionStatus}`);
+        }
+      } else if (subscriptionStatus === "active") {
+        if (accountId) {
+          await query(
+            `UPDATE clubs
+             SET subscription_status = 'active'
+             WHERE owner_id = $1`,
+            [accountId]
+          );
+          console.log(`Updated clubs for owner ${accountId} to active due to recurrent status: ${subscriptionStatus}`);
+        }
+      }
+      return NextResponse.json({ code: 0 });
+    }
+
     // Capture critical variables case-insensitively
     const invoiceIdStr = data.InvoiceId || data.invoiceId;
     const amountStr = data.Amount || data.amount;
@@ -221,6 +253,50 @@ export async function POST(request: Request) {
       );
       
       console.log(`Order ${orderId} marked as failed from CloudPayments webhook.`);
+      return NextResponse.json({ code: 0 });
+    }
+
+    if (event === "refund") {
+      // 4. REFUND EVENT (Payment refunded)
+      await query(
+        `UPDATE subscription_orders
+         SET status = 'refunded',
+             updated_at = NOW()
+         WHERE id = $1`,
+        [orderId]
+      );
+      if (order.club_id) {
+        await query(
+          `UPDATE clubs
+           SET subscription_status = 'expired',
+               subscription_ends_at = NOW()
+           WHERE id = $1`,
+          [order.club_id]
+        );
+      }
+      console.log(`Order ${orderId} marked as refunded and club subscription expired.`);
+      return NextResponse.json({ code: 0 });
+    }
+
+    if (event === "cancel") {
+      // 5. CANCEL EVENT (Payment cancelled/reversed)
+      await query(
+        `UPDATE subscription_orders
+         SET status = 'failed',
+             updated_at = NOW()
+         WHERE id = $1`,
+        [orderId]
+      );
+      if (order.club_id) {
+        await query(
+          `UPDATE clubs
+           SET subscription_status = 'expired',
+               subscription_ends_at = NOW()
+           WHERE id = $1`,
+          [order.club_id]
+        );
+      }
+      console.log(`Order ${orderId} marked as cancelled.`);
       return NextResponse.json({ code: 0 });
     }
 
