@@ -365,7 +365,7 @@ function EmployeeTasksContent() {
           setModalTaskDetails(data);
           setPhotosBefore(data.task.photos_before || []);
           setPhotosAfter(data.task.photos_after || []);
-          setCompletionNotes(data.task.notes || "");
+          setCompletionNotes("");
         } else {
           alert("Не удалось загрузить детали задачи");
           setSelectedTaskForModal(null);
@@ -995,15 +995,19 @@ function EmployeeTasksContent() {
                             <Loader2 className="h-3 w-3 animate-spin" />
                           ) : (
                             <>
-                              {sessionId
-                                ? "Добавить"
-                                : isInProgress || isRework
-                                  ? isModalMode
+                              {isModalMode
+                                ? isRework
+                                  ? "Исправить"
+                                  : isInProgress
                                     ? "Продолжить"
-                                    : isMobile
+                                    : "Обслужить"
+                                : sessionId
+                                  ? "Добавить"
+                                  : isInProgress || isRework
+                                    ? isMobile
                                       ? "Открыть"
                                       : "QR-код"
-                                  : "Начать"}
+                                    : "Начать"}
                             </>
                           )}
                         </Button>
@@ -1607,23 +1611,54 @@ function EmployeeTasksContent() {
                       Инструкция по обслуживанию
                     </h4>
                     <div className="bg-zinc-900/20 border border-zinc-900 rounded-2xl p-5 space-y-4">
-                      {Array.isArray(modalTaskDetails.instructions) ? (
-                        <ol className="space-y-3 list-decimal list-inside text-xs text-zinc-300 font-medium">
-                          {modalTaskDetails.instructions.map((step: any, idx: number) => (
-                            <li key={idx} className="leading-relaxed">
-                              {typeof step === "string" ? step : step.text || step.description}
-                            </li>
-                          ))}
-                        </ol>
-                      ) : typeof modalTaskDetails.instructions === "string" && modalTaskDetails.instructions.trim() ? (
-                        <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed font-medium">
-                          {modalTaskDetails.instructions}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-zinc-500 italic">
-                          Инструкции по регламенту отсутствуют для данного типа устройств.
-                        </p>
-                      )}
+                      {(() => {
+                        const instData = modalTaskDetails.instructions?.instructions !== undefined 
+                          ? modalTaskDetails.instructions.instructions 
+                          : modalTaskDetails.instructions;
+                        
+                        if (Array.isArray(instData) && instData.length > 0) {
+                          return (
+                            <ol className="space-y-3 list-decimal list-inside text-xs text-zinc-300 font-medium">
+                              {instData.map((step: any, idx: number) => (
+                                <li key={idx} className="leading-relaxed">
+                                  {typeof step === "string" ? step : step.text || step.description}
+                                </li>
+                              ))}
+                            </ol>
+                          );
+                        }
+                        
+                        if (typeof instData === "string" && instData.trim()) {
+                          try {
+                            const parsed = JSON.parse(instData);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                              return (
+                                <ol className="space-y-3 list-decimal list-inside text-xs text-zinc-300 font-medium">
+                                  {parsed.map((step: any, idx: number) => (
+                                    <li key={idx} className="leading-relaxed">
+                                      {typeof step === "string" ? step : step.text || step.description}
+                                    </li>
+                                  ))}
+                                </ol>
+                              );
+                            }
+                          } catch (e) {
+                            // not json, just text
+                          }
+                          return (
+                            <div 
+                              className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed font-medium prose prose-invert prose-p:my-1 prose-strong:text-zinc-200"
+                              dangerouslySetInnerHTML={{ __html: instData }}
+                            />
+                          );
+                        }
+                        
+                        return (
+                          <p className="text-xs text-zinc-500 italic">
+                            Инструкции по регламенту отсутствуют для данного типа устройств.
+                          </p>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
