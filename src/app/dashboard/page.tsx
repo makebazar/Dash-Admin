@@ -314,14 +314,32 @@ export default function DashboardPage() {
           invoiceId: data.order_id.toString(),
           accountId: userData?.id || '',
           phone: data.phone_number,
+          
+          // Root level fallback
+          recurrent: {
+            interval: cpInterval,
+            period: cpPeriod
+          },
+          
           data: {
             customerReceipt: data.receipt, // CloudKassir 54-ФЗ
-            cloudPayments: {
-              customerReceipt: data.receipt,
+            
+            // All API and SDK casing variations to ensure 100% gateway compatibility
+            cloudpayments: {
               recurrent: {
                 interval: cpInterval,
                 period: cpPeriod
               }
+            },
+            cloudPayments: {
+              recurrent: {
+                interval: cpInterval,
+                period: cpPeriod
+              }
+            },
+            recurrent: {
+              interval: cpInterval,
+              period: cpPeriod
             }
           }
         }, {
