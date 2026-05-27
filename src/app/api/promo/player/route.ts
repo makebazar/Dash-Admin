@@ -70,6 +70,56 @@ export async function GET(request: Request) {
       console.error("BP Info Error (possibly tables not migrated yet):", e);
     }
 
+    // Calculate monthly topups and withdrawals for limits
+    let monthlyTopups = 0;
+    let monthlyWithdrawn = 0;
+    let monthlyBarReal = 0;
+    let monthlyBarBonus = 0;
+
+    try {
+      const topupRes = await client.query(
+        `SELECT COALESCE(SUM((result_data->>'amount')::float), 0) as total
+         FROM promo_history
+         WHERE player_id = $1 AND club_id = $2 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)`,
+        [playerId, activeClubId],
+      );
+      const topups = parseFloat(topupRes.rows[0].total);
+
+      const barRealRes = await client.query(
+        `SELECT COALESCE(SUM(total_amount), 0) as total
+         FROM shift_receipts
+         WHERE promo_player_id = $1 AND club_id = $2
+           AND payment_type IN ('cash', 'card', 'mixed')
+           AND committed_at >= date_trunc('month', CURRENT_DATE)`,
+        [playerId, activeClubId],
+      );
+      monthlyBarReal = parseFloat(barRealRes.rows[0].total);
+      monthlyTopups = topups + monthlyBarReal;
+
+      const withdrawRes = await client.query(
+        `SELECT COALESCE(SUM(withdraw_amount), 0) as total
+         FROM promo_prize_queue
+         WHERE player_id = $1 AND club_id = $2 AND status != 'canceled' AND created_at >= date_trunc('month', CURRENT_DATE)`,
+        [playerId, activeClubId],
+      );
+      const normalWithdraw = parseFloat(withdrawRes.rows[0].total);
+
+      const barBonusRes = await client.query(
+        `SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) as total
+         FROM promo_history
+         WHERE player_id = $1 AND club_id = $2
+           AND game_type = 'BAR_BONUS_PURCHASE'
+           AND created_at >= date_trunc('month', CURRENT_DATE)`,
+        [playerId, activeClubId],
+      );
+      monthlyBarBonus = parseFloat(barBonusRes.rows[0].total);
+      monthlyWithdrawn = normalWithdraw + monthlyBarBonus;
+    } catch (e) {
+      console.error("Failed to fetch monthly stats for limits:", e);
+    }
+
+    const hasPremiumBp = bpInfo?.progress?.hasPremium === true;
+
     return NextResponse.json({
       player: {
         id: data.id,
@@ -82,6 +132,11 @@ export async function GET(request: Request) {
         settings: data.promo_settings,
         level: levelInfo,
         bp: bpInfo,
+        monthlyTopups,
+        monthlyWithdrawn,
+        monthlyBarReal,
+        monthlyBarBonus,
+        hasPremiumBp,
       },
       allLevels: allLevelsResult.rows,
       tickets: ticketsResult.rows[0].count,

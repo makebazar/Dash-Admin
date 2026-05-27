@@ -99,9 +99,13 @@ export async function GET(request: Request) {
           WHERE player_id = p.id AND club_id = $1 AND game_type IN ('TOPUP', 'SERVICE_AWARD')
         ), 0) as total_deposited,
         COALESCE((
-          SELECT SUM(COALESCE((result_data->>'amount')::numeric, (result_data->>'bonus_cost')::numeric, 0))
+          SELECT SUM(withdraw_amount)
+          FROM promo_prize_queue
+          WHERE player_id = p.id AND club_id = $1 AND status != 'canceled'
+        ), 0) + COALESCE((
+          SELECT SUM((result_data->>'bonus_cost')::numeric)
           FROM promo_history
-          WHERE player_id = p.id AND club_id = $1 AND game_type IN ('WITHDRAW', 'BAR_BONUS_PURCHASE')
+          WHERE player_id = p.id AND club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE'
         ), 0) as total_withdrawn,
         COALESCE((
           SELECT SUM((h.result_data->>'items_total')::numeric)

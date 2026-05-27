@@ -188,11 +188,14 @@ export default function PromoLobby() {
   const [showIntentDialog, setShowIntentDialog] = React.useState(false);
   const [showOrderDialog, setShowOrderDialog] = React.useState(false);
   const [isCheckingIn, setIsCheckingIn] = React.useState(false);
+  const [quests, setQuests] = React.useState<any[]>([]);
+  const [showSeatDialog, setShowSeatDialog] = React.useState(false);
+  const [tempSeatNumber, setTempSeatNumber] = React.useState("");
   const hasCheckedIn = React.useRef(false);
 
   const multiplier = publicClubInfo?.settings?.bonus_price_multiplier || 2;
 
-  const handleCheckIn = async (intent: "topup" | "pos" | "bonus_order") => {
+  const handleCheckIn = async (intent: "topup" | "pos" | "bonus_order" | "visit", seatNumber?: string) => {
     if (!urlClubId || isCheckingIn) return;
     setIsCheckingIn(true);
     try {
@@ -202,6 +205,7 @@ export default function PromoLobby() {
         body: JSON.stringify({
           clubId: urlClubId,
           intent,
+          seatNumber,
           cart: intent === "bonus_order" ? cart : undefined,
         }),
       });
@@ -260,11 +264,12 @@ export default function PromoLobby() {
 
         const currentClubId = urlClubId || data.player.clubId;
 
-        // Fetch products and settings
-        const [prizesRes, productsRes, clubRes] = await Promise.all([
+        // Fetch products, settings, and quests
+        const [prizesRes, productsRes, clubRes, questsRes] = await Promise.all([
           fetch(`/api/promo/prizes?all=true`),
           fetch(`/api/promo/products?clubId=${currentClubId}`),
           fetch(`/api/promo/public-info?clubId=${currentClubId}`),
+          fetch(`/api/promo/player/quests`),
         ]);
 
         const prizesData = await prizesRes.json();
@@ -287,6 +292,11 @@ export default function PromoLobby() {
         const clubData = await clubRes.json();
         if (clubData.success) {
           setPublicClubInfo(clubData.club);
+        }
+
+        const questsData = await questsRes.json();
+        if (questsRes.ok) {
+          setQuests(questsData.quests || []);
         }
 
         // Handle Check-in action from Static QR
@@ -416,11 +426,45 @@ export default function PromoLobby() {
                   </div>
                 </div>
 
+                {(() => {
+                  const isLimitEnabled = player?.settings?.withdraw_limit_enabled === true;
+                  if (!isLimitEnabled) return null;
+
+                  const limitPercent = player?.hasPremiumBp
+                    ? parseFloat(player?.settings?.withdraw_limit_percent_bp ?? 80)
+                    : parseFloat(player?.settings?.withdraw_limit_percent ?? 50);
+                  const monthlyTopups = player?.monthlyTopups || 0;
+                  const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
+                  const allowedLimit = monthlyTopups * (limitPercent / 100);
+                  const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
+                  const limitExceeded = cartTotal > remainingLimit;
+
+                  if (limitExceeded) {
+                    return (
+                      <p className="text-red-500 text-[10px] font-black uppercase tracking-widest text-center">
+                        Превышен лимит вывода! Доступно: {Math.floor(remainingLimit)} ₽, заказ: {Math.floor(cartTotal)} ₽.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+
                 <div className="space-y-3">
                   <button
                     onClick={() => handleCheckIn("bonus_order")}
                     disabled={
-                      isCheckingIn || cartTotal > (player?.bonusBalance || 0)
+                      isCheckingIn || 
+                      cartTotal > (player?.bonusBalance || 0) ||
+                      (() => {
+                        const isLimitEnabled = player?.settings?.withdraw_limit_enabled === true;
+                        if (!isLimitEnabled) return false;
+                        const limitPercent = player?.hasPremiumBp
+                          ? parseFloat(player?.settings?.withdraw_limit_percent_bp ?? 80)
+                          : parseFloat(player?.settings?.withdraw_limit_percent ?? 50);
+                        const allowedLimit = (player?.monthlyTopups || 0) * (limitPercent / 100);
+                        const remainingLimit = Math.max(0, allowedLimit - (player?.monthlyWithdrawn || 0));
+                        return cartTotal > remainingLimit;
+                      })()
                     }
                     className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:grayscale text-white py-5 rounded-3xl font-black uppercase italic text-lg shadow-lg shadow-orange-500/20 transition-all active:scale-[0.98]"
                   >
@@ -468,6 +512,39 @@ export default function PromoLobby() {
               </div>
 
               <div className="grid grid-cols-1 gap-4">
+                <button
+                  onClick={() => {
+                    const needsSeat = quests.some(
+                      (q) =>
+                        q.requires_seat_number &&
+                        q.status !== "completed" &&
+                        q.status !== "claimed"
+                    );
+                    if (needsSeat) {
+                      setTempSeatNumber("");
+                      setShowSeatDialog(true);
+                      setShowIntentDialog(false);
+                    } else {
+                      handleCheckIn("visit");
+                    }
+                  }}
+                  disabled={isCheckingIn}
+                  className="group flex items-center gap-4 w-full bg-white/5 hover:bg-orange-500/10 border border-white/10 hover:border-orange-500/50 p-6 rounded-3xl transition-all active:scale-[0.98] text-left"
+                >
+                  <div className="w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform">
+                    <Target className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-black uppercase italic text-lg leading-tight">
+                      Отметиться
+                    </div>
+                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">
+                      Выполнить квест на посещение
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-orange-500 transition-colors" />
+                </button>
+
                 <button
                   onClick={() => handleCheckIn("topup")}
                   disabled={isCheckingIn}
@@ -536,6 +613,73 @@ export default function PromoLobby() {
               >
                 Отмена
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Seat Number Input Dialog */}
+      <AnimatePresence>
+        {showSeatDialog && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-60 flex items-center justify-center p-6 bg-black/60 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="w-full max-w-sm bg-[#151515] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl space-y-6"
+            >
+              <div className="text-center space-y-2">
+                <h3 className="text-2xl font-black uppercase italic tracking-tight">
+                  Ваше <span className="text-orange-500">Место</span>
+                </h3>
+                <p className="text-gray-400 text-sm font-medium">
+                  Для выполнения квеста укажите номер вашего ПК или игрового места.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 block px-1">
+                  Номер ПК / Места
+                </label>
+                <input
+                  type="text"
+                  placeholder="Например: ПК 15"
+                  value={tempSeatNumber}
+                  onChange={(e) => setTempSeatNumber(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 transition-all placeholder:text-gray-600"
+                />
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <button
+                  onClick={() => {
+                    handleCheckIn("visit", tempSeatNumber);
+                    setShowSeatDialog(false);
+                  }}
+                  disabled={isCheckingIn || !tempSeatNumber.trim()}
+                  className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-4 rounded-3xl font-black uppercase italic text-base shadow-lg shadow-orange-500/20 transition-all active:scale-[0.98]"
+                >
+                  {isCheckingIn ? (
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                  ) : (
+                    "Подтвердить"
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSeatDialog(false);
+                    setShowIntentDialog(true);
+                  }}
+                  className="w-full text-center text-gray-500 hover:text-white text-[10px] font-black uppercase tracking-widest transition-colors py-2"
+                >
+                  Назад
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -766,6 +910,91 @@ export default function PromoLobby() {
                 </button>
               )}
             </div>
+
+            {player?.settings?.withdraw_limit_enabled === true && (() => {
+              const limitPercent = player?.hasPremiumBp
+                ? parseFloat(player?.settings?.withdraw_limit_percent_bp ?? 80)
+                : parseFloat(player?.settings?.withdraw_limit_percent ?? 50);
+              const monthlyTopups = player?.monthlyTopups || 0;
+              const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
+              const allowedLimit = monthlyTopups * (limitPercent / 100);
+              const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
+              const progressPercent = allowedLimit > 0 ? (monthlyWithdrawn / allowedLimit) * 100 : 0;
+
+              return (
+                <div className="space-y-4">
+                  <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="flex-1 space-y-2 w-full">
+                      <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
+                        <span>Лимит на покупки за бонусы ({new Date().toLocaleString("ru-RU", { month: "long" })})</span>
+                        <div className="flex items-center gap-2">
+                          {player?.hasPremiumBp ? (
+                            <span className="text-[8px] font-black uppercase tracking-widest bg-indigo-500/15 text-indigo-400 px-1.5 py-0.5 rounded border border-indigo-500/20">
+                              🔥 BP {limitPercent}%
+                            </span>
+                          ) : (
+                            <span className="text-[8px] font-black uppercase tracking-widest bg-yellow-500/10 text-yellow-500 px-1.5 py-0.5 rounded border border-yellow-500/20">
+                              {limitPercent}%
+                            </span>
+                          )}
+                          <span className="text-orange-500">{Math.floor(remainingLimit)} ₽ осталось из {Math.floor(allowedLimit)} ₽</span>
+                        </div>
+                      </div>
+                      <div className="relative h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-orange-600 to-orange-400 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(100, progressPercent)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-relaxed md:max-w-xs shrink-0">
+                      {remainingLimit <= 0 ? (
+                        <>
+                          Лимит исчерпан. <span className="text-orange-500 font-black">Пополните счет</span> или купите в баре за рубли, чтобы увеличить лимит!
+                        </>
+                      ) : (
+                        <>
+                          Оплата бонусами расходует ваш ежемесячный лимит на вывод и покупки.
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Battle Pass Promo Banner inside Shop */}
+                  {player?.hasPremiumBp ? (
+                    <div className="bg-indigo-500/[0.03] border border-indigo-500/10 rounded-[1.5rem] p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <div className="text-[9px] font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                          🌟 PREMIUM BATTLE PASS АКТИВЕН
+                        </div>
+                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                          Ваш лимит на покупки увеличен до <span className="text-indigo-400 font-black">{limitPercent}%</span> благодаря Battle Pass!
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    player?.settings?.bp_enabled !== false && (
+                      <Link
+                        href="/promo"
+                        className="bg-gradient-to-r from-indigo-950/20 to-purple-950/20 border border-indigo-500/15 hover:border-indigo-500/30 transition-all rounded-[1.5rem] p-4 flex items-center justify-between group"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="text-[9px] font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1">
+                            ⚡ УВЕЛИЧИТЬ ЛИМИТ ДО {player?.settings?.withdraw_limit_percent_bp ?? 80}%
+                          </div>
+                          <div className="text-[8px] text-gray-400 font-medium uppercase tracking-wider">
+                            Активируйте Premium Battle Pass для повышенного лимита вывода и покупок!
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                      </Link>
+                    )
+                  )}
+                </div>
+              );
+            })()}
 
             <AnimatePresence>
               {cart.length > 0 && (

@@ -25,10 +25,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const numericClubId = parseInt(String(clubId), 10);
+    if (isNaN(numericClubId)) {
+      return NextResponse.json(
+        { error: "Некорректный ID клуба" },
+        { status: 400 },
+      );
+    }
+
     // 1. Get club settings
     const clubResult = await query(
       `SELECT promo_settings FROM clubs WHERE id = $1`,
-      [clubId],
+      [numericClubId],
     );
 
     const settings = clubResult.rows[0]?.promo_settings || {};
@@ -79,7 +87,7 @@ export async function POST(request: Request) {
     await query(
       `INSERT INTO promo_player_balances (player_id, club_id)
              VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-      [playerId, clubId],
+      [playerId, numericClubId],
     );
 
     // 4. Issue tickets
@@ -87,7 +95,7 @@ export async function POST(request: Request) {
       `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
              SELECT $1, $2, 'available', 'admin_manual', NULL
              FROM generate_series(1, $3)`,
-      [playerId, clubId, finalTicketsCount],
+      [playerId, numericClubId, finalTicketsCount],
     );
 
     // 5. Process Quests (if amount was used)
@@ -99,7 +107,7 @@ export async function POST(request: Request) {
         try {
           await processBalanceTopupEvent(
             client,
-            clubId,
+            numericClubId,
             playerId,
             parseFloat(amount),
           );

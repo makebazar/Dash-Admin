@@ -44,6 +44,7 @@ import {
   voidPromoAccrualSafe,
   getPendingQuestVerifications,
   verifyQuestSafe,
+  confirmPlayerVisitSafe,
 } from "@/app/clubs/[clubId]/inventory/actions";
 import { normalizePhone } from "@/lib/phone-utils";
 import { cn } from "@/lib/utils";
@@ -177,7 +178,7 @@ export function EmployeePromoControlCard({
       }
 
       if (message.type === "PLAYER_CHECKIN" && message.player) {
-        if (message.player.intent && message.player.intent !== "topup") return;
+        if (message.player.intent && !["topup", "visit"].includes(message.player.intent)) return;
 
         setCheckedInPlayers((prev) => {
           const filtered = prev.filter((p) => p.id !== message.player.id);
@@ -187,13 +188,16 @@ export function EmployeePromoControlCard({
           ].slice(0, 5);
         });
 
-        if (isAccrualDialogOpen && !accrualPlayer) {
+        if (isAccrualDialogOpen && !accrualPlayer && message.player.intent === "topup") {
           setAccrualPlayer(message.player);
         }
 
+        const isVisit = message.player.intent === "visit";
         showMessage({
-          title: "🔔 Гость подошел",
-          description: `${message.player.full_name} сканировал QR`,
+          title: isVisit ? "📌 Гость отметился" : "🔔 Гость подошел",
+          description: isVisit
+            ? `${message.player.full_name} просит отметить посещение${message.player.seat_number ? ` (ПК: ${message.player.seat_number})` : ""}`
+            : `${message.player.full_name} сканировал QR`,
         });
       }
     },
@@ -342,6 +346,43 @@ export function EmployeePromoControlCard({
     }
   };
 
+  const [confirmingVisitId, setConfirmingVisitId] = useState<string | null>(null);
+
+  const handleConfirmVisit = async (playerId: string, seatNumber?: string) => {
+    const ok = await confirmAction({
+      title: "Подтверждение присутствия",
+      description: `Подтвердить, что гость пришел в клуб?${seatNumber ? ` Место/ПК: ${seatNumber}` : ""}`,
+      confirmText: "Да, пришел",
+      cancelText: "Отмена",
+    });
+    if (!ok) return;
+
+    setConfirmingVisitId(playerId);
+    try {
+      const res = await confirmPlayerVisitSafe(clubId, userId, playerId, seatNumber);
+      if (res.ok) {
+        showMessage({
+          title: "✅ Посещение подтверждено",
+          description: "Посещение игрока успешно засчитано!",
+        });
+        setCheckedInPlayers((prev) => prev.filter((p) => p.id !== playerId));
+        refresh();
+      } else {
+        showMessage({
+          title: "Ошибка",
+          description: res.error || "Не удалось подтвердить посещение",
+        });
+      }
+    } catch (e) {
+      showMessage({
+        title: "Ошибка",
+        description: "Сетевая ошибка при подтверждении",
+      });
+    } finally {
+      setConfirmingVisitId(null);
+    }
+  };
+
   const searchPlayersByPhone = async (phone: string) => {
     if (phone.length < 4) {
       setPromoSearchResults([]);
@@ -413,23 +454,44 @@ export function EmployeePromoControlCard({
             <div className="flex flex-wrap gap-2">
               {checkedInPlayers.map((p) => (
                 <div key={p.id} className="group relative">
-                  <button
-                    onClick={() => {
-                      setAccrualPlayer(p);
-                      setIsAccrualDialogOpen(true);
-                    }}
-                    className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-[10px] font-bold border border-border flex items-center gap-2"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    {p.full_name}
-                  </button>
+                  {p.intent === "visit" ? (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-1.5 pl-2.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <div className="text-[10px] font-bold text-foreground truncate max-w-[120px]">
+                        {p.full_name} {p.seat_number ? `(ПК: ${p.seat_number})` : ""}
+                      </div>
+                      <Button
+                        onClick={() => handleConfirmVisit(p.id, p.seat_number)}
+                        disabled={confirmingVisitId === p.id}
+                        size="sm"
+                        className="h-7 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[9px] font-black uppercase px-2 shadow-none"
+                      >
+                        {confirmingVisitId === p.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          "Пришел"
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setAccrualPlayer(p);
+                        setIsAccrualDialogOpen(true);
+                      }}
+                      className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-[10px] font-bold border border-border flex items-center gap-2"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      {p.full_name}
+                    </button>
+                  )}
                   <button
                     onClick={() =>
                       setCheckedInPlayers((prev) =>
                         prev.filter((item) => item.id !== p.id),
                       )
                     }
-                    className="absolute -top-1 -right-1 w-4 h-4 bg-zinc-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100"
+                    className="absolute -top-1 -right-1 w-4 h-4 bg-zinc-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 z-10"
                   >
                     <X className="w-2.5 h-2.5" />
                   </button>
@@ -460,6 +522,14 @@ export function EmployeePromoControlCard({
                       <div className="text-[10px] font-bold text-foreground mt-0.5">
                         {req.player_name || "Гость"}
                       </div>
+                      {req.seat_number && (
+                        <div className="text-[9px] font-black uppercase text-orange-500 mt-1 flex items-center gap-1">
+                          <span>💻 ПК:</span>
+                          <span className="bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.2 rounded font-black text-[9px] text-orange-500">
+                            {req.seat_number}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     {req.verification_photo_url && (
                       <div

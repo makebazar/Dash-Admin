@@ -109,12 +109,22 @@ export async function GET(request: Request) {
         (SELECT COALESCE(SUM(pr.value), 0) FROM promo_history h JOIN promo_prizes pr ON h.prize_id = pr.id WHERE h.club_id = $1 AND h.created_at >= date_trunc('month', CURRENT_DATE) AND pr.type = 'virtual')
         + (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND created_at >= date_trunc('month', CURRENT_DATE) AND game_type IN ('mines', 'rocket')) as prize_money_month,
 
-        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'WITHDRAW' AND created_at >= CURRENT_DATE)
+        (SELECT COALESCE(SUM(withdraw_amount), 0) FROM promo_prize_queue WHERE club_id = $1 AND status != 'canceled' AND created_at >= CURRENT_DATE)
         + (SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE' AND created_at >= CURRENT_DATE) as bonuses_used_today,
-        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'WITHDRAW' AND created_at >= date_trunc('month', CURRENT_DATE))
+        (SELECT COALESCE(SUM(withdraw_amount), 0) FROM promo_prize_queue WHERE club_id = $1 AND status != 'canceled' AND created_at >= date_trunc('month', CURRENT_DATE))
         + (SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE' AND created_at >= date_trunc('month', CURRENT_DATE)) as bonuses_used_month,
+        
+        (SELECT COALESCE(SUM(withdraw_amount), 0) FROM promo_prize_queue WHERE club_id = $1 AND status != 'canceled' AND created_at >= CURRENT_DATE) as withdraws_today,
+        (SELECT COALESCE(SUM(withdraw_amount), 0) FROM promo_prize_queue WHERE club_id = $1 AND status != 'canceled' AND created_at >= date_trunc('month', CURRENT_DATE)) as withdraws_month,
+        
+        (SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE' AND created_at >= CURRENT_DATE) as bar_bonus_retail_today,
+        (SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE' AND created_at >= date_trunc('month', CURRENT_DATE)) as bar_bonus_retail_month,
+        
+        (SELECT COALESCE(SUM((SELECT SUM(ri.quantity * ri.cost_price_snapshot) FROM shift_receipt_items ri WHERE ri.receipt_id = (h.result_data->>'receipt_id')::int)), 0) FROM promo_history h WHERE h.club_id = $1 AND h.game_type = 'BAR_BONUS_PURCHASE' AND h.created_at >= CURRENT_DATE) as bar_bonus_cost_today,
+        (SELECT COALESCE(SUM((SELECT SUM(ri.quantity * ri.cost_price_snapshot) FROM shift_receipt_items ri WHERE ri.receipt_id = (h.result_data->>'receipt_id')::int)), 0) FROM promo_history h WHERE h.club_id = $1 AND h.game_type = 'BAR_BONUS_PURCHASE' AND h.created_at >= date_trunc('month', CURRENT_DATE)) as bar_bonus_cost_month,
 
         (SELECT ABS(COALESCE(SUM((result_data->>'amount')::float), 0)) FROM promo_history WHERE club_id = $1 AND game_type IN ('mines', 'rocket') AND (result_data->>'amount')::float < 0 AND created_at >= CURRENT_DATE) as betting_losses_today,
+        (SELECT ABS(COALESCE(SUM((result_data->>'amount')::float), 0)) FROM promo_history WHERE club_id = $1 AND game_type IN ('mines', 'rocket') AND (result_data->>'amount')::float < 0 AND created_at >= date_trunc('month', CURRENT_DATE)) as betting_losses_month,
 
         (SELECT COALESCE(SUM(bonus_balance), 0) FROM promo_player_balances WHERE club_id = $1) as total_bonus_debt,
 

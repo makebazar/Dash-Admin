@@ -18,6 +18,7 @@ export async function GET(request: Request) {
          pq.id,
          pq.verification_photo_url,
          pq.assigned_at,
+         pq.seat_number,
          q.title as quest_title,
          q.reward_xp,
          q.reward_tickets,

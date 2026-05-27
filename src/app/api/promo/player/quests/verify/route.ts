@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 export async function POST(request: Request) {
   const client = await getClient();
   try {
-    const { questId, photoUrl } = await request.json();
+    const { questId, photoUrl, seatNumber } = await request.json();
     const cookieStore = await cookies();
     const playerId = cookieStore.get("promo_player_id")?.value;
     const activeClubId = cookieStore.get("promo_active_club_id")?.value;
@@ -47,15 +47,16 @@ export async function POST(request: Request) {
         `UPDATE promo_player_quests
          SET status = 'pending_verification',
              verification_photo_url = $1,
-             current_progress = 1
+             current_progress = 1,
+             seat_number = $3
          WHERE id = $2`,
-        [photoUrl || null, existingRes.rows[0].id],
+        [photoUrl || null, existingRes.rows[0].id, seatNumber || null],
       );
     } else {
       await client.query(
-        `INSERT INTO promo_player_quests (player_id, club_id, quest_id, current_progress, status, verification_photo_url, assigned_at)
-         VALUES ($1, $2, $3, 1, 'pending_verification', $4, NOW())`,
-        [playerId, activeClubId, questId, photoUrl || null],
+        `INSERT INTO promo_player_quests (player_id, club_id, quest_id, current_progress, status, verification_photo_url, seat_number, assigned_at)
+         VALUES ($1, $2, $3, 1, 'pending_verification', $4, $5, NOW())`,
+        [playerId, activeClubId, questId, photoUrl || null, seatNumber || null],
       );
     }
 

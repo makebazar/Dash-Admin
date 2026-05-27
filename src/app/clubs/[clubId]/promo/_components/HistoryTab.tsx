@@ -118,7 +118,7 @@ export function HistoryTab({ logs }: HistoryTabProps) {
               </div>
               <div className="flex flex-col">
                 <div className="text-2xl font-black italic">
-                  {logs.stats?.real_topup_month || 0}{" "}
+                  {Math.round(parseFloat(logs.stats?.real_topup_month || 0))}{" "}
                   <span className="text-xs not-italic font-bold text-slate-300">
                     ₽
                   </span>
@@ -126,44 +126,60 @@ export function HistoryTab({ logs }: HistoryTabProps) {
                 <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
                   Сегодня:{" "}
                   <span className="text-amber-600">
-                    +{logs.stats?.real_topup_today || 0} ₽
+                    +{Math.round(parseFloat(logs.stats?.real_topup_today || 0))} ₽
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-emerald-500/20">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
-                  <Plus className="w-4 h-4 text-emerald-600" />
-                </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Новые бонусы (Net)
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <div className="text-2xl font-black italic">
-                  {Math.round(logs.stats?.prize_money_month || 0)}{" "}
-                  <span className="text-xs not-italic font-bold text-slate-300">
-                    ₽
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">
-                    СЕГОДНЯ:{" "}
-                    <span className="text-emerald-600">
-                      {Math.round(logs.stats?.prize_money_today || 0)} ₽
-                    </span>
+            {(() => {
+              const prizeMoneyMonth = parseFloat(logs.stats?.prize_money_month || 0);
+              const bettingLossesMonth = parseFloat(logs.stats?.betting_losses_month || 0);
+              const burnRateMonth = prizeMoneyMonth > 0 ? Math.round(bettingLossesMonth / prizeMoneyMonth * 100) : 0;
+              let burnLabel = "🟢 В норме (35-50%)";
+              let burnColor = "text-emerald-600 bg-emerald-50 border-emerald-100";
+              if (burnRateMonth < 35) {
+                burnLabel = "🟡 Низкое (риск инфляции)";
+                burnColor = "text-amber-600 bg-amber-50 border-amber-100";
+              } else if (burnRateMonth > 50) {
+                burnLabel = "🔴 Высокое (риск выгорания)";
+                burnColor = "text-rose-600 bg-rose-50 border-rose-100";
+              }
+
+              return (
+                <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-emerald-500/20">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                      <Plus className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                      Новые бонусы (Net)
+                    </div>
                   </div>
-                  <div className="text-[10px] font-bold text-slate-300 uppercase border-l border-slate-100 pl-2">
-                    СГОРЕЛО:{" "}
-                    <span className="text-slate-400">
-                      -{logs.stats?.betting_losses_today || 0} ₽
-                    </span>
+                  <div className="flex flex-col">
+                    <div className="text-2xl font-black italic">
+                      {Math.round(prizeMoneyMonth)}{" "}
+                      <span className="text-xs not-italic font-bold text-slate-300">
+                        ₽
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1.5 mt-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="text-[9px] font-bold text-slate-400 uppercase">
+                          СЕГОДНЯ: <span className="text-emerald-600">+{Math.round(parseFloat(logs.stats?.prize_money_today || 0))} ₽</span>
+                        </div>
+                        <div className="text-[9px] font-bold text-slate-300 uppercase border-l border-slate-100 pl-2">
+                          СГОРЕЛО: <span className="text-slate-400">-{Math.round(parseFloat(logs.stats?.betting_losses_today || 0))} ₽</span>
+                        </div>
+                      </div>
+                      <div className={cn("text-[8px] font-black uppercase px-2 py-0.5 rounded border inline-block w-fit tracking-wider", burnColor)}>
+                        Сгорание: {burnRateMonth}% • {burnLabel}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-red-500/20">
               <div className="flex items-center gap-3 mb-2">
@@ -176,7 +192,7 @@ export function HistoryTab({ logs }: HistoryTabProps) {
               </div>
               <div className="flex flex-col">
                 <div className="text-2xl font-black italic">
-                  {logs.stats?.bonuses_used_month || 0}{" "}
+                  {Math.round(parseFloat(logs.stats?.bonuses_used_month || 0))}{" "}
                   <span className="text-xs not-italic font-bold text-slate-300">
                     ₽
                   </span>
@@ -184,41 +200,208 @@ export function HistoryTab({ logs }: HistoryTabProps) {
                 <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
                   СЕГОДНЯ:{" "}
                   <span className="text-red-600">
-                    {logs.stats?.bonuses_used_today || 0} ₽
+                    {Math.round(parseFloat(logs.stats?.bonuses_used_today || 0))} ₽
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="bg-indigo-600 p-5 rounded-3xl shadow-xl shadow-indigo-200 relative overflow-hidden group">
-              <div className="flex items-center gap-3 mb-2 relative z-10">
-                <div className="w-8 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center">
-                  <Target className="w-4 h-4 text-white" />
+            {(() => {
+              const realTopupMonth = parseFloat(logs.stats?.real_topup_month || 0);
+              const bonusesUsedMonth = parseFloat(logs.stats?.bonuses_used_month || 0);
+              const nomROI = bonusesUsedMonth > 0 ? Math.round(realTopupMonth / bonusesUsedMonth * 100) : 0;
+              let roiLabel = "👍 В пределах нормы (65-85%)";
+              let roiBadgeColor = "bg-white/20 text-white border-white/30";
+              if (nomROI < 65) {
+                roiLabel = "⚠️ Низкий КПД (лимиты мягкие)";
+                roiBadgeColor = "bg-rose-500/30 text-rose-100 border-rose-400/30";
+              } else if (nomROI > 85) {
+                roiLabel = "🔥 Высокая окупаемость (>85%)";
+                roiBadgeColor = "bg-emerald-500/30 text-emerald-100 border-emerald-400/30";
+              }
+
+              return (
+                <div className="bg-indigo-600 p-5 rounded-3xl shadow-xl shadow-indigo-200 relative overflow-hidden group">
+                  <div className="flex items-center gap-3 mb-2 relative z-10">
+                    <div className="w-8 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center">
+                      <Target className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="text-[9px] font-black text-white/60 uppercase tracking-widest">
+                      Окупаемость (ROI)
+                    </div>
+                  </div>
+                  <div className="flex flex-col relative z-10">
+                    <div className="text-2xl font-black italic text-white">
+                      {nomROI}
+                      <span className="text-xs not-italic font-bold text-indigo-200 ml-1">
+                        %
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1.5 mt-1.5">
+                      <div className="text-[10px] font-bold text-white/60 uppercase">
+                        Номинальный КПД
+                      </div>
+                      <div className={cn("text-[8px] font-black uppercase px-2 py-0.5 rounded border inline-block w-fit tracking-wider", roiBadgeColor)}>
+                        {roiLabel}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-white/20 transition-colors" />
                 </div>
-                <div className="text-[9px] font-black text-white/60 uppercase tracking-widest">
-                  Окупаемость (ROI)
-                </div>
-              </div>
-              <div className="flex flex-col relative z-10">
-                <div className="text-2xl font-black italic text-white">
-                  {logs.stats?.bonuses_used_month > 0
-                    ? Math.round(
-                        (logs.stats?.real_topup_month /
-                          logs.stats?.bonuses_used_month) *
-                          100,
-                      )
-                    : 0}
-                  <span className="text-xs not-italic font-bold text-indigo-200 ml-1">
-                    %
-                  </span>
-                </div>
-                <div className="text-[10px] font-bold text-white/60 mt-1 uppercase">
-                  Месячный КПД
-                </div>
-              </div>
-              {/* Visual pattern background */}
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-white/20 transition-colors" />
-            </div>
+              );
+            })()}
+          </div>
+        </div>
+
+        {/* Row 3: Детализация расходов и Реальная окупаемость */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-4">
+            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+              Детализация расходов и Реальная Окупаемость (Месяц)
+            </h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {(() => {
+              const withdrawsMonth = parseFloat(logs.stats?.withdraws_month || 0);
+              const withdrawsToday = parseFloat(logs.stats?.withdraws_today || 0);
+              const barBonusRetailMonth = parseFloat(logs.stats?.bar_bonus_retail_month || 0);
+              const barBonusRetailToday = parseFloat(logs.stats?.bar_bonus_retail_today || 0);
+              const barBonusCostMonth = parseFloat(logs.stats?.bar_bonus_cost_month || 0);
+              const barBonusCostToday = parseFloat(logs.stats?.bar_bonus_cost_today || 0);
+              const realTopupMonth = parseFloat(logs.stats?.real_topup_month || 0);
+
+              const realExpense = withdrawsMonth + barBonusCostMonth;
+              const realROI = realExpense > 0 
+                ? Math.round(realTopupMonth / realExpense * 100) 
+                : 0;
+              const netProfit = realTopupMonth - realExpense;
+
+              let realRoiLabel = "👍 Хорошая окупаемость";
+              let realRoiBadgeColor = "bg-white/20 text-white border-white/30";
+              if (realROI > 120) {
+                realRoiLabel = "🔥 Отличная окупаемость (>120%)";
+                realRoiBadgeColor = "bg-white/30 text-white border-white/40 shadow-sm animate-pulse";
+              } else if (realROI < 100) {
+                realRoiLabel = "⚠️ Внимание: окупаемость < 100%";
+                realRoiBadgeColor = "bg-rose-500/30 text-rose-100 border-rose-400/30";
+              }
+
+              return (
+                <>
+                  {/* Card 1: Выводы на ПК */}
+                  <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-sky-500/20">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-8 h-8 bg-sky-100 rounded-lg flex items-center justify-center">
+                        <Coins className="w-4 h-4 text-sky-600" />
+                      </div>
+                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                        Выводы на баланс
+                      </div>
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="text-2xl font-black italic">
+                        {Math.round(withdrawsMonth)}{" "}
+                        <span className="text-xs not-italic font-bold text-slate-300">
+                          ₽
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
+                        Сегодня:{" "}
+                        <span className="text-sky-600">
+                          +{Math.round(withdrawsToday)} ₽
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Покупки в баре (розница) */}
+                  <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-orange-500/20">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                        <ShoppingCart className="w-4 h-4 text-orange-600" />
+                      </div>
+                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                        Покупки в баре (Розница)
+                      </div>
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="text-2xl font-black italic">
+                        {Math.round(barBonusRetailMonth)}{" "}
+                        <span className="text-xs not-italic font-bold text-slate-300">
+                          бон.
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
+                        Сегодня:{" "}
+                        <span className="text-orange-600">
+                          +{Math.round(barBonusRetailToday)} бон.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Себестоимость подарков */}
+                  <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-rose-500/20">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center">
+                        <Target className="w-4 h-4 text-rose-600" />
+                      </div>
+                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                        Себестоимость подарков
+                      </div>
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="text-2xl font-black italic">
+                        {Math.round(barBonusCostMonth)}{" "}
+                        <span className="text-xs not-italic font-bold text-slate-300">
+                          ₽
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
+                        Сегодня:{" "}
+                        <span className="text-rose-600">
+                          +{Math.round(barBonusCostToday)} ₽
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 4: Реальный ROI (по себестоимости) */}
+                  <div className="bg-emerald-600 p-5 rounded-3xl shadow-xl shadow-emerald-200 relative overflow-hidden group">
+                    <div className="flex items-center gap-3 mb-2 relative z-10">
+                      <div className="w-8 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center">
+                        <Trophy className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="text-[9px] font-black text-white/60 uppercase tracking-widest">
+                        Реальный ROI (Чистый КПД)
+                      </div>
+                    </div>
+                    <div className="flex flex-col relative z-10">
+                      <div className="text-2xl font-black italic text-white">
+                        {realROI}
+                        <span className="text-xs not-italic font-bold text-emerald-200 ml-1">
+                          %
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1 mt-1">
+                        <div className="text-[10px] font-bold text-white/80 uppercase">
+                          Профит:{" "}
+                          <span className="text-white font-black">
+                            {netProfit > 0 ? `+${Math.round(netProfit)}` : Math.round(netProfit)} ₽
+                          </span>
+                        </div>
+                        <div className={cn("text-[8px] font-black uppercase px-2 py-0.5 rounded border inline-block w-fit tracking-wider", realRoiBadgeColor)}>
+                          {realRoiLabel}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Pattern background */}
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-white/20 transition-colors" />
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

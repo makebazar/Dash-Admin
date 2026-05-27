@@ -56,6 +56,81 @@ export async function POST(request: Request) {
       );
     }
 
+    // 1b. Validate monthly withdrawal limits if enabled
+    const clubResult = await client.query(
+      `SELECT promo_settings FROM clubs WHERE id = $1`,
+      [activeClubId],
+    );
+    const promoSettings = clubResult.rows[0]?.promo_settings || {};
+
+    if (promoSettings.withdraw_limit_enabled === true) {
+      // Check if player has Premium Battle Pass
+      const bpCheck = await client.query(
+        `SELECT bp.has_premium
+         FROM promo_bp_player_progress bp
+         JOIN promo_bp_seasons s ON s.id = bp.season_id
+         WHERE bp.player_id = $1 AND s.club_id = $2 AND s.is_active = TRUE AND NOW() BETWEEN s.start_date AND s.end_date
+         LIMIT 1`,
+        [playerId, activeClubId],
+      );
+      const hasPremiumBp = bpCheck.rows[0]?.has_premium === true;
+
+      const limitPercent = hasPremiumBp
+        ? parseFloat(promoSettings.withdraw_limit_percent_bp ?? 80)
+        : parseFloat(promoSettings.withdraw_limit_percent ?? 50);
+      
+      const topupRes = await client.query(
+        `SELECT COALESCE(SUM((result_data->>'amount')::float), 0) as total
+         FROM promo_history
+         WHERE player_id = $1 AND club_id = $2 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)`,
+        [playerId, activeClubId],
+      );
+      const topups = parseFloat(topupRes.rows[0].total);
+
+      const barRealRes = await client.query(
+        `SELECT COALESCE(SUM(total_amount), 0) as total
+         FROM shift_receipts
+         WHERE promo_player_id = $1 AND club_id = $2
+           AND payment_type IN ('cash', 'card', 'mixed')
+           AND committed_at >= date_trunc('month', CURRENT_DATE)`,
+        [playerId, activeClubId],
+      );
+      const monthlyBarReal = parseFloat(barRealRes.rows[0].total);
+      const monthlyTopups = topups + monthlyBarReal;
+
+      const withdrawRes = await client.query(
+        `SELECT COALESCE(SUM(withdraw_amount), 0) as total
+         FROM promo_prize_queue
+         WHERE player_id = $1 AND club_id = $2 AND status != 'canceled' AND created_at >= date_trunc('month', CURRENT_DATE)`,
+        [playerId, activeClubId],
+      );
+      const normalWithdraw = parseFloat(withdrawRes.rows[0].total);
+
+      const barBonusRes = await client.query(
+        `SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) as total
+         FROM promo_history
+         WHERE player_id = $1 AND club_id = $2
+           AND game_type = 'BAR_BONUS_PURCHASE'
+           AND created_at >= date_trunc('month', CURRENT_DATE)`,
+        [playerId, activeClubId],
+      );
+      const monthlyBarBonus = parseFloat(barBonusRes.rows[0].total);
+      const monthlyWithdrawn = normalWithdraw + monthlyBarBonus;
+
+      const allowedLimit = monthlyTopups * (limitPercent / 100);
+      const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
+
+      if (withdrawAmount > remainingLimit) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { 
+            error: `Превышен лимит вывода. Ваш доступный лимит на этот месяц составляет ${allowedLimit.toFixed(0)} ₽ (осталось ${remainingLimit.toFixed(0)} ₽). Пополните баланс клуба или совершите покупку в баре, чтобы увеличить лимит.` 
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     // 2. Deduct balance
     await client.query(
       `UPDATE promo_player_balances SET bonus_balance = bonus_balance - $3 WHERE player_id = $1 AND club_id = $2`,

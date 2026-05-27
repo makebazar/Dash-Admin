@@ -33,6 +33,7 @@ export async function GET(request: Request) {
          q.action_button_text,
          q.action_button_url,
          q.requires_photo_verification,
+         q.requires_seat_number,
          q.min_level,
          q.target_service_id,
          pq.current_progress,

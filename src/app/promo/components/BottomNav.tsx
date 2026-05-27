@@ -17,8 +17,8 @@ function BottomNavContent({ cartCount = 0 }: { cartCount?: number }) {
       <Link href="/promo" className={cn("transition-colors", isGames ? "text-orange-500" : "text-gray-500 hover:text-white")}>
         <Gamepad2 className="w-6 h-6" />
       </Link>
-      <Link href="/promo/quests" className={cn("transition-colors", isQuests ? "text-orange-500" : "text-gray-500 hover:text-white")}>
-        <Target className="w-6 h-6" />
+      <Link href="/promo/quests" className={cn("transition-colors text-[10px] font-black uppercase tracking-[0.2em] italic px-1", isQuests ? "text-orange-500" : "text-gray-500 hover:text-white")}>
+        Квесты
       </Link>
       <Link href="/promo?tab=shop" className={cn("relative transition-colors", isShop ? "text-orange-500" : "text-gray-500 hover:text-white")}>
         <ShoppingCart className="w-6 h-6" />

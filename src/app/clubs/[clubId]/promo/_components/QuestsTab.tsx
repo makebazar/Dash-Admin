@@ -82,6 +82,8 @@ const TRIGGER_CATEGORIES = [
     icon: "📝",
     triggers: [
       { id: "manual_verification", label: "Ручное подтверждение" },
+      { id: "visit_cumulative", label: "Накопительное посещение" },
+      { id: "visit_streak", label: "Посещения подряд (Streak)" },
     ],
   },
 ];
@@ -114,6 +116,10 @@ const renderTargetExplanation = (quest: any, products: any[], categories: any[],
     return `Пополнить баланс аккаунта на сумму от ${target_value || 0} ₽.`;
   } else if (trigger_type === "manual_verification") {
     return `Нажмите кнопку ниже для перехода и подтвердите действие у администратора.`;
+  } else if (trigger_type === "visit_cumulative") {
+    return `Посетить клуб ${target_value || 1} раз(а) (подтверждает администратор).`;
+  } else if (trigger_type === "visit_streak") {
+    return `Посетить клуб ${target_value || 1} дней подряд (подтверждает администратор).`;
   } else if (trigger_type === "game_play_count") {
     return `Сыграть ${target_value || 1} игр(ы) на игровых компьютерах.`;
   } else if (trigger_type === "game_win_count") {
@@ -227,6 +233,7 @@ export function QuestsTab({
       action_button_text: "",
       action_button_url: "",
       requires_photo_verification: false,
+      requires_seat_number: false,
       reset_period: "none",
       min_level: 1,
       reset_hours: 24,
@@ -677,57 +684,78 @@ export function QuestsTab({
                   </div>
                 )}
 
-                {/* If Manual Verification trigger */}
-                {editingQuest.trigger_type === "manual_verification" && (
+                {/* If Manual Verification / Visit trigger */}
+                {["manual_verification", "visit_cumulative", "visit_streak"].includes(editingQuest.trigger_type) && (
                   <div className="space-y-4 bg-orange-50/20 p-4 rounded-xl border border-orange-100">
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                        Текст на кнопке действия
-                      </label>
-                      <input
-                        type="text"
-                        value={editingQuest.action_button_text || ""}
-                        onChange={(e) =>
-                          setEditingQuest({
-                            ...editingQuest,
-                            action_button_text: e.target.value,
-                          })
-                        }
-                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 font-bold text-sm outline-none focus:border-orange-500"
-                        placeholder="Оставить отзыв на картах"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                        Ссылка в кнопке (URL)
-                      </label>
-                      <input
-                        type="text"
-                        value={editingQuest.action_button_url || ""}
-                        onChange={(e) =>
-                          setEditingQuest({
-                            ...editingQuest,
-                            action_button_url: e.target.value,
-                          })
-                        }
-                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 font-bold text-sm outline-none focus:border-orange-500"
-                        placeholder="https://yandex.ru/maps/..."
-                      />
-                    </div>
+                    {editingQuest.trigger_type === "manual_verification" && (
+                      <>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                            Текст на кнопке действия
+                          </label>
+                          <input
+                            type="text"
+                            value={editingQuest.action_button_text || ""}
+                            onChange={(e) =>
+                              setEditingQuest({
+                                ...editingQuest,
+                                action_button_text: e.target.value,
+                              })
+                            }
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 font-bold text-sm outline-none focus:border-orange-500"
+                            placeholder="Оставить отзыв на картах"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                            Ссылка в кнопке (URL)
+                          </label>
+                          <input
+                            type="text"
+                            value={editingQuest.action_button_url || ""}
+                            onChange={(e) =>
+                              setEditingQuest({
+                                ...editingQuest,
+                                action_button_url: e.target.value,
+                              })
+                            }
+                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 font-bold text-sm outline-none focus:border-orange-500"
+                            placeholder="https://yandex.ru/maps/..."
+                          />
+                        </div>
+                        <label className="flex items-center gap-2.5 cursor-pointer mt-1 select-none">
+                          <input
+                            type="checkbox"
+                            checked={editingQuest.requires_photo_verification}
+                            onChange={(e) =>
+                              setEditingQuest({
+                                ...editingQuest,
+                                requires_photo_verification: e.target.checked,
+                              })
+                            }
+                            className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500 accent-orange-500"
+                          />
+                          <span className="text-xs font-bold text-slate-700">
+                            Требуется загрузка скриншота/фото для подтверждения
+                          </span>
+                        </label>
+                      </>
+                    )}
+
                     <label className="flex items-center gap-2.5 cursor-pointer mt-1 select-none">
                       <input
                         type="checkbox"
-                        checked={editingQuest.requires_photo_verification}
+                        checked={editingQuest.requires_seat_number || false}
                         onChange={(e) =>
                           setEditingQuest({
                             ...editingQuest,
-                            requires_photo_verification: e.target.checked,
+                            requires_seat_number: e.target.checked,
                           })
                         }
                         className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500 accent-orange-500"
                       />
                       <span className="text-xs font-bold text-slate-700">
-                        Требуется загрузка скриншота/фото для подтверждения
+                        Запрашивать номер места (ПК) у гостя
                       </span>
                     </label>
                   </div>
@@ -1317,10 +1345,15 @@ export function QuestsTab({
                         )}
 
                         {/* Auto-tracking footer for non-manual quests */}
-                        {editingQuest.trigger_type !== "manual_verification" && (
+                        {!["manual_verification", "visit_cumulative", "visit_streak"].includes(editingQuest.trigger_type) ? (
                           <div className="flex items-center justify-center gap-1.5 py-2 bg-white/3 border border-white/5 rounded-xl text-[7px] font-black uppercase tracking-wider text-gray-500">
                             <Zap className="w-2.5 h-2.5 text-orange-500/60" />
                             Отслеживается автоматически
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1.5 py-2 bg-white/3 border border-white/5 rounded-xl text-[7px] font-black uppercase tracking-wider text-gray-500">
+                            <CheckCircle className="w-2.5 h-2.5 text-orange-500/60" />
+                            Требуется подтверждение админа
                           </div>
                         )}
                       </div>
@@ -1441,6 +1474,34 @@ export function QuestsTab({
                       )}
                     </div>
                   )}
+
+                  {/* Quest Stats */}
+                  <div className="grid grid-cols-2 gap-2 pb-2">
+                    <div className="bg-slate-50/50 border border-slate-100/50 p-2 rounded-xl text-center">
+                      <div className="text-[7px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Сыграно раз (всего):</div>
+                      <div className="text-xs font-black text-slate-800 italic">
+                        {quest.total_plays_count ?? 0}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50/50 border border-slate-100/50 p-2 rounded-xl text-center">
+                      <div className="text-[7px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Участников (людей):</div>
+                      <div className="text-xs font-black text-slate-800 italic">
+                        {quest.total_players_count ?? 0}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50/50 border border-slate-100/50 p-2 rounded-xl text-center">
+                      <div className="text-[7px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Выполнен раз:</div>
+                      <div className="text-xs font-black text-emerald-600 italic">
+                        {quest.completed_count ?? 0}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50/50 border border-slate-100/50 p-2 rounded-xl text-center">
+                      <div className="text-[7px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Выполнили гостей:</div>
+                      <div className="text-xs font-black text-emerald-600 italic">
+                        {quest.unique_players_count ?? 0}
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Rewards summary */}
                   <div className="bg-slate-50 border border-slate-100/50 p-3.5 rounded-2xl flex items-center justify-between">

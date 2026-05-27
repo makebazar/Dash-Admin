@@ -6,6 +6,200 @@ export type ReceiptItem = {
   quantity: number;
 };
 
+export function evaluateTrigger(
+  trigger: {
+    trigger_type: string;
+    target_value: any;
+    target_entity_id?: string | null;
+    target_entity_id_type?: string | null;
+    target_service_id?: string | null;
+  },
+  event: {
+    type: "receipt" | "game" | "topup" | "service" | "visit";
+    totalAmount?: number;
+    items?: ReceiptItem[];
+    productCategories?: Record<number, number>;
+    gameType?: string;
+    isWin?: boolean;
+    ticketsSpent?: number;
+    amount?: number;
+    serviceRuleId?: string | number;
+  }
+): number {
+  let progressDelta = 0;
+
+  if (event.type === "receipt") {
+    const totalAmount = event.totalAmount ?? 0;
+    const items = event.items ?? [];
+    const productCategories = event.productCategories ?? {};
+
+    if (trigger.trigger_type === "receipt_total") {
+      if (totalAmount >= Number(trigger.target_value)) {
+        progressDelta = Number(trigger.target_value);
+      }
+    } else if (trigger.trigger_type === "total_spent_accumulative") {
+      progressDelta = totalAmount;
+    } else if (trigger.trigger_type === "receipt_item" && trigger.target_entity_id) {
+      if (trigger.target_entity_id_type === "category") {
+        const targetId = Number(trigger.target_entity_id);
+        const matchingItems = items.filter((i) => productCategories[i.product_id] === targetId);
+        progressDelta = matchingItems.reduce((sum, i) => sum + i.quantity, 0);
+      } else {
+        const targetIds = String(trigger.target_entity_id)
+          .split(",")
+          .map((id) => Number(id.trim()))
+          .filter((id) => !isNaN(id));
+
+        if (targetIds.length > 1) {
+          const matchingItems = items.filter((i) => targetIds.includes(i.product_id));
+          const foundProductIds = new Set(matchingItems.map((i) => i.product_id));
+          const allFound = targetIds.every((tid) => foundProductIds.has(tid));
+          if (allFound) {
+            const minQty = Math.min(...matchingItems.map((i) => i.quantity));
+            progressDelta = minQty;
+          }
+        } else if (targetIds.length === 1) {
+          const targetId = targetIds[0];
+          const matchingItem = items.find((i) => i.product_id === targetId);
+          if (matchingItem) {
+            progressDelta = matchingItem.quantity;
+          }
+        }
+      }
+    }
+  } else if (event.type === "game") {
+    const isTargetAll = !trigger.target_entity_id || String(trigger.target_entity_id).trim() === "";
+    const targetIds = isTargetAll ? [] : String(trigger.target_entity_id).split(",").map((s) => s.trim());
+    const isMatchingGame = isTargetAll || targetIds.includes(String(event.gameType));
+
+    if (isMatchingGame) {
+      if (trigger.trigger_type === "game_play_count") {
+        progressDelta = 1;
+      } else if (trigger.trigger_type === "game_win_count" && event.isWin) {
+        progressDelta = 1;
+      } else if (trigger.trigger_type === "ticket_spend" && (event.ticketsSpent ?? 0) > 0) {
+        progressDelta = event.ticketsSpent ?? 0;
+      }
+    }
+  } else if (event.type === "topup") {
+    if (trigger.trigger_type === "balance_topup") {
+      progressDelta = event.amount ?? 0;
+    }
+  } else if (event.type === "service") {
+    const isTargetAll = !trigger.target_entity_id || String(trigger.target_entity_id).trim() === "";
+    const targetIds = isTargetAll ? [] : String(trigger.target_entity_id).split(",").map((s) => s.trim());
+    const isMatchingService = isTargetAll || targetIds.includes(String(event.serviceRuleId));
+
+    if (isMatchingService) {
+      if (trigger.trigger_type === "service_award" || trigger.trigger_type === "service_accumulative") {
+        progressDelta = 1;
+      }
+    }
+  } else if (event.type === "visit") {
+    if (trigger.trigger_type === "visit_cumulative" || trigger.trigger_type === "visit_streak") {
+      progressDelta = 1;
+    }
+  }
+
+  return progressDelta;
+}
+
+export async function handleQuestProgress(
+  client: any,
+  clubId: number | string,
+  playerId: string,
+  quest: any,
+  event: any
+): Promise<{ rewarded: boolean }> {
+  if (quest.target_service_id) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const serviceRes = await client.query(
+      `SELECT id FROM promo_history
+       WHERE player_id = $1::uuid
+         AND game_type = 'SERVICE_AWARD'
+         AND (result_data->>'rule_id' = $2::text OR $2 IS NULL)
+         AND created_at >= $3
+       LIMIT 1`,
+      [
+        playerId,
+        quest.target_service_id ? String(quest.target_service_id) : null,
+        today,
+      ],
+    );
+
+    if (serviceRes.rowCount === 0) {
+      return { rewarded: false };
+    }
+  }
+
+  const isCombo = quest.combo_triggers && Array.isArray(quest.combo_triggers) && quest.combo_triggers.length > 0;
+
+  if (isCombo) {
+    let comboProgress = quest.combo_progress || {};
+    if (typeof comboProgress === "string") {
+      try {
+        comboProgress = JSON.parse(comboProgress);
+      } catch (e) {
+        comboProgress = {};
+      }
+    }
+
+    let progressChanged = false;
+
+    for (let i = 0; i < quest.combo_triggers.length; i++) {
+      const subTrigger = quest.combo_triggers[i];
+      const delta = evaluateTrigger(subTrigger, event);
+      if (delta > 0) {
+        const current = Number(comboProgress[String(i)] || 0);
+        const target = Number(subTrigger.target_value || 1);
+        comboProgress[String(i)] = Math.min(target, current + delta);
+        progressChanged = true;
+      }
+    }
+
+    if (!progressChanged) return { rewarded: false };
+
+    const allSatisfied = quest.combo_triggers.every((subTrigger: any, i: number) => {
+      const current = Number(comboProgress[String(i)] || 0);
+      const target = Number(subTrigger.target_value || 1);
+      return current >= target;
+    });
+
+    const newStatus = allSatisfied ? "completed" : "active";
+
+    if (quest.player_quest_id) {
+      await client.query(
+        `UPDATE promo_player_quests
+         SET combo_progress = $1,
+             status = $2::text,
+             completed_at = CASE WHEN $2::text = 'completed' THEN NOW() ELSE completed_at END
+         WHERE id = $3`,
+        [JSON.stringify(comboProgress), newStatus, quest.player_quest_id]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO promo_player_quests (player_id, club_id, quest_id, combo_progress, status, completed_at)
+         VALUES ($1, $2, $3, $4, $5::text, CASE WHEN $5::text = 'completed' THEN NOW() ELSE NULL END)`,
+        [playerId, clubId, quest.quest_id, JSON.stringify(comboProgress), newStatus]
+      );
+    }
+
+    if (allSatisfied) {
+      await rewardPlayerForQuest(client, clubId, playerId, quest);
+      return { rewarded: true };
+    }
+    return { rewarded: false };
+  } else {
+    const delta = evaluateTrigger(quest, event);
+    if (delta > 0) {
+      return await progressQuest(client, clubId, playerId, quest, delta);
+    }
+    return { rewarded: false };
+  }
+}
+
 /**
  * Processes a receipt to update player XP and check active quests.
  */
@@ -49,87 +243,12 @@ export async function processReceiptEvent(
   }
 
   for (const quest of activeQuests) {
-    let progressDelta = 0;
-
-    // Composite Check: If the quest requires a service AND a receipt item
-    if (quest.target_service_id) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const serviceRes = await client.query(
-        `SELECT id FROM promo_history
-         WHERE player_id = $1::uuid
-           AND game_type = 'SERVICE_AWARD'
-           AND (result_data->>'rule_id' = $2::text OR $2 IS NULL)
-           AND created_at >= $3
-         LIMIT 1`,
-        [
-          playerId,
-          quest.target_service_id ? String(quest.target_service_id) : null,
-          today,
-        ],
-      );
-
-      if (serviceRes.rowCount === 0) {
-        continue; // Required service not purchased today
-      }
-    }
-
-    if (quest.trigger_type === "receipt_total") {
-      if (totalAmount >= Number(quest.target_value)) {
-        progressDelta = Number(quest.target_value);
-      }
-    } else if (quest.trigger_type === "total_spent_accumulative") {
-      progressDelta = totalAmount;
-    } else if (
-      quest.trigger_type === "receipt_item" &&
-      quest.target_entity_id
-    ) {
-      if (quest.target_entity_id_type === "category") {
-        const targetId = Number(quest.target_entity_id);
-        // Any item from this category matches
-        const matchingItems = items.filter(
-          (i) => productCategories[i.product_id] === targetId,
-        );
-        progressDelta = matchingItems.reduce((sum, i) => sum + i.quantity, 0);
-      } else {
-        // Specific product ID(s) - support comma-separated list
-        const targetIds = String(quest.target_entity_id)
-          .split(",")
-          .map((id) => Number(id.trim()))
-          .filter((id) => !isNaN(id));
-
-        if (targetIds.length > 1) {
-          // "AND" Logic: All specified products must be in the receipt
-          const matchingItems = items.filter((i) =>
-            targetIds.includes(i.product_id),
-          );
-
-          const foundProductIds = new Set(
-            matchingItems.map((i) => i.product_id),
-          );
-          const allFound = targetIds.every((tid) => foundProductIds.has(tid));
-
-          if (allFound) {
-            // If all are found, we increment progress by the number of complete sets
-            // e.g., if target is (A, B) and receipt has (2A, 3B), we got 2 sets.
-            const minQty = Math.min(...matchingItems.map((i) => i.quantity));
-            progressDelta = minQty;
-          }
-        } else if (targetIds.length === 1) {
-          // Single product logic
-          const targetId = targetIds[0];
-          const matchingItem = items.find((i) => i.product_id === targetId);
-          if (matchingItem) {
-            progressDelta = matchingItem.quantity;
-          }
-        }
-      }
-    }
-
-    if (progressDelta > 0) {
-      await progressQuest(client, clubId, playerId, quest, progressDelta);
-    }
+    await handleQuestProgress(client, clubId, playerId, quest, {
+      type: "receipt",
+      totalAmount,
+      items,
+      productCategories,
+    });
   }
 }
 
@@ -148,43 +267,19 @@ export async function processGameEvent(
   const rewards: any[] = [];
 
   for (const quest of activeQuests) {
-    // Check for target game filter if specified
-    const isTargetAll =
-      !quest.target_entity_id || String(quest.target_entity_id).trim() === "";
-    const targetIds = isTargetAll
-      ? []
-      : String(quest.target_entity_id)
-          .split(",")
-          .map((s) => s.trim());
-    const isMatchingGame = isTargetAll || targetIds.includes(String(gameType));
-
-    if (!isMatchingGame) continue;
-
-    let delta = 0;
-    if (quest.trigger_type === "game_play_count") {
-      delta = 1;
-    } else if (quest.trigger_type === "game_win_count" && isWin) {
-      delta = 1;
-    } else if (quest.trigger_type === "ticket_spend" && ticketsSpent > 0) {
-      delta = ticketsSpent;
-    }
-
-    if (delta > 0) {
-      const result = await progressQuest(
-        client,
-        clubId,
-        playerId,
-        quest,
-        delta,
-      );
-      if (result && result.rewarded) {
-        rewards.push({
-          questTitle: quest.title,
-          rewardXp: quest.reward_xp,
-          rewardTickets: quest.reward_tickets,
-          rewardBonusBalance: quest.reward_bonus_balance,
-        });
-      }
+    const result = await handleQuestProgress(client, clubId, playerId, quest, {
+      type: "game",
+      gameType,
+      isWin,
+      ticketsSpent,
+    });
+    if (result && result.rewarded) {
+      rewards.push({
+        questTitle: quest.title,
+        rewardXp: quest.reward_xp,
+        rewardTickets: quest.reward_tickets,
+        rewardBonusBalance: quest.reward_bonus_balance,
+      });
     }
   }
   return rewards;
@@ -217,9 +312,10 @@ export async function processBalanceTopupEvent(
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
 
   for (const quest of activeQuests) {
-    if (quest.trigger_type === "balance_topup") {
-      await progressQuest(client, clubId, playerId, quest, amount);
-    }
+    await handleQuestProgress(client, clubId, playerId, quest, {
+      type: "topup",
+      amount,
+    });
   }
 }
 
@@ -235,24 +331,10 @@ export async function processServiceAwardEvent(
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
 
   for (const quest of activeQuests) {
-    const isTargetAll =
-      !quest.target_entity_id || String(quest.target_entity_id).trim() === "";
-    const targetIds = isTargetAll
-      ? []
-      : String(quest.target_entity_id)
-          .split(",")
-          .map((s) => s.trim());
-    const isMatchingService =
-      isTargetAll || targetIds.includes(String(serviceRuleId));
-
-    if (
-      quest.trigger_type === "service_award" ||
-      quest.trigger_type === "service_accumulative"
-    ) {
-      if (isMatchingService) {
-        await progressQuest(client, clubId, playerId, quest, 1);
-      }
-    }
+    await handleQuestProgress(client, clubId, playerId, quest, {
+      type: "service",
+      serviceRuleId,
+    });
   }
 }
 
@@ -378,7 +460,10 @@ async function getActiveQuestsForPlayer(
        pq.period_start,
        q.reset_period,
        q.min_level,
-       q.target_service_id
+       q.target_service_id,
+       q.combo_triggers,
+       pq.combo_progress,
+       pq.last_visit_at
        FROM promo_quests q
        LEFT JOIN promo_player_quests pq ON pq.quest_id = q.id AND pq.player_id = $1::uuid
        JOIN promo_player_balances pb ON pb.player_id = $1::uuid AND pb.club_id = $2::int
@@ -611,4 +696,168 @@ export async function getPlayerLevelInfo(
     targetXp,
     isMaxLevel: !nextLevel,
   };
+}
+
+/**
+ * Processes confirmed daily player visit events.
+ * Updates both visit_cumulative and visit_streak active quests.
+ */
+export async function processVisitEvent(
+  client: any,
+  clubId: number | string,
+  playerId: string,
+  seatNumber?: string,
+) {
+  const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
+  const confirmedAt = new Date();
+
+  for (const quest of activeQuests) {
+    const isCombo = quest.combo_triggers && Array.isArray(quest.combo_triggers) && quest.combo_triggers.length > 0;
+
+    if (isCombo) {
+      let comboProgress = quest.combo_progress || {};
+      if (typeof comboProgress === "string") {
+        try {
+          comboProgress = JSON.parse(comboProgress);
+        } catch (e) {
+          comboProgress = {};
+        }
+      }
+
+      let progressChanged = false;
+
+      for (let i = 0; i < quest.combo_triggers.length; i++) {
+        const subTrigger = quest.combo_triggers[i];
+        if (subTrigger.trigger_type === "visit_cumulative" || subTrigger.trigger_type === "visit_streak") {
+          let delta = 1;
+
+          if (subTrigger.trigger_type === "visit_streak") {
+            const qProgressRes = await client.query(
+              `SELECT last_visit_at FROM promo_player_quests
+               WHERE quest_id = $1 AND player_id = $2
+               ORDER BY assigned_at DESC LIMIT 1`,
+              [quest.quest_id, playerId]
+            );
+
+            if (qProgressRes.rows.length > 0) {
+              const lastVisit = qProgressRes.rows[0].last_visit_at ? new Date(qProgressRes.rows[0].last_visit_at) : null;
+              if (lastVisit) {
+                const lastVisitDate = new Date(lastVisit.getFullYear(), lastVisit.getMonth(), lastVisit.getDate());
+                const currentDate = new Date(confirmedAt.getFullYear(), confirmedAt.getMonth(), confirmedAt.getDate());
+                const diffTime = Math.abs(currentDate.getTime() - lastVisitDate.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays === 0) {
+                  continue; // Already processed today
+                } else if (diffDays === 1) {
+                  delta = 1;
+                } else {
+                  // Streak broken! Reset progress
+                  comboProgress[String(i)] = 0;
+                  delta = 1;
+                }
+              }
+            }
+          }
+
+          const current = Number(comboProgress[String(i)] || 0);
+          const target = Number(subTrigger.target_value || 1);
+          comboProgress[String(i)] = Math.min(target, current + delta);
+          progressChanged = true;
+        }
+      }
+
+      if (progressChanged) {
+        const allSatisfied = quest.combo_triggers.every((subTrigger: any, i: number) => {
+          const current = Number(comboProgress[String(i)] || 0);
+          const target = Number(subTrigger.target_value || 1);
+          return current >= target;
+        });
+
+        const newStatus = allSatisfied ? "completed" : "active";
+
+        if (quest.player_quest_id) {
+          await client.query(
+            `UPDATE promo_player_quests
+             SET combo_progress = $1,
+                 status = $2::text,
+                 last_visit_at = NOW(),
+                 seat_number = COALESCE(seat_number, $4),
+                 completed_at = CASE WHEN $2::text = 'completed' THEN NOW() ELSE completed_at END
+             WHERE id = $3`,
+            [JSON.stringify(comboProgress), newStatus, quest.player_quest_id, seatNumber || null]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO promo_player_quests (player_id, club_id, quest_id, combo_progress, status, last_visit_at, seat_number, completed_at)
+             VALUES ($1, $2, $3, $4, $5::text, NOW(), $6, CASE WHEN $5::text = 'completed' THEN NOW() ELSE NULL END)`,
+            [playerId, clubId, quest.quest_id, JSON.stringify(comboProgress), newStatus, seatNumber || null]
+          );
+        }
+
+        if (allSatisfied) {
+          await rewardPlayerForQuest(client, clubId, playerId, quest);
+        }
+      }
+    } else {
+      // Non-combo visit logic (standard)
+      if (quest.trigger_type === "visit_cumulative") {
+        await progressQuest(client, clubId, playerId, quest, 1);
+        await client.query(
+          `UPDATE promo_player_quests
+           SET last_visit_at = NOW(),
+               seat_number = COALESCE(seat_number, $3)
+           WHERE quest_id = $1 AND player_id = $2
+           AND status IN ('active', 'completed')
+           ORDER BY assigned_at DESC LIMIT 1`,
+          [quest.quest_id, playerId, seatNumber || null],
+        );
+      } else if (quest.trigger_type === "visit_streak") {
+        let delta = 1;
+        const qProgressRes = await client.query(
+          `SELECT current_progress, last_visit_at
+           FROM promo_player_quests
+           WHERE quest_id = $1 AND player_id = $2
+           ORDER BY assigned_at DESC LIMIT 1`,
+          [quest.quest_id, playerId],
+        );
+
+        if (qProgressRes.rows.length > 0) {
+          const lastVisit = qProgressRes.rows[0].last_visit_at ? new Date(qProgressRes.rows[0].last_visit_at) : null;
+          if (lastVisit) {
+            const lastVisitDate = new Date(lastVisit.getFullYear(), lastVisit.getMonth(), lastVisit.getDate());
+            const currentDate = new Date(confirmedAt.getFullYear(), confirmedAt.getMonth(), confirmedAt.getDate());
+            const diffTime = Math.abs(currentDate.getTime() - lastVisitDate.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) {
+              continue;
+            } else if (diffDays === 1) {
+              delta = 1;
+            } else {
+              await client.query(
+                `UPDATE promo_player_quests
+                 SET current_progress = 0
+                 WHERE quest_id = $1 AND player_id = $2`,
+                [quest.quest_id, playerId],
+              );
+              quest.current_progress = 0;
+              delta = 1;
+            }
+          }
+        }
+
+        await progressQuest(client, clubId, playerId, quest, delta);
+        await client.query(
+          `UPDATE promo_player_quests
+           SET last_visit_at = NOW(),
+               seat_number = COALESCE(seat_number, $3)
+           WHERE quest_id = $1 AND player_id = $2
+           AND status IN ('active', 'completed')
+           ORDER BY assigned_at DESC LIMIT 1`,
+          [quest.quest_id, playerId, seatNumber || null],
+        );
+      }
+    }
+  }
 }

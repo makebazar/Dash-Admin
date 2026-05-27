@@ -13,7 +13,25 @@ export async function GET(request: Request) {
   const client = await getClient();
   try {
     const res = await client.query(
-      `SELECT * FROM promo_quests WHERE club_id = $1 ORDER BY created_at DESC`,
+      `SELECT
+         q.*,
+         COALESCE(stats.total_plays_count, 0)::int as total_plays_count,
+         COALESCE(stats.total_players_count, 0)::int as total_players_count,
+         COALESCE(stats.completed_count, 0)::int as completed_count,
+         COALESCE(stats.unique_players_count, 0)::int as unique_players_count
+       FROM promo_quests q
+       LEFT JOIN (
+         SELECT
+           quest_id,
+           COUNT(*)::int as total_plays_count,
+           COUNT(DISTINCT player_id)::int as total_players_count,
+           COUNT(CASE WHEN status IN ('completed', 'claimed') THEN 1 END)::int as completed_count,
+           COUNT(DISTINCT CASE WHEN status IN ('completed', 'claimed') THEN player_id END)::int as unique_players_count
+         FROM promo_player_quests
+         GROUP BY quest_id
+       ) stats ON q.id = stats.quest_id
+       WHERE q.club_id = $1
+       ORDER BY q.created_at DESC`,
       [clubId],
     );
     return NextResponse.json({ quests: res.rows });
@@ -45,9 +63,9 @@ export async function POST(request: Request) {
          is_randomizable, lifetime_minutes, is_active,
          available_days, time_start, time_end,
          action_button_text, action_button_url, requires_photo_verification,
-         reset_period, min_level, target_service_id, image_url, reset_hours
+         reset_period, min_level, target_service_id, image_url, reset_hours, requires_seat_number, combo_triggers
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
        ) RETURNING *`,
       [
         data.club_id,
@@ -75,6 +93,8 @@ export async function POST(request: Request) {
         data.target_service_id || null,
         data.image_url || null,
         data.reset_hours || null,
+        data.requires_seat_number || false,
+        data.combo_triggers ? JSON.stringify(data.combo_triggers) : null,
       ],
     );
     return NextResponse.json({ success: true, quest: res.rows[0] });
@@ -109,8 +129,9 @@ export async function PUT(request: Request) {
          available_days = $14, time_start = $15, time_end = $16,
          action_button_text = $17, action_button_url = $18, requires_photo_verification = $19,
          reset_period = $20, min_level = $21, target_service_id = $22,
-         image_url = $23, reset_hours = $24, updated_at = NOW()
-       WHERE id = $25 AND club_id = $26
+         image_url = $23, reset_hours = $24, requires_seat_number = $25,
+         combo_triggers = $26, updated_at = NOW()
+       WHERE id = $27 AND club_id = $28
        RETURNING *`,
       [
         data.title,
@@ -137,6 +158,8 @@ export async function PUT(request: Request) {
         data.target_service_id || null,
         data.image_url || null,
         data.reset_hours || null,
+        data.requires_seat_number || false,
+        data.combo_triggers ? JSON.stringify(data.combo_triggers) : null,
         data.id,
         data.club_id,
       ],

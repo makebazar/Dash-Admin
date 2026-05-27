@@ -54,6 +54,7 @@ export default function QuestsPage() {
   const [quests, setQuests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [seatNumbers, setSeatNumbers] = useState<Record<string, string>>({});
   const router = useRouter();
 
   async function fetchQuests() {
@@ -77,6 +78,10 @@ export default function QuestsPage() {
   }, [router]);
 
   const handleFileUpload = async (questId: string, file: File) => {
+    if (quests.find((q) => q.id === questId)?.requires_seat_number && !seatNumbers[questId]?.trim()) {
+      alert("Пожалуйста, укажите номер места/ПК");
+      return;
+    }
     setUploading(questId);
     try {
       const formData = new FormData();
@@ -100,10 +105,11 @@ export default function QuestsPage() {
 
   const handleVerify = async (questId: string, photoUrl?: string) => {
     try {
+      const seatNumber = seatNumbers[questId] || "";
       const res = await fetch("/api/promo/player/quests/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ questId, photoUrl }),
+        body: JSON.stringify({ questId, photoUrl, seatNumber }),
       });
       if (res.ok) {
         fetchQuests();
@@ -267,6 +273,26 @@ export default function QuestsPage() {
 
                               {quest.trigger_type === "manual_verification" ? (
                                 <div className="space-y-3 pt-2 border-t border-white/5">
+                                  {quest.requires_seat_number && (
+                                    <div className="space-y-1.5 mb-2">
+                                      <label className="text-[9px] font-black uppercase tracking-widest text-gray-500 block px-1">
+                                        Номер вашего ПК/места
+                                      </label>
+                                      <input
+                                        type="text"
+                                        placeholder="Например: ПК 15"
+                                        value={seatNumbers[quest.id] || ""}
+                                        onChange={(e) =>
+                                          setSeatNumbers((prev) => ({
+                                            ...prev,
+                                            [quest.id]: e.target.value,
+                                          }))
+                                        }
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 transition-all placeholder:text-gray-600"
+                                      />
+                                    </div>
+                                  )}
+
                                   {quest.action_button_text && (
                                     <a
                                       href={quest.action_button_url}
@@ -289,9 +315,12 @@ export default function QuestsPage() {
                                           const file = e.target.files?.[0];
                                           if (file) handleFileUpload(quest.id, file);
                                         }}
-                                        disabled={uploading === quest.id}
+                                        disabled={uploading === quest.id || (quest.requires_seat_number && !seatNumbers[quest.id]?.trim())}
                                       />
-                                      <div className="border border-dashed border-white/10 rounded-xl p-4 flex flex-col items-center gap-2 bg-white/5 hover:bg-white/10 transition-colors">
+                                      <div className={cn(
+                                        "border border-dashed border-white/10 rounded-xl p-4 flex flex-col items-center gap-2 bg-white/5 hover:bg-white/10 transition-colors",
+                                        (quest.requires_seat_number && !seatNumbers[quest.id]?.trim()) && "opacity-40 cursor-not-allowed"
+                                      )}>
                                         {uploading === quest.id ? (
                                           <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
                                         ) : (
@@ -307,7 +336,8 @@ export default function QuestsPage() {
                                   ) : (
                                     <button
                                       onClick={() => handleVerify(quest.id)}
-                                      className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-black uppercase italic tracking-tight text-xs shadow-lg shadow-orange-500/20 transition-all"
+                                      disabled={quest.requires_seat_number && !seatNumbers[quest.id]?.trim()}
+                                      className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-orange-500 text-white py-3 rounded-xl font-black uppercase italic tracking-tight text-xs shadow-lg shadow-orange-500/20 transition-all"
                                     >
                                       Я выполнил
                                     </button>

@@ -5215,6 +5215,71 @@ export async function createShiftReceipt(
         );
       }
 
+      // Validate monthly withdrawal limits if enabled
+      if (promoSettings.withdraw_limit_enabled === true) {
+        // Check if player has Premium Battle Pass
+        const bpCheck = await client.query(
+          `SELECT bp.has_premium
+           FROM promo_bp_player_progress bp
+           JOIN promo_bp_seasons s ON s.id = bp.season_id
+           WHERE bp.player_id = $1 AND s.club_id = $2 AND s.is_active = TRUE AND NOW() BETWEEN s.start_date AND s.end_date
+           LIMIT 1`,
+          [data.promo_player_id, clubId],
+        );
+        const hasPremiumBp = bpCheck.rows[0]?.has_premium === true;
+
+        const limitPercent = hasPremiumBp
+          ? parseFloat(promoSettings.withdraw_limit_percent_bp ?? 80)
+          : parseFloat(promoSettings.withdraw_limit_percent ?? 50);
+
+        const topupRes = await client.query(
+          `SELECT COALESCE(SUM((result_data->>'amount')::float), 0) as total
+           FROM promo_history
+           WHERE player_id = $1 AND club_id = $2 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)`,
+          [data.promo_player_id, clubId],
+        );
+        const topups = parseFloat(topupRes.rows[0].total);
+
+        const barRealRes = await client.query(
+          `SELECT COALESCE(SUM(total_amount), 0) as total
+           FROM shift_receipts
+           WHERE promo_player_id = $1 AND club_id = $2
+             AND payment_type IN ('cash', 'card', 'mixed')
+             AND committed_at >= date_trunc('month', CURRENT_DATE)`,
+          [data.promo_player_id, clubId],
+        );
+        const monthlyBarReal = parseFloat(barRealRes.rows[0].total);
+        const monthlyTopups = topups + monthlyBarReal;
+
+        const withdrawRes = await client.query(
+          `SELECT COALESCE(SUM(withdraw_amount), 0) as total
+           FROM promo_prize_queue
+           WHERE player_id = $1 AND club_id = $2 AND status != 'canceled' AND created_at >= date_trunc('month', CURRENT_DATE)`,
+          [data.promo_player_id, clubId],
+        );
+        const normalWithdraw = parseFloat(withdrawRes.rows[0].total);
+
+        const barBonusRes = await client.query(
+          `SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) as total
+           FROM promo_history
+           WHERE player_id = $1 AND club_id = $2
+             AND game_type = 'BAR_BONUS_PURCHASE'
+             AND created_at >= date_trunc('month', CURRENT_DATE)`,
+          [data.promo_player_id, clubId],
+        );
+        const monthlyBarBonus = parseFloat(barBonusRes.rows[0].total);
+        const monthlyWithdrawn = normalWithdraw + monthlyBarBonus;
+
+        const allowedLimit = monthlyTopups * (limitPercent / 100);
+        const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
+
+        if (totalBonusCost > remainingLimit) {
+          throw new Error(
+            `Превышен лимит вывода бонусов игрока за этот месяц. Доступный лимит: ${remainingLimit.toFixed(0)} ₽, требуется: ${totalBonusCost} ₽. Игроку необходимо пополнить баланс или совершить покупки в баре за рубли.`
+          );
+        }
+      }
+
       await client.query(
         `UPDATE promo_player_balances SET bonus_balance = bonus_balance - $1, updated_at = NOW() WHERE player_id = $2 AND club_id = $3`,
         [totalBonusCost, data.promo_player_id, clubId],
@@ -5588,6 +5653,7 @@ export async function getPendingQuestVerifications(
        pq.id,
        pq.verification_photo_url,
        pq.assigned_at,
+       pq.seat_number,
        q.title as quest_title,
        p.full_name as player_name,
        p.phone_number as player_phone
@@ -5687,6 +5753,71 @@ export async function verifyQuestSafe(
     return {
       ok: false as const,
       error: getActionErrorMessage(error, "Ошибка проверки задания"),
+    };
+  } finally {
+    client.release();
+  }
+}
+
+export async function confirmPlayerVisitSafe(
+  clubId: string,
+  userId: string,
+  playerId: string,
+  seatNumber?: string,
+) {
+  const client = await getClient();
+  try {
+    await assertUserCanAccessClub(clubId, userId);
+    await client.query("BEGIN");
+
+    // 1. Resolve employee internal ID
+    const empRes = await client.query(
+      `SELECT id FROM club_employees WHERE club_id = $1 AND user_id = $2`,
+      [clubId, userId],
+    );
+    const employeeId = empRes.rows[0]?.id;
+
+    // 2. Check if player has already had a confirmed check-in today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const visitCheck = await client.query(
+      `SELECT id FROM promo_player_visits
+       WHERE player_id = $1::uuid AND club_id = $2::int AND confirmed_at >= $3
+       LIMIT 1`,
+      [playerId, clubId, today],
+    );
+
+    if (visitCheck.rows.length > 0) {
+      throw new Error("Гость уже отмелся сегодня!");
+    }
+
+    // 3. Log visit check-in in the database
+    await client.query(
+      `INSERT INTO promo_player_visits (player_id, club_id, seat_number, confirmed_by, confirmed_at)
+       VALUES ($1::uuid, $2::int, $3, $4, NOW())`,
+      [playerId, clubId, seatNumber || null, employeeId || null],
+    );
+
+    // 4. Run quest visit updates (processVisitEvent)
+    const { processVisitEvent } = await import("@/lib/promo-quests");
+    await processVisitEvent(client, clubId, playerId, seatNumber);
+
+    await client.query("COMMIT");
+
+    // 5. Notify via SSE to refresh all clients
+    const { notifyInventoryClub } = await import("@/lib/inventory-events");
+    notifyInventoryClub(clubId, {
+      type: "PROMO_QUEUE_UPDATED",
+      timestamp: Date.now(),
+    });
+
+    return { ok: true as const };
+  } catch (error: any) {
+    await client.query("ROLLBACK");
+    return {
+      ok: false as const,
+      error: getActionErrorMessage(error, "Ошибка подтверждения посещения"),
     };
   } finally {
     client.release();

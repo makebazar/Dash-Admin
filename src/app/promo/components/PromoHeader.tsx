@@ -56,16 +56,7 @@ export function PromoHeader({
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-          {onPrizesClick && (
-            <button
-              onClick={onPrizesClick}
-              className={`w-9 h-9 sm:w-10 sm:h-10 border rounded-xl flex items-center justify-center active:scale-90 transition-transform backdrop-blur-md ${showPrizes ? "bg-orange-500/20 border-orange-500/30" : "bg-white/5 border-white/10 hover:bg-white/10"}`}
-            >
-              <Gift
-                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${showPrizes ? "text-orange-500" : "text-white/70"}`}
-              />
-            </button>
-          )}
+
 
           <Link
             href="/promo/roadmap"

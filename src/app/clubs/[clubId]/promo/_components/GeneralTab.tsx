@@ -313,6 +313,100 @@ export function GeneralTab({
             </div>
           </div>
 
+          {/* Withdrawal Limits */}
+          <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-8">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center">
+                <Settings className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-xl font-black uppercase italic">
+                Лимиты на <span className="text-orange-500">вывод</span>
+              </h3>
+            </div>
+
+            <div className="space-y-6">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:shadow-md group">
+                <div>
+                  <div className="font-black italic uppercase text-xs tracking-tight">
+                    Лимиты активны
+                  </div>
+                  <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                    Ограничить вывод бонусов процентом от пополнений за месяц
+                  </div>
+                </div>
+                <button
+                  onClick={() =>
+                    saveSettings({
+                      ...settings,
+                      withdraw_limit_enabled:
+                        settings.withdraw_limit_enabled === true ? false : true,
+                    })
+                  }
+                  className={cn(
+                    "w-12 h-6 rounded-full relative transition-colors duration-300",
+                    settings.withdraw_limit_enabled === true
+                      ? "bg-orange-500"
+                      : "bg-slate-300",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300",
+                      settings.withdraw_limit_enabled === true ? "left-7" : "left-1",
+                    )}
+                  />
+                </button>
+              </div>
+
+              {settings.withdraw_limit_enabled === true && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                        Процент от пополнений (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value={settings.withdraw_limit_percent ?? 50}
+                        onChange={(e) =>
+                          saveSettings({
+                            ...settings,
+                            withdraw_limit_percent: parseInt(e.target.value) || 50,
+                          })
+                        }
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                        % с Battle Pass (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value={settings.withdraw_limit_percent_bp ?? 80}
+                        onChange={(e) =>
+                          saveSettings({
+                            ...settings,
+                            withdraw_limit_percent_bp: parseInt(e.target.value) || 80,
+                          })
+                        }
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[9px] font-bold text-slate-400 ml-4 leading-relaxed">
+                    Установите увеличенный лимит вывода бонусов (например, 80%) для гостей, у которых приобретен Premium Battle Pass.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-6">
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center">
