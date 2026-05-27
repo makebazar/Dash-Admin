@@ -49,6 +49,8 @@ export default function BowlPhysicsDice() {
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const requestRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const meshOffsetsRef = useRef<THREE.Quaternion[]>([new THREE.Quaternion(), new THREE.Quaternion()]);
+  const isFastForwardingRef = useRef<boolean>(false);
 
   // === AUDIO SYSTEM ===
   const playCollisionSound = useCallback((strength: number) => {
@@ -344,6 +346,7 @@ export default function BowlPhysicsDice() {
         });
 
         body.addEventListener("collide", (e: any) => {
+          if (isFastForwardingRef.current) return;
           const relVel = e.contact.bi.velocity.vsub(e.contact.bj.velocity);
           const strength = relVel.length();
           if (strength > 1.5) playCollisionSound(strength);
@@ -357,9 +360,14 @@ export default function BowlPhysicsDice() {
 
       const animate = () => {
         world.fixedStep();
-        diceRefs.current.forEach(({ mesh, body }) => {
+        diceRefs.current.forEach(({ mesh, body }, i) => {
           mesh.position.copy(body.position as any);
-          mesh.quaternion.copy(body.quaternion as any);
+          if (meshOffsetsRef.current[i]) {
+            const bodyQuat = new THREE.Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
+            mesh.quaternion.copy(bodyQuat.multiply(meshOffsetsRef.current[i]));
+          } else {
+            mesh.quaternion.copy(body.quaternion as any);
+          }
         });
         renderer.render(scene, camera);
         requestRef.current = requestAnimationFrame(animate);
@@ -393,6 +401,18 @@ export default function BowlPhysicsDice() {
     };
   }, [playCollisionSound]);
 
+  const getLocalVectorForFace = (n: number) => {
+    switch (n) {
+      case 1: return new CANNON.Vec3(1, 0, 0);
+      case 6: return new CANNON.Vec3(-1, 0, 0);
+      case 3: return new CANNON.Vec3(0, 1, 0);
+      case 4: return new CANNON.Vec3(0, -1, 0);
+      case 2: return new CANNON.Vec3(0, 0, 1);
+      case 5: return new CANNON.Vec3(0, 0, -1);
+      default: return new CANNON.Vec3(0, 1, 0);
+    }
+  };
+
   const getUpsideValue = (body: CANNON.Body) => {
     const ups: Record<string, number> = {
       "1,0,0": 1,
@@ -414,7 +434,14 @@ export default function BowlPhysicsDice() {
         closest = vStr;
       }
     });
-    return ups[closest];
+
+    const val = ups[closest];
+    let localVec = new CANNON.Vec3(0, 1, 0);
+    const p = closest.split(",").map(Number);
+    if (p.length === 3) {
+      localVec.set(p[0], p[1], p[2]);
+    }
+    return { val, localVec };
   };
 
   const rollDice = async () => {
@@ -425,6 +452,7 @@ export default function BowlPhysicsDice() {
     setResult(null);
     setGameMessage(null);
     setErrorMsg(null);
+    meshOffsetsRef.current = [new THREE.Quaternion(), new THREE.Quaternion()];
 
     try {
       const response = await fetch("/api/promo/play", {
@@ -438,36 +466,82 @@ export default function BowlPhysicsDice() {
 
       setTickets((prev) => prev - 1);
 
-      // Use the forces provided by the server for an "honest" physical toss
-      diceRefs.current.forEach(({ body }, i) => {
-        const force = data.diceResult?.initialForces?.[i];
-        if (force) {
-          body.position.set(force.pos.x, force.pos.y, force.pos.z);
-          body.velocity.set(force.vel.x, force.vel.y, force.vel.z);
-          body.angularVelocity.set(
-            force.angVel.x,
-            force.angVel.y,
-            force.angVel.z,
-          );
-        } else {
-          // Fallback if no forces provided
-          body.position.set(
-            i === 0 ? -1.5 : 1.5,
-            10,
-            (Math.random() - 0.5) * 3,
-          );
-          body.velocity.set(
-            (Math.random() - 0.5) * 6,
-            -20,
-            (Math.random() - 0.5) * 6,
-          );
-          body.angularVelocity.set(
-            Math.random() * 40,
-            Math.random() * 40,
-            Math.random() * 40,
-          );
+      // Pre-simulate physics to determine the final resting orientation and sync visuals
+      if (data.diceResult) {
+        isFastForwardingRef.current = true;
+
+        // Apply starting initial forces from server
+        diceRefs.current.forEach(({ body }, i) => {
+          const force = data.diceResult?.initialForces?.[i];
+          if (force) {
+            body.position.set(force.pos.x, force.pos.y, force.pos.z);
+            body.velocity.set(force.vel.x, force.vel.y, force.vel.z);
+            body.angularVelocity.set(force.angVel.x, force.angVel.y, force.angVel.z);
+          }
+        });
+
+        // Fast-forward Cannon world to find resting positions
+        for (let step = 0; step < 250; step++) {
+          worldRef.current?.fixedStep();
         }
-      });
+
+        // Calculate visual mesh offsets so visual faces display what the server rolled
+        const newOffsets = diceRefs.current.map(({ body }, i) => {
+          const targetFace = i === 0 ? data.diceResult?.d1 : data.diceResult?.d2;
+          if (!targetFace) return new THREE.Quaternion();
+
+          const { val: physicalUpFace, localVec: v_up_local } = getUpsideValue(body);
+          const v_desired_local = getLocalVectorForFace(targetFace);
+
+          const A = new THREE.Vector3(v_desired_local.x, v_desired_local.y, v_desired_local.z);
+          const B = new THREE.Vector3(v_up_local.x, v_up_local.y, v_up_local.z);
+          return new THREE.Quaternion().setFromUnitVectors(A, B);
+        });
+        meshOffsetsRef.current = newOffsets;
+
+        // Restore body states back to initial forces to start real-time visual simulation
+        diceRefs.current.forEach(({ body }, i) => {
+          const force = data.diceResult?.initialForces?.[i];
+          if (force) {
+            body.position.set(force.pos.x, force.pos.y, force.pos.z);
+            body.velocity.set(force.vel.x, force.vel.y, force.vel.z);
+            body.angularVelocity.set(force.angVel.x, force.angVel.y, force.angVel.z);
+          }
+        });
+
+        isFastForwardingRef.current = false;
+      } else {
+        // Fallback: Use the forces provided by the server for an "honest" physical toss
+        diceRefs.current.forEach(({ body }, i) => {
+          const force = data.diceResult?.initialForces?.[i];
+          if (force) {
+            body.position.set(force.pos.x, force.pos.y, force.pos.z);
+            body.velocity.set(force.vel.x, force.vel.y, force.vel.z);
+            body.angularVelocity.set(
+              force.angVel.x,
+              force.angVel.y,
+              force.angVel.z,
+            );
+          } else {
+            // Fallback if no forces provided
+            body.position.set(
+              i === 0 ? -1.5 : 1.5,
+              10,
+              (Math.random() - 0.5) * 3,
+            );
+            body.velocity.set(
+              (Math.random() - 0.5) * 6,
+              -20,
+              (Math.random() - 0.5) * 6,
+            );
+            body.angularVelocity.set(
+              Math.random() * 40,
+              Math.random() * 40,
+              Math.random() * 40,
+            );
+          }
+        });
+      }
 
       let checkInterval = setInterval(() => {
         const allStopped = diceRefs.current.every(
@@ -480,8 +554,8 @@ export default function BowlPhysicsDice() {
           clearInterval(checkInterval);
 
           // Get results naturally from physics simulation
-          const d1 = getUpsideValue(diceRefs.current[0].body);
-          const d2 = getUpsideValue(diceRefs.current[1].body);
+          const d1 = getUpsideValue(diceRefs.current[0].body).val;
+          const d2 = getUpsideValue(diceRefs.current[1].body).val;
           const sum = d1 + d2;
 
           setResult({ d1, d2, sum });

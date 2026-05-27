@@ -7,6 +7,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const clubId = searchParams.get("clubId");
     const phone = searchParams.get("phone");
+    const search = searchParams.get("search");
+    const limitParam = searchParams.get("limit");
+    const offsetParam = searchParams.get("offset");
     const userId = (await cookies()).get("session_user_id")?.value;
 
     if (!userId || !clubId) {
@@ -18,10 +21,31 @@ export async function GET(request: Request) {
 
     if (phone) {
       if (phone.length < 4) {
-        return NextResponse.json({ players: [] });
+        return NextResponse.json({ players: [], total: 0 });
       }
       whereClause = "AND p.phone_number LIKE $2";
       params.push(`%${phone}%`);
+    } else if (search) {
+      whereClause = "AND (p.phone_number LIKE $2 OR p.full_name ILIKE $2)";
+      params.push(`%${search}%`);
+    }
+
+    // Calculate total count first
+    const countResult = await query(
+      `SELECT COUNT(*)::int as count
+       FROM promo_players p
+       JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $1
+       WHERE 1=1 ${whereClause}`,
+      params,
+    );
+    const total = countResult.rows[0]?.count || 0;
+
+    let limitClause = "LIMIT 50";
+    if (limitParam) {
+      const nextParamIndex = params.length + 1;
+      limitClause = `LIMIT $${nextParamIndex} OFFSET $${nextParamIndex + 1}`;
+      params.push(parseInt(limitParam));
+      params.push(parseInt(offsetParam || "0"));
     }
 
     const result = await query(
@@ -32,6 +56,11 @@ export async function GET(request: Request) {
         COALESCE(b.total_xp, 0) as total_xp,
         COALESCE(b.bonus_balance, 0) as bonus_balance,
         (SELECT COUNT(*)::int FROM promo_tickets t WHERE t.player_id = p.id AND t.club_id = $1 AND t.status = 'available' AND (t.expires_at IS NULL OR t.expires_at > NOW())) as tickets_count,
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM promo_tickets t
+          WHERE t.player_id = p.id AND t.club_id = $1
+        ), 0) as total_tickets_received,
         COALESCE((
           SELECT MAX(l.level_number)
           FROM promo_levels l
@@ -73,16 +102,30 @@ export async function GET(request: Request) {
           SELECT SUM(COALESCE((result_data->>'amount')::numeric, (result_data->>'bonus_cost')::numeric, 0))
           FROM promo_history
           WHERE player_id = p.id AND club_id = $1 AND game_type IN ('WITHDRAW', 'BAR_BONUS_PURCHASE')
-        ), 0) as total_withdrawn
+        ), 0) as total_withdrawn,
+        COALESCE((
+          SELECT SUM((h.result_data->>'items_total')::numeric)
+          FROM promo_history h
+          WHERE h.player_id = p.id AND h.club_id = $1 AND h.game_type = 'BAR_BONUS_PURCHASE'
+        ), 0) as bar_retail_total,
+        COALESCE((
+          SELECT SUM((
+            SELECT SUM(ri.quantity * ri.cost_price_snapshot)
+            FROM shift_receipt_items ri
+            WHERE ri.receipt_id = (h.result_data->>'receipt_id')::int
+          ))
+          FROM promo_history h
+          WHERE h.player_id = p.id AND h.club_id = $1 AND h.game_type = 'BAR_BONUS_PURCHASE'
+        ), 0) as bar_cost_total
        FROM promo_players p
        JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $1
        WHERE 1=1 ${whereClause}
        ORDER BY p.created_at DESC
-       LIMIT 50`,
+       ${limitClause}`,
       params,
     );
 
-    return NextResponse.json({ players: result.rows });
+    return NextResponse.json({ players: result.rows, total });
   } catch (error) {
     console.error("Fetch Players Error:", error);
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });

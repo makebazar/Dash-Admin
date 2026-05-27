@@ -6,32 +6,40 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const clubId = searchParams.get("clubId");
+    const playerId = searchParams.get("playerId");
     const userId = (await cookies()).get("session_user_id")?.value;
 
     if (!userId || !clubId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 1. Fetch Ticket Issuance Logs
-    const issuanceLogs = await query(
-      `SELECT
-        t.id,
+    let issuanceWhere = `t.club_id = $1`;
+    const issuanceParams: any[] = [clubId];
+    if (playerId) {
+      issuanceWhere += ` AND t.player_id = $2`;
+      issuanceParams.push(playerId);
+    }
+
+    const issuanceQuery = `SELECT
+        MIN(t.id::text) as id,
         p.full_name as player_name,
         p.phone_number as player_phone,
         t.source,
         t.created_at,
-        COUNT(*) OVER(PARTITION BY t.player_id, t.created_at, t.source) as batch_count
+        COUNT(*)::int as batch_count,
+        h.game_type as history_game_type,
+        h.result_data::text as history_result_data
        FROM promo_tickets t
        JOIN promo_players p ON t.player_id = p.id
-       WHERE t.club_id = $1
-       ORDER BY t.created_at DESC
-       LIMIT 100`,
-      [clubId],
-    );
+       LEFT JOIN promo_history h ON t.history_id = h.id
+       WHERE ${issuanceWhere}
+       GROUP BY p.full_name, p.phone_number, t.source, t.created_at, t.player_id, t.history_id, h.game_type, h.result_data::text
+       ORDER BY t.created_at DESC LIMIT 100`;
+
+    const issuanceLogs = await query(issuanceQuery, issuanceParams);
 
     // 2. Fetch Game History Logs
-    const gameLogs = await query(
-      `SELECT
+    let gameQuery = `SELECT
         h.id,
         p.full_name as player_name,
         p.phone_number as player_phone,
@@ -80,11 +88,16 @@ export async function GET(request: Request) {
        FROM promo_history h
        JOIN promo_players p ON h.player_id = p.id
        LEFT JOIN promo_prizes pr ON h.prize_id = pr.id
-       WHERE h.club_id = $1
-       ORDER BY h.created_at DESC
-       LIMIT 100`,
-      [clubId],
-    );
+       WHERE h.club_id = $1`;
+    
+    const gameParams: any[] = [clubId];
+    if (playerId) {
+      gameQuery += ` AND h.player_id = $2`;
+      gameParams.push(playerId);
+    }
+    gameQuery += ` ORDER BY h.created_at DESC LIMIT 200`;
+
+    const gameLogs = await query(gameQuery, gameParams);
 
     // 3. Stats for today
     const stats = await query(

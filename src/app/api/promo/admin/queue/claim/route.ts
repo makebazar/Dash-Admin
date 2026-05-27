@@ -4,19 +4,26 @@ import { cookies } from "next/headers";
 
 export async function POST(request: Request) {
   try {
-    const { itemId } = await request.json();
+    const { id, itemId, action } = await request.json();
+    const targetId = id || itemId;
     const userId = (await cookies()).get("session_user_id")?.value;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (!targetId) {
+      return NextResponse.json({ error: "Missing queue item id" }, { status: 400 });
+    }
+
+    const status = action === "cancel" ? "canceled" : "claimed";
+
     const queueRes = await query(
       `UPDATE promo_prize_queue
-             SET status = 'claimed', claimed_at = NOW(), claimed_by_admin_id = $1
-             WHERE id = $2
-             RETURNING club_id`,
-      [userId, itemId],
+       SET status = $1, claimed_at = NOW(), claimed_by_admin_id = $2
+       WHERE id = $3
+       RETURNING club_id`,
+      [status, userId, targetId],
     );
 
     if (queueRes.rowCount && queueRes.rowCount > 0) {

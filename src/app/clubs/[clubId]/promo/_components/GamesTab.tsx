@@ -18,6 +18,9 @@ import {
   CreditCard as CardIcon,
   Bird,
   Trophy,
+  Sparkles,
+  Layers,
+  TrendingUp,
 } from "lucide-react";
 
 export type Prize = {
@@ -47,9 +50,13 @@ export const GAMES = [
   { id: "rocket", label: "Ракета", icon: RocketIcon },
   { id: "cards", label: "Карты", icon: CardIcon },
   { id: "flappy", label: "Flappy", icon: Bird },
+  { id: "plinko", label: "Плинко", icon: Sparkles },
+  { id: "coinflip", label: "Монетка", icon: Coins },
+  { id: "tower", label: "Башня", icon: Layers },
+  { id: "hilo", label: "Hi-Lo", icon: TrendingUp },
 ];
 
-const CONFIG_BASED_GAMES = ["mines", "rocket", "flappy"];
+const CONFIG_BASED_GAMES = ["mines", "rocket", "flappy", "plinko", "coinflip", "tower", "hilo"];
 
 interface GamesTabProps {
   clubId: string;
@@ -475,6 +482,187 @@ export function GamesTab({
                         ),
                       )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedGame === "plinko" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                      Количество рядов колышков (Rows)
+                    </label>
+                    <select
+                      value={localConfigs.plinko?.rows || 8}
+                      onChange={(e) =>
+                        updateConfig("plinko", { rows: parseInt(e.target.value) })
+                      }
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                    >
+                      <option value={8}>8 рядов (9 корзин)</option>
+                      <option value={10}>10 рядов (11 корзин)</option>
+                      <option value={12}>12 рядов (13 корзин)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                      Множитель по краям (High Risk)
+                    </label>
+                    <input
+                      type="number"
+                      step="5"
+                      value={localConfigs.plinko?.max_edge_mult || 80}
+                      onChange={(e) =>
+                        updateConfig("plinko", { max_edge_mult: parseInt(e.target.value) })
+                      }
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {selectedGame === "coinflip" && (
+                <div className="space-y-6 pt-4 border-t border-slate-100">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                        Множитель 1-го раунда (x)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.05"
+                        value={localConfigs.coinflip?.round1_multiplier || 1.95}
+                        onChange={(e) =>
+                          updateConfig("coinflip", { round1_multiplier: parseFloat(e.target.value) })
+                        }
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                        Множитель 2-го раунда (x)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={localConfigs.coinflip?.round2_multiplier || 3.8}
+                        onChange={(e) =>
+                          updateConfig("coinflip", { round2_multiplier: parseFloat(e.target.value) })
+                        }
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                        Множитель 3-го раунда (x)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.2"
+                        value={localConfigs.coinflip?.round3_multiplier || 7.6}
+                        onChange={(e) =>
+                          updateConfig("coinflip", { round3_multiplier: parseFloat(e.target.value) })
+                        }
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100/50">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                        Шанс выигрыша игрока (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={localConfigs.coinflip?.win_chance || 45}
+                        onChange={(e) =>
+                          updateConfig("coinflip", { win_chance: parseInt(e.target.value) })
+                        }
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                      />
+                      <p className="text-[9px] text-slate-400 italic ml-4">
+                        * 45% = 55% шанс проигрыша игрока на каждом броске. Повышает доходность клуба.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedGame === "tower" && (
+                <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                        Количество плит на этаже
+                      </label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="5"
+                        value={localConfigs.tower?.tiles_count || 4}
+                        onChange={(e) =>
+                          updateConfig("tower", { tiles_count: parseInt(e.target.value) })
+                        }
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                        Количество мин на этаже
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max={3}
+                        value={localConfigs.tower?.mines_count || 1}
+                        onChange={(e) =>
+                          updateConfig("tower", { mines_count: parseInt(e.target.value) })
+                        }
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                      Множители этажей (через запятую)
+                    </label>
+                    <input
+                      type="text"
+                      value={localConfigs.tower?.multipliers || "1.3, 1.7, 2.3, 3.1, 4.2, 5.7, 7.8, 10.5"}
+                      onChange={(e) =>
+                        updateConfig("tower", { multipliers: e.target.value })
+                      }
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                    />
+                    <p className="text-[9px] text-slate-400 italic ml-4">
+                      * Введите ровно 8 множителей для каждого этажа (например: 1.3, 1.7, 2.3...)
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {selectedGame === "hilo" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                      Процент отдачи / RTP (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="50"
+                      max="99"
+                      value={localConfigs.hilo?.rtp || 92}
+                      onChange={(e) =>
+                        updateConfig("hilo", { rtp: parseInt(e.target.value) })
+                      }
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
+                    />
+                    <p className="text-[9px] text-slate-400 italic ml-4">
+                      * 92 = 8% комиссия системы на расчет шансов.
+                    </p>
                   </div>
                 </div>
               )}
