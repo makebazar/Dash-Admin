@@ -576,7 +576,7 @@ export default function CRMPage() {
         </div>
       </header>
 
-      <main className="flex-1 mt-20 overflow-x-auto p-8 pl-12">
+      <main className="flex-1 mt-20 overflow-x-auto p-8 pl-72">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
@@ -942,7 +942,7 @@ export default function CRMPage() {
                 <Label className="text-sm font-semibold">Контакт</Label>
                 <Input
                   id="contact"
-                  placeholder="Имя"
+                  placeholder="Рабочий телефон"
                   className="rounded-xl"
                   value={formData.contact_person}
                   onChange={(e) =>

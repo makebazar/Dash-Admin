@@ -115,10 +115,10 @@ export async function POST(request: Request) {
          VALUES ($1, $2, $3, $4, $5)`,
         [
           lead.id,
-          trimmedContact || "Основной контакт",
+          trimmedContact || "Рабочий телефон",
           trimmedPhone || null,
           trimmedTg || null,
-          "Основной контакт"
+          "Рабочий телефон"
         ]
       );
     }

@@ -115,7 +115,7 @@ export default function LeadDetailPage({
     name: "",
     phone: "",
     tg_username: "",
-    role: "",
+    role: "Владелец",
     vk_link: "",
     preferred_contact: "",
   });
@@ -209,7 +209,7 @@ export default function LeadDetailPage({
           name: "",
           phone: "",
           tg_username: "",
-          role: "",
+          role: "Владелец",
           vk_link: "",
           preferred_contact: "",
         });
@@ -576,7 +576,7 @@ export default function LeadDetailPage({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">
-                          Номер / Название клуба
+                          Номер клуба
                         </Label>
                         <Input
                           autoFocus
@@ -596,17 +596,24 @@ export default function LeadDetailPage({
                         <Label className="text-[10px] uppercase font-bold text-slate-400">
                           Должность
                         </Label>
-                        <Input
-                          placeholder="Владелец"
-                          className="h-9 rounded-lg bg-white"
+                        <Select
                           value={contactForm.role}
-                          onChange={(e) =>
+                          onValueChange={(value) =>
                             setContactFormData({
                               ...contactForm,
-                              role: e.target.value,
+                              role: value,
                             })
                           }
-                        />
+                        >
+                          <SelectTrigger className="h-9 rounded-lg bg-white border-slate-200 text-xs font-semibold text-slate-700">
+                            <SelectValue placeholder="Владелец" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl">
+                            <SelectItem value="Владелец" className="text-xs">Владелец</SelectItem>
+                            <SelectItem value="Админ" className="text-xs">Админ</SelectItem>
+                            <SelectItem value="Управ" className="text-xs">Управ</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
