@@ -47,6 +47,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
+import InputMask from "react-input-mask";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -952,15 +953,22 @@ export default function CRMPage() {
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Телефон</Label>
-                <Input
-                  id="phone"
-                  placeholder="7999..."
-                  className="rounded-xl"
+                <InputMask
+                  mask="+7 (999) 999-99-99"
                   value={formData.phone}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setFormData({ ...formData, phone: e.target.value })
                   }
-                />
+                >
+                  {(inputProps: any) => (
+                    <Input
+                      {...inputProps}
+                      id="phone"
+                      placeholder="+7 (999) 999-99-99"
+                      className="rounded-xl"
+                    />
+                  )}
+                </InputMask>
               </div>
             </div>
 

@@ -25,6 +25,7 @@ import {
   Navigation,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import InputMask from "react-input-mask";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -576,12 +577,12 @@ export default function LeadDetailPage({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">
-                          Номер клуба
+                          Имя
                         </Label>
                         <Input
                           autoFocus
                           required
-                          placeholder="Напр: Клуб №5"
+                          placeholder="Напр: Иван Иванов"
                           className="h-9 rounded-lg bg-white"
                           value={contactForm.name}
                           onChange={(e) =>
@@ -621,17 +622,24 @@ export default function LeadDetailPage({
                         <Label className="text-[10px] uppercase font-bold text-slate-400">
                           Телефон
                         </Label>
-                        <Input
-                          placeholder="7999..."
-                          className="h-9 rounded-lg bg-white"
+                        <InputMask
+                          mask="+7 (999) 999-99-99"
                           value={contactForm.phone}
-                          onChange={(e) =>
+                          onChange={(e: any) =>
                             setContactFormData({
                               ...contactForm,
                               phone: e.target.value,
                             })
                           }
-                        />
+                        >
+                          {(inputProps: any) => (
+                            <Input
+                              {...inputProps}
+                              placeholder="+7 (999) 999-99-99"
+                              className="h-9 rounded-lg bg-white"
+                            />
+                          )}
+                        </InputMask>
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">
