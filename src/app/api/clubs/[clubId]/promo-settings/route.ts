@@ -20,8 +20,8 @@ export async function POST(
                 promo_settings = $1,
                 bp_settings = jsonb_build_object(
                     'is_enabled', COALESCE(($1::jsonb->>'bp_enabled')::boolean, false),
-                    'bp_price', COALESCE(($1::jsonb->>'bp_price')::integer, 1000),
-                    'xp_per_ruble', COALESCE(($1::jsonb->>'bp_xp_per_rub')::integer, 1)
+                    'bp_price', COALESCE(($1::jsonb->>'bp_price')::numeric::integer, 1000),
+                    'xp_per_ruble', COALESCE(($1::jsonb->>'bp_xp_per_rub')::numeric::integer, 1)
                 )
              WHERE id = $2`,
       [JSON.stringify(settings), clubId],

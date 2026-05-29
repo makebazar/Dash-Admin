@@ -38,12 +38,23 @@ export async function GET() {
     if (!auth.ok) return auth.response;
 
     const result = await query(
-      `SELECT id, code, name, tagline, description, price_amount, price_per_extra_club, period_unit, period_value, grace_period_days, display_order, is_active, is_public, created_at, updated_at
-             FROM subscription_plans
-             ORDER BY display_order ASC, created_at DESC`,
+      `SELECT sp.id, sp.code, sp.name, sp.tagline, sp.description, sp.price_amount, sp.price_per_extra_club, sp.period_unit, sp.period_value, sp.grace_period_days, sp.display_order, sp.is_active, sp.is_public, sp.created_at, sp.updated_at,
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', c.id, 'name', c.name))
+                 FROM subscription_plan_allowed_clubs spac
+                 JOIN clubs c ON spac.club_id = c.id
+                 WHERE spac.plan_id = sp.id),
+                '[]'::jsonb
+              ) as allowed_clubs
+       FROM subscription_plans sp
+       ORDER BY sp.display_order ASC, sp.created_at DESC`,
     );
 
-    return NextResponse.json({ plans: result.rows });
+    const clubsResult = await query(
+      `SELECT id, name FROM clubs ORDER BY name ASC`
+    );
+
+    return NextResponse.json({ plans: result.rows, clubs: clubsResult.rows });
   } catch (error) {
     console.error("Get Subscription Plans Error:", error);
     return NextResponse.json(
@@ -80,6 +91,9 @@ export async function POST(request: Request) {
     const displayOrder = Number(body.display_order || 100);
     const isActive = body.is_active !== false;
     const isPublic = body.is_public !== false;
+    const allowedClubIds = Array.isArray(body.allowed_club_ids)
+      ? body.allowed_club_ids.map(Number).filter((x) => !isNaN(x))
+      : [];
 
     if (!code || !name) {
       return NextResponse.json(
@@ -108,7 +122,24 @@ export async function POST(request: Request) {
       ],
     );
 
-    return NextResponse.json({ plan: result.rows[0] });
+    const newPlan = result.rows[0];
+    newPlan.allowed_clubs = [];
+
+    if (allowedClubIds && allowedClubIds.length > 0) {
+      for (const clubId of allowedClubIds) {
+        await query(
+          `INSERT INTO subscription_plan_allowed_clubs (plan_id, club_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [newPlan.id, clubId]
+        );
+      }
+      const allowedClubsRes = await query(
+        `SELECT id, name FROM clubs WHERE id = ANY($1::int[])`,
+        [allowedClubIds]
+      );
+      newPlan.allowed_clubs = allowedClubsRes.rows;
+    }
+
+    return NextResponse.json({ plan: newPlan });
   } catch (error: any) {
     if (error?.code === "23505") {
       return NextResponse.json(
@@ -159,6 +190,9 @@ export async function PATCH(request: Request) {
     const displayOrder = Number(body.display_order || 100);
     const isActive = body.is_active !== false;
     const isPublic = body.is_public !== false;
+    const allowedClubIds = Array.isArray(body.allowed_club_ids)
+      ? body.allowed_club_ids.map(Number).filter((x) => !isNaN(x))
+      : null;
 
     if (!code || !name) {
       return NextResponse.json(
@@ -205,7 +239,33 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Plan not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ plan: result.rows[0] });
+    if (allowedClubIds !== null) {
+      await query(
+        `DELETE FROM subscription_plan_allowed_clubs WHERE plan_id = $1`,
+        [id]
+      );
+      if (allowedClubIds.length > 0) {
+        for (const clubId of allowedClubIds) {
+          await query(
+            `INSERT INTO subscription_plan_allowed_clubs (plan_id, club_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [id, clubId]
+          );
+        }
+      }
+    }
+
+    const updatedPlan = result.rows[0];
+    updatedPlan.allowed_clubs = [];
+    const allowedClubsRes = await query(
+      `SELECT c.id, c.name 
+       FROM subscription_plan_allowed_clubs spac
+       JOIN clubs c ON spac.club_id = c.id
+       WHERE spac.plan_id = $1`,
+      [id]
+    );
+    updatedPlan.allowed_clubs = allowedClubsRes.rows;
+
+    return NextResponse.json({ plan: updatedPlan });
   } catch (error: any) {
     if (error?.code === "23505") {
       return NextResponse.json(

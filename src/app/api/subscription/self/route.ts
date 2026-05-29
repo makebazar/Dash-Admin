@@ -39,12 +39,26 @@ export async function GET(request: Request) {
     const clubId = searchParams.get("clubId");
 
     // Получаем тарифы
-    const plansResult = await query(
-      `SELECT id, code, name, tagline, description, features, badge_text, badge_tone, cta_text, card_theme, display_order, is_highlighted, price_amount, price_per_extra_club, period_unit, period_value, is_active
-         FROM subscription_plans
-         WHERE is_active = TRUE AND is_public = TRUE
-         ORDER BY display_order ASC, created_at DESC`,
-    );
+    const plansResult = clubId
+      ? await query(
+          `SELECT sp.id, sp.code, sp.name, sp.tagline, sp.description, sp.features, sp.badge_text, sp.badge_tone, sp.cta_text, sp.card_theme, sp.display_order, sp.is_highlighted, sp.price_amount, sp.price_per_extra_club, sp.period_unit, sp.period_value, sp.is_active
+             FROM subscription_plans sp
+             WHERE sp.is_active = TRUE
+               AND (
+                 (sp.is_public = TRUE AND NOT EXISTS (SELECT 1 FROM subscription_plan_allowed_clubs spac WHERE spac.plan_id = sp.id))
+                 OR
+                 (EXISTS (SELECT 1 FROM subscription_plan_allowed_clubs spac WHERE spac.plan_id = sp.id AND spac.club_id = $1))
+               )
+             ORDER BY sp.display_order ASC, sp.created_at DESC`,
+          [Number(clubId)]
+        )
+      : await query(
+          `SELECT sp.id, sp.code, sp.name, sp.tagline, sp.description, sp.features, sp.badge_text, sp.badge_tone, sp.cta_text, sp.card_theme, sp.display_order, sp.is_highlighted, sp.price_amount, sp.price_per_extra_club, sp.period_unit, sp.period_value, sp.is_active
+             FROM subscription_plans sp
+             WHERE sp.is_active = TRUE AND sp.is_public = TRUE
+               AND NOT EXISTS (SELECT 1 FROM subscription_plan_allowed_clubs spac WHERE spac.plan_id = sp.id)
+             ORDER BY sp.display_order ASC, sp.created_at DESC`
+        );
 
     // Находим "основной" клуб (самый старый из активных), который всегда платит 100% цены
     const primaryClubResult = await query(
@@ -138,11 +152,17 @@ export async function POST(request: Request) {
     }
 
     const planResult = await query(
-      `SELECT code, name, price_amount, price_per_extra_club, period_unit, period_value, is_active
-             FROM subscription_plans
-             WHERE code = $1
-             LIMIT 1`,
-      [planCode],
+      `SELECT sp.code, sp.name, sp.price_amount, sp.price_per_extra_club, sp.period_unit, sp.period_value, sp.is_active
+       FROM subscription_plans sp
+       WHERE sp.code = $1
+         AND sp.is_active = TRUE
+         AND (
+           (sp.is_public = TRUE AND NOT EXISTS (SELECT 1 FROM subscription_plan_allowed_clubs spac WHERE spac.plan_id = sp.id))
+           OR
+           (EXISTS (SELECT 1 FROM subscription_plan_allowed_clubs spac WHERE spac.plan_id = sp.id AND spac.club_id = $2))
+         )
+       LIMIT 1`,
+      [planCode, clubId],
     );
 
     if ((planResult.rowCount || 0) === 0) {

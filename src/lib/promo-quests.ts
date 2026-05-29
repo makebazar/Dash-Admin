@@ -544,26 +544,29 @@ export async function rewardPlayerForQuest(
   quest: any,
 ) {
   // Add XP and Bonus Balance
-  if (quest.reward_xp > 0 || quest.reward_bonus_balance > 0) {
+  const rewardXp = Number(quest.reward_xp || 0);
+  const rewardBonusBalance = Number(quest.reward_bonus_balance || 0);
+  if (rewardXp > 0 || rewardBonusBalance > 0) {
     // 1. Award XP (Quest XP also goes to BP, usually without money boosts unless specified)
-    if (quest.reward_xp > 0) {
-      await addPlayerXP(client, clubId, playerId, quest.reward_xp);
+    if (rewardXp > 0) {
+      await addPlayerXP(client, clubId, playerId, rewardXp);
     }
 
     // 2. Award Bonus Balance
-    if (quest.reward_bonus_balance > 0) {
+    if (rewardBonusBalance > 0) {
       await client.query(
         `UPDATE promo_player_balances
          SET bonus_balance = COALESCE(bonus_balance, 0) + $1::numeric,
              updated_at = NOW()
          WHERE player_id = $2::uuid AND club_id = $3::int`,
-        [quest.reward_bonus_balance, playerId, clubId],
+        [rewardBonusBalance, playerId, clubId],
       );
     }
   }
 
   // Issue Tickets
-  if (quest.reward_tickets > 0) {
+  const rewardTickets = Math.floor(Number(quest.reward_tickets || 0));
+  if (rewardTickets > 0) {
     const expiryHours = 24; // Could be configurable, but default to 24h
     const expiryDate = new Date();
     expiryDate.setHours(expiryDate.getHours() + expiryHours);
@@ -572,7 +575,7 @@ export async function rewardPlayerForQuest(
       `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
        SELECT $1::uuid, $2::int, 'available', 'quest_reward', $3
        FROM generate_series(1, $4)`,
-      [playerId, clubId, expiryDate, quest.reward_tickets],
+      [playerId, clubId, expiryDate, rewardTickets],
     );
   }
 

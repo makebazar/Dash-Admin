@@ -607,7 +607,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Section: Subscription */}
-        <div>
+        {clubs.filter((c) => c.is_owner).length > 0 && (
+          <div>
           <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
               <h2 className="text-2xl font-bold tracking-tight mb-2">
@@ -734,13 +735,14 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {planOptions.map((plan) => {
                     const isSelected = selectedPlan === plan.code;
+                    const isCurrentPlanActive = isSelected && (clubSubscription?.subscription_status === "active" || clubSubscription?.subscription_status === "trialing");
                     return (
                       <div
                         key={plan.id}
                         className={`relative flex flex-col rounded-2xl border p-6 transition-all ${
                           plan.card_theme === "dark"
                             ? "bg-slate-900 border-slate-900 text-white"
-                            : isSelected
+                            : isCurrentPlanActive
                               ? "bg-white border-black shadow-[0_8px_30px_rgb(0,0,0,0.08)]"
                               : "bg-white border-slate-200 hover:border-slate-300"
                         }`}
@@ -798,23 +800,25 @@ export default function DashboardPage() {
                         </div>
 
                         <Button
-                          className={`w-full h-12 rounded-xl font-medium text-base transition-all ${
+                          className={`w-full h-12 rounded-xl font-medium text-base transition-all cursor-pointer ${
                             plan.card_theme === "dark"
                               ? "bg-white text-black hover:bg-slate-200"
-                              : isSelected
+                              : isCurrentPlanActive
                                 ? "bg-slate-100 text-slate-400 cursor-default hover:bg-slate-100"
                                 : "bg-black text-white hover:bg-slate-800"
                           }`}
                           onClick={() => {
-                            if (!isSelected)
+                            if (!isCurrentPlanActive)
                               handleChangeSubscription(plan.code);
                           }}
-                          disabled={isChangingPlan || isSelected}
+                          disabled={isChangingPlan || isCurrentPlanActive}
                         >
                           {isChangingPlan && selectedPlan === plan.code ? (
                             <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : isSelected ? (
+                          ) : isCurrentPlanActive ? (
                             "Текущий тариф"
+                          ) : isSelected ? (
+                            "Продлить тариф"
                           ) : (
                             plan.cta_text || "Выбрать тариф"
                           )}
@@ -827,6 +831,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+        )}
       </main>
 
       {/* Modals */}

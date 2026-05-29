@@ -162,7 +162,7 @@ export async function GET(
          COUNT(id) as receipts_count
        FROM shift_receipts
        WHERE shift_id = $1 AND voided_at IS NULL AND committed_at IS NOT NULL
-         AND payment_type != \'salary\'`,
+         AND payment_type != 'salary'`,
       [shiftId],
     );
     const posRevenue = Number(posRevenueRes.rows[0].pos_revenue || 0);

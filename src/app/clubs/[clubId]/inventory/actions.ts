@@ -5927,7 +5927,7 @@ export async function bulkAccruePromoSafe(
               data.player_id,
               clubId,
               topupHistoryRes.rows[0].id,
-              ticketsToAward,
+              Math.floor(ticketsToAward),
             ],
           );
         }
@@ -6092,7 +6092,7 @@ export async function bulkAccruePromoSafe(
         `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at, history_id)
          SELECT $1::uuid, $2::int, 'available', 'service_award', NULL, $3::uuid
          FROM generate_series(1, $4)`,
-        [data.player_id, clubId, serviceHistoryRes.rows[0].id, rule.tickets],
+        [data.player_id, clubId, serviceHistoryRes.rows[0].id, Math.floor(Number(rule.tickets))],
       );
 
       // Process Quests

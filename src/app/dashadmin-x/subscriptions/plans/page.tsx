@@ -30,14 +30,21 @@ interface Plan {
   display_order: number;
   is_active: boolean;
   is_public: boolean;
+  allowed_clubs?: { id: number; name: string }[];
 }
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [clubs, setClubs] = useState<{ id: number; name: string }[]>([]);
+  const [clubSearchQuery, setClubSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<Partial<Plan>>({});
+  const [editForm, setEditForm] = useState<Partial<Plan & { allowed_club_ids?: number[] }>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  const filteredClubs = clubs.filter((club) =>
+    club.name.toLowerCase().includes(clubSearchQuery.toLowerCase())
+  );
 
   useEffect(() => {
     fetchPlans();
@@ -49,6 +56,7 @@ export default function PlansPage() {
       const data = await res.json();
       if (res.ok) {
         setPlans(data.plans);
+        setClubs(data.clubs || []);
       }
     } catch (error) {
       console.error("Error fetching plans:", error);
@@ -59,12 +67,17 @@ export default function PlansPage() {
 
   const startEdit = (plan: Plan) => {
     setEditingId(plan.id);
-    setEditForm(plan);
+    setEditForm({
+      ...plan,
+      allowed_club_ids: plan.allowed_clubs ? plan.allowed_clubs.map((c) => c.id) : [],
+    });
+    setClubSearchQuery("");
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditForm({});
+    setClubSearchQuery("");
   };
 
   const handleSave = async () => {
@@ -343,6 +356,88 @@ export default function PlansPage() {
                       </div>
                     </div>
 
+                    {/* Restricted Clubs Selector (Individual subscription conditions) */}
+                    <div className="space-y-3 pt-6 border-t border-slate-100">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                        Ограничение по клубам (индивидуальный тариф)
+                      </label>
+                      <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <p className="text-xs text-slate-500 max-w-xl">
+                            Выберите конкретные клубы, которые смогут оплатить этот тариф. Если не выбран ни один клуб, тариф будет доступен всем клиентам по умолчанию (при условии, что включен «Публичный»).
+                          </p>
+                          {(editForm.allowed_club_ids || []).length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setEditForm({ ...editForm, allowed_club_ids: [] })}
+                              className="text-[10px] font-bold text-rose-600 hover:text-rose-700 transition-colors uppercase cursor-pointer shrink-0"
+                            >
+                              Сбросить все ({editForm.allowed_club_ids?.length})
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Search Bar */}
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Поиск клубов по названию..."
+                            value={clubSearchQuery}
+                            onChange={(e) => setClubSearchQuery(e.target.value)}
+                            className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-slate-100 transition-all"
+                          />
+                          {clubSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setClubSearchQuery("")}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Clubs grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
+                          {filteredClubs.map((club) => {
+                            const isChecked = (editForm.allowed_club_ids || []).includes(club.id);
+                            return (
+                              <button
+                                key={club.id}
+                                type="button"
+                                onClick={() => {
+                                  const currentIds = editForm.allowed_club_ids || [];
+                                  const nextIds = currentIds.includes(club.id)
+                                    ? currentIds.filter((id) => id !== club.id)
+                                    : [...currentIds, club.id];
+                                  setEditForm({ ...editForm, allowed_club_ids: nextIds });
+                                }}
+                                className={cn(
+                                  "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border text-left transition-all cursor-pointer",
+                                  isChecked
+                                    ? "bg-slate-900 border-slate-900 text-white shadow-sm"
+                                    : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                                )}
+                              >
+                                <div className={cn(
+                                  "h-3.5 w-3.5 rounded flex items-center justify-center border transition-all shrink-0",
+                                  isChecked ? "border-white bg-white text-slate-900" : "border-slate-300 bg-slate-50"
+                                )}>
+                                  {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                                </div>
+                                <span className="truncate">{club.name}</span>
+                              </button>
+                            );
+                          })}
+                          {filteredClubs.length === 0 && (
+                            <div className="col-span-full py-6 text-center text-slate-400 text-xs font-medium">
+                              Клубы не найдены
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                       <div className="flex items-center gap-3">
                         <button
@@ -428,10 +523,31 @@ export default function PlansPage() {
                           >
                             {plan.is_public ? "Публичный" : "Внутренний"}
                           </span>
+                          {plan.allowed_clubs && plan.allowed_clubs.length > 0 && (
+                            <span className="px-2 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 rounded text-[10px] font-bold uppercase flex items-center gap-1">
+                              <ShieldCheck className="h-3 w-3 shrink-0" />
+                              Индивидуальный ({plan.allowed_clubs.length})
+                            </span>
+                          )}
                         </div>{" "}
                         <p className="text-sm text-slate-500 mt-1">
                           {plan.tagline || "Описание не задано"}
                         </p>
+                        {plan.allowed_clubs && plan.allowed_clubs.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2 items-center">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                              Разрешен для:
+                            </span>
+                            {plan.allowed_clubs.map((c) => (
+                              <span
+                                key={c.id}
+                                className="px-2 py-0.5 bg-slate-50 border border-slate-200/50 rounded-lg text-[10px] font-medium text-slate-600 shadow-sm"
+                              >
+                                {c.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex items-center gap-6 mt-4">
                           <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
