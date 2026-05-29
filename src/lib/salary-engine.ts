@@ -1071,7 +1071,9 @@ export async function generateMonthlySalaryReport(
         qualityMetrics.efficiency;
 
       const shifts_count = finishedShifts.length;
-      const planned_shifts = empPlannedShifts?.planned_shifts || 20;
+      const planned_shifts = empPlannedShifts && empPlannedShifts.planned_shifts > 0
+        ? empPlannedShifts.planned_shifts
+        : shifts_count;
 
       // 1. Calculate Period Bonuses rewards
       let bonuses_status: any[] = [];

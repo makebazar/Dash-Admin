@@ -79,7 +79,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
              WHERE club_id = $1 AND user_id = $2 AND month = $3 AND year = $4`,
             [clubId, employee_id, month, year]
         );
-        const planned_shifts = plannedShiftsRes.rows[0]?.planned_shifts || 20;
+        let planned_shifts = plannedShiftsRes.rows[0]?.planned_shifts || 0;
+        if (!planned_shifts || planned_shifts <= 0) {
+            // Count actual finished shifts for the month
+            const startOfMonth = new Date(year, month - 1, 1);
+            const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+            const actualShiftsRes = await query(
+                `SELECT COUNT(*)::int as actual_shifts 
+                 FROM shifts 
+                 WHERE club_id = $1 AND user_id = $2 
+                   AND check_in >= $3 AND check_in <= $4
+                   AND status != 'ACTIVE'`,
+                [clubId, employee_id, startOfMonth.toISOString(), endOfMonth.toISOString()]
+            );
+            planned_shifts = actualShiftsRes.rows[0]?.actual_shifts || 0;
+        }
 
         // 4. Create salary snapshot for unpaid shifts
         // We include EVERYTHING from the scheme to freeze it "ironclad"

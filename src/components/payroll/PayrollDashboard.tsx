@@ -1242,8 +1242,11 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                   )}
                                 >
                                   <span>
-                                    {t.label ||
-                                      `≥ ${formatCurrency(Number(t.from || 0))}`}
+                                    {t.label ? (
+                                      `${t.label} (от ${isMonetary ? formatCurrency(Number(t.from || 0)) : new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(t.from || 0))})`
+                                    ) : (
+                                      `≥ ${isMonetary ? formatCurrency(Number(t.from || 0)) : new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(Number(t.from || 0))}`
+                                    )}
                                   </span>
                                   <span>
                                     {isPercentReward
