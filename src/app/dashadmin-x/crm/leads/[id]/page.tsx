@@ -130,7 +130,7 @@ export default function LeadDetailPage({
           fetch(`/api/dashadmin-x/crm/leads/${id}/notes`),
           fetch(`/api/dashadmin-x/crm/statuses`),
           fetch(`/api/dashadmin-x/crm/scripts`),
-          fetch(`/api/dashadmin-x/users`),
+          fetch(`/api/dashadmin-x/employees`),
           fetch(`/api/auth/me`),
         ]);
 
@@ -146,7 +146,7 @@ export default function LeadDetailPage({
       if (scriptsRes.ok) setScripts(await scriptsRes.json());
       if (usersRes.ok) {
         const usersData = await usersRes.json();
-        setUsers(usersData.users || []);
+        setUsers(usersData.employees || []);
       }
       if (meRes.ok) {
         const meData = await meRes.json();

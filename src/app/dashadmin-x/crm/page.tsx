@@ -175,7 +175,7 @@ export default function CRMPage() {
         fetch("/api/dashadmin-x/crm/leads"),
         fetch("/api/dashadmin-x/crm/statuses"),
         fetch("/api/dashadmin-x/crm/scripts"),
-        fetch("/api/dashadmin-x/users"),
+        fetch("/api/dashadmin-x/employees"),
         fetch("/api/auth/me"),
       ]);
 
@@ -184,7 +184,7 @@ export default function CRMPage() {
       if (scriptsRes.ok) setScripts(await scriptsRes.json());
       if (usersRes.ok) {
         const usersData = await usersRes.json();
-        setUsers(usersData.users || []);
+        setUsers(usersData.employees || []);
       }
       if (meRes.ok) {
         const meData = await meRes.json();

@@ -86,6 +86,7 @@ export default function ClubDetailPage({
   const [owners, setOwners] = useState<Owner[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
+  const [employeesList, setEmployeesList] = useState<User[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -108,15 +109,24 @@ export default function ClubDetailPage({
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/dashadmin-x/clubs/${id}`);
-      const data = await res.json();
-      if (res.ok) {
+      const [clubRes, employeesRes] = await Promise.all([
+        fetch(`/api/dashadmin-x/clubs/${id}`),
+        fetch(`/api/dashadmin-x/employees`),
+      ]);
+
+      const data = await clubRes.json();
+      if (clubRes.ok) {
         setClub(data.club);
         setOwners(data.owners);
         setEmployees(data.employees);
         setAvailableUsers(data.availableUsers);
       } else {
         setError(data.error || "Ошибка загрузки");
+      }
+
+      if (employeesRes.ok) {
+        const empData = await employeesRes.json();
+        setEmployeesList(empData.employees || []);
       }
     } catch (err) {
       setError("Сетевая ошибка");
@@ -343,7 +353,7 @@ export default function ClubDetailPage({
                   </SelectTrigger>
                   <SelectContent className="rounded-xl">
                     <SelectItem value="none">Сотрудник не выбран</SelectItem>
-                    {availableUsers.map((user) => (
+                    {employeesList.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
                         {user.full_name || user.phone_number}
                       </SelectItem>
