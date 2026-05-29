@@ -90,6 +90,8 @@ interface Lead {
   next_contact_at: string | null;
   position: number;
   created_at: string;
+  assigned_user_id: string | null;
+  assignee_name: string | null;
 }
 
 interface Script {
@@ -113,6 +115,11 @@ export default function CRMPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCity, setSelectedCity] = useState<string>("all");
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // User states & assignee filtering
+  const [users, setUsers] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [selectedAssignee, setSelectedAssignee] = useState<string>("all");
 
   // Scripts
   const [scripts, setScripts] = useState<Script[]>([]);
@@ -147,6 +154,7 @@ export default function CRMPage() {
     status: "new",
     notes: "",
     next_contact_at: "",
+    assigned_user_id: "",
   });
 
   const sensors = useSensors(
@@ -163,15 +171,25 @@ export default function CRMPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [leadsRes, statusesRes, scriptsRes] = await Promise.all([
+      const [leadsRes, statusesRes, scriptsRes, usersRes, meRes] = await Promise.all([
         fetch("/api/dashadmin-x/crm/leads"),
         fetch("/api/dashadmin-x/crm/statuses"),
         fetch("/api/dashadmin-x/crm/scripts"),
+        fetch("/api/dashadmin-x/users"),
+        fetch("/api/auth/me"),
       ]);
 
       if (leadsRes.ok) setLeads(await leadsRes.json());
       if (statusesRes.ok) setStatuses(await statusesRes.json());
       if (scriptsRes.ok) setScripts(await scriptsRes.json());
+      if (usersRes.ok) {
+        const usersData = await usersRes.json();
+        setUsers(usersData.users || []);
+      }
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        setCurrentUser(meData.user || null);
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -303,6 +321,7 @@ export default function CRMPage() {
       status: statuses[0]?.id || "new",
       notes: "",
       next_contact_at: "",
+      assigned_user_id: "",
     });
     setSelectedLead(null);
   };
@@ -327,6 +346,7 @@ export default function CRMPage() {
       next_contact_at: lead.next_contact_at
         ? lead.next_contact_at.split("T")[0]
         : "",
+      assigned_user_id: lead.assigned_user_id || "",
     });
     setIsEditOpen(true);
   };
@@ -346,6 +366,15 @@ export default function CRMPage() {
     let result = leads;
     if (selectedCity !== "all")
       result = result.filter((l) => l.city === selectedCity);
+    if (selectedAssignee !== "all") {
+      if (selectedAssignee === "me") {
+        result = result.filter((l) => l.assigned_user_id === currentUser?.id);
+      } else if (selectedAssignee === "unassigned") {
+        result = result.filter((l) => !l.assigned_user_id);
+      } else {
+        result = result.filter((l) => l.assigned_user_id === selectedAssignee);
+      }
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(
@@ -359,7 +388,7 @@ export default function CRMPage() {
       );
     }
     return result;
-  }, [leads, searchQuery, selectedCity]);
+  }, [leads, searchQuery, selectedCity, selectedAssignee, currentUser]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
@@ -452,6 +481,31 @@ export default function CRMPage() {
                 {cities.map((city) => (
                   <SelectItem key={city} value={city!} className="text-xs">
                     {city}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-1.5 border border-slate-200">
+            <UserIcon className="h-3.5 w-3.5 text-slate-400" />
+            <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
+              <SelectTrigger className="h-7 border-none bg-transparent shadow-none p-0 focus:ring-0 text-xs font-bold w-36">
+                <SelectValue placeholder="Все ответственные" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                <SelectItem value="all" className="text-xs">
+                  Все ответственные
+                </SelectItem>
+                <SelectItem value="me" className="text-xs">
+                  Мои лиды
+                </SelectItem>
+                <SelectItem value="unassigned" className="text-xs">
+                  Без ответственного
+                </SelectItem>
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={user.id} className="text-xs">
+                    {user.full_name || user.phone_number}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -887,6 +941,27 @@ export default function CRMPage() {
                 />
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Ответственный</Label>
+              <Select
+                value={formData.assigned_user_id || "unassigned"}
+                onValueChange={(v) => setFormData({ ...formData, assigned_user_id: v === "unassigned" ? "" : v })}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Не назначен" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Не назначен</SelectItem>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.full_name || u.phone_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <DialogFooter className="pt-2">
               <Button
                 type="button"
@@ -979,6 +1054,27 @@ export default function CRMPage() {
                 />
               </div>
             </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Ответственный</Label>
+              <Select
+                value={formData.assigned_user_id || "unassigned"}
+                onValueChange={(v) => setFormData({ ...formData, assigned_user_id: v === "unassigned" ? "" : v })}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Не назначен" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Не назначен</SelectItem>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.full_name || u.phone_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <DialogFooter className="flex justify-between items-center pt-2">
               <Button
                 type="button"
@@ -1172,6 +1268,16 @@ function LeadCard({
           >
             <Calendar className="h-3 w-3 mr-1.5" />
             {format(nextContact, "dd MMM", { locale: ru })}
+          </div>
+        )}
+        {lead.assignee_name && (
+          <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
+            <div className="h-5 w-5 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[8px] font-bold text-blue-600 shrink-0">
+              {lead.assignee_name.substring(0, 2).toUpperCase()}
+            </div>
+            <span className="text-[10px] text-slate-500 font-medium truncate">
+              {lead.assignee_name}
+            </span>
           </div>
         )}
       </div>

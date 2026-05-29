@@ -21,15 +21,17 @@ interface UserData {
   id: string;
   full_name: string;
   is_super_admin: boolean;
+  is_staff: boolean;
 }
 
 const NAV_ITEMS = [
   { label: "Обзор", href: "/dashadmin-x", icon: LayoutDashboard },
   { label: "CRM", href: "/dashadmin-x/crm", icon: PhoneCall },
-  { label: "Подписки", href: "/dashadmin-x/subscriptions", icon: Zap },
-  { label: "Пользователи", href: "/dashadmin-x/users", icon: Users },
+  { label: "Сотрудники", href: "/dashadmin-x/employees", icon: Shield, superAdminOnly: true },
+  { label: "Подписки", href: "/dashadmin-x/subscriptions", icon: Zap, superAdminOnly: true },
+  { label: "Пользователи", href: "/dashadmin-x/users", icon: Users, superAdminOnly: true },
   { label: "Клубы", href: "/dashadmin-x/clubs", icon: Store },
-  { label: "Роли", href: "/dashadmin-x/roles", icon: Shield },
+  { label: "Роли", href: "/dashadmin-x/roles", icon: Shield, superAdminOnly: true },
   { label: "Поддержка", href: "/dashadmin-x/support", icon: Headphones },
 ];
 
@@ -56,7 +58,7 @@ export default function DashAdminXLayout({
           router.push("/legal-consent");
           return;
         }
-        if (!data.user?.is_super_admin) {
+        if (!data.user?.is_super_admin && !data.user?.is_staff) {
           router.push("/dashboard");
           return;
         }
@@ -89,6 +91,13 @@ export default function DashAdminXLayout({
     );
   }
 
+  const filteredNavItems = NAV_ITEMS.filter((item) => {
+    if (item.superAdminOnly && !userData?.is_super_admin) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div className="flex min-h-screen bg-[#FAFAFA]">
       {/* Sidebar */}
@@ -107,7 +116,7 @@ export default function DashAdminXLayout({
 
         {/* Navigation */}
         <nav className="flex-1 px-4 py-6 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {filteredNavItems.map((item) => {
             const Icon = item.icon;
             const isActive =
               pathname === item.href ||
@@ -140,7 +149,9 @@ export default function DashAdminXLayout({
               <p className="text-sm font-medium text-slate-900 truncate">
                 {userData?.full_name || "Администратор"}
               </p>
-              <p className="text-xs text-slate-500">Super Admin</p>
+              <p className="text-xs text-slate-500">
+                {userData?.is_super_admin ? "Super Admin" : "Менеджер"}
+              </p>
             </div>
           </div>
           <button

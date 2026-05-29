@@ -3,7 +3,7 @@ import { query } from "@/db";
 import { cookies } from "next/headers";
 import { isSuperAdmin } from "@/lib/admin";
 
-async function ensureSuperAdmin() {
+async function checkUserClubAccess(clubId: string) {
   const userId = (await cookies()).get("session_user_id")?.value;
   if (!userId)
     return {
@@ -12,24 +12,44 @@ async function ensureSuperAdmin() {
     };
 
   const adminCheck = await query(
-    `SELECT is_super_admin, phone_number FROM users WHERE id = $1`,
+    `SELECT is_super_admin, is_staff, phone_number FROM users WHERE id = $1`,
     [userId],
   );
 
-  const canAccess = isSuperAdmin(
-    adminCheck.rows[0]?.is_super_admin,
+  const user = adminCheck.rows[0];
+  if (!user) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+
+  const isSuper = isSuperAdmin(
+    user.is_super_admin,
     userId,
-    adminCheck.rows[0]?.phone_number,
+    user.phone_number,
   );
 
-  if (!canAccess) {
+  const isStaff = Boolean(user.is_staff);
+
+  if (!isSuper && !isStaff) {
     return {
       ok: false as const,
       response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
     };
   }
 
-  return { ok: true as const };
+  if (isStaff) {
+    const clubCheck = await query("SELECT referred_by_id FROM clubs WHERE id = $1", [clubId]);
+    if (clubCheck.rowCount === 0 || clubCheck.rows[0].referred_by_id !== userId) {
+      return {
+        ok: false as const,
+        response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+      };
+    }
+  }
+
+  return { ok: true as const, userId, isSuper, isStaff };
 }
 
 export async function GET(
@@ -37,20 +57,21 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const auth = await ensureSuperAdmin();
+    const { id } = await params;
+    const auth = await checkUserClubAccess(id);
     if (!auth.ok) return auth.response;
 
-    const { id } = await params;
-
-    // Fetch club and primary owner
+    // Fetch club, primary owner, and referrer
     const clubResult = await query(
       `
             SELECT
                 c.*,
                 u.full_name as owner_name,
-                u.phone_number as owner_phone
+                u.phone_number as owner_phone,
+                ref.full_name as referrer_name
             FROM clubs c
             LEFT JOIN users u ON u.id = c.owner_id
+            LEFT JOIN users ref ON ref.id = c.referred_by_id
             WHERE c.id = $1
         `,
       [id],
@@ -125,10 +146,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const auth = await ensureSuperAdmin();
+    const { id } = await params;
+    const auth = await checkUserClubAccess(id);
     if (!auth.ok) return auth.response;
 
-    const { id } = await params;
+    if (!auth.isSuper) {
+      return NextResponse.json({ error: "Forbidden: Super Admin only" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const targetUserId = searchParams.get("userId");
     const mode = searchParams.get("mode");
@@ -170,7 +195,6 @@ export async function DELETE(
 
     if (mode === "destroy-club") {
       // High danger action - Hard Delete
-      // Cascades are now set up in the DB
       await query("DELETE FROM clubs WHERE id = $1", [id]);
       return NextResponse.json({ success: true });
     }
@@ -190,10 +214,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const auth = await ensureSuperAdmin();
+    const { id } = await params;
+    const auth = await checkUserClubAccess(id);
     if (!auth.ok) return auth.response;
 
-    const { id } = await params;
+    if (!auth.isSuper) {
+      return NextResponse.json({ error: "Forbidden: Super Admin only" }, { status: 403 });
+    }
+
     const { userId, phoneNumber, fullName, role } = await request.json();
 
     let targetUserId = userId;
@@ -240,15 +268,16 @@ export async function POST(
     );
   }
 }
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const auth = await ensureSuperAdmin();
+    const { id } = await params;
+    const auth = await checkUserClubAccess(id);
     if (!auth.ok) return auth.response;
 
-    const { id } = await params;
     const body = await request.json();
 
     const {
@@ -260,7 +289,17 @@ export async function PATCH(
       night_start_hour,
       inventory_required,
       is_active,
+      referred_by_id,
+      referral_reward_type,
+      referral_reward_value,
     } = body;
+
+    // Security check: staff members CANNOT change referral commission settings or assigned managers!
+    if (!auth.isSuper) {
+      if (referred_by_id !== undefined || referral_reward_type !== undefined || referral_reward_value !== undefined) {
+        return NextResponse.json({ error: "Forbidden: Only Super Admin can change commission settings" }, { status: 403 });
+      }
+    }
 
     // Special logic for primary owner change
     if (owner_id) {
@@ -292,18 +331,24 @@ export async function PATCH(
                 day_start_hour = COALESCE($5, day_start_hour),
                 night_start_hour = COALESCE($6, night_start_hour),
                 inventory_required = COALESCE($7, inventory_required),
-                is_active = COALESCE($8, is_active)
-            WHERE id = $9
+                is_active = COALESCE($8, is_active),
+                referred_by_id = CASE WHEN $9 = 'undefined' THEN referred_by_id WHEN $9 = 'null' THEN NULL ELSE $9::uuid END,
+                referral_reward_type = COALESCE($10, referral_reward_type),
+                referral_reward_value = COALESCE($11, referral_reward_value)
+            WHERE id = $12
         `,
       [
-        name,
-        address,
-        owner_id,
-        timezone,
-        day_start_hour,
-        night_start_hour,
-        inventory_required,
-        is_active,
+        name !== undefined ? name : null,
+        address !== undefined ? address : null,
+        owner_id !== undefined ? owner_id : null,
+        timezone !== undefined ? timezone : null,
+        day_start_hour !== undefined ? day_start_hour : null,
+        night_start_hour !== undefined ? night_start_hour : null,
+        inventory_required !== undefined ? inventory_required : null,
+        is_active !== undefined ? is_active : null,
+        referred_by_id === undefined ? 'undefined' : (referred_by_id === null ? 'null' : referred_by_id),
+        referral_reward_type !== undefined ? referral_reward_type : null,
+        referral_reward_value !== undefined ? referral_reward_value : null,
         id,
       ],
     );

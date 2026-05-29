@@ -8,14 +8,15 @@ async function checkAuth() {
   if (!userId) return null;
 
   const adminCheck = await query(
-    `SELECT id, is_super_admin, phone_number FROM users WHERE id = $1`,
+    `SELECT id, is_super_admin, is_staff, phone_number FROM users WHERE id = $1`,
     [userId],
   );
 
   const user = adminCheck.rows[0];
   if (!user) return null;
 
-  if (!isSuperAdmin(user.is_super_admin, userId, user.phone_number)) {
+  const canAccess = isSuperAdmin(user.is_super_admin, userId, user.phone_number) || Boolean(user.is_staff);
+  if (!canAccess) {
     return null;
   }
 
@@ -30,7 +31,10 @@ export async function GET() {
     }
 
     const result = await query(
-      `SELECT * FROM crm_leads ORDER BY status, position ASC, created_at DESC`,
+      `SELECT l.*, u.full_name as assignee_name
+       FROM crm_leads l
+       LEFT JOIN users u ON u.id = l.assigned_user_id
+       ORDER BY l.status, l.position ASC, l.created_at DESC`,
     );
 
     return NextResponse.json(result.rows);
@@ -63,6 +67,7 @@ export async function POST(request: Request) {
       address,
       social_link,
       maps_link,
+      assigned_user_id,
     } = body;
 
     if (!name) {
@@ -78,8 +83,8 @@ export async function POST(request: Request) {
 
     const result = await query(
       `INSERT INTO crm_leads (
-                name, contact_person, phone, status, notes, next_contact_at, position, city, tg_username, address, social_link, maps_link
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                name, contact_person, phone, status, notes, next_contact_at, position, city, tg_username, address, social_link, maps_link, assigned_user_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING *`,
       [
         name,
@@ -94,6 +99,7 @@ export async function POST(request: Request) {
         address || null,
         social_link || null,
         maps_link || null,
+        assigned_user_id || null,
       ],
     );
 

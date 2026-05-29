@@ -67,12 +67,14 @@ interface Lead {
   notes: string | null;
   next_contact_at: string | null;
   created_at: string;
+  assigned_user_id: string | null;
 }
 
 interface LeadNote {
   id: string;
   content: string;
   created_at: string;
+  author_name: string | null;
 }
 
 interface Script {
@@ -99,6 +101,8 @@ export default function LeadDetailPage({
   const [notes, setNotes] = useState<LeadNote[]>([]);
   const [statuses, setStatuses] = useState<CRMStatus[]>([]);
   const [scripts, setScripts] = useState<Script[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Modal states
@@ -119,13 +123,15 @@ export default function LeadDetailPage({
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [leadRes, contactsRes, notesRes, statusesRes, scriptsRes] =
+      const [leadRes, contactsRes, notesRes, statusesRes, scriptsRes, usersRes, meRes] =
         await Promise.all([
           fetch(`/api/dashadmin-x/crm/leads`),
           fetch(`/api/dashadmin-x/crm/leads/${id}/contacts`),
           fetch(`/api/dashadmin-x/crm/leads/${id}/notes`),
           fetch(`/api/dashadmin-x/crm/statuses`),
           fetch(`/api/dashadmin-x/crm/scripts`),
+          fetch(`/api/dashadmin-x/users`),
+          fetch(`/api/auth/me`),
         ]);
 
       if (leadRes.ok) {
@@ -138,6 +144,14 @@ export default function LeadDetailPage({
       if (notesRes.ok) setNotes(await notesRes.json());
       if (statusesRes.ok) setStatuses(await statusesRes.json());
       if (scriptsRes.ok) setScripts(await scriptsRes.json());
+      if (usersRes.ok) {
+        const usersData = await usersRes.json();
+        setUsers(usersData.users || []);
+      }
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        setCurrentUser(meData.user || null);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -360,6 +374,27 @@ export default function LeadDetailPage({
                   </Select>
                 </div>
               </div>
+              
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-500">Ответственный</Label>
+                <Select
+                  value={lead.assigned_user_id || "unassigned"}
+                  onValueChange={(v) => updateLead({ assigned_user_id: v === "unassigned" ? null : v })}
+                >
+                  <SelectTrigger className="w-full h-10 px-3 rounded-xl border-slate-200 bg-white font-medium text-sm text-slate-700">
+                    <SelectValue placeholder="Не назначен" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="unassigned" className="text-xs">Не назначен</SelectItem>
+                    {users.map((u) => (
+                      <SelectItem key={u.id} value={u.id} className="text-xs">
+                        {u.full_name || u.phone_number}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-slate-500">
                   Адрес
@@ -610,8 +645,8 @@ export default function LeadDetailPage({
 
               {notes.map((note) => (
                 <div key={note.id} className="flex gap-4">
-                  <div className="h-10 w-10 rounded-full bg-slate-200 border-4 border-white shadow-sm flex items-center justify-center shrink-0">
-                    <UserIcon className="h-5 w-5 text-slate-400" />
+                  <div className="h-10 w-10 rounded-full bg-blue-50 border-4 border-white shadow-sm flex items-center justify-center shrink-0 text-xs font-bold text-blue-600">
+                    {note.author_name ? note.author_name.substring(0, 2).toUpperCase() : <UserIcon className="h-5 w-5 text-slate-400" />}
                   </div>
                   <div className="flex-1 space-y-2">
                     <div className="bg-white p-6 rounded-3xl rounded-tl-none border border-slate-200 shadow-sm relative">
@@ -620,6 +655,7 @@ export default function LeadDetailPage({
                       </p>
                     </div>
                     <p className="text-[11px] font-bold text-slate-300 ml-2 uppercase">
+                      {note.author_name && <span className="text-slate-500 mr-2">{note.author_name}</span>}
                       {format(new Date(note.created_at), "dd MMM yyyy, HH:mm", {
                         locale: ru,
                       })}

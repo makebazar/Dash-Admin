@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     const isActive = body.is_active !== false;
     const isPublic = body.is_public !== false;
     const allowedClubIds = Array.isArray(body.allowed_club_ids)
-      ? body.allowed_club_ids.map(Number).filter((x) => !isNaN(x))
+      ? body.allowed_club_ids.map(Number).filter((x: number) => !isNaN(x))
       : [];
 
     if (!code || !name) {
@@ -191,7 +191,7 @@ export async function PATCH(request: Request) {
     const isActive = body.is_active !== false;
     const isPublic = body.is_public !== false;
     const allowedClubIds = Array.isArray(body.allowed_club_ids)
-      ? body.allowed_club_ids.map(Number).filter((x) => !isNaN(x))
+      ? body.allowed_club_ids.map(Number).filter((x: number) => !isNaN(x))
       : null;
 
     if (!code || !name) {

@@ -48,6 +48,9 @@ interface Club {
   inventory_required: boolean;
   public_id: string;
   is_active: boolean;
+  referred_by_id?: string | null;
+  referral_reward_type?: string;
+  referral_reward_value?: number;
 }
 
 interface Owner {
@@ -326,6 +329,68 @@ export default function ClubDetailPage({
                   className="bg-white border-slate-200 rounded-xl h-11 focus:ring-1 focus:ring-slate-200 transition-all shadow-sm"
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-bold text-slate-900">
+                  Прикрепленный сотрудник
+                </Label>
+                <Select
+                  value={club?.referred_by_id || "none"}
+                  onValueChange={(v) => handleUpdate("referred_by_id", v === "none" ? null : v)}
+                >
+                  <SelectTrigger className="bg-white border-slate-200 rounded-xl h-11 focus:ring-1 focus:ring-slate-200 transition-all shadow-sm text-sm">
+                    <SelectValue placeholder="Сотрудник не выбран" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="none">Сотрудник не выбран</SelectItem>
+                    {availableUsers.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.full_name || user.phone_number}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {club?.referred_by_id && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-slate-900">
+                      Тип вознаграждения
+                    </Label>
+                    <Select
+                      value={club?.referral_reward_type || "percentage"}
+                      onValueChange={(v) => handleUpdate("referral_reward_type", v)}
+                    >
+                      <SelectTrigger className="bg-white border-slate-200 rounded-xl h-11 focus:ring-1 focus:ring-slate-200 transition-all shadow-sm text-sm">
+                        <SelectValue placeholder="Процент от подписки" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        <SelectItem value="percentage">Процент от подписки</SelectItem>
+                        <SelectItem value="fixed">Фиксированная выплата</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-bold text-slate-900">
+                      Размер вознаграждения
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={club?.referral_reward_value ?? 0}
+                        onChange={(e) => handleUpdate("referral_reward_value", parseFloat(e.target.value) || 0)}
+                        className="bg-white border-slate-200 rounded-xl h-11 pr-8 focus:ring-1 focus:ring-slate-200 transition-all shadow-sm"
+                      />
+                      <span className="absolute right-3 top-3 text-slate-400 text-sm font-semibold select-none">
+                        {club?.referral_reward_type === "fixed" ? "₽" : "%"}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </section>
 

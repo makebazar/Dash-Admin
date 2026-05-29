@@ -6,9 +6,11 @@ import { isSuperAdmin } from '@/lib/admin';
 async function checkAuth() {
     const userId = (await cookies()).get('session_user_id')?.value;
     if (!userId) return null;
-    const adminCheck = await query(`SELECT is_super_admin, phone_number FROM users WHERE id = $1`, [userId]);
+    const adminCheck = await query(`SELECT is_super_admin, is_staff, phone_number FROM users WHERE id = $1`, [userId]);
     const user = adminCheck.rows[0];
-    if (!user || !isSuperAdmin(user.is_super_admin, userId, user.phone_number)) return null;
+    if (!user) return null;
+    const canAccess = isSuperAdmin(user.is_super_admin, userId, user.phone_number) || Boolean(user.is_staff);
+    if (!canAccess) return null;
     return userId;
 }
 

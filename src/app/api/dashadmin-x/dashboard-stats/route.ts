@@ -12,35 +12,61 @@ export async function GET() {
     }
 
     const adminCheck = await query(
-      `SELECT is_super_admin, phone_number FROM users WHERE id = $1`,
+      `SELECT is_super_admin, is_staff, phone_number FROM users WHERE id = $1`,
       [userId],
     );
 
-    const canAccess = isSuperAdmin(
-      adminCheck.rows[0]?.is_super_admin,
+    const user = adminCheck.rows[0];
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const isSuper = isSuperAdmin(
+      user.is_super_admin,
       userId,
-      adminCheck.rows[0]?.phone_number,
+      user.phone_number,
     );
 
-    if (!canAccess) {
+    const isStaff = Boolean(user.is_staff);
+
+    if (!isSuper && !isStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const statsResult = await query(`
-            SELECT
-                (SELECT COUNT(*) FROM clubs) as total_clubs,
-                (SELECT COUNT(*) FROM users) as total_users,
-                (SELECT COUNT(*) FROM clubs WHERE subscription_status = 'active') as active_subscriptions,
-                (SELECT COALESCE(SUM(
-                    CASE
-                        WHEN subscription_plan = 'starter' THEN 2900
-                        WHEN subscription_plan = 'pro' THEN 7900
-                        WHEN subscription_plan = 'enterprise' THEN 19900
-                        ELSE 0
-                    END
-                ), 0) FROM clubs WHERE subscription_status = 'active') as monthly_revenue
-            FROM (SELECT 1) dummy
-        `);
+    let statsResult;
+    if (isSuper) {
+      statsResult = await query(`
+             SELECT
+                 (SELECT COUNT(*) FROM clubs) as total_clubs,
+                 (SELECT COUNT(*) FROM users) as total_users,
+                 (SELECT COUNT(*) FROM clubs WHERE subscription_status = 'active') as active_subscriptions,
+                 (SELECT COALESCE(SUM(
+                     CASE
+                         WHEN subscription_plan = 'starter' THEN 2900
+                         WHEN subscription_plan = 'pro' THEN 7900
+                         WHEN subscription_plan = 'enterprise' THEN 19900
+                         ELSE 0
+                     END
+                 ), 0) FROM clubs WHERE subscription_status = 'active') as monthly_revenue
+             FROM (SELECT 1) dummy
+         `);
+    } else {
+      statsResult = await query(`
+             SELECT
+                 (SELECT COUNT(*) FROM clubs WHERE referred_by_id = $1) as total_clubs,
+                 (SELECT COUNT(DISTINCT owner_id) FROM clubs WHERE referred_by_id = $1) as total_users,
+                 (SELECT COUNT(*) FROM clubs WHERE referred_by_id = $1 AND subscription_status = 'active') as active_subscriptions,
+                 (SELECT COALESCE(SUM(
+                     CASE
+                         WHEN subscription_plan = 'starter' THEN 2900
+                         WHEN subscription_plan = 'pro' THEN 7900
+                         WHEN subscription_plan = 'enterprise' THEN 19900
+                         ELSE 0
+                     END
+                 ), 0) FROM clubs WHERE referred_by_id = $1 AND subscription_status = 'active') as monthly_revenue
+             FROM (SELECT 1) dummy
+         `, [userId]);
+    }
 
     const stats = statsResult.rows[0];
 

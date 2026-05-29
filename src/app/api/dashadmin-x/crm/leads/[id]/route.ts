@@ -8,14 +8,15 @@ async function checkAuth() {
   if (!userId) return null;
 
   const adminCheck = await query(
-    `SELECT id, is_super_admin, phone_number FROM users WHERE id = $1`,
+    `SELECT id, is_super_admin, is_staff, phone_number FROM users WHERE id = $1`,
     [userId],
   );
 
   const user = adminCheck.rows[0];
   if (!user) return null;
 
-  if (!isSuperAdmin(user.is_super_admin, userId, user.phone_number)) {
+  const canAccess = isSuperAdmin(user.is_super_admin, userId, user.phone_number) || Boolean(user.is_staff);
+  if (!canAccess) {
     return null;
   }
 
@@ -48,6 +49,7 @@ export async function PATCH(
         "address",
         "social_link",
         "maps_link",
+        "assigned_user_id",
       ].includes(key),
     );
     if (fields.length === 0) {

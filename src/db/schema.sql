@@ -627,3 +627,35 @@ CREATE INDEX IF NOT EXISTS idx_recruitment_application_tests_application ON recr
 
 ALTER TABLE recruitment_applications
     ALTER COLUMN status SET DEFAULT 'in_progress';
+
+-- ============================================
+-- CRM SEPARATION & REFERRALS (2026-05-29)
+-- ============================================
+
+ALTER TABLE crm_leads 
+ADD COLUMN IF NOT EXISTS assigned_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_crm_leads_assigned_user ON crm_leads(assigned_user_id);
+
+ALTER TABLE crm_notes 
+ADD COLUMN IF NOT EXISTS created_by_id UUID REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_crm_notes_created_by ON crm_notes(created_by_id);
+
+ALTER TABLE clubs 
+ADD COLUMN IF NOT EXISTS referred_by_id UUID REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_clubs_referred_by ON clubs(referred_by_id);
+
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS is_staff BOOLEAN DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_users_is_staff ON users(is_staff) WHERE is_staff = TRUE;
+
+ALTER TABLE clubs 
+ADD COLUMN IF NOT EXISTS referral_reward_type VARCHAR(20) DEFAULT 'percentage';
+
+ALTER TABLE clubs 
+ADD COLUMN IF NOT EXISTS referral_reward_value DECIMAL(10, 2) DEFAULT 0.00;
+
+
