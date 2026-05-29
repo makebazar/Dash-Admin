@@ -39,3 +39,33 @@ export async function DELETE(
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
+
+export async function PATCH(
+    request: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    try {
+        if (!await checkAuth()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const { id } = await params;
+        const { title, color, position } = await request.json();
+
+        const result = await query(
+            `UPDATE crm_statuses
+             SET title = COALESCE($1, title),
+                 color = COALESCE($2, color),
+                 position = COALESCE($3, position)
+             WHERE id = $4
+             RETURNING *`,
+            [title !== undefined ? title : null, color !== undefined ? color : null, position !== undefined ? position : null, id]
+        );
+
+        if (result.rowCount === 0) {
+            return NextResponse.json({ error: 'Status not found' }, { status: 404 });
+        }
+
+        return NextResponse.json(result.rows[0]);
+    } catch (error) {
+        console.error("Update CRM Status Error:", error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}

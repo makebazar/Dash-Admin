@@ -67,10 +67,15 @@ export async function GET(request: Request) {
                   c.is_active,
                   u.full_name as owner_name,
                   u.phone_number as owner_phone,
+                  u.subscription_plan as subscription_plan,
+                  sp.name as subscription_plan_name,
+                  ref_u.full_name as referred_by_name,
                   (SELECT COUNT(*) FROM club_employees ce WHERE ce.club_id = c.id AND ce.is_active = TRUE AND ce.dismissed_at IS NULL) as employee_count,
                   (SELECT COUNT(*) FROM club_workstations cw WHERE cw.club_id = c.id AND cw.is_active = TRUE) as workstation_count
               FROM clubs c
               LEFT JOIN users u ON u.id = c.owner_id
+              LEFT JOIN subscription_plans sp ON sp.code = u.subscription_plan
+              LEFT JOIN users ref_u ON ref_u.id = c.referred_by_id
               WHERE c.is_active = $1 OR $2 = TRUE
               ORDER BY c.created_at DESC
           `,
@@ -99,10 +104,15 @@ export async function GET(request: Request) {
                   c.is_active,
                   u.full_name as owner_name,
                   u.phone_number as owner_phone,
+                  u.subscription_plan as subscription_plan,
+                  sp.name as subscription_plan_name,
+                  ref_u.full_name as referred_by_name,
                   (SELECT COUNT(*) FROM club_employees ce WHERE ce.club_id = c.id AND ce.is_active = TRUE AND ce.dismissed_at IS NULL) as employee_count,
                   (SELECT COUNT(*) FROM club_workstations cw WHERE cw.club_id = c.id AND cw.is_active = TRUE) as workstation_count
               FROM clubs c
               LEFT JOIN users u ON u.id = c.owner_id
+              LEFT JOIN subscription_plans sp ON sp.code = u.subscription_plan
+              LEFT JOIN users ref_u ON ref_u.id = c.referred_by_id
               WHERE c.referred_by_id = $3 AND (c.is_active = $1 OR $2 = TRUE)
               ORDER BY c.created_at DESC
           `,

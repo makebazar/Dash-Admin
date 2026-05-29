@@ -54,6 +54,8 @@ interface Contact {
   phone: string | null;
   tg_username: string | null;
   role: string | null;
+  vk_link?: string | null;
+  preferred_contact?: string | null;
 }
 
 interface Lead {
@@ -114,6 +116,8 @@ export default function LeadDetailPage({
     phone: "",
     tg_username: "",
     role: "",
+    vk_link: "",
+    preferred_contact: "",
   });
 
   useEffect(() => {
@@ -201,7 +205,14 @@ export default function LeadDetailPage({
       if (res.ok) {
         const contact = await res.json();
         setContacts([...contacts, contact]);
-        setContactFormData({ name: "", phone: "", tg_username: "", role: "" });
+        setContactFormData({
+          name: "",
+          phone: "",
+          tg_username: "",
+          role: "",
+          vk_link: "",
+          preferred_contact: "",
+        });
         setIsCreateContactOpen(false);
       }
     } catch (e) {}
@@ -218,7 +229,7 @@ export default function LeadDetailPage({
     } catch (e) {}
   };
 
-  const openLink = (url: string | null) => {
+  const openLink = (url: string | null | undefined) => {
     if (!url) return;
     const formattedUrl = url.startsWith("http") ? url : `https://${url}`;
     window.open(formattedUrl, "_blank");
@@ -523,6 +534,28 @@ export default function LeadDetailPage({
                               : `@${contact.tg_username}`}
                           </button>
                         )}
+                        {contact.vk_link && (
+                          <button
+                            onClick={() => openLink(contact.vk_link)}
+                            className="flex items-center text-xs text-indigo-600 font-bold hover:underline font-bold"
+                          >
+                            <Globe className="h-3 w-3 mr-1.5 text-slate-300" />{" "}
+                            ВКонтакте
+                          </button>
+                        )}
+                        {contact.preferred_contact && (
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {contact.preferred_contact.split(', ').map(channel => (
+                              <Badge
+                                key={channel}
+                                variant="outline"
+                                className="text-[9px] font-bold uppercase bg-emerald-50 border-emerald-100 text-emerald-600 px-1.5 py-0"
+                              >
+                                {channel}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <Button
@@ -543,13 +576,13 @@ export default function LeadDetailPage({
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase font-bold text-slate-400">
-                          Имя
+                          Номер / Название клуба
                         </Label>
                         <Input
                           autoFocus
                           required
-                          placeholder="Максим"
-                          className="h-9 rounded-lg"
+                          placeholder="Напр: Клуб №5"
+                          className="h-9 rounded-lg bg-white"
                           value={contactForm.name}
                           onChange={(e) =>
                             setContactFormData({
@@ -565,7 +598,7 @@ export default function LeadDetailPage({
                         </Label>
                         <Input
                           placeholder="Владелец"
-                          className="h-9 rounded-lg"
+                          className="h-9 rounded-lg bg-white"
                           value={contactForm.role}
                           onChange={(e) =>
                             setContactFormData({
@@ -583,7 +616,7 @@ export default function LeadDetailPage({
                         </Label>
                         <Input
                           placeholder="7999..."
-                          className="h-9 rounded-lg"
+                          className="h-9 rounded-lg bg-white"
                           value={contactForm.phone}
                           onChange={(e) =>
                             setContactFormData({
@@ -599,7 +632,7 @@ export default function LeadDetailPage({
                         </Label>
                         <Input
                           placeholder="@user"
-                          className="h-9 rounded-lg"
+                          className="h-9 rounded-lg bg-white"
                           value={contactForm.tg_username}
                           onChange={(e) =>
                             setContactFormData({
@@ -610,7 +643,59 @@ export default function LeadDetailPage({
                         />
                       </div>
                     </div>
-                    <div className="flex justify-end gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase font-bold text-slate-400">
+                        Ссылка ВК
+                      </Label>
+                      <Input
+                        placeholder="vk.com/..."
+                        className="h-9 rounded-lg bg-white"
+                        value={contactForm.vk_link}
+                        onChange={(e) =>
+                          setContactFormData({
+                            ...contactForm,
+                            vk_link: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase font-bold text-slate-400">
+                        Способ связи (предпочтительнее)
+                      </Label>
+                      <div className="flex gap-2">
+                        {['Telegram', 'max', 'WhatsApp'].map((option) => {
+                          const isSelected = contactForm.preferred_contact.split(', ').includes(option);
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => {
+                                let current = contactForm.preferred_contact ? contactForm.preferred_contact.split(', ').filter(Boolean) : [];
+                                if (current.includes(option)) {
+                                  current = current.filter(item => item !== option);
+                                } else {
+                                  current.push(option);
+                                }
+                                setContactFormData({
+                                  ...contactForm,
+                                  preferred_contact: current.join(', ')
+                                });
+                              }}
+                              className={cn(
+                                "flex-1 py-1.5 px-3 text-xs font-semibold rounded-lg border transition-all text-center",
+                                isSelected 
+                                  ? "bg-blue-50 border-blue-500 text-blue-600 shadow-sm"
+                                  : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                              )}
+                            >
+                              {option}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
                       <Button
                         type="button"
                         variant="ghost"
@@ -623,7 +708,7 @@ export default function LeadDetailPage({
                       <Button
                         type="submit"
                         size="sm"
-                        className="bg-blue-600 hover:bg-blue-700 rounded-lg"
+                        className="bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold"
                       >
                         Добавить
                       </Button>

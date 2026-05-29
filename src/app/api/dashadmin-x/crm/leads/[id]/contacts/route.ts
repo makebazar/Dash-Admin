@@ -35,10 +35,11 @@ export async function POST(
     try {
         if (!await checkAuth()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         const { id } = await params;
-        const { name, phone, tg_username, role } = await request.json();
+        const { name, phone, tg_username, role, vk_link, preferred_contact } = await request.json();
         const result = await query(
-            `INSERT INTO crm_contacts (lead_id, name, phone, tg_username, role) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-            [id, name, phone || null, tg_username || null, role || null]
+            `INSERT INTO crm_contacts (lead_id, name, phone, tg_username, role, vk_link, preferred_contact) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [id, name, phone || null, tg_username || null, role || null, vk_link || null, preferred_contact || null]
         );
         return NextResponse.json(result.rows[0]);
     } catch (error) {

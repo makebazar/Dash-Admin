@@ -658,4 +658,7 @@ ADD COLUMN IF NOT EXISTS referral_reward_type VARCHAR(20) DEFAULT 'percentage';
 ALTER TABLE clubs 
 ADD COLUMN IF NOT EXISTS referral_reward_value DECIMAL(10, 2) DEFAULT 0.00;
 
+ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS vk_link TEXT;
+ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS preferred_contact VARCHAR(30);
+
 

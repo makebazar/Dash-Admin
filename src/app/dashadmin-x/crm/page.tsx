@@ -16,6 +16,8 @@ import {
   Send,
   FileText,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   ClipboardList,
   Filter,
   Settings2,
@@ -240,6 +242,32 @@ export default function CRMPage() {
     } catch (e) {}
   };
 
+  const handleMoveStatus = async (index: number, direction: "up" | "down") => {
+    const newStatuses = [...statuses];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newStatuses.length) return;
+
+    const temp = newStatuses[index];
+    newStatuses[index] = newStatuses[targetIndex];
+    newStatuses[targetIndex] = temp;
+
+    setStatuses(newStatuses);
+
+    try {
+      await Promise.all(
+        newStatuses.map((s, idx) =>
+          fetch(`/api/dashadmin-x/crm/statuses/${s.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ position: idx }),
+          })
+        )
+      );
+    } catch (e) {
+      console.error("Failed to reorder statuses:", e);
+    }
+  };
+
   const handleCreateScript = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -358,7 +386,9 @@ export default function CRMPage() {
   };
 
   const cities = useMemo(() => {
-    const uniqueCities = new Set(leads.map((l) => l.city).filter(Boolean));
+    const uniqueCities = new Set(
+      leads.map((l) => l.city).filter((c): c is string => Boolean(c))
+    );
     return Array.from(uniqueCities).sort();
   }, [leads]);
 
@@ -546,7 +576,7 @@ export default function CRMPage() {
         </div>
       </header>
 
-      <main className="flex-1 mt-20 overflow-x-auto p-8">
+      <main className="flex-1 mt-20 overflow-x-auto p-8 pl-12">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
@@ -643,7 +673,7 @@ export default function CRMPage() {
                 Текущие этапы
               </Label>
               <div className="space-y-2">
-                {statuses.map((s) => (
+                {statuses.map((s, idx) => (
                   <div
                     key={s.id}
                     className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 group"
@@ -660,6 +690,28 @@ export default function CRMPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-0.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={idx === 0}
+                          onClick={() => handleMoveStatus(idx, "up")}
+                          className="h-7 w-7 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg disabled:opacity-30 disabled:pointer-events-none"
+                        >
+                          <ChevronUp className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={idx === statuses.length - 1}
+                          onClick={() => handleMoveStatus(idx, "down")}
+                          className="h-7 w-7 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg disabled:opacity-30 disabled:pointer-events-none"
+                        >
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </div>
                       <Badge
                         variant="outline"
                         className="text-[10px] uppercase font-bold text-slate-400"
@@ -828,6 +880,7 @@ export default function CRMPage() {
                 <Label className="text-sm font-semibold">Город</Label>
                 <Input
                   id="city"
+                  list="cities-list"
                   placeholder="Москва"
                   className="rounded-xl"
                   value={formData.city}
@@ -835,6 +888,11 @@ export default function CRMPage() {
                     setFormData({ ...formData, city: e.target.value })
                   }
                 />
+                <datalist id="cities-list">
+                  {cities.map((city) => (
+                    <option key={city} value={city} />
+                  ))}
+                </datalist>
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Адрес</Label>
@@ -1002,12 +1060,18 @@ export default function CRMPage() {
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Город</Label>
                 <Input
+                  list="cities-list"
                   className="rounded-xl"
                   value={formData.city}
                   onChange={(e) =>
                     setFormData({ ...formData, city: e.target.value })
                   }
                 />
+                <datalist id="cities-list">
+                  {cities.map((city) => (
+                    <option key={city} value={city} />
+                  ))}
+                </datalist>
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Telegram</Label>

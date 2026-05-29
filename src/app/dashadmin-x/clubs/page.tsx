@@ -29,6 +29,9 @@ interface Club {
   employee_count: string | number;
   workstation_count: string | number;
   is_active: boolean;
+  referred_by_name?: string | null;
+  subscription_plan?: string | null;
+  subscription_plan_name?: string | null;
 }
 
 interface Stats {
@@ -223,6 +226,11 @@ export default function ClubsPageX() {
                               Архив
                             </span>
                           )}
+                          {(club.subscription_plan_name || club.subscription_plan) && (
+                            <span className="text-[9px] font-bold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded uppercase tracking-tighter shrink-0 border border-blue-100">
+                              {club.subscription_plan_name || club.subscription_plan}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 text-slate-400">
                           <MapPin className="h-3.5 w-3.5 shrink-0" />
@@ -259,13 +267,23 @@ export default function ClubsPageX() {
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-slate-50">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                        Владелец
-                      </p>
-                      <p className="text-sm font-medium text-slate-700">
-                        {club.owner_name || "—"}
-                      </p>
+                    <div className="pt-4 border-t border-slate-50 grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                          Владелец
+                        </p>
+                        <p className="text-sm font-semibold text-slate-700 truncate">
+                          {club.owner_name || "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                          Менеджер
+                        </p>
+                        <p className="text-sm font-semibold text-slate-700 truncate">
+                          {club.referred_by_name || "—"}
+                        </p>
+                      </div>
                     </div>
                   </Card>
                 </Link>
@@ -287,6 +305,12 @@ export default function ClubsPageX() {
                       </th>
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Владелец
+                      </th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Менеджер
+                      </th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Подписка
                       </th>
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
                         Команда
@@ -333,6 +357,20 @@ export default function ClubsPageX() {
                           <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
                             {club.owner_phone || ""}
                           </p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-medium text-slate-700">
+                            {club.referred_by_name || "—"}
+                          </p>
+                        </td>
+                        <td className="px-6 py-4">
+                          {(club.subscription_plan_name || club.subscription_plan) ? (
+                            <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md uppercase tracking-tighter shrink-0 border border-blue-100">
+                              {club.subscription_plan_name || club.subscription_plan}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className="text-sm font-bold text-slate-900">

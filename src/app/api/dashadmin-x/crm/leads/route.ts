@@ -99,11 +99,31 @@ export async function POST(request: Request) {
         address || null,
         social_link || null,
         maps_link || null,
-        assigned_user_id || null,
+        assigned_user_id || userId,
       ],
     );
 
-    return NextResponse.json(result.rows[0]);
+    const lead = result.rows[0];
+
+    const trimmedContact = contact_person?.trim();
+    const trimmedPhone = phone?.trim();
+    const trimmedTg = tg_username?.trim();
+
+    if (trimmedContact || trimmedPhone || trimmedTg) {
+      await query(
+        `INSERT INTO crm_contacts (lead_id, name, phone, tg_username, role)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          lead.id,
+          trimmedContact || "Основной контакт",
+          trimmedPhone || null,
+          trimmedTg || null,
+          "Основной контакт"
+        ]
+      );
+    }
+
+    return NextResponse.json(lead);
   } catch (error) {
     console.error("CRM Leads POST Error:", error);
     return NextResponse.json(
