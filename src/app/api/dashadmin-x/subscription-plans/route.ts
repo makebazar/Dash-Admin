@@ -44,7 +44,7 @@ export async function GET() {
                  FROM subscription_plan_allowed_clubs spac
                  JOIN clubs c ON spac.club_id = c.id
                  WHERE spac.plan_id = sp.id),
-                '[]'::jsonb
+                '[]'::json
               ) as allowed_clubs
        FROM subscription_plans sp
        ORDER BY sp.display_order ASC, sp.created_at DESC`,
