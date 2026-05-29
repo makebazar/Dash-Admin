@@ -576,7 +576,7 @@ export default function CRMPage() {
         </div>
       </header>
 
-      <main className="flex-1 mt-20 overflow-x-auto p-8 pl-72">
+      <main className="flex-1 mt-20 overflow-x-auto p-8 pl-12">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin text-slate-300" />

@@ -101,7 +101,7 @@ export default function DashAdminXLayout({
   return (
     <div className="flex min-h-screen bg-[#FAFAFA]">
       {/* Sidebar */}
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-slate-200 flex flex-col">
+      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-slate-200 flex flex-col z-40">
         {/* Logo */}
         <div className="h-20 flex items-center px-6 border-b border-slate-100">
           <Link href="/dashadmin-x" className="flex items-center gap-2.5">
