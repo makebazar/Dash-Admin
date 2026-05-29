@@ -1150,6 +1150,7 @@ export async function generateMonthlySalaryReport(
           let is_met = false;
           let current_reward_value = bonus.reward_value;
           let current_reward_type = bonus.reward_type;
+          let current_level = 0;
 
           const standard_shifts = schemeCtx?.standard_monthly_shifts || 15;
           const mode = bonus.bonus_mode || bonus.mode || "MONTH";
@@ -1218,6 +1219,7 @@ export async function generateMonthlySalaryReport(
 
             if (metThresholdIndex >= 0 && shifts_count > 0) {
               is_met = true;
+              current_level = metThresholdIndex + 1;
               if (bonus.reward_type === "FIXED") {
                 current_reward_value =
                   scaledThresholds[metThresholdIndex].amount;
@@ -1233,6 +1235,7 @@ export async function generateMonthlySalaryReport(
                   : scaledThresholds[metThresholdIndex].from;
             } else {
               is_met = false;
+              current_level = 0;
               target_value =
                 shifts_count > 0
                   ? scaledThresholds[0].from
@@ -1252,12 +1255,14 @@ export async function generateMonthlySalaryReport(
             is_met = shifts_count > 0 && current_value >= target_value;
 
             if (is_met) {
+              current_level = 1;
               if (bonus.reward_type === "FIXED") {
                 current_reward_value = bonus.reward_value;
               } else {
                 current_reward_value = bonus.reward_value; // Store percent value
               }
             } else {
+              current_level = 0;
               current_reward_value = 0;
             }
           }
@@ -1276,6 +1281,7 @@ export async function generateMonthlySalaryReport(
             ...bonus,
             thresholds: resultThresholds,
             all_thresholds: resultThresholds, // For KpiMapper compatibility
+            current_level,
             avg_per_shift,
             current_value,
             target_value,
