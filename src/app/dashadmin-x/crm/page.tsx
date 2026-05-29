@@ -47,7 +47,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
-import InputMask from "react-input-mask";
+
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -953,22 +953,23 @@ export default function CRMPage() {
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-semibold">Телефон</Label>
-                <InputMask
-                  mask="+7 (999) 999-99-99"
+                <Input
+                  id="phone"
+                  placeholder="+7 (999) 999-99-99"
+                  className="rounded-xl"
                   value={formData.phone}
-                  onChange={(e: any) =>
-                    setFormData({ ...formData, phone: e.target.value })
-                  }
-                >
-                  {(inputProps: any) => (
-                    <Input
-                      {...inputProps}
-                      id="phone"
-                      placeholder="+7 (999) 999-99-99"
-                      className="rounded-xl"
-                    />
-                  )}
-                </InputMask>
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, "").slice(0, 11);
+                    let masked = "";
+                    if (digits.length === 0) { masked = ""; }
+                    else if (digits.length <= 1) { masked = "+" + digits; }
+                    else if (digits.length <= 4) { masked = `+${digits[0]} (${digits.slice(1)}`; }
+                    else if (digits.length <= 7) { masked = `+${digits[0]} (${digits.slice(1, 4)}) ${digits.slice(4)}`; }
+                    else if (digits.length <= 9) { masked = `+${digits[0]} (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`; }
+                    else { masked = `+${digits[0]} (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9, 11)}`; }
+                    setFormData({ ...formData, phone: masked });
+                  }}
+                />
               </div>
             </div>
 
