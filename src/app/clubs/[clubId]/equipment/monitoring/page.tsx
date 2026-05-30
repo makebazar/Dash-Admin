@@ -536,7 +536,7 @@ export default function MonitoringPage() {
                                                 <div className="min-w-[90px]">
                                                     <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
                                                         <span>CPU</span>
-                                                        <span>{tel.cpu_usage.toFixed(0)}%</span>
+                                                        <span>{Number(tel.cpu_usage).toFixed(0)}%</span>
                                                     </div>
                                                     <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1 overflow-hidden">
                                                         <div 
@@ -552,7 +552,7 @@ export default function MonitoringPage() {
                                                 <div className="min-w-[90px]">
                                                     <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
                                                         <span>GPU</span>
-                                                        <span>{gpus[0] ? `${gpus[0].usage.toFixed(0)}%` : 'N/A'}</span>
+                                                        <span>{gpus[0] ? `${Number(gpus[0].usage).toFixed(0)}%` : 'N/A'}</span>
                                                     </div>
                                                     <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1 overflow-hidden">
                                                         <div 
@@ -568,7 +568,7 @@ export default function MonitoringPage() {
                                                 <div>
                                                     <p className="text-[10px] font-bold text-slate-400">Темп. CPU / GPU</p>
                                                     <p className="text-xs font-extrabold text-slate-700 mt-0.5">
-                                                        {tel.cpu_temp > 0 ? `${tel.cpu_temp.toFixed(0)}°C` : 'N/A'} / {gpus[0] && gpus[0].temp > 0 ? `${gpus[0].temp.toFixed(0)}°C` : 'N/A'}
+                                                        {Number(tel.cpu_temp) > 0 ? `${Number(tel.cpu_temp).toFixed(0)}°C` : 'N/A'} / {gpus[0] && Number(gpus[0].temp) > 0 ? `${Number(gpus[0].temp).toFixed(0)}°C` : 'N/A'}
                                                     </p>
                                                 </div>
 
@@ -576,7 +576,7 @@ export default function MonitoringPage() {
                                                 <div className="min-w-[90px]">
                                                     <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
                                                         <span>ОЗУ</span>
-                                                        <span>{tel.memory_usage ? `${tel.memory_usage.toFixed(0)}%` : 'N/A'}</span>
+                                                        <span>{tel.memory_usage ? `${Number(tel.memory_usage).toFixed(0)}%` : 'N/A'}</span>
                                                     </div>
                                                     <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1 overflow-hidden">
                                                         <div 
@@ -684,7 +684,7 @@ export default function MonitoringPage() {
                                                                             <span className="text-slate-400 font-medium">Видеокарта {index + 1}:</span>
                                                                             <p className="font-extrabold text-slate-700 mt-0.5">{gpu.name}</p>
                                                                             <p className="text-[10px] text-slate-500 mt-0.5">
-                                                                                Загрузка: {gpu.usage.toFixed(0)}% · Темп: {gpu.temp}°C · Видеопамять: {formatBytes(gpu.memory_used)} / {formatBytes(gpu.memory_total)}
+                                                                                Загрузка: {Number(gpu.usage).toFixed(0)}% · Темп: {Number(gpu.temp).toFixed(0)}°C · Видеопамять: {formatBytes(gpu.memory_used)} / {formatBytes(gpu.memory_total)}
                                                                             </p>
                                                                         </div>
                                                                     ))}
@@ -692,7 +692,7 @@ export default function MonitoringPage() {
                                                                         <div className="pt-1.5 border-t border-slate-100">
                                                                             <span className="text-slate-400 font-medium">Оперативная память (RAM):</span>
                                                                             <p className="font-extrabold text-slate-700 mt-0.5">
-                                                                                {formatBytes((tel.memory as any).used_bytes)} / {formatBytes((tel.memory as any).total_bytes)} ({(tel.memory_usage || 0).toFixed(0)}%)
+                                                                                {formatBytes((tel.memory as any).used_bytes)} / {formatBytes((tel.memory as any).total_bytes)} ({Number(tel.memory_usage || 0).toFixed(0)}%)
                                                                             </p>
                                                                         </div>
                                                                     )}
