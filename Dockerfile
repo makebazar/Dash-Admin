@@ -13,11 +13,10 @@ ENV npm_config_audit=false \
     npm_config_fund=false \
     npm_config_update_notifier=false \
     npm_config_progress=false \
-    npm_config_jobs=1 \
     FFMPEG_BINARIES_SKIP_DOWNLOAD=1 \
     ELECTRON_SKIP_BINARY_DOWNLOAD=1
 
-RUN --mount=type=cache,target=/root/.npm NODE_ENV=development npm ci --no-audit --no-fund || (sleep 2 && NODE_ENV=development npm ci --no-audit --no-fund)
+RUN --mount=type=cache,target=/root/.npm NODE_ENV=development npm ci --loglevel=info || (sleep 2 && NODE_ENV=development npm ci --loglevel=info)
 
 # Copy application source code
 COPY . .
