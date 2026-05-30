@@ -70,6 +70,42 @@ export async function POST(
 
         await requireClubFullAccess(String(clubId));
 
+        // Action: toggle reference PC (master) status
+        if (action === 'toggle_master') {
+            const workstationId = body.workstation_id;
+            if (!workstationId) {
+                return NextResponse.json({ error: 'workstation_id required' }, { status: 400 });
+            }
+
+            // Get current is_master state
+            const currentRes = await query(
+                `SELECT is_master FROM club_workstations WHERE id = $1 AND club_id = $2`,
+                [workstationId, clubId]
+            );
+
+            if ((currentRes.rowCount || 0) === 0) {
+                return NextResponse.json({ error: 'Workstation not found' }, { status: 404 });
+            }
+
+            const willBeMaster = !currentRes.rows[0].is_master;
+
+            if (willBeMaster) {
+                // Unset any other master in the club to ensure only one reference PC
+                await query(
+                    `UPDATE club_workstations SET is_master = FALSE WHERE club_id = $1`,
+                    [clubId]
+                );
+            }
+
+            // Update this workstation
+            const result = await query(
+                `UPDATE club_workstations SET is_master = $1 WHERE id = $2 AND club_id = $3 RETURNING id, name, is_master`,
+                [willBeMaster, workstationId, clubId]
+            );
+
+            return NextResponse.json(result.rows[0]);
+        }
+
         // Action: generate new binding code
         if (action === 'generate_binding_code') {
             const workstationId = body.workstation_id;

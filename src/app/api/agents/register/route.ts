@@ -22,14 +22,13 @@ export async function POST(request: Request) {
 
         const ws = workstation.rows[0];
 
-        // Update last seen and status
+        // Update last seen and status (do not overwrite custom workstation name with Windows hostname)
         await query(
             `UPDATE club_workstations 
              SET agent_last_seen = NOW(), 
-                 agent_status = 'ONLINE',
-                 name = COALESCE($1, name)
-             WHERE id = $2`,
-            [hostname || null, ws.id]
+                 agent_status = 'ONLINE'
+             WHERE id = $1`,
+            [ws.id]
         );
 
         // Return MQTT connection details
