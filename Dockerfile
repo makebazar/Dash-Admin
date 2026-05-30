@@ -16,7 +16,13 @@ ENV npm_config_audit=false \
     FFMPEG_BINARIES_SKIP_DOWNLOAD=1 \
     ELECTRON_SKIP_BINARY_DOWNLOAD=1
 
-RUN --mount=type=cache,target=/root/.npm NODE_ENV=development npm ci --loglevel=info || (sleep 2 && NODE_ENV=development npm ci --loglevel=info)
+# Install dependencies with ignore-scripts to bypass the slow/hanging ffmpeg-static download
+RUN --mount=type=cache,target=/root/.npm NODE_ENV=development npm ci --ignore-scripts --loglevel=info
+
+# Install temporary build tools and rebuild bcrypt from source for Alpine (musl) compatibility
+RUN apk add --no-cache make gcc g++ python3 && \
+    npm rebuild bcrypt --build-from-source && \
+    apk del make gcc g++ python3
 
 # Copy application source code
 COPY . .
