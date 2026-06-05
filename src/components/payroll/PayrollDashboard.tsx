@@ -210,6 +210,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     bar: number;
     total: number;
   }>(null);
+  const [useActualKpi, setUseActualKpi] = useState(true);
 
   const toggleCard = (employeeId: number) => {
     setExpandedCards((prev) => {
@@ -252,6 +253,13 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     setPeriodCalcStart("");
     setPeriodCalcEnd("");
     setPeriodCalcSummary(null);
+
+    // Auto-enable useActualKpi if selected month is in the past
+    const currentMonth = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    const isClosedMonth = selectedYear < currentYear || (selectedYear === currentYear && selectedMonth < currentMonth);
+    setUseActualKpi(isClosedMonth);
+
     setPaymentForm({
       amount: Math.round(Number(employee.balance) || 0).toString(),
       method: "CASH",
@@ -523,7 +531,21 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
       (sum, s) => sum + (Number(s.bar_deduction) || 0),
       0,
     );
-    const monthKpi = calcKpiForPeriod();
+    const monthKpi = useActualKpi
+      ? filtered.reduce((sum: number, s: any) => {
+          const bonusesList = Array.isArray(s.bonuses) ? s.bonuses : [];
+          const periodBonus = bonusesList.reduce((acc: number, b: any) => {
+            if (
+              b.type === "PERIOD_BONUS_CONTRIBUTION" &&
+              String(b.payout_type || "").toUpperCase() !== "VIRTUAL_BALANCE"
+            ) {
+              return acc + (Number(b.amount) || 0);
+            }
+            return acc;
+          }, 0);
+          return sum + periodBonus;
+        }, 0)
+      : calcKpiForPeriod();
     const bonuses = monthKpi + shiftBonuses;
     const total = base + bonuses - bar;
 
@@ -541,6 +563,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     paymentModal.open,
     periodCalcEnd,
     periodCalcStart,
+    useActualKpi,
   ]);
 
   const fetchData = async () => {
@@ -3062,6 +3085,19 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                           className="w-full h-11 bg-white border border-slate-200 rounded-xl px-3 font-medium text-slate-900"
                         />
                       </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-1 py-1">
+                      <input
+                        type="checkbox"
+                        id="useActualKpi"
+                        checked={useActualKpi}
+                        onChange={(e) => setUseActualKpi(e.target.checked)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                      />
+                      <label htmlFor="useActualKpi" className="text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                        Использовать фактический KPI месяца
+                      </label>
                     </div>
 
                     {periodCalcSummary && (
