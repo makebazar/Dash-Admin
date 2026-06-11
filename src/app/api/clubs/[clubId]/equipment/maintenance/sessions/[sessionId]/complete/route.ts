@@ -29,7 +29,7 @@ export async function POST(
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    const userId = userIdFromCookie || sessionCheck.rows[0].created_by;
+    const userId = sessionCheck.rows[0].created_by || userIdFromCookie;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

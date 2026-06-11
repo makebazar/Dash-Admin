@@ -4,12 +4,41 @@ import { query } from "@/db";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const clubId = searchParams.get("clubId");
+  const discipline = searchParams.get("discipline");
 
   if (!clubId) {
     return NextResponse.json({ error: "clubId is required" }, { status: 400 });
   }
 
   try {
+    if (discipline && discipline !== "all") {
+      // Fetch ELO rating leaderboard
+      const leaderboardRes = await query(
+        `SELECT
+          p.id,
+          p.full_name as name,
+          COALESCE(e.elo, 1000) as elo,
+          COALESCE(e.matches_played, 0) as matches_played
+        FROM discipline_elo e
+        JOIN promo_players p ON e.player_id = p.id
+        WHERE e.discipline = $1 AND p.club_id = $2
+        ORDER BY e.elo DESC
+        LIMIT 50`,
+        [discipline, clubId],
+      );
+
+      return NextResponse.json({
+        leaderboard: leaderboardRes.rows.map((r, i) => ({
+          id: r.id,
+          name: r.name,
+          full_name: r.name,
+          elo: r.elo,
+          matches_played: r.matches_played,
+          rank: i + 1,
+        })),
+      });
+    }
+
     // 1. Leaderboard (Top 10 by total_xp)
     const leaderboardRes = await query(
       `SELECT
@@ -64,6 +93,7 @@ export async function GET(request: Request) {
       LIMIT 5`,
       [clubId],
     );
+
     return NextResponse.json({
       leaderboard: leaderboardRes.rows.map((r, i) => ({
         ...r,
@@ -79,7 +109,6 @@ export async function GET(request: Request) {
           tickets: q.reward_tickets,
           bonus: parseFloat(q.reward_bonus_balance || 0),
         },
-        // We'll assign icons/colors based on trigger_type on frontend
         trigger: q.trigger_type,
       })),
       wins: winsRes.rows.map((w) => ({
