@@ -158,11 +158,11 @@ export async function GET(
     // Calculate POS revenue for reconciliation
     const posRevenueRes = await query(
       `SELECT
-         COALESCE(SUM(total_amount), 0) as pos_revenue,
+         COALESCE(SUM(total_amount - COALESCE(total_refund_amount, 0)), 0) as pos_revenue,
          COUNT(id) as receipts_count
        FROM shift_receipts
        WHERE shift_id = $1 AND voided_at IS NULL AND committed_at IS NOT NULL
-         AND payment_type != 'salary'`,
+         AND COALESCE(counts_in_revenue, true) = true`,
       [shiftId],
     );
     const posRevenue = Number(posRevenueRes.rows[0].pos_revenue || 0);

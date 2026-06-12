@@ -469,7 +469,10 @@ export async function GET(
                 `SELECT sm.*, p.name as product_name
                  FROM warehouse_stock_movements sm
                  JOIN warehouse_products p ON sm.product_id = p.id
-                 LEFT JOIN shift_receipts sr ON sm.related_entity_type = 'SHIFT_RECEIPT' AND sm.related_entity_id = sr.id
+                 LEFT JOIN shift_receipts sr ON (
+                     (sm.related_entity_type = 'SHIFT_RECEIPT' OR sm.related_entity_type = 'SHIFT_RECEIPT_RETURN' OR sm.related_entity_type = 'SHIFT_RECEIPT_VOID')
+                     AND sm.related_entity_id = sr.id
+                 )
                  WHERE sm.club_id = $1 
                  AND sm.type = 'SALE'
                  AND COALESCE(sr.counts_in_revenue, true) = true
