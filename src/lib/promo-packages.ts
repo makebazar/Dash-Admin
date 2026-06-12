@@ -292,9 +292,46 @@ export async function processPackagePurchase(
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toLocaleDateString("en-CA", { timeZone: timezone });
 
+  // Resolve product names from database if any product_ids are present in items
+  const productIds = items
+    .map((item) => item.product_id)
+    .filter((id): id is number => id !== undefined);
+
+  let productNamesMap: Record<number, string> = {};
+  if (productIds.length > 0) {
+    const prodRes = await client.query(
+      `SELECT id, name FROM products WHERE id = ANY($1::int[])`,
+      [productIds]
+    );
+    prodRes.rows.forEach((row) => {
+      productNamesMap[row.id] = row.name;
+    });
+  }
+
+  const serviceRules = settings.service_rules || [];
+
+  // Enhance items with service_id if product name matches a service rule name (case-insensitive)
+  const enhancedItems = items.map((item) => {
+    if (item.product_id !== undefined && !item.service_id) {
+      const prodName = productNamesMap[item.product_id]?.trim().toLowerCase();
+      if (prodName) {
+        const matchedRule = serviceRules.find(
+          (r: any) => r.name?.trim().toLowerCase() === prodName
+        );
+        if (matchedRule) {
+          return {
+            ...item,
+            service_id: String(matchedRule.id),
+          };
+        }
+      }
+    }
+    return item;
+  });
+
   for (const program of packagePrograms) {
-    // Filter items matching this program
-    const matchingItems = items.filter((item) => itemMatchesProgram(item, program));
+    // Filter items matching this program using enhanced items
+    const matchingItems = enhancedItems.filter((item) => itemMatchesProgram(item, program));
     if (matchingItems.length === 0) continue;
 
     const totalQty = matchingItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
