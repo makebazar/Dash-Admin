@@ -150,11 +150,12 @@ export async function GET(
       maintenance_tasks: tasksResult.rows,
       movement_history: movesResult.rows,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Get Equipment Error:", error);
+    const status = typeof error?.status === "number" ? error.status : 500;
     return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
+      { error: error?.message || "Internal Server Error" },
+      { status },
     );
   }
 }
@@ -497,11 +498,12 @@ export async function PATCH(
     }
 
     return NextResponse.json(updatedEquipment);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Update Equipment Error:", error);
+    const status = typeof error?.status === "number" ? error.status : 500;
     return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
+      { error: error?.message || "Internal Server Error" },
+      { status },
     );
   }
 }
@@ -544,11 +546,12 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true, tasks_cleaned: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Delete Equipment Error:", error);
+    const status = typeof error?.status === "number" ? error.status : 500;
     return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
+      { error: error?.message || "Internal Server Error" },
+      { status },
     );
   }
 }

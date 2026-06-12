@@ -109,7 +109,7 @@ export async function PATCH(
 
     // Verify session existence
     const sessionResult = await query(
-      `SELECT id FROM equipment_maintenance_sessions WHERE id = $1 AND club_id = $2`,
+      `SELECT id, created_by FROM equipment_maintenance_sessions WHERE id = $1 AND club_id = $2`,
       [sessionId, clubId],
     );
 
@@ -117,13 +117,27 @@ export async function PATCH(
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
+    const creatorId = sessionResult.rows[0].created_by;
+
     // Assign tasks to session and update their status to IN_PROGRESS
-    await query(
+    // Only bind tasks that are currently PENDING or REWORK and not already bound to another session
+    const updateResult = await query(
       `UPDATE equipment_maintenance_tasks
-             SET session_id = $1, status = 'IN_PROGRESS'
-             WHERE id = ANY($2) AND club_id = $3`,
-      [sessionId, taskIds, clubId],
+             SET session_id = $1, status = 'IN_PROGRESS', assigned_user_id = $4
+             WHERE id = ANY($2) 
+               AND club_id = $3
+               AND (status = 'PENDING' OR status = 'REWORK')
+               AND session_id IS NULL
+             RETURNING id`,
+      [sessionId, taskIds, clubId, creatorId],
     );
+
+    if ((updateResult.rowCount || 0) === 0) {
+      return NextResponse.json(
+        { error: "Не удалось привязать задачи. Возможно, они уже выполняются другим сотрудником." },
+        { status: 409 },
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

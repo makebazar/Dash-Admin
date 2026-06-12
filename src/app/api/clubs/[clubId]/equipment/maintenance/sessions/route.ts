@@ -33,12 +33,26 @@ export async function POST(
     const sessionId = sessionResult.rows[0].id;
 
     // 2. Assign tasks to session and update their status to IN_PROGRESS
-    await query(
+    // Only bind tasks that are currently PENDING or REWORK and not already bound to another session
+    const updateResult = await query(
       `UPDATE equipment_maintenance_tasks
-             SET session_id = $1, status = 'IN_PROGRESS'
-             WHERE id = ANY($2) AND club_id = $3`,
-      [sessionId, taskIds, clubId],
+             SET session_id = $1, status = 'IN_PROGRESS', assigned_user_id = $4
+             WHERE id = ANY($2) 
+               AND club_id = $3
+               AND (status = 'PENDING' OR status = 'REWORK')
+               AND session_id IS NULL
+             RETURNING id`,
+      [sessionId, taskIds, clubId, userId],
     );
+
+    if ((updateResult.rowCount || 0) === 0) {
+      // If we failed to bind any tasks, delete the empty session we just created
+      await query(`DELETE FROM equipment_maintenance_sessions WHERE id = $1`, [sessionId]);
+      return NextResponse.json(
+        { error: "Не удалось привязать задачи. Возможно, они уже выполняются другим сотрудником." },
+        { status: 409 },
+      );
+    }
 
     return NextResponse.json({ sessionId });
   } catch (error) {

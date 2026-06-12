@@ -223,6 +223,7 @@ export async function completeMaintenanceTask(params: {
              verification_status = 'PENDING',
              completed_at = CURRENT_TIMESTAMP,
              completed_by = $2,
+             assigned_user_id = $2,
              photos = $3,
              photos_before = $4,
              photos_after = $5,

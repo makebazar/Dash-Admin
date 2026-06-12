@@ -73,6 +73,9 @@ export async function GET(
             CASE
                 WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE AND (
                     mt.verification_status = 'REJECTED'
+                    OR mt.session_id IS NOT NULL
+                    OR ce_task.role_id IN (2, 5142)
+                    OR mt.updated_at > NOW() - INTERVAL '2 hours'
                     OR EXISTS (
                         SELECT 1 FROM shifts s_active
                         WHERE s_active.user_id = mt.assigned_user_id
@@ -89,11 +92,16 @@ export async function GET(
                 WHEN mt.status = 'IN_PROGRESS' AND (
                     mt.assigned_user_id IS NOT NULL AND (
                         ce_task.is_active = FALSE
-                        OR NOT EXISTS (
-                            SELECT 1 FROM shifts s_active
-                            WHERE s_active.user_id = mt.assigned_user_id
-                              AND s_active.club_id = e.club_id
-                              AND s_active.check_out IS NULL
+                        OR (
+                            mt.session_id IS NULL
+                            AND COALESCE(ce_task.role_id, 0) NOT IN (2, 5142)
+                            AND mt.updated_at <= NOW() - INTERVAL '2 hours'
+                            AND NOT EXISTS (
+                                SELECT 1 FROM shifts s_active
+                                WHERE s_active.user_id = mt.assigned_user_id
+                                  AND s_active.club_id = e.club_id
+                                  AND s_active.check_out IS NULL
+                            )
                         )
                     )
                 ) THEN
@@ -139,8 +147,8 @@ export async function GET(
                 w.name as workstation_name,
                 w.zone as workstation_zone,
                 CASE 
-                    WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE THEN u.full_name
-                    WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE THEN eu.full_name
+                    WHEN (${effectiveTaskAssigneeSql}) = mt.assigned_user_id THEN u.full_name
+                    WHEN (${effectiveTaskAssigneeSql}) = e.assigned_user_id THEN eu.full_name
                     ELSE NULL
                 END as assigned_to_name,
                 cu.full_name as completed_by_name,
