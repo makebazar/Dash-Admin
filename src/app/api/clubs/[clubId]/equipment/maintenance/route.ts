@@ -140,10 +140,10 @@ export async function GET(
                 ${effectiveTaskAssigneeSql} as assigned_user_id,
                 e.name as equipment_name,
                 e.type as equipment_type,
-                e.last_cleaned_at as last_cleaned_at,
+                               e.last_cleaned_at as last_cleaned_at,
                 et.name_ru as equipment_type_name,
                 et.icon as equipment_icon,
-                et.cleaning_time_minutes as cleaning_time_minutes,
+                COALESCE(inst.cleaning_time_minutes, et.cleaning_time_minutes) as cleaning_time_minutes,
                 w.id as workstation_id,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
@@ -169,6 +169,7 @@ export async function GET(
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
             LEFT JOIN equipment_types et ON e.type = et.code
+            LEFT JOIN club_equipment_instructions inst ON inst.club_id = mt.club_id AND inst.equipment_type_code = e.type
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
             LEFT JOIN users u ON mt.assigned_user_id = u.id
             LEFT JOIN users eu ON e.assigned_user_id = eu.id

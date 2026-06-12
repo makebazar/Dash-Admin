@@ -90,6 +90,7 @@ export async function POST(
       instructions,
       performance_instructions,
       default_interval_days,
+      cleaning_time_minutes,
     } = body;
 
     if (!equipment_type_code) {
@@ -100,13 +101,14 @@ export async function POST(
     }
 
     const result = await query(
-      `INSERT INTO club_equipment_instructions (club_id, equipment_type_code, instructions, performance_instructions, updated_by, default_interval_days)
-             VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO club_equipment_instructions (club_id, equipment_type_code, instructions, performance_instructions, updated_by, default_interval_days, cleaning_time_minutes)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT (club_id, equipment_type_code)
              DO UPDATE SET
                 instructions = EXCLUDED.instructions,
                 performance_instructions = EXCLUDED.performance_instructions,
                 default_interval_days = EXCLUDED.default_interval_days,
+                cleaning_time_minutes = EXCLUDED.cleaning_time_minutes,
                 updated_at = CURRENT_TIMESTAMP,
                 updated_by = EXCLUDED.updated_by
              RETURNING *`,
@@ -117,6 +119,7 @@ export async function POST(
         performance_instructions || null,
         userId,
         default_interval_days || null,
+        cleaning_time_minutes !== undefined && cleaning_time_minutes !== null && cleaning_time_minutes !== "" ? Number(cleaning_time_minutes) : null,
       ],
     );
 

@@ -91,7 +91,7 @@ export async function GET(
         e.identifier as equipment_identifier, e.brand as equipment_brand, e.model as equipment_model,
         w.name as workstation_name, w.id as workstation_id,
         inst.instructions, inst.performance_instructions,
-        et.cleaning_time_minutes as cleaning_time_minutes,
+        COALESCE(inst.cleaning_time_minutes, et.cleaning_time_minutes) as cleaning_time_minutes,
         et.name_ru as equipment_type_name,
         -- Fetch the latest event of type REJECTED to show rejection/rework reason if status is REWORK
         (

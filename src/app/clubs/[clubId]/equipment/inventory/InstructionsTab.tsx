@@ -29,6 +29,7 @@ interface Instruction {
   instructions: string;
   performance_instructions?: string;
   default_interval_days?: number;
+  cleaning_time_minutes?: number | null;
 }
 
 interface PerformanceMetric {
@@ -53,6 +54,7 @@ export function InstructionsTab() {
   const [content, setContent] = useState("");
   const [perfContent, setPerfContent] = useState("");
   const [interval, setInterval] = useState<number>(30);
+  const [cleaningTime, setCleaningTime] = useState<number | "">("");
   const [localMetrics, setLocalMetrics] = useState<PerformanceMetric[]>([]);
 
   useEffect(() => {
@@ -65,6 +67,7 @@ export function InstructionsTab() {
       setContent(savedInstr?.instructions || "");
       setPerfContent(savedInstr?.performance_instructions || "");
       setInterval(savedInstr?.default_interval_days || 30);
+      setCleaningTime(savedInstr?.cleaning_time_minutes !== undefined && savedInstr?.cleaning_time_minutes !== null ? savedInstr.cleaning_time_minutes : "");
 
       const typeMetrics = (Array.isArray(metrics) ? metrics : []).filter(
         (m) => m.equipment_type_code === selectedType,
@@ -81,6 +84,7 @@ export function InstructionsTab() {
   const savedContent = selectedInstruction?.instructions || "";
   const savedPerfContent = selectedInstruction?.performance_instructions || "";
   const savedInterval = selectedInstruction?.default_interval_days || 30;
+  const savedCleaningTime = selectedInstruction?.cleaning_time_minutes !== undefined && selectedInstruction?.cleaning_time_minutes !== null ? selectedInstruction.cleaning_time_minutes : "";
 
   const savedMetrics = useMemo(
     () =>
@@ -96,6 +100,7 @@ export function InstructionsTab() {
     content !== savedContent ||
     perfContent !== savedPerfContent ||
     interval !== savedInterval ||
+    cleaningTime !== savedCleaningTime ||
     hasMetricsChanged;
   const selectedTypeMeta = (
     Array.isArray(equipmentTypes) ? equipmentTypes : []
@@ -188,6 +193,7 @@ export function InstructionsTab() {
             instructions: content,
             performance_instructions: perfContent,
             default_interval_days: interval,
+            cleaning_time_minutes: cleaningTime === "" ? null : cleaningTime,
           }),
         }),
         fetch(`/api/clubs/${clubId}/equipment/performance/metrics`, {
@@ -269,7 +275,7 @@ export function InstructionsTab() {
             </Button>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(320px,1fr)_180px] lg:items-end mb-8">
+          <div className="grid gap-6 lg:grid-cols-[minmax(320px,1fr)_180px_180px] lg:items-end mb-8">
             <div className="space-y-2">
               <Label htmlFor="equipment-type" className="text-sm font-medium">
                 Тип оборудования
@@ -309,6 +315,29 @@ export function InstructionsTab() {
                 />
                 <div className="flex h-full items-center border-l bg-slate-50 px-3 text-sm text-muted-foreground">
                   дней
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cleaning-time" className="text-sm font-medium">
+                Время чистки
+              </Label>
+              <div className="flex h-11 w-fit items-center overflow-hidden rounded-xl border bg-white">
+                <Input
+                  id="cleaning-time"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  placeholder="Нет"
+                  value={cleaningTime}
+                  onChange={(e) =>
+                    setCleaningTime(e.target.value === "" ? "" : parseInt(e.target.value, 10) || "")
+                  }
+                  className="h-full w-20 border-0 bg-transparent px-3 text-center text-lg font-semibold tabular-nums shadow-none focus-visible:ring-0"
+                />
+                <div className="flex h-full items-center border-l bg-slate-50 px-3 text-sm text-muted-foreground">
+                  мин
                 </div>
               </div>
             </div>
