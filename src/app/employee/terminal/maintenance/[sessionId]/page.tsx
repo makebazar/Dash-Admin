@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   Loader2,
@@ -67,6 +67,7 @@ interface Task {
     photos: string[];
     rejected_by_name?: string;
   };
+  cleaning_time_minutes?: number | null;
 }
 
 type Step =
@@ -127,6 +128,10 @@ export default function MaintenanceTerminalPage() {
   };
   const [countdown, setCountdown] = useState(5);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const totalSessionTime = useMemo(() => {
+    return tasks.reduce((sum, task) => sum + (task.cleaning_time_minutes || 0), 0);
+  }, [tasks]);
 
   // Persistence Logic
   const [reports, setReports] = useState<
@@ -721,6 +726,12 @@ export default function MaintenanceTerminalPage() {
                     ? "Проверка"
                     : currentTask.workstation_zone}
               </span>
+              {currentStep !== "PLAN" && currentStep !== "SUMMARY" && currentTask?.cleaning_time_minutes && (
+                <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-bold px-1.5 h-4 flex items-center gap-1 shrink-0">
+                  <Clock className="h-2.5 w-2.5 text-emerald-500" />
+                  {currentTask.cleaning_time_minutes} мин.
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -836,6 +847,22 @@ export default function MaintenanceTerminalPage() {
                 Проверьте список оборудования перед началом сессии обслуживания.
               </p>
             </div>
+
+            {totalSessionTime > 0 && (
+              <div className="p-4 rounded-3xl bg-zinc-900 border border-zinc-800 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">
+                    Общее время выполнения
+                  </div>
+                  <div className="text-sm font-bold text-white mt-0.5">
+                    Приблизительно {totalSessionTime} мин.
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="space-y-3">
               {tasks.map((task, i) => (
                 <div
@@ -888,6 +915,12 @@ export default function MaintenanceTerminalPage() {
                       <div className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mt-0.5 opacity-70">
                         {task.equipment_type_name}
                       </div>
+                      {task.cleaning_time_minutes && (
+                        <div className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 mt-1">
+                          <Clock className="h-3 w-3" />
+                          Время на чистку: {task.cleaning_time_minutes} мин.
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="h-8 w-8 rounded-full border border-zinc-800 flex items-center justify-center text-zinc-500 font-mono text-[10px] font-bold">

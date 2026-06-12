@@ -93,6 +93,17 @@ export async function PATCH(
             values.push(interval);
         }
 
+        if (body.cleaning_time_minutes !== undefined) {
+            const cleaningTime = body.cleaning_time_minutes === null || body.cleaning_time_minutes === "" || body.cleaning_time_minutes === "none"
+                ? null
+                : Number.parseInt(String(body.cleaning_time_minutes), 10);
+            if (cleaningTime !== null && (!Number.isFinite(cleaningTime) || cleaningTime < 1 || cleaningTime > 1440)) {
+                return NextResponse.json({ error: 'Время на чистку должно быть от 1 до 1440 минут' }, { status: 400 });
+            }
+            fields.push(`cleaning_time_minutes = $${index++}`);
+            values.push(cleaningTime);
+        }
+
         if (body.base_type_code !== undefined) {
             fields.push(`base_type_code = $${index++}`);
             values.push(body.base_type_code ? String(body.base_type_code) : null);
@@ -114,7 +125,7 @@ export async function PATCH(
             `UPDATE equipment_types
              SET ${fields.join(', ')}
              WHERE code = $${index++} AND club_id = $${index}
-             RETURNING code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code`,
+             RETURNING code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code, cleaning_time_minutes`,
             values
         );
 

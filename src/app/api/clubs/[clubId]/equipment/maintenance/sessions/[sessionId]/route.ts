@@ -25,6 +25,7 @@ export async function GET(
                 e.type as equipment_type,
                 et.name_ru as equipment_type_name,
                 et.icon as equipment_icon,
+                et.cleaning_time_minutes as cleaning_time_minutes,
                 w.name as workstation_name,
                 w.zone as workstation_zone,
                 u_v.full_name as verified_by_name,

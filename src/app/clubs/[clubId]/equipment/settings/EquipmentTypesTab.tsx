@@ -22,6 +22,7 @@ interface EquipmentType {
     is_system: boolean
     is_active: boolean
     base_type_code?: string | null
+    cleaning_time_minutes?: number | null
 }
 
 const EMPTY_FORM = {
@@ -29,6 +30,7 @@ const EMPTY_FORM = {
     default_cleaning_interval: 30,
     icon: "wrench",
     base_type_code: "none",
+    cleaning_time_minutes: "" as string | number,
 }
 
 export function EquipmentTypesTab() {
@@ -85,6 +87,7 @@ export function EquipmentTypesTab() {
             default_cleaning_interval: type.default_cleaning_interval || 30,
             icon: type.icon || "wrench",
             base_type_code: type.base_type_code || "none",
+            cleaning_time_minutes: type.cleaning_time_minutes !== undefined && type.cleaning_time_minutes !== null ? type.cleaning_time_minutes : "",
         })
         setIsDialogOpen(true)
     }
@@ -102,6 +105,7 @@ export function EquipmentTypesTab() {
                 default_cleaning_interval: form.default_cleaning_interval,
                 icon: form.icon,
                 base_type_code: form.base_type_code === "none" ? null : form.base_type_code,
+                cleaning_time_minutes: form.cleaning_time_minutes === "" ? null : Number(form.cleaning_time_minutes),
             }
 
             const url = editingType
@@ -224,7 +228,7 @@ export function EquipmentTypesTab() {
                                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                                             <span>{type.code}</span>
                                                             <span>·</span>
-                                                            <span>{type.default_cleaning_interval || 30} дн.</span>
+                                                            <span>{type.default_cleaning_interval || 30} дн.{type.cleaning_time_minutes ? ` · ${type.cleaning_time_minutes} мин.` : ""}</span>
                                                             <span>·</span>
                                                             <Badge variant={type.is_active ? "secondary" : "outline"} className="h-5 px-1.5">
                                                                 {type.is_active ? "Активен" : "В архиве"}
@@ -276,7 +280,7 @@ export function EquipmentTypesTab() {
                                             </div>
                                             <div className="min-w-0">
                                                 <div className="truncate text-sm font-semibold text-slate-950">{type.name_ru}</div>
-                                                <div className="text-xs text-muted-foreground">{type.default_cleaning_interval || 30} дн. по умолчанию</div>
+                                                <div className="text-xs text-muted-foreground">{type.default_cleaning_interval || 30} дн. по умолчанию{type.cleaning_time_minutes ? ` · ${type.cleaning_time_minutes} мин.` : ""}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -309,7 +313,7 @@ export function EquipmentTypesTab() {
                             />
                         </div>
 
-                        <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+                        <div className="grid gap-4 md:grid-cols-[140px_140px_minmax(0,1fr)]">
                             <div className="space-y-2">
                                 <Label htmlFor="type-interval">Интервал</Label>
                                 <Input
@@ -319,6 +323,19 @@ export function EquipmentTypesTab() {
                                     max="365"
                                     value={form.default_cleaning_interval}
                                     onChange={(e) => setForm(prev => ({ ...prev, default_cleaning_interval: parseInt(e.target.value, 10) || 30 }))}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="type-cleaning-time">Чистка (мин)</Label>
+                                <Input
+                                    id="type-cleaning-time"
+                                    type="number"
+                                    min="1"
+                                    max="1440"
+                                    placeholder="Нет"
+                                    value={form.cleaning_time_minutes}
+                                    onChange={(e) => setForm(prev => ({ ...prev, cleaning_time_minutes: e.target.value === "" ? "" : parseInt(e.target.value, 10) || "" }))}
                                 />
                             </div>
 

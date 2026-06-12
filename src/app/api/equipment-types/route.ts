@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
         if (!clubId) {
             const result = await query(
-                `SELECT code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code
+                `SELECT code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code, cleaning_time_minutes
                  FROM equipment_types
                  WHERE is_active = TRUE
                    AND club_id IS NULL
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
         }
 
         const result = await query(
-            `SELECT code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code
+            `SELECT code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code, cleaning_time_minutes
              FROM equipment_types
              WHERE is_active = TRUE
                AND (club_id IS NULL OR club_id = $1)

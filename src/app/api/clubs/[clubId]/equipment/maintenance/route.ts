@@ -143,6 +143,7 @@ export async function GET(
                 e.last_cleaned_at as last_cleaned_at,
                 et.name_ru as equipment_type_name,
                 et.icon as equipment_icon,
+                et.cleaning_time_minutes as cleaning_time_minutes,
                 w.id as workstation_id,
                 w.name as workstation_name,
                 w.zone as workstation_zone,

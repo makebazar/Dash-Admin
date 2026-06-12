@@ -356,9 +356,10 @@ export default function MaintenanceSchedule() {
 
   const handleAssignEquipment = async (equipmentId: string, value: string) => {
     setEditingEquipmentKey(null);
-    const assignmentMode = value === "free_pool" ? "FREE_POOL" : "DIRECT";
+    const isFree = value === "free_pool" || value === "unassigned" || value === "none";
+    const assignmentMode = isFree ? "FREE_POOL" : "DIRECT";
 
-    const assignedUserId = assignmentMode === "DIRECT" ? value : null;
+    const assignedUserId = isFree ? null : value;
     const assignedToName = assignedUserId
       ? employees.find((employee) => employee.id === assignedUserId)
           ?.full_name || null
@@ -926,7 +927,10 @@ export default function MaintenanceSchedule() {
   ) => {
     if (!workstationId) return;
 
-    const assignedUserId = userId === "none" ? null : userId;
+    const assignedUserId =
+      userId === "none" || userId === "unassigned" || userId === "free_pool"
+        ? null
+        : userId;
     const assignedToName = assignedUserId
       ? employees.find((employee) => employee.id === assignedUserId)
           ?.full_name || null

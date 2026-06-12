@@ -79,7 +79,7 @@ export async function GET(
         }
 
         const result = await query(
-            `SELECT code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code
+            `SELECT code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code, cleaning_time_minutes
              FROM equipment_types
              WHERE club_id IS NULL OR club_id = $1
              ORDER BY
@@ -122,6 +122,9 @@ export async function POST(
         const name = String(body.name || nameRu).trim() || nameRu;
         const defaultCleaningInterval = Number.parseInt(String(body.default_cleaning_interval || 30), 10) || 30;
         const baseTypeCode = body.base_type_code ? String(body.base_type_code) : null;
+        const cleaningTimeMinutes = body.cleaning_time_minutes !== undefined && body.cleaning_time_minutes !== null
+            ? (Number.parseInt(String(body.cleaning_time_minutes), 10) || null)
+            : null;
 
         if (!nameRu) {
             return NextResponse.json({ error: 'Название типа обязательно' }, { status: 400 });
@@ -139,9 +142,9 @@ export async function POST(
         const result = await query(
             `INSERT INTO equipment_types (
                 code, name, name_ru, default_cleaning_interval, icon, sort_order,
-                club_id, is_system, is_active, created_by, base_type_code
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, TRUE, $8, $9)
-             RETURNING code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code`,
+                club_id, is_system, is_active, created_by, base_type_code, cleaning_time_minutes
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, TRUE, $8, $9, $10)
+             RETURNING code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code, cleaning_time_minutes`,
             [
                 generatedCode,
                 name,
@@ -152,6 +155,7 @@ export async function POST(
                 clubId,
                 userId,
                 baseTypeCode,
+                cleaningTimeMinutes,
             ]
         );
 

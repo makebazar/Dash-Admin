@@ -91,6 +91,8 @@ export async function GET(
         e.identifier as equipment_identifier, e.brand as equipment_brand, e.model as equipment_model,
         w.name as workstation_name, w.id as workstation_id,
         inst.instructions, inst.performance_instructions,
+        et.cleaning_time_minutes as cleaning_time_minutes,
+        et.name_ru as equipment_type_name,
         -- Fetch the latest event of type REJECTED to show rejection/rework reason if status is REWORK
         (
           SELECT note 
@@ -100,6 +102,7 @@ export async function GET(
         ) as rejection_reason
        FROM equipment_maintenance_tasks mt
        JOIN equipment e ON mt.equipment_id = e.id
+       LEFT JOIN equipment_types et ON e.type = et.code
        LEFT JOIN club_workstations w ON e.workstation_id = w.id
        LEFT JOIN club_equipment_instructions inst ON inst.club_id = mt.club_id AND inst.equipment_type_code = e.type
        LEFT JOIN club_employees ce_task ON ce_task.user_id = mt.assigned_user_id AND ce_task.club_id = e.club_id
@@ -155,11 +158,13 @@ export async function GET(
         id: task.equipment_id,
         name: task.equipment_name,
         type: task.equipment_type,
+        type_name: task.equipment_type_name,
         identifier: task.equipment_identifier,
         brand: task.equipment_brand,
         model: task.equipment_model,
         workstation_name: task.workstation_name,
         workstation_id: task.workstation_id,
+        cleaning_time_minutes: task.cleaning_time_minutes,
       },
       instructions: {
         instructions: task.instructions || "",

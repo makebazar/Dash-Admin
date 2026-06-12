@@ -66,6 +66,7 @@ interface MaintenanceTask {
     photos: string[];
     rejected_by_name?: string;
   };
+  cleaning_time_minutes?: number | null;
 }
 
 const normalizeDateKey = (value?: string | null) => {
@@ -89,6 +90,7 @@ const normalizeTask = (task: any): MaintenanceTask => ({
     : task?.verification_status,
   session_id: task?.session_id,
   verified_by_name: task?.verified_by_name,
+  cleaning_time_minutes: task?.cleaning_time_minutes !== undefined && task?.cleaning_time_minutes !== null ? Number(task.cleaning_time_minutes) : null,
 });
 
 function EmployeeTasksContent() {
@@ -170,6 +172,18 @@ function EmployeeTasksContent() {
         .map((t) => t.id),
     [tasks],
   );
+
+  const selectedTotalTime = useMemo(() => {
+    return tasks
+      .filter((t) => selectedTaskIds.includes(t.id))
+      .reduce((sum, t) => sum + (t.cleaning_time_minutes || 0), 0);
+  }, [tasks, selectedTaskIds]);
+
+  const inProgressTotalTime = useMemo(() => {
+    return tasks
+      .filter((t) => inProgressTaskIds.includes(t.id))
+      .reduce((sum, t) => sum + (t.cleaning_time_minutes || 0), 0);
+  }, [tasks, inProgressTaskIds]);
 
   const toggleTaskSelection = (taskId: string) => {
     // Reset session if selection changes
@@ -906,6 +920,12 @@ function EmployeeTasksContent() {
                           {task.workstation_name || "Склад"}
                         </span>
                       )}
+                      {task.cleaning_time_minutes && (
+                        <span className="text-emerald-500 flex items-center gap-1 normal-case font-bold">
+                          <Clock className="h-3 w-3" />
+                          {task.cleaning_time_minutes} мин.
+                        </span>
+                      )}
                       {task.last_cleaned_at && (
                         <span className="text-emerald-500 flex items-center gap-1">
                           <Check className="h-3 w-3" />
@@ -1447,6 +1467,17 @@ function EmployeeTasksContent() {
                       </span>
                     </div>
 
+                    {inProgressTotalTime > 0 && (
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                          Общее время:
+                        </span>
+                        <span className="text-xs font-mono font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full">
+                          {inProgressTotalTime} мин.
+                        </span>
+                      </div>
+                    )}
+
                     {sessionId ? (
                       <div className="space-y-8 py-2 animate-in zoom-in-95 duration-500">
                         <div className="bg-white p-5 rounded-[2rem] flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.1)] border-4 border-zinc-900">
@@ -1552,6 +1583,11 @@ function EmployeeTasksContent() {
               <span className="text-sm font-black text-white">
                 Выбрано задач: {selectedTaskIds.length}
               </span>
+              {selectedTotalTime > 0 && (
+                <span className="text-xs text-zinc-400 font-bold mt-0.5">
+                  Общее время: {selectedTotalTime} мин.
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
               <Button
@@ -1663,19 +1699,31 @@ function EmployeeTasksContent() {
                   {/* Equipment Metadata */}
                   <div className="space-y-3">
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Информация об устройстве</h4>
-                    <div className="grid grid-cols-2 gap-3 bg-zinc-900/20 border border-zinc-900 rounded-2xl p-4">
+                    <div className={cn(
+                      "grid gap-3 bg-zinc-900/20 border border-zinc-900 rounded-2xl p-4",
+                      modalTaskDetails.equipment.cleaning_time_minutes ? "grid-cols-3" : "grid-cols-2"
+                    )}>
                       <div>
                         <span className="text-[9px] font-bold text-zinc-500 block uppercase">Бренд / Модель</span>
-                        <span className="text-sm font-extrabold text-zinc-200">
+                        <span className="text-sm font-extrabold text-zinc-200 truncate block" title={`${modalTaskDetails.equipment.brand || "—"} / ${modalTaskDetails.equipment.model || "—"}`}>
                           {modalTaskDetails.equipment.brand || "—"} / {modalTaskDetails.equipment.model || "—"}
                         </span>
                       </div>
                       <div>
                         <span className="text-[9px] font-bold text-zinc-500 block uppercase">Идентификатор</span>
-                        <span className="text-sm font-mono font-extrabold text-zinc-200">
+                        <span className="text-sm font-mono font-extrabold text-zinc-200 truncate block">
                           {modalTaskDetails.equipment.identifier || "—"}
                         </span>
                       </div>
+                      {modalTaskDetails.equipment.cleaning_time_minutes && (
+                        <div>
+                          <span className="text-[9px] font-bold text-zinc-500 block uppercase">Время на чистку</span>
+                          <span className="text-sm font-extrabold text-emerald-500 flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" />
+                            {modalTaskDetails.equipment.cleaning_time_minutes} мин.
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
