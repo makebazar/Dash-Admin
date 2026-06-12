@@ -386,8 +386,9 @@ export default function ChecklistsPage({
   const fetchTasks = async (
     id: string,
     status: "active" | "history" = "active",
+    silent = false,
   ) => {
-    setIsTasksLoading(true);
+    if (!silent) setIsTasksLoading(true);
     try {
       const query = status === "history" ? "?status=history" : "";
       const res = await fetch(
@@ -400,7 +401,7 @@ export default function ChecklistsPage({
     } catch (error) {
       console.error("Error fetching tasks:", error);
     } finally {
-      setIsTasksLoading(false);
+      if (!silent) setIsTasksLoading(false);
     }
   };
 
@@ -416,8 +417,8 @@ export default function ChecklistsPage({
     }
   }, [checklistsTab, clubId]);
 
-  const fetchShiftsForReview = async (id: string) => {
-    setIsShiftsLoading(true);
+  const fetchShiftsForReview = async (id: string, silent = false) => {
+    if (!silent) setIsShiftsLoading(true);
     try {
       const res = await fetch(`/api/clubs/${id}/shifts`);
       const data = await res.json();
@@ -427,7 +428,7 @@ export default function ChecklistsPage({
     } catch (error) {
       console.error("Error fetching shifts:", error);
     } finally {
-      setIsShiftsLoading(false);
+      if (!silent) setIsShiftsLoading(false);
     }
   };
 
@@ -463,6 +464,13 @@ export default function ChecklistsPage({
   }, [clubId]);
 
   const handleVerifyShiftForReview = async (shift: ShiftReviewItem) => {
+    if (typeof window !== "undefined") {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }
+    const scrollY = typeof window !== "undefined" ? window.scrollY : 0;
+
     setIsSubmittingShift(shift.id);
     try {
       const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`, {
@@ -472,7 +480,12 @@ export default function ChecklistsPage({
       });
 
       if (res.ok) {
-        await fetchShiftsForReview(clubId);
+        await fetchShiftsForReview(clubId, true);
+        if (typeof window !== "undefined") {
+          setTimeout(() => {
+            window.scrollTo(0, scrollY);
+          }, 0);
+        }
       } else {
         const data = await res.json();
         alert(data.error || "Ошибка подтверждения смены");
@@ -669,6 +682,13 @@ export default function ChecklistsPage({
       return;
     }
 
+    if (typeof window !== "undefined") {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }
+    const scrollY = typeof window !== "undefined" ? window.scrollY : 0;
+
     setIsSubmittingTask(true);
     try {
       let uploadedUrls: string[] = [];
@@ -712,6 +732,11 @@ export default function ChecklistsPage({
           setReworkPhotos([]);
           setReworkPhotosPreviews([]);
         }
+        if (typeof window !== "undefined") {
+          setTimeout(() => {
+            window.scrollTo(0, scrollY);
+          }, 0);
+        }
       } else {
         alert("Ошибка при сохранении решения");
       }
@@ -732,6 +757,13 @@ export default function ChecklistsPage({
     )
       return;
 
+    if (typeof window !== "undefined") {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }
+    const scrollY = typeof window !== "undefined" ? window.scrollY : 0;
+
     setIsSubmittingTask(true);
     try {
       const res = await fetch(
@@ -745,7 +777,12 @@ export default function ChecklistsPage({
         alert(data.error || "Не удалось вернуть задачу на проверку");
         return;
       }
-      await fetchTasks(clubId, equipmentTab);
+      await fetchTasks(clubId, equipmentTab, true);
+      if (typeof window !== "undefined") {
+        setTimeout(() => {
+          window.scrollTo(0, scrollY);
+        }, 0);
+      }
     } catch (error) {
       console.error(error);
       alert("Ошибка сервера");
@@ -790,7 +827,7 @@ export default function ChecklistsPage({
 
       if (!verifyRes.ok) {
         alert("Стирка создана, но не удалось закрыть проверку");
-        fetchTasks(clubId, equipmentTab);
+        fetchTasks(clubId, equipmentTab, true);
         return;
       }
 

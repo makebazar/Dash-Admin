@@ -124,6 +124,7 @@ function EmployeeTasksContent() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
 
   // Modal completion mode state
   const [maintenanceSettings, setMaintenanceSettings] = useState<any>(null);
@@ -435,10 +436,13 @@ function EmployeeTasksContent() {
     if (!selectedTaskForModal) return;
     setIsModalDetailsLoading(true);
     try {
+      const isFreeTask = freeTasks.some((t) => t.id === selectedTaskForModal);
+      const body = isFreeTask ? { claim: true } : { status: "IN_PROGRESS" };
+
       const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${selectedTaskForModal}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "IN_PROGRESS" }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         // Fetch updated details
@@ -691,6 +695,40 @@ function EmployeeTasksContent() {
     }
   };
 
+  const handleBulkStart = async () => {
+    if (selectedTaskIds.length === 0) return;
+    setIsBulkUpdating(true);
+    try {
+      const promises = selectedTaskIds.map(async (taskId) => {
+        const isFree = freeTasks.some((t) => t.id === taskId);
+        const url = `/api/clubs/${clubId}/equipment/maintenance/${taskId}`;
+        const body = isFree ? { claim: true } : { status: "IN_PROGRESS" };
+
+        const res = await fetch(url, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        return { taskId, ok: res.ok };
+      });
+
+      const results = await Promise.all(promises);
+      const failedCount = results.filter((r) => !r.ok).length;
+
+      if (failedCount > 0) {
+        alert(`Не удалось взять в работу ${failedCount} задач из ${selectedTaskIds.length}`);
+      } else {
+        setSelectedTaskIds([]);
+      }
+      await fetchData(false);
+    } catch (error) {
+      console.error("Error bulk updating tasks:", error);
+      alert("Ошибка при массовом взятии задач в работу");
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
   const handleCreateTerminalSession = () => {
     const idsToStart =
       selectedTaskIds.length > 0 ? selectedTaskIds : inProgressTaskIds;
@@ -775,7 +813,7 @@ function EmployeeTasksContent() {
           isRejected && "ring-1 ring-rose-500/30 bg-rose-500/[0.02]",
         )}
         onClick={() => {
-          if (isFree || showAsCompleted) return;
+          if (showAsCompleted) return;
           if (isModalMode) {
             setSelectedTaskForModal(task.id);
           } else {
@@ -812,27 +850,29 @@ function EmployeeTasksContent() {
             <div className="flex-1 p-4 flex flex-col gap-3 min-w-0">
               <div className="flex items-start justify-between gap-3 min-w-0">
                 <div className="flex items-start gap-4 min-w-0 flex-1">
-                  {/* Selection Checkbox - Desktop Only */}
-                  {!isMobile &&
-                    !isFree &&
-                    !showAsCompleted &&
-                    !isInCurrentSession &&
-                    !isModalMode && (
-                      <div className="shrink-0 pt-1">
-                        <div
-                          className={cn(
-                            "h-6 w-6 rounded-md border transition-all flex items-center justify-center",
-                            isSelected
-                              ? "bg-primary border-primary text-primary-foreground shadow-sm scale-110"
-                              : "border-muted-foreground/30 bg-background",
-                          )}
-                        >
-                          {isSelected && (
-                            <Check className="h-3.5 w-3.5 stroke-3" />
-                          )}
-                        </div>
+                  {/* Selection Checkbox */}
+                  {!showAsCompleted && !isInCurrentSession && (
+                    <div
+                      className="shrink-0 pt-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTaskSelection(task.id);
+                      }}
+                    >
+                      <div
+                        className={cn(
+                          "h-6 w-6 rounded-md border transition-all flex items-center justify-center cursor-pointer",
+                          isSelected
+                            ? "bg-primary border-primary text-primary-foreground shadow-sm scale-110"
+                            : "border-muted-foreground/30 bg-background hover:border-muted-foreground/60",
+                        )}
+                      >
+                        {isSelected && (
+                          <Check className="h-3.5 w-3.5 stroke-3" />
+                        )}
                       </div>
-                    )}
+                    </div>
+                  )}
 
                   {/* Text Content */}
                   <div className="min-w-0 flex-1 flex flex-col gap-1 mt-0.5">
@@ -884,7 +924,10 @@ function EmployeeTasksContent() {
                         size="sm"
                         variant="secondary"
                         className="h-9 px-4 rounded-xl font-black bg-accent hover:bg-accent/80 text-foreground text-[11px] transition-all uppercase tracking-tighter"
-                        onClick={() => handleClaim(task.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClaim(task.id);
+                        }}
                         disabled={isUpdating === task.id}
                       >
                         {isUpdating === task.id ? (
@@ -1498,31 +1541,76 @@ function EmployeeTasksContent() {
         </div>
       )}
 
-      {!isModalMode && isMobile && (selectedTaskIds.length >= 2 || sessionId) && (
+      {/* Floating Bulk Action Bar */}
+      {selectedTaskIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 animate-in slide-in-from-bottom-5 duration-300">
+          <div className="bg-zinc-950/90 backdrop-blur-xl border border-zinc-800 rounded-3xl p-4 flex flex-col sm:flex-row items-center gap-4 justify-between shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+            <div className="flex flex-col pl-2 text-center sm:text-left">
+              <span className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">
+                Массовые действия
+              </span>
+              <span className="text-sm font-black text-white">
+                Выбрано задач: {selectedTaskIds.length}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                className="h-10 px-4 rounded-xl border-zinc-800 text-zinc-400 hover:text-white text-[11px] font-black uppercase tracking-tighter transition-all"
+                onClick={() => setSelectedTaskIds([])}
+              >
+                Отмена
+              </Button>
+              
+              <Button
+                className="h-10 px-5 rounded-xl bg-primary hover:bg-primary/95 text-primary-foreground text-[11px] font-black uppercase tracking-tighter transition-all flex items-center gap-2 shadow-md active:scale-[0.98]"
+                onClick={handleBulkStart}
+                disabled={isBulkUpdating}
+              >
+                {isBulkUpdating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <>
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                    Взять в работу
+                  </>
+                )}
+              </Button>
+              
+              {!isModalMode && (
+                <Button
+                  className="h-10 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black uppercase tracking-tighter transition-all flex items-center gap-2 shadow-md active:scale-[0.98]"
+                  onClick={() => createSession(selectedTaskIds)}
+                  disabled={isCreatingSession}
+                >
+                  {isCreatingSession ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      <QrIcon className="h-3.5 w-3.5" />
+                      QR-обслуживание
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isModalMode && isMobile && selectedTaskIds.length === 0 && sessionId && (
         <div className="fixed bottom-6 left-4 right-4 z-50 animate-in slide-in-from-bottom-10 duration-500">
           <Button
             className="w-full h-16 rounded-[2rem] bg-primary text-primary-foreground font-black uppercase italic tracking-tighter shadow-[0_20px_50px_rgba(0,0,0,0.5)] active:scale-[0.98] transition-all border border-white/10"
             onClick={() => {
-              if (selectedTaskIds.length > 0) {
-                createSession(selectedTaskIds);
-              } else if (sessionId) {
+              if (sessionId) {
                 window.open(terminalUrl, "_self");
               }
             }}
             disabled={isCreatingSession}
           >
-            {isCreatingSession ? (
-              <Loader2 className="h-6 w-6 animate-spin" />
-            ) : (
-              <>
-                {selectedTaskIds.length > 0
-                  ? sessionId
-                    ? "Добавить в обслуживание"
-                    : "Начать обслуживание"
-                  : "Продолжить обслуживание"}
-                <ChevronRight className="ml-2 h-6 w-6" />
-              </>
-            )}
+            Продолжить обслуживание
+            <ChevronRight className="ml-2 h-6 w-6" />
           </Button>
         </div>
       )}

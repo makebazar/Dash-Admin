@@ -115,10 +115,22 @@ export async function completeMaintenanceTask(params: {
     [clubId, userId],
   );
 
+  let rolesList = rolesRes.rows.map((r: any) => r.role_id);
+
+  if (rolesList.length === 0) {
+    const userRes = await query(
+      `SELECT role_id FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (userRes.rows[0]?.role_id) {
+      rolesList.push(userRes.rows[0].role_id);
+    }
+  }
+
   let schemeFormula: any = null;
 
-  if (rolesRes.rows.length > 0) {
-    for (const role of rolesRes.rows) {
+  if (rolesList.length > 0) {
+    for (const roleId of rolesList) {
       const roleSchemeRes = await query(
         `SELECT sv.formula
                  FROM employee_role_salary_assignments ersa
@@ -127,7 +139,7 @@ export async function completeMaintenanceTask(params: {
                  WHERE ersa.user_id = $1 AND ersa.club_id = $2 AND ersa.role_id = $3 AND ss.id IS NOT NULL
                  ORDER BY sv.version DESC
                  LIMIT 1`,
-        [userId, clubId, role.role_id],
+        [userId, clubId, roleId],
       );
       if (roleSchemeRes.rows.length > 0) {
         schemeFormula = roleSchemeRes.rows[0]?.formula;
