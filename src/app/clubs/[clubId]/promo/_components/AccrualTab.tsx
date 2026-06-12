@@ -83,52 +83,87 @@ const RuleList = ({
             key={idx}
             className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-2xl group transition-all hover:bg-white hover:shadow-md"
           >
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-1">
-                <label className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                  Тип начисления
-                </label>
-                <select
-                  value={rule.type || "step"}
-                  onChange={(e) =>
-                    handleUpdateRule(rulesKey, idx, { type: e.target.value })
-                  }
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-xs outline-none focus:border-orange-500"
-                >
-                  <option value="step">За каждые ₽</option>
-                  <option value="threshold">При сумме от ₽</option>
-                </select>
+            <div className="flex-1 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                    Тип начисления
+                  </label>
+                  <select
+                    value={rule.type || "step"}
+                    onChange={(e) =>
+                      handleUpdateRule(rulesKey, idx, { type: e.target.value })
+                    }
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-xs outline-none focus:border-orange-500"
+                  >
+                    <option value="step">За каждые ₽</option>
+                    <option value="threshold">При сумме от ₽</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                    Сумма (₽)
+                  </label>
+                  <input
+                    type="number"
+                    value={rule.amount || 0}
+                    onChange={(e) =>
+                      handleUpdateRule(rulesKey, idx, {
+                        amount: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-xs outline-none focus:border-orange-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                    Билеты (шт)
+                  </label>
+                  <input
+                    type="number"
+                    value={rule.tickets || 0}
+                    onChange={(e) =>
+                      handleUpdateRule(rulesKey, idx, {
+                        tickets: parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-xs outline-none focus:border-orange-500"
+                  />
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                  Сумма (₽)
-                </label>
-                <input
-                  type="number"
-                  value={rule.amount || 0}
-                  onChange={(e) =>
-                    handleUpdateRule(rulesKey, idx, {
-                      amount: parseInt(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-xs outline-none focus:border-orange-500"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                  Билеты (шт)
-                </label>
-                <input
-                  type="number"
-                  value={rule.tickets || 0}
-                  onChange={(e) =>
-                    handleUpdateRule(rulesKey, idx, {
-                      tickets: parseInt(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 font-bold text-xs outline-none focus:border-orange-500"
-                />
-              </div>
+
+              {/* Group overrides for sum threshold */}
+              {settings.limit_groups && settings.limit_groups.length > 0 && (
+                <div className="border-t border-slate-200/40 pt-2.5 space-y-2">
+                  <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                    Пороги для групп лимитов
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {settings.limit_groups.map((group: any) => (
+                      <div key={group.id} className="space-y-1">
+                        <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 ml-2 truncate block">
+                          Сумма {group.name} (₽)
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="Например, 300"
+                          value={rule.group_amounts?.[group.id] ?? ""}
+                          onChange={(e) => {
+                            const groupAmounts = { ...(rule.group_amounts || {}) };
+                            if (e.target.value.trim() === "") {
+                              delete groupAmounts[group.id];
+                            } else {
+                              groupAmounts[group.id] = parseFloat(e.target.value) || 0;
+                            }
+                            handleUpdateRule(rulesKey, idx, { group_amounts: groupAmounts });
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 font-bold text-xs outline-none focus:border-orange-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <button
               onClick={() => handleRemoveRule(rulesKey, idx)}

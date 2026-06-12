@@ -119,10 +119,8 @@ function PromoBoardContent() {
           if (data.club) {
             setClubName(data.club.name);
             const settings = data.club.promo_settings || {};
-            const base = settings.domain
-              ? settings.domain.startsWith("http")
-                ? settings.domain
-                : `https://${settings.domain}`
+            const base = typeof window !== "undefined"
+              ? window.location.origin
               : "https://game.mydashadmin.ru";
             setPromoDomain(base);
           }

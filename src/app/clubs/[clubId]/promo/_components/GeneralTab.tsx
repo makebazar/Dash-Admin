@@ -7,7 +7,7 @@ import {
   ExternalLink,
   History,
   ChevronRight,
-  Globe,
+  Award,
   QrCode,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,13 +26,11 @@ export function GeneralTab({
 }: GeneralTabProps) {
   if (!settings) return null;
 
-  const promoDomain = settings.domain
-    ? settings.domain.startsWith("http")
-      ? settings.domain
-      : `https://${settings.domain}`
+  const origin = typeof window !== "undefined"
+    ? window.location.origin
     : "https://game.mydashadmin.ru";
 
-  const qrUrl = `${promoDomain}/promo?clubId=${clubId}&action=checkin`;
+  const qrUrl = `${origin}/promo?clubId=${clubId}&action=checkin`;
 
   return (
     <motion.div
@@ -231,15 +229,15 @@ export function GeneralTab({
           </div>
         </div>
 
-        {/* BP and Domain Settings */}
+        {/* BP Settings */}
         <div className="space-y-8">
           <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-8">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-indigo-500 rounded-2xl flex items-center justify-center">
-                <Globe className="w-6 h-6 text-white" />
+                <Award className="w-6 h-6 text-white" />
               </div>
               <h3 className="text-xl font-black uppercase italic">
-                Battle <span className="text-indigo-500">Pass</span> & Домен
+                Battle <span className="text-indigo-500">Pass</span>
               </h3>
             </div>
 
@@ -287,24 +285,6 @@ export function GeneralTab({
                     saveSettings({
                       ...settings,
                       bp_price: parseInt(e.target.value),
-                    })
-                  }
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                  Собственный домен
-                </label>
-                <input
-                  type="text"
-                  placeholder="game.mydashadmin.ru"
-                  value={settings.domain || ""}
-                  onChange={(e) =>
-                    saveSettings({
-                      ...settings,
-                      domain: e.target.value,
                     })
                   }
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
@@ -359,49 +339,229 @@ export function GeneralTab({
               </div>
 
               {settings.withdraw_limit_enabled === true && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                        Процент от пополнений (%)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="1000"
-                        value={settings.withdraw_limit_percent ?? 50}
-                        onChange={(e) =>
-                          saveSettings({
-                            ...settings,
-                            withdraw_limit_percent: parseInt(e.target.value) || 50,
-                          })
-                        }
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
-                      />
+                <div className="space-y-6">
+                  {/* Step limit toggle */}
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:shadow-md group">
+                    <div>
+                      <div className="font-black italic uppercase text-xs tracking-tight">
+                        Ступенчатый лимит вывода
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 mt-0.5">
+                        Настроить несколько порогов лимитов в зависимости от пополнений
+                      </div>
                     </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                        % с Battle Pass (%)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="1000"
-                        value={settings.withdraw_limit_percent_bp ?? 80}
-                        onChange={(e) =>
-                          saveSettings({
-                            ...settings,
-                            withdraw_limit_percent_bp: parseInt(e.target.value) || 80,
-                          })
-                        }
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
+                    <button
+                      onClick={() =>
+                        saveSettings({
+                          ...settings,
+                          withdraw_limit_step_enabled:
+                            settings.withdraw_limit_step_enabled === true ? false : true,
+                        })
+                      }
+                      className={cn(
+                        "w-12 h-6 rounded-full relative transition-colors duration-300",
+                        settings.withdraw_limit_step_enabled === true
+                          ? "bg-orange-500"
+                          : "bg-slate-300",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300",
+                          settings.withdraw_limit_step_enabled === true ? "left-7" : "left-1",
+                        )}
                       />
-                    </div>
+                    </button>
                   </div>
-                  <p className="text-[9px] font-bold text-slate-400 ml-4 leading-relaxed">
-                    Установите увеличенный лимит вывода бонусов (например, 80%) для гостей, у которых приобретен Premium Battle Pass.
-                  </p>
+
+                  {settings.withdraw_limit_step_enabled !== true ? (
+                    /* Flat limits setup */
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                            Процент от пополнений (%)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="1000"
+                            value={settings.withdraw_limit_percent ?? 50}
+                            onChange={(e) =>
+                              saveSettings({
+                                ...settings,
+                                withdraw_limit_percent: parseInt(e.target.value) || 50,
+                              })
+                            }
+                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                            % с Battle Pass (%)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="1000"
+                            value={settings.withdraw_limit_percent_bp ?? 80}
+                            onChange={(e) =>
+                              saveSettings({
+                                ...settings,
+                                withdraw_limit_percent_bp: parseInt(e.target.value) || 80,
+                              })
+                            }
+                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[9px] font-bold text-slate-400 ml-4 leading-relaxed">
+                        Установите увеличенный лимит вывода бонусов (например, 80%) для гостей, у которых приобретен Premium Battle Pass.
+                      </p>
+                    </div>
+                  ) : (
+                    /* Step limits setup */
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                          Пороги вывода по ступеням
+                        </label>
+                        <button
+                          onClick={() => {
+                            const currentSteps = settings.withdraw_limit_steps || [];
+                            const newStep = {
+                              id: "step_" + Math.random().toString(36).substring(2, 9),
+                              amount: 1000,
+                              percent: 50,
+                              percent_bp: 80,
+                              group_amounts: {},
+                            };
+                            saveSettings({
+                              ...settings,
+                              withdraw_limit_steps: [...currentSteps, newStep],
+                            });
+                          }}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                        >
+                          + Добавить шаг
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {(!settings.withdraw_limit_steps || settings.withdraw_limit_steps.length === 0) ? (
+                          <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-2xl text-slate-300 font-bold uppercase italic text-xs">
+                            Пороги не настроены
+                          </div>
+                        ) : (
+                          settings.withdraw_limit_steps.map((step: any, idx: number) => (
+                            <div key={step.id || idx} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-3">
+                              <div className="flex items-center justify-between border-b border-slate-200/60 pb-2 mb-2">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                  Шаг {idx + 1}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    const updatedSteps = settings.withdraw_limit_steps.filter((s: any) => s.id !== step.id);
+                                    saveSettings({
+                                      ...settings,
+                                      withdraw_limit_steps: updatedSteps,
+                                    });
+                                  }}
+                                  className="text-[9px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-600"
+                                >
+                                  Удалить
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                  <label className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                                    Сумма (₽)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={step.amount || 0}
+                                    onChange={(e) => {
+                                      const updatedSteps = [...(settings.withdraw_limit_steps || [])];
+                                      updatedSteps[idx] = { ...updatedSteps[idx], amount: parseFloat(e.target.value) || 0 };
+                                      saveSettings({ ...settings, withdraw_limit_steps: updatedSteps });
+                                    }}
+                                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 font-bold text-xs outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                                    Вывод (%)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={step.percent || 0}
+                                    onChange={(e) => {
+                                      const updatedSteps = [...(settings.withdraw_limit_steps || [])];
+                                      updatedSteps[idx] = { ...updatedSteps[idx], percent: parseFloat(e.target.value) || 0 };
+                                      saveSettings({ ...settings, withdraw_limit_steps: updatedSteps });
+                                    }}
+                                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 font-bold text-xs outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                                    Вывод с BP (%)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={step.percent_bp || 0}
+                                    onChange={(e) => {
+                                      const updatedSteps = [...(settings.withdraw_limit_steps || [])];
+                                      updatedSteps[idx] = { ...updatedSteps[idx], percent_bp: parseFloat(e.target.value) || 0 };
+                                      saveSettings({ ...settings, withdraw_limit_steps: updatedSteps });
+                                    }}
+                                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 font-bold text-xs outline-none focus:border-orange-500"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Group overrides for sum threshold */}
+                              {settings.limit_groups && settings.limit_groups.length > 0 && (
+                                <div className="border-t border-slate-200/40 pt-2.5 mt-2.5 space-y-2">
+                                  <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 ml-2 mb-1">
+                                    Пороги для групп
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                    {settings.limit_groups.map((group: any) => (
+                                      <div key={group.id} className="space-y-1">
+                                        <label className="text-[8px] font-black uppercase tracking-widest text-slate-500 ml-2 truncate block">
+                                          Сумма {group.name} (₽)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          placeholder="Например, 300"
+                                          value={step.group_amounts?.[group.id] ?? ""}
+                                          onChange={(e) => {
+                                            const updatedSteps = [...(settings.withdraw_limit_steps || [])];
+                                            const groupAmounts = { ...(updatedSteps[idx].group_amounts || {}) };
+                                            if (e.target.value.trim() === "") {
+                                              delete groupAmounts[group.id];
+                                            } else {
+                                              groupAmounts[group.id] = parseFloat(e.target.value) || 0;
+                                            }
+                                            updatedSteps[idx] = { ...updatedSteps[idx], group_amounts: groupAmounts };
+                                            saveSettings({ ...settings, withdraw_limit_steps: updatedSteps });
+                                          }}
+                                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 font-bold text-xs outline-none focus:border-orange-500"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -423,7 +583,7 @@ export function GeneralTab({
               <div className="space-y-3">
                 {(!settings.limit_groups || settings.limit_groups.length === 0) ? (
                   <div className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    Нет созданных групп лимитов. Игроки используют стандартные пороги (1000 / 3000 / 5000 ₽).
+                    Нет созданных групп лимитов. Игроки используют стандартные пороги.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -432,9 +592,6 @@ export function GeneralTab({
                         <div>
                           <div className="font-black italic uppercase text-xs text-slate-900">
                             {group.name}
-                          </div>
-                          <div className="text-[10px] font-bold text-slate-500 mt-1">
-                            Пороги: {group.t1} ₽ (50%) • {group.t2} ₽ (70%) • {group.t3} ₽ (90%)
                           </div>
                         </div>
                         <button
@@ -473,55 +630,12 @@ export function GeneralTab({
                       className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-xs font-bold focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
                     />
                   </div>
-                  
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                        Порог 1 (50%)
-                      </label>
-                      <input
-                        type="number"
-                        id="new-group-t1"
-                        placeholder="300"
-                        className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-xs font-bold focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                        Порог 2 (70%)
-                      </label>
-                      <input
-                        type="number"
-                        id="new-group-t2"
-                        placeholder="1000"
-                        className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-xs font-bold focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                        Порог 3 (90%)
-                      </label>
-                      <input
-                        type="number"
-                        id="new-group-t3"
-                        placeholder="2000"
-                        className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-xs font-bold focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
-                      />
-                    </div>
-                  </div>
                 </div>
 
                 <button
                   onClick={() => {
                     const nameInput = document.getElementById("new-group-name") as HTMLInputElement;
-                    const t1Input = document.getElementById("new-group-t1") as HTMLInputElement;
-                    const t2Input = document.getElementById("new-group-t2") as HTMLInputElement;
-                    const t3Input = document.getElementById("new-group-t3") as HTMLInputElement;
-
                     const name = nameInput?.value?.trim();
-                    const t1 = parseFloat(t1Input?.value) || 0;
-                    const t2 = parseFloat(t2Input?.value) || 0;
-                    const t3 = parseFloat(t3Input?.value) || 0;
 
                     if (!name) {
                       alert("Укажите название группы");
@@ -529,7 +643,7 @@ export function GeneralTab({
                     }
 
                     const id = "group_" + Math.random().toString(36).substring(2, 9);
-                    const newGroup = { id, name, t1, t2, t3 };
+                    const newGroup = { id, name };
                     const currentGroups = settings.limit_groups || [];
                     
                     if (currentGroups.some((g: any) => g.name.toLowerCase() === name.toLowerCase())) {
@@ -542,11 +656,8 @@ export function GeneralTab({
                       limit_groups: [...currentGroups, newGroup],
                     });
 
-                    // Clear inputs
+                    // Clear input
                     if (nameInput) nameInput.value = "";
-                    if (t1Input) t1Input.value = "";
-                    if (t2Input) t2Input.value = "";
-                    if (t3Input) t3Input.value = "";
                   }}
                   className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black italic uppercase text-xs rounded-xl shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20 transition-all text-center"
                 >
@@ -568,7 +679,7 @@ export function GeneralTab({
 
             <div className="grid grid-cols-1 gap-4">
               <a
-                href={`${promoDomain}/?clubId=${clubId}`}
+                href={`${origin}/?clubId=${clubId}`}
                 target="_blank"
                 className="flex items-center justify-between p-5 bg-blue-50 hover:bg-blue-100 rounded-[1.5rem] group transition-all"
               >

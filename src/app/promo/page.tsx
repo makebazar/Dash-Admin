@@ -905,7 +905,7 @@ export default function PromoLobby() {
                   </div>
                   <div>
                     <h3 className="text-xl font-black uppercase italic tracking-tight">
-                      Программа лояльности
+                      Программы лояльности
                     </h3>
                     <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mt-0.5">
                       Копи посещения, пакеты и получай ценные подарки на кассе
@@ -915,22 +915,90 @@ export default function PromoLobby() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {getActivePrograms(player.settings).map((program: any) => {
-                    let current = 0;
-                    if (program.isLegacy) {
-                      current = player.packageProgress?.[program.legacyField] ?? 0;
-                    } else {
-                      current = player.packageProgress?.programProgress?.[program.id]?.current_count ?? 0;
-                    }
-
+                    const current = program.isLegacy
+                      ? (player.packageProgress?.[program.legacyField] || 0)
+                      : (player.packageProgress?.programProgress?.[program.id]?.current_count || 0);
                     const target = program.target || 5;
                     const isCompleted = current >= target;
-                    const isPending = program.isLegacy
-                      ? player.packageProgress?.pendingClaims?.includes(program.legacyType)
-                      : player.packageProgress?.pendingClaims?.includes(program.id);
+                    const isPending = player.packageProgress?.pendingClaims?.includes(
+                      program.isLegacy ? program.legacyType : program.id
+                    );
 
-                    let emoji = "📦";
-                    if (program.type === "visit_accumulation") emoji = "🚶";
-                    if (program.type === "visit_streak") emoji = "🔥";
+                    const triggerServices = (program.trigger_service_ids || []).map((id: string) => {
+                      const rule = player?.settings?.service_rules?.find((r: any) => String(r.id) === String(id));
+                      return rule ? rule.name : null;
+                    }).filter(Boolean);
+
+                    const triggerProducts = (program.trigger_product_ids || []).map((id: number) => {
+                      const prod = products.find((p: any) => p.id === id);
+                      return prod ? prod.name : null;
+                    }).filter(Boolean);
+
+                    let triggerText = "";
+                    if (program.type === "package_accumulation") {
+                      if (triggerServices.length > 0 || triggerProducts.length > 0) {
+                        const items = [...triggerServices, ...triggerProducts];
+                        triggerText = items.join(", ");
+                      } else {
+                        triggerText = "Любой пакет";
+                      }
+                    } else if (program.type === "visit_accumulation") {
+                      triggerText = "Посещение клуба и отметка у кассы";
+                    } else if (program.type === "visit_streak") {
+                      triggerText = "Каждый день подряд отмечаться у кассы";
+                    }
+
+                    const rewardItems: { text: string; icon: string; className: string }[] = [];
+                    if (program.rewards) {
+                      if (program.rewards.xp > 0) {
+                        rewardItems.push({
+                          text: `+${program.rewards.xp} XP`,
+                          icon: "⚡",
+                          className: "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                        });
+                      }
+                      if (program.rewards.tickets > 0) {
+                        rewardItems.push({
+                          text: `+${program.rewards.tickets} билета`,
+                          icon: "🎟️",
+                          className: "bg-orange-500/10 border-orange-500/20 text-orange-400"
+                        });
+                      }
+                      if (program.rewards.bonus_balance > 0) {
+                        rewardItems.push({
+                          text: `+${program.rewards.bonus_balance} бонусов`,
+                          icon: "🪙",
+                          className: "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
+                        });
+                      }
+                      if (program.rewards.free_package || program.rewards.free_package === "true") {
+                        rewardItems.push({
+                          text: `Пакет: ${program.rewards.free_package_name || "Бесплатный пакет"}`,
+                          icon: "🎁",
+                          className: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
+                        });
+                      }
+                      if (program.rewards.bar_reward_type === "product" && program.rewards.bar_product_id) {
+                        const rewardProduct = products.find((p: any) => String(p.id) === String(program.rewards.bar_product_id));
+                        rewardItems.push({
+                          text: rewardProduct ? `Товар: ${rewardProduct.name}` : "Товар из бара",
+                          icon: "🍔",
+                          className: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                        });
+                      } else if (program.rewards.bar_reward_type === "category") {
+                        rewardItems.push({
+                          text: "Товар из бара",
+                          icon: "🍔",
+                          className: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                        });
+                      }
+                    } else if (program.isLegacy) {
+                      rewardItems.push({
+                        text: program.title || "Бесплатный пакет",
+                        icon: "🎁",
+                        className: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
+                      });
+                    }
 
                     let rewardName = program.title || "";
                     if (!rewardName) {
@@ -944,19 +1012,27 @@ export default function PromoLobby() {
                         key={program.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col justify-between min-h-[14rem] relative overflow-hidden group"
+                        className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 flex flex-col justify-between min-h-[18rem] relative overflow-hidden group hover:border-white/20 transition-all duration-300"
                       >
-                        <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-2xl select-none">
-                          {emoji}
+                        <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-10 transition-opacity pointer-events-none select-none duration-500">
+                          {program.type === "visit_streak" ? (
+                            <Flame className="w-24 h-24 text-white animate-pulse" />
+                          ) : program.type === "visit_accumulation" ? (
+                            <Award className="w-24 h-24 text-white" />
+                          ) : (
+                            <Gift className="w-24 h-24 text-white" />
+                          )}
                         </div>
                         <div>
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-3">
                             {program.type === "visit_streak" ? (
-                              <Flame className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" />
+                              <Flame className="w-5 h-5 text-orange-500 group-hover:scale-110 transition-transform animate-pulse" />
+                            ) : program.type === "visit_accumulation" ? (
+                              <Award className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" />
                             ) : (
-                              <span className="text-xl">{emoji}</span>
+                              <Gift className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
                             )}
-                            <h4 className="font-black uppercase italic text-sm text-gray-200">
+                            <h4 className="font-black uppercase italic text-xs tracking-wider text-gray-400">
                               {program.type === "package_accumulation"
                                 ? "Накопление"
                                 : program.type === "visit_accumulation"
@@ -964,9 +1040,33 @@ export default function PromoLobby() {
                                 : "Серия дней"}
                             </h4>
                           </div>
-                          <p className="text-xs text-gray-400 font-medium line-clamp-2">
+                          
+                          <p className="text-base font-black uppercase text-white tracking-tight leading-snug line-clamp-2">
                             {rewardName}
                           </p>
+
+                          {/* Trigger condition details */}
+                          <div className="mt-4 space-y-1">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Условие:</span>
+                            <div className="text-[10px] text-gray-200 font-bold uppercase tracking-wider bg-white/[0.02] border border-white/5 rounded-xl px-3 py-2 leading-relaxed">
+                              {triggerText}
+                            </div>
+                          </div>
+
+                          {/* Rewards list display */}
+                          {rewardItems.length > 0 && (
+                            <div className="mt-4 space-y-1.5">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Награда:</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {rewardItems.map((r, i) => (
+                                  <span key={i} className={`inline-flex items-center gap-1.5 border text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-xl transition-all duration-300 ${r.className}`}>
+                                    <span className="text-xs">{r.icon}</span>
+                                    <span>{r.text}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         <div className="space-y-4 mt-4">
@@ -1024,7 +1124,7 @@ export default function PromoLobby() {
                 {(player.packageProgress?.pendingPrizes?.length ?? 0) > 0 && (
                   <div className="mt-6 space-y-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">🎁</span>
+                      <Gift className="w-4 h-4 text-amber-400" />
                       <h4 className="text-xs font-black uppercase tracking-widest text-amber-400">
                         Ваши призы ждут на кассе
                       </h4>
@@ -1035,9 +1135,13 @@ export default function PromoLobby() {
                           key={prize.id}
                           className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3"
                         >
-                          <span className="text-2xl shrink-0">
-                            {prize.prize_type === "bar_item" ? "🍹" : "📦"}
-                          </span>
+                          <div className="w-8 h-8 bg-amber-500/20 rounded-xl flex items-center justify-center shrink-0">
+                            {prize.prize_type === "bar_item" ? (
+                              <ShoppingCart className="w-4 h-4 text-amber-500" />
+                            ) : (
+                              <Gift className="w-4 h-4 text-amber-500" />
+                            )}
+                          </div>
                           <div className="min-w-0">
                             <div className="text-sm font-bold text-white truncate">
                               {prize.prize_name}
