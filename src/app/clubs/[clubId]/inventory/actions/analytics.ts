@@ -1,5 +1,3 @@
-"use server";
-
 import type { InventorySettings as NormalizedInventorySettings } from "@/lib/inventory-settings";
 import { normalizeInventorySettings, getShiftZoneLabel } from "@/lib/inventory-settings";
 import { query, getClient } from "@/db";

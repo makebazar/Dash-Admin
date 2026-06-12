@@ -1,5 +1,3 @@
-"use server";
-
 import { hasColumn } from "@/lib/db-compat";
 import { query, getClient } from "@/db";
 import { resolveEquipmentStateForPersistence } from "@/lib/equipment-status";

@@ -1,5 +1,3 @@
-"use server";
-
 import { normalizeInventorySettings, getShiftZoneLabel } from "@/lib/inventory-settings";
 import { notifyInventoryClub } from "@/lib/inventory-events";
 import { query, getClient } from "@/db";

@@ -1,5 +1,3 @@
-"use server";
-
 import { logOperation } from "@/lib/logger";
 import { normalizeInventorySettings, getShiftZoneLabel } from "@/lib/inventory-settings";
 import { query, getClient } from "@/db";

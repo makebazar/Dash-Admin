@@ -1,5 +1,3 @@
-"use server";
-
 import { logOperation } from "@/lib/logger";
 import { query, getClient } from "@/db";
 import { revalidatePath } from "next/cache";

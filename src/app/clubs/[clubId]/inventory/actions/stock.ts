@@ -1,5 +1,3 @@
-"use server";
-
 import { normalizeInventorySettings, getShiftZoneLabel } from "@/lib/inventory-settings";
 import { query, getClient } from "@/db";
 import { revalidatePath } from "next/cache";

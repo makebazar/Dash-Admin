@@ -1,5 +1,3 @@
-"use server";
-
 import type { InventorySettings as NormalizedInventorySettings } from "@/lib/inventory-settings";
 import { cookies } from "next/headers";
 import { getClubApiAccess, hasModuleAccess } from "@/lib/club-api-access";

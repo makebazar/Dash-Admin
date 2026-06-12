@@ -1,5 +1,3 @@
-"use server";
-
 import { normalizeInventorySettings, getShiftZoneLabel } from "@/lib/inventory-settings";
 import { query, getClient } from "@/db";
 import { revalidatePath } from "next/cache";
@@ -21,8 +19,6 @@ export function normalizeShiftZoneKey(
     return raw;
   return null;
 }
-
-
 
 export async function getShiftForZoneAccountability(
   client: any,
