@@ -39,14 +39,32 @@ export async function GET(
 
     const effectiveTaskAssigneeSql = `
       CASE
-        WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE THEN mt.assigned_user_id
+        WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE AND (
+          mt.verification_status = 'REJECTED'
+          OR EXISTS (
+            SELECT 1 FROM shifts s_active
+            WHERE s_active.user_id = mt.assigned_user_id
+              AND s_active.club_id = e.club_id
+              AND s_active.check_out IS NULL
+          )
+        ) THEN mt.assigned_user_id
         ELSE ${effectiveEquipmentAssigneeSql}
       END
     `;
 
     const effectiveStatusSql = `
       CASE
-        WHEN mt.status = 'IN_PROGRESS' AND (mt.assigned_user_id IS NOT NULL AND ce_task.is_active = FALSE) THEN
+        WHEN mt.status = 'IN_PROGRESS' AND (
+          mt.assigned_user_id IS NOT NULL AND (
+            ce_task.is_active = FALSE
+            OR NOT EXISTS (
+              SELECT 1 FROM shifts s_active
+              WHERE s_active.user_id = mt.assigned_user_id
+                AND s_active.club_id = e.club_id
+                AND s_active.check_out IS NULL
+            )
+          )
+        ) THEN
           CASE WHEN mt.verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
         ELSE mt.status
       END

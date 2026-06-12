@@ -38,7 +38,14 @@ const formatCurrency = (amount: number) => {
 export default function TournamentsPortal() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const clubId = searchParams.get("clubId") || "";
+  const urlClubId = searchParams.get("clubId") || "";
+  const [clubId, setClubId] = React.useState<string>(urlClubId);
+
+  React.useEffect(() => {
+    if (urlClubId) {
+      setClubId(urlClubId);
+    }
+  }, [urlClubId]);
 
   const [activeTab, setActiveTab] = React.useState<"feed" | "profile" | "team" | "leaderboard">("feed");
   const [loading, setLoading] = React.useState(true);
@@ -134,12 +141,12 @@ export default function TournamentsPortal() {
     );
   };
 
-  const fetchPlayerAndTeam = async (overrideActiveId?: string) => {
+  const fetchPlayerAndTeam = async (overrideActiveId?: string, currentClubId = clubId) => {
     try {
       const pRes = await fetch("/api/promo/player");
       if (pRes.status === 401) {
-        router.push(`/promo/login?clubId=${clubId}`);
-        return;
+        router.push(`/promo/login?clubId=${currentClubId}`);
+        return null;
       }
       const pData = await pRes.json();
       setPlayer(pData.player);
@@ -178,15 +185,22 @@ export default function TournamentsPortal() {
       } else {
         setActiveTeamId(null);
       }
+
+      const resolvedClubId = currentClubId || (pData.player.clubId ? String(pData.player.clubId) : "");
+      if (resolvedClubId && resolvedClubId !== clubId) {
+        setClubId(resolvedClubId);
+      }
+      return resolvedClubId;
     } catch (err) {
       console.error(err);
+      return null;
     }
   };
 
-  const fetchTournaments = async () => {
-    if (!clubId) return;
+  const fetchTournaments = async (targetClubId = clubId) => {
+    if (!targetClubId) return;
     try {
-      const res = await fetch(`/api/clubs/${clubId}/tournaments`);
+      const res = await fetch(`/api/clubs/${targetClubId}/tournaments`);
       const data = await res.json();
       setTournaments(data.tournaments || []);
     } catch (err) {
@@ -194,9 +208,10 @@ export default function TournamentsPortal() {
     }
   };
 
-  const fetchTournamentDetails = async (id: string) => {
+  const fetchTournamentDetails = async (id: string, targetClubId = clubId) => {
+    if (!targetClubId) return;
     try {
-      const res = await fetch(`/api/clubs/${clubId}/tournaments?id=${id}`);
+      const res = await fetch(`/api/clubs/${targetClubId}/tournaments?id=${id}`);
       const data = await res.json();
       setActiveTournament(data.tournament);
       setCompetitors(data.competitors || []);
@@ -206,10 +221,10 @@ export default function TournamentsPortal() {
     }
   };
 
-  const fetchLeaderboard = async (discipline: string) => {
+  const fetchLeaderboard = async (discipline: string, targetClubId = clubId) => {
     try {
-      if (!clubId) return;
-      const boardRes = await fetch(`/api/promo/public/board-data?discipline=${discipline}&clubId=${clubId}`);
+      if (!targetClubId) return;
+      const boardRes = await fetch(`/api/promo/public/board-data?discipline=${discipline}&clubId=${targetClubId}`);
       const boardData = await boardRes.json();
       setLeaderboard(boardData.leaderboard || []);
     } catch (err) {
@@ -220,12 +235,14 @@ export default function TournamentsPortal() {
   React.useEffect(() => {
     async function init() {
       setLoading(true);
-      await fetchPlayerAndTeam();
-      await fetchTournaments();
+      const resolvedClubId = await fetchPlayerAndTeam(undefined, urlClubId);
+      if (resolvedClubId) {
+        await fetchTournaments(resolvedClubId);
+      }
       setLoading(false);
     }
     init();
-  }, [clubId]);
+  }, [urlClubId]);
 
   React.useEffect(() => {
     if (activeTab === "leaderboard") {
@@ -1324,8 +1341,86 @@ export default function TournamentsPortal() {
               {/* Registration Widget */}
               {(activeTournament.status === "REGISTRATION" || activeTournament.status === "DRAFT") && (
                 <div className="pt-4 border-t border-white/5 space-y-4">
-                  {/* Check if this is a team tournament */}
                   {(() => {
+                    const myCompetitorEntry = competitors.find(c => {
+                      if (c.player_id === player?.id) return true;
+                      if (c.team_members?.some((m: any) => m.id === player?.id)) return true;
+                      return false;
+                    });
+
+                    if (myCompetitorEntry) {
+                      return (
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-3xl space-y-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                              <Check className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-black uppercase text-emerald-400">Вы зарегистрированы</h4>
+                              <p className="text-[11px] text-gray-400 mt-0.5 font-bold">
+                                {myCompetitorEntry.type === "TEAM" 
+                                  ? `В составе команды "${myCompetitorEntry.display_name}"`
+                                  : "В качестве Свободного Агента"}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="bg-black/20 p-4 rounded-2xl flex flex-col gap-2.5 text-xs border border-white/5">
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-400 font-bold uppercase tracking-wider text-[10px]">Статус участия:</span>
+                              {(() => {
+                                if (myCompetitorEntry.payment_status === "RESERVE") {
+                                  const reserveIndex = competitors
+                                    .filter(c => c.payment_status === "RESERVE")
+                                    .findIndex(c => c.id === myCompetitorEntry.id) + 1;
+                                  return (
+                                    <span className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1 rounded-full font-black uppercase tracking-wider text-[10px]">
+                                      В резерве #{reserveIndex}
+                                    </span>
+                                  );
+                                } else if (myCompetitorEntry.payment_status === "PAID") {
+                                  return (
+                                    <span className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full font-black uppercase tracking-wider text-[10px]">
+                                      В сетке (Оплачено)
+                                    </span>
+                                  );
+                                } else if (myCompetitorEntry.type === "TEAM" && Array.isArray(myCompetitorEntry.meta?.paidPlayerIds) && myCompetitorEntry.meta.paidPlayerIds.length > 0) {
+                                  const paidCount = myCompetitorEntry.meta.paidPlayerIds.length;
+                                  const totalCount = myCompetitorEntry.team_members?.length || 0;
+                                  return (
+                                    <span className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1 rounded-full font-black uppercase tracking-wider text-[10px]">
+                                      Оплачено {paidCount} из {totalCount}
+                                    </span>
+                                  );
+                                } else {
+                                  return (
+                                    <span className="bg-blue-500/10 border border-blue-500/20 text-blue-400 px-3 py-1 rounded-full font-black uppercase tracking-wider text-[10px]">
+                                      Ожидает оплаты ({formatCurrency(activeTournament.entry_fee)})
+                                    </span>
+                                  );
+                                }
+                              })()}
+                            </div>
+                            {myCompetitorEntry.type === "TEAM" && (
+                              <div className="flex justify-between items-center border-t border-white/5 pt-2 text-[10px] font-bold">
+                                <span className="text-gray-400 uppercase tracking-wider">Ваш личный статус:</span>
+                                {Array.isArray(myCompetitorEntry.meta?.paidPlayerIds) && myCompetitorEntry.meta.paidPlayerIds.includes(player?.id) ? (
+                                  <span className="text-emerald-400 font-bold uppercase">Взнос оплачен</span>
+                                ) : (
+                                  <span className="text-orange-400 font-bold uppercase">Взнос не оплачен</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          {myCompetitorEntry.payment_status === "PENDING_PAYMENT" && (
+                            <p className="text-[10px] text-gray-400 leading-normal italic text-center font-medium">
+                              *Пожалуйста, оплатите взнос на ресепшене клуба Colizeum для подтверждения участия.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    }
+
                     const isTeamTourney = activeTournament.type === "team" || activeTournament.type === "2vs2" || activeTournament.type === "5vs5";
                     
                     const activeCompetitors = competitors.filter((c: any) => c.payment_status !== "RESERVE");
@@ -1608,7 +1703,8 @@ export default function TournamentsPortal() {
                                 {groupMatches.map((m) => {
                                   const compA = competitors.find(c => c.id === m.competitor_a_id);
                                   const compB = competitors.find(c => c.id === m.competitor_b_id);
-                                  const showLobbyBtn = m.status === "scheduled" || m.status === "veto" || m.status === "live";
+                                  const statusLower = m.status?.toLowerCase();
+                                  const showLobbyBtn = statusLower === "scheduled" || statusLower === "veto" || statusLower === "live";
 
                                   return (
                                     <div key={m.id} className="flex justify-between items-center gap-3 bg-black/30 p-3 rounded-2xl text-xs">
@@ -1678,24 +1774,25 @@ export default function TournamentsPortal() {
                                 {roundMatches.map((m) => {
                                   const compA = competitors.find(c => c.id === m.competitor_a_id);
                                   const compB = competitors.find(c => c.id === m.competitor_b_id);
-                                  const showLobbyBtn = m.status === "scheduled" || m.status === "veto" || m.status === "live";
+                                  const statusLower = m.status?.toLowerCase();
+                                  const showLobbyBtn = statusLower === "scheduled" || statusLower === "veto" || statusLower === "live";
 
                                   return (
                                     <div
                                       key={m.id}
                                       className={cn(
                                         "bg-[#0c0c0e] border p-4.5 rounded-[2rem] space-y-3.5 shadow-lg relative transition-all",
-                                        m.status === "FINISHED" 
+                                        statusLower === "finished" 
                                           ? "border-white/5 opacity-70" 
-                                          : (m.status === "LIVE" ? "border-red-500/30 shadow-red-500/5 animate-pulse" : "border-white/10 hover:border-orange-500/20")
+                                          : (statusLower === "live" ? "border-red-500/30 shadow-red-500/5 animate-pulse" : "border-white/10 hover:border-orange-500/20")
                                       )}
                                     >
                                       <div className="flex justify-between items-center text-[8px] font-black uppercase tracking-wider text-gray-500">
                                         <span>Матч #{m.id}</span>
                                         <span className={cn(
-                                          m.status === "FINISHED" ? "text-gray-400" : (m.status === "live" ? "text-red-500" : "text-blue-400")
+                                          statusLower === "finished" ? "text-gray-400" : (statusLower === "live" ? "text-red-500" : "text-blue-400")
                                         )}>
-                                          {m.status === "scheduled" ? "ожидание" : (m.status === "live" ? "в игре" : m.status.toLowerCase())}
+                                          {statusLower === "scheduled" ? "ожидание" : (statusLower === "live" ? "в игре" : statusLower)}
                                         </span>
                                       </div>
 
@@ -1777,10 +1874,20 @@ export default function TournamentsPortal() {
                               "text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border",
                               c.payment_status === "PAID"
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : c.type === "TEAM" && Array.isArray(c.meta?.paidPlayerIds) && c.meta.paidPlayerIds.length > 0
+                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                                 : "bg-orange-500/10 text-orange-400 border-orange-500/20"
                             )}
                           >
-                            {c.payment_status === "PAID" ? "Оплачено" : "Не оплачен"}
+                            {(() => {
+                              if (c.payment_status === "PAID") {
+                                return "Оплачено";
+                              }
+                              if (c.type === "TEAM" && Array.isArray(c.meta?.paidPlayerIds) && c.meta.paidPlayerIds.length > 0) {
+                                return `Оплачено ${c.meta.paidPlayerIds.length}/${c.team_members?.length || 0}`;
+                              }
+                              return "Не оплачен";
+                            })()}
                           </span>
                         </div>
                       ))}

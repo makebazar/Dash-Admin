@@ -45,13 +45,13 @@ export async function GET(request: Request) {
                 SELECT COUNT(*)::int
                 FROM tournament_matches m
                 JOIN tournament_competitors c ON (m.competitor_a_id = c.id OR m.competitor_b_id = c.id)
-                WHERE c.team_id = t.id AND m.status = 'finished'
+                WHERE c.team_id = t.id AND LOWER(m.status) = 'finished'
               ) as total_matches,
               (
                 SELECT COUNT(*)::int
                 FROM tournament_matches m
                 JOIN tournament_competitors c ON (m.competitor_a_id = c.id OR m.competitor_b_id = c.id)
-                WHERE c.team_id = t.id AND m.status = 'finished' AND m.winner_competitor_id = c.id
+                WHERE c.team_id = t.id AND LOWER(m.status) = 'finished' AND m.winner_competitor_id = c.id
               ) as matches_won,
               (
                 SELECT COUNT(DISTINCT tournament_id)::int

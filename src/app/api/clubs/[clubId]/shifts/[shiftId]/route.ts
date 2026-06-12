@@ -70,6 +70,7 @@ const SHIFT_CHANGE_LABELS: Record<string, string> = {
     expenses: 'Расходы',
     report_comment: 'Комментарий сотрудника',
     shift_type: 'Тип смены',
+    user_id: 'Сотрудник',
 };
 
 const REPORT_DATA_LABELS: Record<string, string> = {
@@ -149,6 +150,7 @@ function buildOwnerCorrectionChanges(
         { field: 'expenses', nextValue: calculatedExpenses },
         { field: 'report_comment', nextValue: body.report_comment },
         { field: 'shift_type', nextValue: body.shift_type },
+        { field: 'user_id', nextValue: body.user_id },
     ];
 
     comparableFields.forEach(({ field, nextValue }) => {
@@ -920,6 +922,7 @@ export async function PATCH(
         let salaryBreakdown = null;
 
         // Get assigned scheme
+        const targetUserId = body.user_id !== undefined ? body.user_id : currentShift.user_id;
         const schemeRes = await query(
             `SELECT ss.id, ss.name, ss.standard_monthly_shifts, sv.formula
              FROM employee_salary_assignments esa
@@ -928,7 +931,7 @@ export async function PATCH(
              WHERE esa.user_id = $1 AND esa.club_id = $2
              ORDER BY sv.version DESC
              LIMIT 1`,
-            [currentShift.user_id, clubId]
+            [targetUserId, clubId]
         );
 
         // Fetch evaluations for this shift (for checklist bonuses)
@@ -1130,6 +1133,10 @@ export async function PATCH(
         if (body.shift_type !== undefined) {
             updates.push(`shift_type = $${paramIndex++}`);
             values.push(body.shift_type);
+        }
+        if (body.user_id !== undefined) {
+            updates.push(`user_id = $${paramIndex++}`);
+            values.push(body.user_id);
         }
 
         // Update salary fields

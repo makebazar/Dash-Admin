@@ -53,7 +53,7 @@ export async function GET(
 
       // Fetch competitors (including team rosters if applicable)
       const competitorsRes = await client.query(
-        `SELECT c.id, c.type, c.display_name, c.team_id, c.player_id, e.status as payment_status,
+        `SELECT c.id, c.type, c.display_name, c.team_id, c.player_id, c.meta, e.status as payment_status,
                 t_teams.logo_url as team_logo,
                 (
                   SELECT json_agg(json_build_object(
@@ -319,6 +319,29 @@ export async function POST(
     // Action: CONFIRM PAYMENT
     if (action === "confirm_payment") {
       const { id, competitorId } = body; // id = tournamentId
+      
+      // Get competitor type and team members
+      const compRes = await client.query(
+        `SELECT type, team_id, meta FROM tournament_competitors WHERE id = $1`,
+        [competitorId]
+      );
+      if (compRes.rows.length > 0) {
+        const comp = compRes.rows[0];
+        if (comp.type === "TEAM") {
+          const membersRes = await client.query(
+            `SELECT player_id FROM team_members WHERE team_id = $1`,
+            [comp.team_id]
+          );
+          const memberIds = membersRes.rows.map(r => r.player_id);
+          const meta = comp.meta || {};
+          const newMeta = { ...meta, paidPlayerIds: memberIds };
+          await client.query(
+            `UPDATE tournament_competitors SET meta = $1 WHERE id = $2`,
+            [JSON.stringify(newMeta), competitorId]
+          );
+        }
+      }
+
       await client.query(
         `UPDATE tournament_entries 
          SET status = 'PAID'
@@ -326,6 +349,69 @@ export async function POST(
         [id, competitorId]
       );
       return NextResponse.json({ success: true });
+    }
+
+    // Action: TOGGLE PLAYER PAYMENT
+    if (action === "toggle_player_payment") {
+      const { competitorId, playerId, paid } = body;
+      
+      const compRes = await client.query(
+        `SELECT type, team_id, player_id, meta FROM tournament_competitors WHERE id = $1`,
+        [competitorId]
+      );
+      if (compRes.rows.length === 0) {
+        return NextResponse.json({ error: "Участник не найден" }, { status: 404 });
+      }
+      
+      const comp = compRes.rows[0];
+      if (comp.type === "SOLO") {
+        const newStatus = paid ? "PAID" : "PENDING_PAYMENT";
+        await client.query(
+          `UPDATE tournament_entries 
+           SET status = $1 
+           WHERE competitor_id = $2 AND status != 'RESERVE'`,
+          [newStatus, competitorId]
+        );
+        return NextResponse.json({ success: true });
+      } else {
+        // TEAM competitor
+        const membersRes = await client.query(
+          `SELECT player_id FROM team_members WHERE team_id = $1`,
+          [comp.team_id]
+        );
+        const memberIds = membersRes.rows.map(r => r.player_id);
+        
+        const meta = comp.meta || {};
+        let paidPlayerIds = Array.isArray(meta.paidPlayerIds) ? meta.paidPlayerIds : [];
+        
+        if (paid) {
+          if (!paidPlayerIds.includes(playerId)) {
+            paidPlayerIds.push(playerId);
+          }
+        } else {
+          paidPlayerIds = paidPlayerIds.filter((id: string) => id !== playerId);
+        }
+        
+        const newMeta = { ...meta, paidPlayerIds };
+        await client.query(
+          `UPDATE tournament_competitors SET meta = $1 WHERE id = $2`,
+          [JSON.stringify(newMeta), competitorId]
+        );
+        
+        // Calculate new team entry status (if all members paid -> PAID, otherwise PENDING_PAYMENT)
+        // Only if currently not in RESERVE
+        const allPaid = memberIds.length > 0 && memberIds.every(id => paidPlayerIds.includes(id));
+        const newStatus = allPaid ? "PAID" : "PENDING_PAYMENT";
+        
+        await client.query(
+          `UPDATE tournament_entries 
+           SET status = $1 
+           WHERE competitor_id = $2 AND status != 'RESERVE'`,
+          [newStatus, competitorId]
+        );
+        
+        return NextResponse.json({ success: true });
+      }
     }
 
     // Action: DELETE COMPETITOR (cancel registration)
@@ -445,12 +531,19 @@ export async function POST(
         return NextResponse.json({ error: "Для старта турнира требуется минимум 2 оплативших участника" }, { status: 400 });
       }
 
-      // Generate Group Stage (round = 0)
-      // For simple LAN, if competitor count <= 4, do direct playoffs. If > 4, do Group Stage + Playoff
-      if (paidCompetitors.length > 4) {
+      // Generate matches based on tournament configuration (bracketType)
+      const bracketType = tournament.config?.bracketType;
+      if (bracketType === "single_elimination") {
+        await generatePlayoffs(client, id, paidCompetitors);
+      } else if (bracketType === "round_robin") {
         await generateGroupStage(client, id, paidCompetitors);
       } else {
-        await generatePlayoffs(client, id, paidCompetitors);
+        // Fallback auto-logic: if competitor count <= 4, do direct playoffs. If > 4, do Group Stage
+        if (paidCompetitors.length > 4) {
+          await generateGroupStage(client, id, paidCompetitors);
+        } else {
+          await generatePlayoffs(client, id, paidCompetitors);
+        }
       }
 
       // Update status to active

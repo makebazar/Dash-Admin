@@ -19,6 +19,7 @@ import {
   Sun,
   Trash2,
   TrendingUp,
+  User,
   Wallet,
 } from "lucide-react";
 
@@ -43,6 +44,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 interface OwnerCorrectionChange {
@@ -52,8 +54,14 @@ interface OwnerCorrectionChange {
   after: any;
 }
 
+interface Employee {
+  id: string;
+  full_name: string;
+}
+
 interface Shift {
   id: string;
+  user_id: string;
   employee_name: string;
   check_in: string;
   check_out: string | null;
@@ -336,6 +344,8 @@ export default function ShiftDetailsPage() {
     {},
   );
   const [editShiftType, setEditShiftType] = useState<"DAY" | "NIGHT">("DAY");
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [editUserId, setEditUserId] = useState("");
   const [isZoneResolutionDialogOpen, setIsZoneResolutionDialogOpen] =
     useState(false);
   const [zoneResolutionTarget, setZoneResolutionTarget] =
@@ -398,11 +408,24 @@ export default function ShiftDetailsPage() {
     }
   }, [clubId, shiftId]);
 
+  const fetchEmployees = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/employees`);
+      const data = await res.json();
+      if (res.ok && data.employees) {
+        setEmployees(data.employees);
+      }
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+    }
+  }, [clubId]);
+
   useEffect(() => {
     fetchClubSettings();
     fetchReportTemplate();
     fetchShiftDetails();
-  }, [fetchClubSettings, fetchReportTemplate, fetchShiftDetails]);
+    fetchEmployees();
+  }, [fetchClubSettings, fetchReportTemplate, fetchShiftDetails, fetchEmployees]);
 
   const formatForInput = useCallback(
     (dateStr: string | null) => {
@@ -439,6 +462,7 @@ export default function ShiftDetailsPage() {
       setEditCheckInDisplay(localDateTimeToDisplay(nextCheckIn));
       setEditCheckOutDisplay(localDateTimeToDisplay(nextCheckOut));
       setEditShiftType(currentShift.shift_type || "DAY");
+      setEditUserId(currentShift.user_id || "");
       setEditCustomFields(currentShift.report_data || {});
     },
     [formatForInput],
@@ -680,6 +704,11 @@ export default function ShiftDetailsPage() {
         return <span className="font-medium">{formatMoney(value)}</span>;
       }
 
+      if (change.field === "user_id") {
+        const empName = employees.find((emp) => emp.id === value)?.full_name || value;
+        return <span className="font-medium">{empName}</span>;
+      }
+
       if (Array.isArray(value)) {
         const total = value.reduce(
           (sum, item: any) => sum + (Number(item?.amount) || 0),
@@ -712,7 +741,7 @@ export default function ShiftDetailsPage() {
         <span className="font-medium whitespace-pre-wrap">{String(value)}</span>
       );
     },
-    [formatDate, formatMoney, formatTime],
+    [formatDate, formatMoney, formatTime, employees],
   );
 
   const convertToClubTimezone = useCallback(
@@ -779,6 +808,7 @@ export default function ShiftDetailsPage() {
           check_out: convertToClubTimezone(editCheckOut),
           total_hours: totalHours,
           shift_type: editShiftType,
+          user_id: editUserId,
           report_data: updatedReportData,
         }),
       });
@@ -1016,6 +1046,28 @@ export default function ShiftDetailsPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
                   <div className="space-y-8">
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-bold flex items-center gap-2 text-slate-900 tracking-tight">
+                        <User className="h-5 w-5 text-slate-400" />
+                        Сотрудник
+                      </h3>
+                      <Select
+                        value={editUserId}
+                        onValueChange={setEditUserId}
+                      >
+                        <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-slate-200 focus-visible:ring-1 focus-visible:ring-black focus-visible:bg-white text-base transition-all">
+                          <SelectValue placeholder="Выберите сотрудника" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {employees.map((emp) => (
+                            <SelectItem key={emp.id} value={emp.id}>
+                              {emp.full_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     <div className="space-y-4">
                       <h3 className="text-lg font-bold flex items-center gap-2 text-slate-900 tracking-tight">
                         <Clock className="h-5 w-5 text-slate-400" />

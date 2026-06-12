@@ -218,6 +218,7 @@ export async function GET(
         cs2ServerIp: process.env.GAME_SERVER_IP || "127.0.0.1",
         winnerId: match.winner_competitor_id,
         mapPool: match.tournament_config?.mapPool || ["de_mirage", "de_dust2", "de_inferno", "de_nuke", "de_anubis", "de_ancient", "de_vertigo"],
+        matchFormat: match.tournament_config?.matchFormat || "bo1",
         competitorA: compA ? { 
           id: match.competitor_a_id, 
           name: compA.display_name, 
@@ -305,7 +306,7 @@ export async function POST(
 
       const allReady = expectedPlayers.every(id => readyPlayerIds.includes(id));
 
-      if (allReady && match.status === "scheduled") {
+      if (allReady && match.status?.toLowerCase() === "scheduled") {
         // Start VETO phase
         await client.query(
           `UPDATE tournament_matches SET status = 'veto' WHERE id = $1`,
@@ -396,9 +397,30 @@ export async function POST(
         ? match.competitor_b_id 
         : match.competitor_a_id;
 
-      if (remainingMaps.length === 1) {
-        // Only 1 map left -> Veto finished, launch CS2
-        const selectedMap = remainingMaps[0];
+      const matchFormat = tourneyConfigRes.rows[0]?.config?.matchFormat || "bo1";
+      const totalRequiredTurns = 6;
+      const isVetoFinished = newBannedMaps.length >= totalRequiredTurns;
+
+      if (isVetoFinished) {
+        // Veto finished, determine selected maps
+        let selectedMap = "";
+        if (matchFormat === "bo3") {
+          const pickA = newBannedMaps[2];
+          const pickB = newBannedMaps[3];
+          const decider = remainingMaps[0];
+          selectedMap = `${pickA},${pickB},${decider}`;
+        } else if (matchFormat === "bo5") {
+          const pick1 = newBannedMaps[2];
+          const pick2 = newBannedMaps[3];
+          const pick3 = newBannedMaps[4];
+          const pick4 = newBannedMaps[5];
+          const decider = remainingMaps[0];
+          selectedMap = `${pick1},${pick2},${pick3},${pick4},${decider}`;
+        } else {
+          // BO1
+          selectedMap = remainingMaps[0];
+        }
+
         await client.query(
           `UPDATE match_veto 
            SET banned_maps = $1, selected_map = $2, current_turn_competitor_id = NULL
@@ -416,8 +438,9 @@ export async function POST(
         // Notify clients
         await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [matchId]);
 
-        // Launch CS2 server in the background
-        triggerServerLaunch(matchId, selectedMap, parseInt(activeClubId));
+        // Launch CS2 server in the background (we can launch with the first map in the list)
+        const firstMap = selectedMap.split(",")[0];
+        triggerServerLaunch(matchId, firstMap, parseInt(activeClubId));
       } else {
         // Veto continues
         await client.query(

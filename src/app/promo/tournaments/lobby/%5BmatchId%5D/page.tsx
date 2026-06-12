@@ -196,6 +196,11 @@ export default function MatchLobby() {
     (activeTurnComp.playerId === player?.id || activeTurnComp.captainId === player?.id)
   );
 
+  const statusLower = match.status?.toLowerCase();
+  const format = match.matchFormat || "bo1";
+  const turnIndex = veto?.banned_maps?.length || 0;
+  const isPickTurn = format === "bo3" ? (turnIndex === 2 || turnIndex === 3) : (format === "bo5" ? (turnIndex >= 2 && turnIndex <= 5) : false);
+
   return (
     <div className="min-h-screen bg-[#070708] text-white selection:bg-orange-500/20 pb-12">
       {/* Header */}
@@ -261,7 +266,7 @@ export default function MatchLobby() {
           <div className="lg:col-span-2 space-y-6">
             {/* Veto Info Dashboard */}
             <div className="bg-white/5 border border-white/5 rounded-[2rem] p-8 space-y-6">
-              {match.status === "scheduled" && (
+              {statusLower === "scheduled" && (
                 <div className="text-center space-y-6 py-4">
                   <div className="w-16 h-16 bg-orange-500/10 rounded-3xl flex items-center justify-center mx-auto border border-orange-500/20">
                     <Monitor className="w-8 h-8 text-orange-500 animate-bounce" />
@@ -302,14 +307,16 @@ export default function MatchLobby() {
               )}
 
               {/* VETO MAPS CARDS */}
-              {match.status === "veto" && veto && (
+              {statusLower === "veto" && veto && (
                 <div className="space-y-6">
                   <div className="text-center">
                     <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 block mb-1">
-                      Стадия Выбора Карт
+                      Стадия Выбора Карт ({format.toUpperCase()})
                     </span>
                     <h3 className="text-md font-black uppercase italic tracking-tight text-orange-500">
-                      {isMyTurnToBan ? "ВАШ ХОД БАНИТЬ КАРТУ" : "ОЖИДАНИЕ ХОДА СОПЕРНИКА"}
+                      {isMyTurnToBan 
+                        ? (isPickTurn ? "ВАШ ХОД ВЫБИРАТЬ КАРТУ" : "ВАШ ХОД БАНИТЬ КАРТУ") 
+                        : "ОЖИДАНИЕ ХОДА СОПЕРНИКА"}
                     </h3>
                   </div>
 
@@ -317,7 +324,7 @@ export default function MatchLobby() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {match.mapPool.map((map: string) => {
                       const isBanned = veto.banned_maps?.includes(map);
-                      const isSelected = veto.selected_map === map;
+                      const isSelected = veto.selected_map?.split(',').includes(map);
 
                       return (
                         <div
@@ -362,7 +369,7 @@ export default function MatchLobby() {
               )}
 
               {/* LIVE SERVER READY */}
-              {match.status === "live" && (
+              {statusLower === "live" && (
                 <div className="text-center space-y-6 py-6">
                   <div className="w-16 h-16 bg-emerald-500/10 rounded-3xl flex items-center justify-center mx-auto border border-emerald-500/20">
                     <Tv className="w-8 h-8 text-emerald-500 animate-pulse" />
@@ -372,7 +379,15 @@ export default function MatchLobby() {
                       Сервер Запущен!
                     </h2>
                     <p className="text-xs text-gray-400 font-medium max-w-xs mx-auto">
-                      Карта: <strong className="text-white uppercase">{veto?.selected_map?.replace("de_", "")}</strong>. Нажмите кнопку подключения, чтобы войти в игру.
+                      {veto?.selected_map?.includes(",") ? (
+                        <>
+                          Карты: <strong className="text-white uppercase">{veto.selected_map.split(",").map((m: string) => m.replace("de_", "")).join(", ")}</strong>.
+                        </>
+                      ) : (
+                        <>
+                          Карта: <strong className="text-white uppercase">{veto?.selected_map?.replace("de_", "")}</strong>.
+                        </>
+                      )} Нажмите кнопку подключения, чтобы войти в игру.
                     </p>
                   </div>
 

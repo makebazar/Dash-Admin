@@ -182,6 +182,8 @@ export default function AdminTournaments() {
   const [rules, setRules] = React.useState("");
   const [entryFeeType, setEntryFeeType] = React.useState<"player" | "team">("player");
   const [autoDistributeBonuses, setAutoDistributeBonuses] = React.useState(true);
+  const [bracketType, setBracketType] = React.useState<"round_robin" | "single_elimination">("round_robin");
+  const [matchFormat, setMatchFormat] = React.useState<"bo1" | "bo3" | "bo5">("bo1");
 
   // Dynamic placements state
   const [placements, setPlacements] = React.useState<any[]>([
@@ -570,7 +572,9 @@ export default function AdminTournaments() {
             maxParticipants: maxParticipants > 0 ? maxParticipants : null,
             entryFeeType,
             mapPool: ["de_mirage", "de_dust2", "de_inferno", "de_nuke", "de_anubis", "de_ancient", "de_vertigo"],
-            itemPool
+            itemPool,
+            bracketType,
+            matchFormat
           }
         }),
       });
@@ -584,6 +588,8 @@ export default function AdminTournaments() {
         setTotalBonusPool(0);
         setEntryFeeType("player");
         setItemPool([]);
+        setBracketType("round_robin");
+        setMatchFormat("bo1");
         setAutoDistributeBonuses(true);
         setPlacements([
           { id: "1", label: "1 Место", cashPct: 60, bonus: 1000, item: "" },
@@ -628,6 +634,8 @@ export default function AdminTournaments() {
     setTotalBonusPool(activeBonusPool);
     setEntryFeeType(activeTournament.config?.entryFeeType || "player");
     setItemPool(activeTournament.config?.itemPool || []);
+    setBracketType(activeTournament.config?.bracketType || "round_robin");
+    setMatchFormat(activeTournament.config?.matchFormat || "bo1");
     setPlacements(activePlacements.length > 0 ? activePlacements : [
       { id: "1", label: "1 Место", cashPct: 60, bonus: 1000, item: "" },
       { id: "2", label: "2 Место", cashPct: 30, bonus: 500, item: "" },
@@ -681,6 +689,31 @@ export default function AdminTournaments() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleTogglePlayerPayment = async (competitorId: string, playerId: string, paid: boolean) => {
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "toggle_player_payment",
+          id: activeTournament.id,
+          competitorId,
+          playerId,
+          paid,
+        }),
+      });
+      if (res.ok) {
+        await fetchTournamentDetails(activeTournament.id);
+      } else {
+        const errData = await res.json();
+        alert(errData.error || "Ошибка при изменении статуса оплаты");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети при изменении статуса оплаты");
     }
   };
 
@@ -895,6 +928,8 @@ export default function AdminTournaments() {
               setEntryFee(500);
               setClubSharePct(20);
               setEntryFeeType("player");
+              setBracketType("round_robin");
+              setMatchFormat("bo1");
               setAutoDistributeBonuses(true);
               setPrizePoolMode("dynamic");
               setFixedPrizeAmount(10000);
@@ -1291,6 +1326,7 @@ export default function AdminTournaments() {
                                   {roundMatches.map((m) => {
                                     const compA = competitors.find(c => c.id === m.competitor_a_id);
                                     const compB = competitors.find(c => c.id === m.competitor_b_id);
+                                    const statusLower = m.status?.toLowerCase();
 
                                     return (
                                       <div
@@ -1302,17 +1338,17 @@ export default function AdminTournaments() {
                                         }}
                                         className={cn(
                                           "bg-white border p-4 rounded-[2rem] space-y-3 shadow-xs relative transition-all cursor-pointer hover:border-orange-500/30",
-                                          m.status === "FINISHED" 
+                                          statusLower === "finished" 
                                             ? "border-slate-200 opacity-80" 
-                                            : (m.status === "LIVE" ? "border-red-400/50 shadow-md shadow-red-500/5 animate-pulse" : "border-slate-200")
+                                            : (statusLower === "live" ? "border-red-400/50 shadow-md shadow-red-500/5 animate-pulse" : "border-slate-200")
                                         )}
                                       >
                                         <div className="flex justify-between items-center text-[8px] font-black uppercase tracking-wider text-slate-400">
                                           <span>Матч #{m.id}</span>
                                           <span className={cn(
-                                            m.status === "FINISHED" ? "text-slate-400" : (m.status === "live" ? "text-red-500" : "text-blue-500")
+                                            statusLower === "finished" ? "text-slate-400" : (statusLower === "live" ? "text-red-500" : "text-blue-500")
                                           )}>
-                                            {m.status === "scheduled" ? "ожидание" : (m.status === "live" ? "в игре" : m.status.toLowerCase())}
+                                            {statusLower === "scheduled" ? "ожидание" : (statusLower === "live" ? "в игре" : statusLower)}
                                           </span>
                                         </div>
 
@@ -1420,21 +1456,48 @@ export default function AdminTournaments() {
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
-                              {c.payment_status === "PENDING_PAYMENT" ? (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleConfirmPayment(c.id);
-                                  }}
-                                  className="bg-orange-500 hover:bg-orange-600 text-white font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors shadow-sm"
-                                >
-                                  Оплатить
-                                </button>
-                              ) : (
-                                <span className="text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2 py-1 rounded">
-                                  Оплачено
-                                </span>
-                              )}
+                              {(() => {
+                                if (c.payment_status === "PAID") {
+                                  return (
+                                    <span className="text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2 py-1 rounded">
+                                      Оплачено
+                                    </span>
+                                  );
+                                }
+                                
+                                if (c.type === "TEAM" && Array.isArray(c.meta?.paidPlayerIds) && c.meta.paidPlayerIds.length > 0) {
+                                  const paidCount = c.meta.paidPlayerIds.length;
+                                  const totalCount = c.team_members?.length || 0;
+                                  return (
+                                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                      <span className="text-[8px] font-black uppercase tracking-widest bg-amber-50 text-amber-700 border border-amber-200/60 px-2 py-1 rounded">
+                                        Оплачено {paidCount} из {totalCount}
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleConfirmPayment(c.id);
+                                        }}
+                                        className="bg-orange-500 hover:bg-orange-600 text-white font-black text-[9px] uppercase tracking-widest px-2.5 py-1.5 rounded-lg transition-colors shadow-sm"
+                                      >
+                                        Оплатить все
+                                      </button>
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleConfirmPayment(c.id);
+                                    }}
+                                    className="bg-orange-500 hover:bg-orange-600 text-white font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                                  >
+                                    Оплатить
+                                  </button>
+                                );
+                              })()}
                               {(activeTournament.status === "REGISTRATION" || activeTournament.status === "DRAFT") && (
                                 <button
                                   onClick={(e) => {
@@ -1452,20 +1515,34 @@ export default function AdminTournaments() {
 
                           {isExpanded && hasMembers && (
                             <div className="border-t border-slate-200/60 bg-white/50 p-3.5 space-y-2.5">
-                              {c.team_members.map((m: any) => (
-                                <div
-                                  key={m.id}
-                                  className="flex justify-between items-center text-[11px] bg-white border border-slate-200/60 p-2.5 rounded-xl shadow-xs"
-                                >
-                                  <div>
-                                    <span className="font-bold text-slate-800 block">{m.fullName}</span>
-                                    <span className="text-[9px] text-slate-400 font-medium">{m.phoneNumber}</span>
+                              {c.team_members.map((m: any) => {
+                                const isMemberPaid = Array.isArray(c.meta?.paidPlayerIds) && c.meta.paidPlayerIds.includes(m.id);
+                                return (
+                                  <div
+                                    key={m.id}
+                                    className="flex justify-between items-center text-[11px] bg-white border border-slate-200/60 p-2.5 rounded-xl shadow-xs"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <input
+                                        type="checkbox"
+                                        checked={isMemberPaid}
+                                        onChange={async (e) => {
+                                          await handleTogglePlayerPayment(c.id, m.id, e.target.checked);
+                                        }}
+                                        className="accent-orange-500 w-3.5 h-3.5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                                      />
+                                      <div>
+                                        <span className="font-bold text-slate-800 block">{m.fullName}</span>
+                                        <span className="text-[9px] text-slate-400 font-medium">{m.phoneNumber}</span>
+                                      </div>
+                                    </div>
+                                    <span className="font-black italic text-orange-500 shrink-0">
+                                      {m.elo} ELO
+                                    </span>
                                   </div>
-                                  <span className="font-black italic text-orange-500 shrink-0">
-                                    {m.elo} ELO
-                                  </span>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1568,20 +1645,34 @@ export default function AdminTournaments() {
 
                           {isExpanded && hasMembers && (
                             <div className="border-t border-amber-100 bg-white/50 p-3.5 space-y-2.5">
-                              {c.team_members.map((m: any) => (
-                                <div
-                                  key={m.id}
-                                  className="flex justify-between items-center text-[11px] bg-white border border-slate-200/60 p-2.5 rounded-xl shadow-xs"
-                                >
-                                  <div>
-                                    <span className="font-bold text-slate-800 block">{m.fullName}</span>
-                                    <span className="text-[9px] text-slate-400 font-medium">{m.phoneNumber}</span>
+                              {c.team_members.map((m: any) => {
+                                const isMemberPaid = Array.isArray(c.meta?.paidPlayerIds) && c.meta.paidPlayerIds.includes(m.id);
+                                return (
+                                  <div
+                                    key={m.id}
+                                    className="flex justify-between items-center text-[11px] bg-white border border-slate-200/60 p-2.5 rounded-xl shadow-xs"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <input
+                                        type="checkbox"
+                                        checked={isMemberPaid}
+                                        onChange={async (e) => {
+                                          await handleTogglePlayerPayment(c.id, m.id, e.target.checked);
+                                        }}
+                                        className="accent-orange-500 w-3.5 h-3.5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                                      />
+                                      <div>
+                                        <span className="font-bold text-slate-800 block">{m.fullName}</span>
+                                        <span className="text-[9px] text-slate-400 font-medium">{m.phoneNumber}</span>
+                                      </div>
+                                    </div>
+                                    <span className="font-black italic text-orange-500 shrink-0">
+                                      {m.elo} ELO
+                                    </span>
                                   </div>
-                                  <span className="font-black italic text-orange-500 shrink-0">
-                                    {m.elo} ELO
-                                  </span>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1957,6 +2048,55 @@ export default function AdminTournaments() {
                           )}
                         >
                           {typeItem.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black uppercase text-slate-500 block">Формат проведения (Сетка)</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { id: "round_robin", name: "Группа + Плей-офф" },
+                        { id: "single_elimination", name: "Олимпийская (Playoff)" },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setBracketType(item.id as any)}
+                          className={cn(
+                            "py-3 px-4 rounded-xl border font-bold text-xs uppercase tracking-wider transition-all text-center",
+                            bracketType === item.id
+                              ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100/60"
+                          )}
+                        >
+                          {item.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black uppercase text-slate-500 block">Формат матчей</label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { id: "bo1", name: "BO1" },
+                        { id: "bo3", name: "BO3" },
+                        { id: "bo5", name: "BO5" },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setMatchFormat(item.id as any)}
+                          className={cn(
+                            "py-3 px-4 rounded-xl border font-bold text-xs uppercase tracking-wider transition-all text-center",
+                            matchFormat === item.id
+                              ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100/60"
+                          )}
+                        >
+                          {item.name}
                         </button>
                       ))}
                     </div>
