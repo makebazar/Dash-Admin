@@ -15,8 +15,30 @@ import {
   Ticket,
   ShoppingCart,
   ChevronRight,
+  Zap,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+
+const getTierInfo = (monthlyTopups: number, limitGroupId?: string | null, limitGroups?: any[]) => {
+  let t1 = 1000;
+  let t2 = 3000;
+  let t3 = 5000;
+
+  if (limitGroupId && limitGroups && Array.isArray(limitGroups)) {
+    const group = limitGroups.find((g: any) => g.id === limitGroupId);
+    if (group) {
+      t1 = parseFloat(group.t1) || 0;
+      t2 = parseFloat(group.t2) || 0;
+      t3 = parseFloat(group.t3) || 0;
+    }
+  }
+
+  if (monthlyTopups > t3) return { percent: 90, nextTierAt: null, nextPercent: null };
+  if (monthlyTopups > t2) return { percent: 70, nextTierAt: t3, nextPercent: 90 };
+  if (monthlyTopups > t1) return { percent: 50, nextTierAt: t2, nextPercent: 70 };
+  return { percent: 30, nextTierAt: t1, nextPercent: 50 };
+};
 
 export default function PromoWithdraw() {
   const [player, setPlayer] = useState<any>(null);
@@ -91,12 +113,18 @@ export default function PromoWithdraw() {
 
     const isLimitEnabled = player?.settings?.withdraw_limit_enabled === true;
     if (isLimitEnabled) {
-      const limitPercent = player?.hasPremiumBp
-        ? parseFloat(player?.settings?.withdraw_limit_percent_bp ?? 80)
-        : parseFloat(player?.settings?.withdraw_limit_percent ?? 50);
       const monthlyTopups = player?.monthlyTopups || 0;
       const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
-      const allowedLimit = monthlyTopups * (limitPercent / 100);
+      const extraLimit = parseFloat(player?.extraWithdrawLimit || 0);
+
+      const { percent: basePercent } = getTierInfo(monthlyTopups, player?.limitGroupId, player?.settings?.limit_groups);
+      let bpBoost = 15;
+      if (player?.settings?.withdraw_limit_percent_bp !== undefined && player?.settings?.withdraw_limit_percent !== undefined) {
+        bpBoost = Math.max(0, parseFloat(player.settings.withdraw_limit_percent_bp) - parseFloat(player.settings.withdraw_limit_percent));
+      }
+      
+      const finalPercent = player?.hasPremiumBp ? Math.min(100, basePercent + bpBoost) : basePercent;
+      const allowedLimit = (monthlyTopups * (finalPercent / 100)) + extraLimit;
       const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
 
       if (amount > remainingLimit) {
@@ -170,17 +198,61 @@ export default function PromoWithdraw() {
         </div>
 
         {player?.settings?.withdraw_limit_enabled === true && (() => {
-          const limitPercent = player?.hasPremiumBp
-            ? parseFloat(player?.settings?.withdraw_limit_percent_bp ?? 80)
-            : parseFloat(player?.settings?.withdraw_limit_percent ?? 50);
           const monthlyTopups = player?.monthlyTopups || 0;
           const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
-          const allowedLimit = monthlyTopups * (limitPercent / 100);
+          const extraLimit = parseFloat(player?.extraWithdrawLimit || 0);
+          const limitGroups = player?.settings?.limit_groups;
+          const activeGroup = player?.limitGroupId && Array.isArray(limitGroups)
+            ? limitGroups.find((g: any) => g.id === player.limitGroupId)
+            : null;
+
+          const { percent: basePercent, nextTierAt, nextPercent } = getTierInfo(monthlyTopups, player?.limitGroupId, player?.settings?.limit_groups);
+          let bpBoost = 15;
+          if (player?.settings?.withdraw_limit_percent_bp !== undefined && player?.settings?.withdraw_limit_percent !== undefined) {
+            bpBoost = Math.max(0, parseFloat(player.settings.withdraw_limit_percent_bp) - parseFloat(player.settings.withdraw_limit_percent));
+          }
+          
+          const limitPercent = player?.hasPremiumBp ? Math.min(100, basePercent + bpBoost) : basePercent;
+          const allowedLimit = (monthlyTopups * (limitPercent / 100)) + extraLimit;
           const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
           const progressPercent = allowedLimit > 0 ? (monthlyWithdrawn / allowedLimit) * 100 : 0;
 
           return (
             <div className="bg-[#151515] border border-white/5 rounded-[2.5rem] p-6 mb-8 shadow-2xl relative overflow-hidden">
+              {/* Active limit group banner inside card */}
+              {activeGroup && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 mb-4 flex items-center gap-3">
+                  <div className="w-8 h-8 bg-emerald-500/20 rounded-xl flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-emerald-500" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black text-emerald-500 uppercase tracking-wider">
+                      ✨ Группа лимитов: {activeGroup.name}
+                    </div>
+                    <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5 leading-tight">
+                      Пороги: {activeGroup.t1} ₽ (50%) • {activeGroup.t2} ₽ (70%) • {activeGroup.t3} ₽ (90%)
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Active boost alert banner inside card */}
+              {player?.activeBoostPercent > 0 && (
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4 mb-4 flex items-center gap-3">
+                  <div className="w-8 h-8 bg-yellow-500/20 rounded-xl flex items-center justify-center shrink-0">
+                    <Zap className="w-4 h-4 text-yellow-500 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black text-yellow-500 uppercase tracking-wider">
+                      Активен буст вывода: +{player.activeBoostPercent}%
+                    </div>
+                    <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5 leading-tight">
+                      Буст применится к вашему следующему пополнению счета
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
@@ -242,6 +314,16 @@ export default function PromoWithdraw() {
                       {Math.floor(remainingLimit)} ₽
                     </div>
                   </div>
+                  {extraLimit > 0 && (
+                    <div className="col-span-2 border-t border-white/5 pt-2">
+                      <div className="text-[9px] font-black uppercase tracking-[0.1em] text-yellow-500 mb-0.5">
+                        Экстра-лимит от бустов
+                      </div>
+                      <div className="text-base font-black text-yellow-500">
+                        +{Math.floor(extraLimit)} ₽
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Breakdown details if bar spends exist */}
@@ -264,7 +346,7 @@ export default function PromoWithdraw() {
 
                 {/* Motivator message & BP Premium Info / Upsell */}
                 <div className="space-y-3 pt-1">
-                  <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 flex items-center justify-between">
+                  <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 flex flex-col gap-1.5">
                     <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider leading-relaxed">
                       {remainingLimit <= 0 ? (
                         <>
@@ -276,6 +358,11 @@ export default function PromoWithdraw() {
                         </>
                       )}
                     </div>
+                    {nextTierAt && (
+                      <div className="text-[9px] font-black text-yellow-500 uppercase tracking-wider mt-1">
+                        🚀 Пополните еще на {Math.max(0, nextTierAt - Math.floor(monthlyTopups))} ₽, чтобы поднять базовый лимит до {nextPercent}%!
+                      </div>
+                    )}
                   </div>
 
                   {player?.hasPremiumBp ? (
@@ -336,12 +423,18 @@ export default function PromoWithdraw() {
                   const isLimitEnabled = player?.settings?.withdraw_limit_enabled === true;
                   let maxAllowed = Math.floor(player?.bonusBalance || 0);
                   if (isLimitEnabled) {
-                    const limitPercent = player?.hasPremiumBp
-                      ? parseFloat(player?.settings?.withdraw_limit_percent_bp ?? 80)
-                      : parseFloat(player?.settings?.withdraw_limit_percent ?? 50);
                     const monthlyTopups = player?.monthlyTopups || 0;
                     const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
-                    const allowedLimit = monthlyTopups * (limitPercent / 100);
+                    const extraLimit = parseFloat(player?.extraWithdrawLimit || 0);
+
+                    const { percent: basePercent } = getTierInfo(monthlyTopups, player?.limitGroupId, player?.settings?.limit_groups);
+                    let bpBoost = 15;
+                    if (player?.settings?.withdraw_limit_percent_bp !== undefined && player?.settings?.withdraw_limit_percent !== undefined) {
+                      bpBoost = Math.max(0, parseFloat(player.settings.withdraw_limit_percent_bp) - parseFloat(player.settings.withdraw_limit_percent));
+                    }
+                    
+                    const limitPercent = player?.hasPremiumBp ? Math.min(100, basePercent + bpBoost) : basePercent;
+                    const allowedLimit = (monthlyTopups * (limitPercent / 100)) + extraLimit;
                     const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
                     maxAllowed = Math.min(maxAllowed, Math.floor(remainingLimit));
                   }

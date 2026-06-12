@@ -108,9 +108,10 @@ function itemMatchesProgram(item: LoyaltyItem, program: LoyaltyProgram): boolean
 }
 
 /**
+ * Issues/**
  * Issues rewards for a completed loyalty program.
  */
-async function issueRewards(
+export async function issueRewards(
   client: PoolClient,
   clubId: number | string,
   playerId: string,
@@ -121,25 +122,27 @@ async function issueRewards(
 
   // XP
   if ((rewards.xp || 0) > 0) {
-    await client.query(
-      `UPDATE players SET xp = COALESCE(xp, 0) + $1 WHERE id = $2::uuid`,
-      [rewards.xp, playerId]
-    );
+    const { addPlayerXP } = await import("@/lib/promo-quests");
+    await addPlayerXP(client, Number(clubId), playerId, Math.floor(rewards.xp));
   }
 
   // Tickets
   if ((rewards.tickets || 0) > 0) {
     await client.query(
-      `UPDATE players SET ticket_balance = COALESCE(ticket_balance, 0) + $1 WHERE id = $2::uuid`,
-      [rewards.tickets, playerId]
+      `INSERT INTO promo_tickets (player_id, club_id, status, source)
+       SELECT $1::uuid, $2::int, 'available', 'loyalty_reward'
+       FROM generate_series(1, $3)`,
+      [playerId, Number(clubId), Math.floor(rewards.tickets)]
     );
   }
 
   // Bonus balance
   if ((rewards.bonus_balance || 0) > 0) {
     await client.query(
-      `UPDATE players SET bonus_balance = COALESCE(bonus_balance, 0) + $1 WHERE id = $2::uuid`,
-      [rewards.bonus_balance, playerId]
+      `UPDATE promo_player_balances
+       SET bonus_balance = COALESCE(bonus_balance, 0) + $1, updated_at = NOW()
+       WHERE player_id = $2::uuid AND club_id = $3::int`,
+      [rewards.bonus_balance, playerId, Number(clubId)]
     );
   }
 
@@ -154,19 +157,20 @@ async function issueRewards(
     await client.query(
       `INSERT INTO promo_prize_queue (
         club_id, player_id, player_name, player_phone,
-        prize_name, prize_type, status
-      ) VALUES ($1, $2::uuid, $3, $4, $5, 'free_package', 'pending')`,
+        prize_name, prize_type, loyalty_type, status
+      ) VALUES ($1, $2::uuid, $3, $4, $5, 'free_package', $6, 'pending')`,
       [
         clubId,
         playerId,
         player?.full_name || "Гость",
         player?.phone || "",
         rewards.free_package_name || prizeName,
+        program.id,
       ]
     );
   }
 
-    if (rewards.bar_reward_type && rewards.bar_reward_type !== "none") {
+  if (rewards.bar_reward_type && rewards.bar_reward_type !== "none") {
     let barPrizeName = "";
     let barProductId: number | null = null;
 
@@ -207,8 +211,8 @@ async function issueRewards(
       await client.query(
         `INSERT INTO promo_prize_queue (
           club_id, player_id, player_name, player_phone,
-          prize_name, prize_type, bar_product_id, deduct_inventory, status
-        ) VALUES ($1, $2::uuid, $3, $4, $5, 'bar_item', $6, $7, 'pending')`,
+          prize_name, prize_type, bar_product_id, deduct_inventory, loyalty_type, status
+        ) VALUES ($1, $2::uuid, $3, $4, $5, 'bar_item', $6, $7, $8, 'pending')`,
         [
           clubId,
           playerId,
@@ -217,6 +221,7 @@ async function issueRewards(
           barPrizeName,
           barProductId,
           barProductId !== null, // deduct only if we know the product
+          program.id,
         ]
       );
     }
@@ -306,20 +311,16 @@ export async function processPackagePurchase(
       }
     }
 
-    // Check if target reached
+    // Check if target reached, cap count at target
     const target = program.target || 5;
-    const completed = newCount >= target;
+    const finalCount = Math.min(newCount, target);
 
     await client.query(
       `UPDATE promo_package_progress
        SET current_count = $1, last_event_date = $2::date, updated_at = NOW()
        WHERE player_id = $3::uuid AND club_id = $4::int AND program_id = $5`,
-      [completed ? 0 : newCount, todayStr, playerId, clubId, program.id]
+      [finalCount, todayStr, playerId, clubId, program.id]
     );
-
-    if (completed) {
-      await issueRewards(client, clubId, playerId, program);
-    }
   }
 }
 
@@ -358,18 +359,14 @@ export async function processPlayerVisit(
 
     const newCount = progress.current_count + 1;
     const target = program.target || 10;
-    const completed = newCount >= target;
+    const finalCount = Math.min(newCount, target);
 
     await client.query(
       `UPDATE promo_package_progress
        SET current_count = $1, last_event_date = $2::date, updated_at = NOW()
        WHERE player_id = $3::uuid AND club_id = $4::int AND program_id = $5`,
-      [completed ? 0 : newCount, todayStr, playerId, clubId, program.id]
+      [finalCount, todayStr, playerId, clubId, program.id]
     );
-
-    if (completed) {
-      await issueRewards(client, clubId, playerId, program);
-    }
   }
 }
 

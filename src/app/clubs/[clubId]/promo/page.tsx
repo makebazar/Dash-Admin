@@ -81,9 +81,45 @@ export default function PromotionsPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000); // Auto-refresh every 30s
-    return () => clearInterval(interval);
   }, [clubId]);
+
+  useEffect(() => {
+    if (!clubId || activeTab !== "queue") return;
+
+    // Подключаемся к SSE-потоку для обновления очереди в реальном времени
+    const eventSource = new EventSource(
+      `/api/promo/admin/queue/stream?clubId=${clubId}`
+    );
+
+    const handleUpdate = () => {
+      fetchQueueOnly();
+    };
+
+    eventSource.addEventListener("update", handleUpdate);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "update" || event.type === "update") {
+          fetchQueueOnly();
+        }
+      } catch (e) {}
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [clubId, activeTab]);
+
+  const fetchQueueOnly = async () => {
+    try {
+      const res = await fetch(`/api/promo/admin/queue?clubId=${clubId}`);
+      const data = await res.json();
+      setQueue(data.queue || []);
+    } catch (error) {
+      console.error("Fetch Queue Error:", error);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -292,6 +328,7 @@ export default function PromotionsPage() {
               clubId={clubId as string}
               players={players}
               onRefresh={fetchData}
+              settings={settings}
             />
           )}
 

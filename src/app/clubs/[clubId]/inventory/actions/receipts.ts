@@ -538,7 +538,7 @@ export async function createShiftReceipt(
       const totalBonusCost = Math.floor(itemsTotal * multiplier);
 
       const balanceRes = await client.query(
-        `SELECT bonus_balance FROM promo_player_balances WHERE player_id = $1 AND club_id = $2 FOR UPDATE`,
+        `SELECT bonus_balance, limit_group_id FROM promo_player_balances WHERE player_id = $1 AND club_id = $2 FOR UPDATE`,
         [data.promo_player_id, clubId],
       );
 
@@ -547,6 +547,7 @@ export async function createShiftReceipt(
       }
 
       const currentBalance = Number(balanceRes.rows[0].bonus_balance || 0);
+      const limitGroupId = balanceRes.rows[0].limit_group_id;
 
       if (currentBalance < totalBonusCost) {
         throw new Error(
@@ -566,10 +567,6 @@ export async function createShiftReceipt(
           [data.promo_player_id, clubId],
         );
         const hasPremiumBp = bpCheck.rows[0]?.has_premium === true;
-
-        const limitPercent = hasPremiumBp
-          ? parseFloat(promoSettings.withdraw_limit_percent_bp ?? 80)
-          : parseFloat(promoSettings.withdraw_limit_percent ?? 50);
 
         const topupRes = await client.query(
           `SELECT COALESCE(SUM((result_data->>'amount')::float), 0) as total
@@ -609,7 +606,49 @@ export async function createShiftReceipt(
         const monthlyBarBonus = parseFloat(barBonusRes.rows[0].total);
         const monthlyWithdrawn = normalWithdraw + monthlyBarBonus;
 
-        const allowedLimit = monthlyTopups * (limitPercent / 100);
+        // Calculate base limit percentage based on monthly topups
+        let t1 = 1000;
+        let t2 = 3000;
+        let t3 = 5000;
+
+        if (limitGroupId && promoSettings.limit_groups && Array.isArray(promoSettings.limit_groups)) {
+          const group = promoSettings.limit_groups.find((g: any) => g.id === limitGroupId);
+          if (group) {
+            t1 = parseFloat(group.t1) || 0;
+            t2 = parseFloat(group.t2) || 0;
+            t3 = parseFloat(group.t3) || 0;
+          }
+        }
+
+        let basePercent = 30;
+        if (monthlyTopups > t3) {
+          basePercent = 90;
+        } else if (monthlyTopups > t2) {
+          basePercent = 70;
+        } else if (monthlyTopups > t1) {
+          basePercent = 50;
+        }
+
+        // Premium Battle Pass boost
+        let bpBoost = 15;
+        if (promoSettings.withdraw_limit_percent_bp !== undefined && promoSettings.withdraw_limit_percent !== undefined) {
+          bpBoost = Math.max(0, parseFloat(promoSettings.withdraw_limit_percent_bp) - parseFloat(promoSettings.withdraw_limit_percent));
+        }
+        
+        const finalPercent = hasPremiumBp ? Math.min(100, basePercent + bpBoost) : basePercent;
+
+        // Get extra limit from boosts
+        const balanceCheck = await client.query(
+          `SELECT extra_withdraw_limit
+           FROM promo_player_balances
+           WHERE player_id = $1 AND club_id = $2`,
+          [data.promo_player_id, clubId],
+        );
+        const extraLimit = balanceCheck.rows.length > 0 && balanceCheck.rows[0].extra_withdraw_limit 
+          ? parseFloat(balanceCheck.rows[0].extra_withdraw_limit) 
+          : 0;
+
+        const allowedLimit = (monthlyTopups * (finalPercent / 100)) + extraLimit;
         const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
 
         if (totalBonusCost > remainingLimit) {
@@ -1234,6 +1273,27 @@ export async function bulkAccruePromoSafe(
 
     // 3. Handle Topup
     if (data.topup_amount > 0) {
+      // Apply active withdraw boost if exists
+      const boostCheck = await client.query(
+        `SELECT active_boost_percent FROM promo_player_balances 
+         WHERE player_id = $1::uuid AND club_id = $2::int FOR UPDATE`,
+        [data.player_id, clubId]
+      );
+      if (boostCheck.rows.length > 0) {
+        const activeBoostPercent = parseInt(boostCheck.rows[0].active_boost_percent || 0);
+        if (activeBoostPercent > 0) {
+          const extraLimit = (data.topup_amount * activeBoostPercent) / 100;
+          await client.query(
+            `UPDATE promo_player_balances 
+             SET extra_withdraw_limit = COALESCE(extra_withdraw_limit, 0) + $1,
+                 active_boost_percent = 0,
+                 updated_at = NOW()
+             WHERE player_id = $2::uuid AND club_id = $3::int`,
+            [extraLimit, data.player_id, clubId]
+          );
+        }
+      }
+
       const topupHistoryRes = await client.query(
         `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
          VALUES ($1::uuid, $2::int, 'TOPUP', $3::jsonb)

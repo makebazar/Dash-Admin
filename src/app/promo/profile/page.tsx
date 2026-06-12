@@ -279,11 +279,20 @@ export default function PromoProfile() {
                 LVL {player?.level?.currentLevel || 1}
               </span>
             </h2>
-            <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-6">
+            <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-3">
               {player?.phoneNumber
                 ? getPhoneDisplay(player.phoneNumber)
                 : "..."}
             </p>
+            {player?.limitGroupId && player?.settings?.limit_groups && (() => {
+              const group = player.settings.limit_groups.find((g: any) => g.id === player.limitGroupId);
+              if (!group) return null;
+              return (
+                <div className="inline-flex items-center gap-1 bg-white/20 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest text-white mb-4">
+                  ✨ Группа: {group.name}
+                </div>
+              );
+            })()}
 
             <Link
               href="/promo/roadmap"

@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
     // Get player global data + club-specific balance
     const result = await client.query(
-      `SELECT p.id, p.full_name, p.phone_number, b.total_xp, b.bonus_balance, c.name as club_name, c.promo_settings
+      `SELECT p.id, p.full_name, p.phone_number, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
              FROM promo_players p
              JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
              JOIN clubs c ON c.id = b.club_id
@@ -163,7 +163,7 @@ export async function GET(request: Request) {
         };
       }
 
-      if (progressRes.rowCount > 0) {
+      if (progressRes.rows.length > 0) {
         packageProgress = {
           ...progressRes.rows[0],
           pendingClaims,
@@ -193,6 +193,9 @@ export async function GET(request: Request) {
         phoneNumber: data.phone_number,
         totalXp,
         bonusBalance: parseFloat(data.bonus_balance || 0),
+        activeBoostPercent: parseInt(data.active_boost_percent || 0),
+        extraWithdrawLimit: parseFloat(data.extra_withdraw_limit || 0),
+        limitGroupId: data.limit_group_id,
         clubName: data.club_name,
         clubId: activeClubId,
         settings: data.promo_settings,

@@ -849,6 +849,7 @@ export function GamesTab({
                             <option value="physical">Товар (Queue)</option>
                             <option value="attempt">Билеты (+шт)</option>
                             <option value="bonus">Опыт (+XP)</option>
+                            <option value="withdraw_boost">Буст вывода (+% к след. пополнению)</option>
                           </select>
                         </div>
                         <div className="space-y-1">

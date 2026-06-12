@@ -55,6 +55,7 @@ export async function GET(request: Request) {
         p.full_name,
         COALESCE(b.total_xp, 0) as total_xp,
         COALESCE(b.bonus_balance, 0) as bonus_balance,
+        b.limit_group_id,
         (SELECT COUNT(*)::int FROM promo_tickets t WHERE t.player_id = p.id AND t.club_id = $1 AND t.status = 'available' AND (t.expires_at IS NULL OR t.expires_at > NOW())) as tickets_count,
         COALESCE((
           SELECT COUNT(*)::int

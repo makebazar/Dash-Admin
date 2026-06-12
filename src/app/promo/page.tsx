@@ -153,6 +153,26 @@ const GAMES = [
   },
 ];
 
+const getTierInfo = (monthlyTopups: number, limitGroupId?: string | null, limitGroups?: any[]) => {
+  let t1 = 1000;
+  let t2 = 3000;
+  let t3 = 5000;
+
+  if (limitGroupId && limitGroups && Array.isArray(limitGroups)) {
+    const group = limitGroups.find((g: any) => g.id === limitGroupId);
+    if (group) {
+      t1 = parseFloat(group.t1) || 0;
+      t2 = parseFloat(group.t2) || 0;
+      t3 = parseFloat(group.t3) || 0;
+    }
+  }
+
+  if (monthlyTopups > t3) return { percent: 90, nextTierAt: null, nextPercent: null };
+  if (monthlyTopups > t2) return { percent: 70, nextTierAt: t3, nextPercent: 90 };
+  if (monthlyTopups > t1) return { percent: 50, nextTierAt: t2, nextPercent: 70 };
+  return { percent: 30, nextTierAt: t1, nextPercent: 50 };
+};
+
 export default function PromoLobby() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -233,13 +253,61 @@ export default function PromoLobby() {
 
   const [claimingLoyalty, setClaimingLoyalty] = React.useState<string | null>(null);
 
-  const handleClaimLoyalty = async (type: "packages" | "visits" | "streak") => {
-    setClaimingLoyalty(type);
+  const getActivePrograms = (settings: any) => {
+    if (!settings) return [];
+    if (Array.isArray(settings.loyalty_programs) && settings.loyalty_programs.length > 0) {
+      return settings.loyalty_programs.filter((p: any) => p.enabled);
+    }
+
+    // Legacy fallback
+    const programs: any[] = [];
+    if (settings.packages_promo_enabled) {
+      programs.push({
+        id: "legacy_packages",
+        enabled: true,
+        type: "package_accumulation",
+        title: settings.packages_accumulation_reward_name || "Бесплатный пакет",
+        target: parseInt(settings.packages_accumulation_target || "5"),
+        isLegacy: true,
+        legacyField: "accumulated_packages",
+        legacyType: "packages"
+      });
+    }
+    if (settings.packages_visits_enabled) {
+      programs.push({
+        id: "legacy_visits",
+        enabled: true,
+        type: "visit_accumulation",
+        title: settings.packages_visits_reward_name || "Подарок за посещения",
+        target: parseInt(settings.packages_visits_target || "10"),
+        isLegacy: true,
+        legacyField: "accumulated_visits",
+        legacyType: "visits"
+      });
+    }
+    if (settings.packages_streak_enabled) {
+      programs.push({
+        id: "legacy_streak",
+        enabled: true,
+        type: "visit_streak",
+        title: settings.packages_streak_reward_name || "Приз за стрик",
+        target: parseInt(settings.packages_streak_target || "2"),
+        isLegacy: true,
+        legacyField: "current_streak",
+        legacyType: "streak"
+      });
+    }
+    return programs;
+  };
+
+  const handleClaimLoyalty = async (typeOrId: string, isLegacy: boolean) => {
+    setClaimingLoyalty(typeOrId);
     try {
+      const payload = isLegacy ? { type: typeOrId } : { programId: typeOrId };
       const res = await fetch("/api/promo/player/loyalty/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success) {
@@ -461,12 +529,18 @@ export default function PromoLobby() {
                   const isLimitEnabled = player?.settings?.withdraw_limit_enabled === true;
                   if (!isLimitEnabled) return null;
 
-                  const limitPercent = player?.hasPremiumBp
-                    ? parseFloat(player?.settings?.withdraw_limit_percent_bp ?? 80)
-                    : parseFloat(player?.settings?.withdraw_limit_percent ?? 50);
                   const monthlyTopups = player?.monthlyTopups || 0;
                   const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
-                  const allowedLimit = monthlyTopups * (limitPercent / 100);
+                  const extraLimit = parseFloat(player?.extraWithdrawLimit || 0);
+
+                  const { percent: basePercent } = getTierInfo(monthlyTopups, player?.limitGroupId, player?.settings?.limit_groups);
+                  let bpBoost = 15;
+                  if (player?.settings?.withdraw_limit_percent_bp !== undefined && player?.settings?.withdraw_limit_percent !== undefined) {
+                    bpBoost = Math.max(0, parseFloat(player.settings.withdraw_limit_percent_bp) - parseFloat(player.settings.withdraw_limit_percent));
+                  }
+                  
+                  const finalPercent = player?.hasPremiumBp ? Math.min(100, basePercent + bpBoost) : basePercent;
+                  const allowedLimit = (monthlyTopups * (finalPercent / 100)) + extraLimit;
                   const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
                   const limitExceeded = cartTotal > remainingLimit;
 
@@ -489,11 +563,20 @@ export default function PromoLobby() {
                       (() => {
                         const isLimitEnabled = player?.settings?.withdraw_limit_enabled === true;
                         if (!isLimitEnabled) return false;
-                        const limitPercent = player?.hasPremiumBp
-                          ? parseFloat(player?.settings?.withdraw_limit_percent_bp ?? 80)
-                          : parseFloat(player?.settings?.withdraw_limit_percent ?? 50);
-                        const allowedLimit = (player?.monthlyTopups || 0) * (limitPercent / 100);
-                        const remainingLimit = Math.max(0, allowedLimit - (player?.monthlyWithdrawn || 0));
+                        
+                        const monthlyTopups = player?.monthlyTopups || 0;
+                        const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
+                        const extraLimit = parseFloat(player?.extraWithdrawLimit || 0);
+
+                        const { percent: basePercent } = getTierInfo(monthlyTopups, player?.limitGroupId, player?.settings?.limit_groups);
+                        let bpBoost = 15;
+                        if (player?.settings?.withdraw_limit_percent_bp !== undefined && player?.settings?.withdraw_limit_percent !== undefined) {
+                          bpBoost = Math.max(0, parseFloat(player.settings.withdraw_limit_percent_bp) - parseFloat(player.settings.withdraw_limit_percent));
+                        }
+                        
+                        const finalPercent = player?.hasPremiumBp ? Math.min(100, basePercent + bpBoost) : basePercent;
+                        const allowedLimit = (monthlyTopups * (finalPercent / 100)) + extraLimit;
+                        const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
                         return cartTotal > remainingLimit;
                       })()
                     }
@@ -766,8 +849,55 @@ export default function PromoLobby() {
               </div>
             )}
 
+            {/* Active Boost Banner */}
+            {player?.activeBoostPercent > 0 && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="mb-12 bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-yellow-500/10 border border-yellow-500/20 rounded-[2rem] p-6 shadow-[0_8px_32px_rgba(234,179,8,0.05)] relative overflow-hidden group"
+              >
+                {/* Decorative background glow */}
+                <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-yellow-500/10 blur-3xl rounded-full" />
+                <div className="absolute -left-10 -top-10 w-40 h-40 bg-amber-500/5 blur-3xl rounded-full" />
+                
+                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-yellow-500/20 rounded-2xl flex items-center justify-center shrink-0">
+                      <motion.div
+                        animate={{
+                          scale: [1, 1.1, 1],
+                          rotate: [0, -10, 10, -10, 10, 0]
+                        }}
+                        transition={{
+                          repeat: Infinity,
+                          duration: 1.5,
+                          repeatDelay: 3
+                        }}
+                      >
+                        <Zap className="w-6 h-6 text-yellow-500 fill-yellow-500/30" />
+                      </motion.div>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black uppercase italic tracking-tight text-yellow-500">
+                        Активен буст вывода: +{player.activeBoostPercent}%
+                      </h4>
+                      <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-1 leading-relaxed">
+                        Ваше следующее пополнение счета на кассе увеличит ваш лимит вывода на {player.activeBoostPercent}% от суммы!
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/promo/withdraw"
+                    className="flex-none bg-yellow-500 hover:bg-yellow-600 text-black text-xs font-black uppercase tracking-widest px-6 py-3.5 rounded-2xl transition-all active:scale-95 flex items-center gap-2"
+                  >
+                    Подробнее <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+
             {/* Loyalty Programs Section */}
-            {player && (player.settings?.packages_promo_enabled || player.settings?.packages_visits_enabled || player.settings?.packages_streak_enabled) && (
+            {player && getActivePrograms(player.settings).length > 0 && (
               <div className="mb-12">
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center">
@@ -784,29 +914,58 @@ export default function PromoLobby() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Package Accumulation Card */}
-                  {player.settings?.packages_promo_enabled && (() => {
-                    const current = player.packageProgress?.accumulated_packages ?? 0;
-                    const target = parseInt(player.settings.packages_accumulation_target || "5");
+                  {getActivePrograms(player.settings).map((program: any) => {
+                    let current = 0;
+                    if (program.isLegacy) {
+                      current = player.packageProgress?.[program.legacyField] ?? 0;
+                    } else {
+                      current = player.packageProgress?.programProgress?.[program.id]?.current_count ?? 0;
+                    }
+
+                    const target = program.target || 5;
                     const isCompleted = current >= target;
-                    const isPending = player.packageProgress?.pendingClaims?.includes("packages");
+                    const isPending = program.isLegacy
+                      ? player.packageProgress?.pendingClaims?.includes(program.legacyType)
+                      : player.packageProgress?.pendingClaims?.includes(program.id);
+
+                    let emoji = "📦";
+                    if (program.type === "visit_accumulation") emoji = "🚶";
+                    if (program.type === "visit_streak") emoji = "🔥";
+
+                    let rewardName = program.title || "";
+                    if (!rewardName) {
+                      if (program.type === "package_accumulation") rewardName = program.rewards?.free_package_name || "Бесплатный пакет";
+                      else if (program.type === "visit_accumulation") rewardName = "Подарок за посещения";
+                      else rewardName = "Приз за серию дней";
+                    }
 
                     return (
                       <motion.div
+                        key={program.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col justify-between min-h-[14rem] relative overflow-hidden group"
                       >
                         <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-2xl select-none">
-                          📦
+                          {emoji}
                         </div>
                         <div>
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xl">📦</span>
-                            <h4 className="font-black uppercase italic text-sm text-gray-200">Купленные пакеты</h4>
+                            {program.type === "visit_streak" ? (
+                              <Flame className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" />
+                            ) : (
+                              <span className="text-xl">{emoji}</span>
+                            )}
+                            <h4 className="font-black uppercase italic text-sm text-gray-200">
+                              {program.type === "package_accumulation"
+                                ? "Накопление"
+                                : program.type === "visit_accumulation"
+                                ? "Посещения"
+                                : "Серия дней"}
+                            </h4>
                           </div>
                           <p className="text-xs text-gray-400 font-medium line-clamp-2">
-                            {player.settings.packages_accumulation_reward_name || "6-я ночь в подарок"}
+                            {rewardName}
                           </p>
                         </div>
 
@@ -835,155 +994,11 @@ export default function PromoLobby() {
                               </button>
                             ) : (
                               <button
-                                onClick={() => handleClaimLoyalty("packages")}
+                                onClick={() => handleClaimLoyalty(program.isLegacy ? program.legacyType : program.id, program.isLegacy)}
                                 disabled={claimingLoyalty !== null}
                                 className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:scale-[1.02] shadow-lg shadow-orange-500/20 animate-pulse cursor-pointer"
                               >
-                                {claimingLoyalty === "packages" ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" />
-                                ) : (
-                                  "Забрать подарок"
-                                )}
-                              </button>
-                            )
-                          ) : (
-                            <div className="text-[9px] font-black uppercase tracking-wider text-gray-400 text-center py-2 bg-white/3 rounded-xl border border-white/5">
-                              Осталось купить: {Math.max(0, target - current)} шт.
-                            </div>
-                          )}
-                        </div>
-                      </motion.div>
-                    );
-                  })()}
-
-                  {/* Visit Accumulation Card */}
-                  {player.settings?.packages_visits_enabled && (() => {
-                    const current = player.packageProgress?.accumulated_visits ?? 0;
-                    const target = parseInt(player.settings.packages_visits_target || "10");
-                    const isCompleted = current >= target;
-                    const isPending = player.packageProgress?.pendingClaims?.includes("visits");
-
-                    return (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col justify-between min-h-[14rem] relative overflow-hidden group"
-                      >
-                        <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-2xl select-none">
-                          🚶
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xl">🚶</span>
-                            <h4 className="font-black uppercase italic text-sm text-gray-200">Посещения клуба</h4>
-                          </div>
-                          <p className="text-xs text-gray-400 font-medium line-clamp-2">
-                            {player.settings.packages_visits_reward_name || "Подарок за посещения"}
-                          </p>
-                        </div>
-
-                        <div className="space-y-4 mt-4">
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-gray-500">
-                              <span>Прогресс</span>
-                              <span className="text-amber-500">{current} / {target}</span>
-                            </div>
-                            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
-                                style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          {isCompleted ? (
-                            isPending ? (
-                              <button
-                                disabled
-                                className="w-full py-2.5 bg-white/10 text-gray-400 rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 border border-white/5"
-                              >
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                Ожидает на кассе
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleClaimLoyalty("visits")}
-                                disabled={claimingLoyalty !== null}
-                                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:scale-[1.02] shadow-lg shadow-orange-500/20 animate-pulse cursor-pointer"
-                              >
-                                {claimingLoyalty === "visits" ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" />
-                                ) : (
-                                  "Забрать подарок"
-                                )}
-                              </button>
-                            )
-                          ) : (
-                            <div className="text-[9px] font-black uppercase tracking-wider text-gray-400 text-center py-2 bg-white/3 rounded-xl border border-white/5">
-                              Осталось посетить: {Math.max(0, target - current)} раз(а)
-                            </div>
-                          )}
-                        </div>
-                      </motion.div>
-                    );
-                  })()}
-
-                  {/* Consecutive Streak Card */}
-                  {player.settings?.packages_streak_enabled && (() => {
-                    const current = player.packageProgress?.current_streak ?? 0;
-                    const target = parseInt(player.settings.packages_streak_target || "2");
-                    const isCompleted = current >= target;
-                    const isPending = player.packageProgress?.pendingClaims?.includes("streak");
-
-                    return (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col justify-between min-h-[14rem] relative overflow-hidden group"
-                      >
-                        <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-2xl select-none">
-                          🔥
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <Flame className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" />
-                            <h4 className="font-black uppercase italic text-sm text-gray-200">Серия (Стрик)</h4>
-                          </div>
-                          <p className="text-xs text-gray-400 font-medium line-clamp-2">
-                            {player.settings.packages_streak_reward_name || "Подарок за серию дней"}
-                          </p>
-                        </div>
-
-                        <div className="space-y-4 mt-4">
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-gray-500">
-                              <span>Дней подряд</span>
-                              <span className="text-amber-500">{current} / {target}</span>
-                            </div>
-                            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
-                                style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          {isCompleted ? (
-                            isPending ? (
-                              <button
-                                disabled
-                                className="w-full py-2.5 bg-white/10 text-gray-400 rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 border border-white/5"
-                              >
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                Ожидает на кассе
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handleClaimLoyalty("streak")}
-                                disabled={claimingLoyalty !== null}
-                                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:scale-[1.02] shadow-lg shadow-orange-500/20 animate-pulse cursor-pointer"
-                              >
-                                {claimingLoyalty === "streak" ? (
+                                {claimingLoyalty === (program.isLegacy ? program.legacyType : program.id) ? (
                                   <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" />
                                 ) : (
                                   "Забрать подарок"
@@ -992,14 +1007,17 @@ export default function PromoLobby() {
                             )
                           ) : (
                             <div className="text-[9px] font-black uppercase tracking-wider text-gray-400 text-center py-2 bg-white/3 rounded-xl border border-white/5 flex items-center justify-center gap-1">
-                              <Flame className="w-3 h-3 text-orange-500 animate-pulse" />
-                              Осталось: {Math.max(0, target - current)} дн.
+                              {program.type === "visit_streak" && <Flame className="w-3 h-3 text-orange-500 animate-pulse" />}
+                              <span>
+                                Осталось: {Math.max(0, target - current)}{" "}
+                                {program.type === "visit_accumulation" ? "раз(а)" : program.type === "visit_streak" ? "дн." : "шт."}
+                              </span>
                             </div>
                           )}
                         </div>
                       </motion.div>
                     );
-                  })()}
+                  })}
                 </div>
 
                 {/* Pending Prizes — show player what awaits them at the cashier */}
@@ -1038,91 +1056,36 @@ export default function PromoLobby() {
               </div>
             )}
 
-
-            {/* Info Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-16">
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 relative overflow-hidden group"
-              >
-                <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-                  <Ticket className="w-24 h-24 text-orange-500" />
-                </div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center">
-                    <Ticket className="w-5 h-5 text-orange-500" />
-                  </div>
-                  <h3 className="text-xl font-black uppercase italic tracking-tight">
-                    Билеты
-                  </h3>
-                </div>
-                <p className="text-gray-400 text-sm leading-relaxed">
-                  Используй билеты для участия в призовых играх. Каждый билет —
-                  это шанс выиграть реальные подарки: от напитков до игрового
-                  времени на баланс.
-                </p>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 relative overflow-hidden group"
-              >
-                <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-                  <Coins className="w-24 h-24 text-yellow-500" />
-                </div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-yellow-500/20 rounded-xl flex items-center justify-center">
-                    <Coins className="w-5 h-5 text-yellow-500" />
-                  </div>
-                  <h3 className="text-xl font-black uppercase italic tracking-tight">
-                    Ставка
-                  </h3>
-                </div>
-                <p className="text-gray-400 text-sm leading-relaxed">
-                  Играй на свои бонусы! Умножай накопленный баланс в динамичных
-                  играх, но будь осторожен — здесь всё зависит от твоей
-                  стратегии и удачи.
-                </p>
-              </motion.div>
-            </div>
-
-            {/* Accruals Quick Link */}
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-16"
-            >
-              <Link
-                href="/promo/accruals"
-                className="flex items-center justify-between bg-white/5 border border-white/10 rounded-3xl p-6 hover:bg-white/10 transition-all group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Zap className="w-6 h-6 text-orange-500" />
-                  </div>
-                  <div>
-                    <h4 className="font-black uppercase italic tracking-tight">
-                      Как получить билеты?
-                    </h4>
-                    <p className="text-xs text-gray-500 font-medium">
-                      Смотри правила и историю своих начислений
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-gray-700 group-hover:text-white transition-colors" />
-              </Link>
-            </motion.div>
-
             {/* Tickets Category */}
             <section className="mb-16">
-              <div className="flex items-center gap-4 mb-8">
+              <div className="flex items-center gap-4 mb-6">
                 <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/30 whitespace-nowrap">
                   Игры за билеты
                 </h3>
                 <div className="h-px w-full bg-white/5" />
               </div>
+
+              {/* Tickets Info Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8 relative overflow-hidden group"
+              >
+                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Ticket className="w-20 h-20 text-orange-500" />
+                </div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 bg-orange-500/20 rounded-xl flex items-center justify-center">
+                    <Ticket className="w-4 h-4 text-orange-500" />
+                  </div>
+                  <h4 className="text-md font-black uppercase italic tracking-tight">
+                    Билеты
+                  </h4>
+                </div>
+                <p className="text-gray-400 text-xs leading-relaxed max-w-2xl">
+                  Используй билеты для участия в призовых играх. Каждый билет — это шанс выиграть реальные подарки: от напитков до игрового времени на баланс.
+                </p>
+              </motion.div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {GAMES.filter(
@@ -1151,14 +1114,63 @@ export default function PromoLobby() {
               </div>
             </section>
 
+            {/* Accruals Quick Link */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-16"
+            >
+              <Link
+                href="/promo/accruals"
+                className="flex items-center justify-between bg-white/5 border border-white/10 rounded-3xl p-6 hover:bg-white/10 transition-all group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Zap className="w-6 h-6 text-orange-500" />
+                  </div>
+                  <div>
+                    <h4 className="font-black uppercase italic tracking-tight">
+                      Как получить билеты?
+                    </h4>
+                    <p className="text-xs text-gray-500 font-medium">
+                      Смотри правила и историю своих начислений
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-700 group-hover:text-white transition-colors" />
+              </Link>
+            </motion.div>
+
             {/* Stakes Category */}
-            <section>
-              <div className="flex items-center gap-4 mb-8">
+            <section className="mb-16">
+              <div className="flex items-center gap-4 mb-6">
                 <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/30 whitespace-nowrap">
-                  Рискни бонусами
+                  Игры на ставки
                 </h3>
                 <div className="h-px w-full bg-white/5" />
               </div>
+
+              {/* Stakes Info Card */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8 relative overflow-hidden group"
+              >
+                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                  <Coins className="w-20 h-20 text-yellow-500" />
+                </div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 bg-yellow-500/20 rounded-xl flex items-center justify-center">
+                    <Coins className="w-4 h-4 text-yellow-500" />
+                  </div>
+                  <h4 className="text-md font-black uppercase italic tracking-tight">
+                    Ставка
+                  </h4>
+                </div>
+                <p className="text-gray-400 text-xs leading-relaxed max-w-2xl">
+                  Играй на свои бонусы! Умножай накопленный баланс в динамичных играх, но будь осторожен — здесь всё зависит от твоей стратегии и удачи.
+                </p>
+              </motion.div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {GAMES.filter(
@@ -1216,12 +1228,22 @@ export default function PromoLobby() {
             </div>
 
             {player?.settings?.withdraw_limit_enabled === true && (() => {
-              const limitPercent = player?.hasPremiumBp
-                ? parseFloat(player?.settings?.withdraw_limit_percent_bp ?? 80)
-                : parseFloat(player?.settings?.withdraw_limit_percent ?? 50);
               const monthlyTopups = player?.monthlyTopups || 0;
               const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
-              const allowedLimit = monthlyTopups * (limitPercent / 100);
+              const extraLimit = parseFloat(player?.extraWithdrawLimit || 0);
+
+              const { percent: basePercent } = getTierInfo(monthlyTopups, player?.limitGroupId, player?.settings?.limit_groups);
+              let bpBoost = 15;
+              if (player?.settings?.withdraw_limit_percent_bp !== undefined && player?.settings?.withdraw_limit_percent !== undefined) {
+                bpBoost = Math.max(0, parseFloat(player.settings.withdraw_limit_percent_bp) - parseFloat(player.settings.withdraw_limit_percent));
+              }
+              const limitGroups = player?.settings?.limit_groups;
+              const activeGroup = player?.limitGroupId && Array.isArray(limitGroups)
+                ? limitGroups.find((g: any) => g.id === player.limitGroupId)
+                : null;
+
+              const limitPercent = player?.hasPremiumBp ? Math.min(100, basePercent + bpBoost) : basePercent;
+              const allowedLimit = (monthlyTopups * (limitPercent / 100)) + extraLimit;
               const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
               const progressPercent = allowedLimit > 0 ? (monthlyWithdrawn / allowedLimit) * 100 : 0;
 
@@ -1232,6 +1254,11 @@ export default function PromoLobby() {
                       <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
                         <span>Лимит на покупки за бонусы ({new Date().toLocaleString("ru-RU", { month: "long" })})</span>
                         <div className="flex items-center gap-2">
+                          {activeGroup && (
+                            <span className="text-[8px] font-black uppercase tracking-widest bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                              ✨ {activeGroup.name}
+                            </span>
+                          )}
                           {player?.hasPremiumBp ? (
                             <span className="text-[8px] font-black uppercase tracking-widest bg-indigo-500/15 text-indigo-400 px-1.5 py-0.5 rounded border border-indigo-500/20">
                               🔥 BP {limitPercent}%

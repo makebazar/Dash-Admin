@@ -407,6 +407,155 @@ export function GeneralTab({
             </div>
           </div>
 
+          {/* Группы лимитов */}
+          <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-8">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center">
+                <Settings className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-xl font-black uppercase italic">
+                Группы <span className="text-emerald-500">лимитов</span>
+              </h3>
+            </div>
+
+            <div className="space-y-6">
+              {/* List of groups */}
+              <div className="space-y-3">
+                {(!settings.limit_groups || settings.limit_groups.length === 0) ? (
+                  <div className="text-xs font-bold text-slate-400 text-center py-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    Нет созданных групп лимитов. Игроки используют стандартные пороги (1000 / 3000 / 5000 ₽).
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {settings.limit_groups.map((group: any) => (
+                      <div key={group.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 transition-all hover:bg-white hover:shadow-md">
+                        <div>
+                          <div className="font-black italic uppercase text-xs text-slate-900">
+                            {group.name}
+                          </div>
+                          <div className="text-[10px] font-bold text-slate-500 mt-1">
+                            Пороги: {group.t1} ₽ (50%) • {group.t2} ₽ (70%) • {group.t3} ₽ (90%)
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const updatedGroups = settings.limit_groups.filter((g: any) => g.id !== group.id);
+                            saveSettings({
+                              ...settings,
+                              limit_groups: updatedGroups,
+                            });
+                          }}
+                          className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-xl transition-all"
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Add form */}
+              <div className="p-5 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
+                <div className="font-black italic uppercase text-xs tracking-tight text-slate-700">
+                  Создать новую группу
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                      Название группы
+                    </label>
+                    <input
+                      type="text"
+                      id="new-group-name"
+                      placeholder="Например, Студенты"
+                      className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-xs font-bold focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                        Порог 1 (50%)
+                      </label>
+                      <input
+                        type="number"
+                        id="new-group-t1"
+                        placeholder="300"
+                        className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-xs font-bold focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                        Порог 2 (70%)
+                      </label>
+                      <input
+                        type="number"
+                        id="new-group-t2"
+                        placeholder="1000"
+                        className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-xs font-bold focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                        Порог 3 (90%)
+                      </label>
+                      <input
+                        type="number"
+                        id="new-group-t3"
+                        placeholder="2000"
+                        className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-xs font-bold focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const nameInput = document.getElementById("new-group-name") as HTMLInputElement;
+                    const t1Input = document.getElementById("new-group-t1") as HTMLInputElement;
+                    const t2Input = document.getElementById("new-group-t2") as HTMLInputElement;
+                    const t3Input = document.getElementById("new-group-t3") as HTMLInputElement;
+
+                    const name = nameInput?.value?.trim();
+                    const t1 = parseFloat(t1Input?.value) || 0;
+                    const t2 = parseFloat(t2Input?.value) || 0;
+                    const t3 = parseFloat(t3Input?.value) || 0;
+
+                    if (!name) {
+                      alert("Укажите название группы");
+                      return;
+                    }
+
+                    const id = "group_" + Math.random().toString(36).substring(2, 9);
+                    const newGroup = { id, name, t1, t2, t3 };
+                    const currentGroups = settings.limit_groups || [];
+                    
+                    if (currentGroups.some((g: any) => g.name.toLowerCase() === name.toLowerCase())) {
+                      alert("Группа с таким названием уже существует");
+                      return;
+                    }
+
+                    saveSettings({
+                      ...settings,
+                      limit_groups: [...currentGroups, newGroup],
+                    });
+
+                    // Clear inputs
+                    if (nameInput) nameInput.value = "";
+                    if (t1Input) t1Input.value = "";
+                    if (t2Input) t2Input.value = "";
+                    if (t3Input) t3Input.value = "";
+                  }}
+                  className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black italic uppercase text-xs rounded-xl shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20 transition-all text-center"
+                >
+                  Добавить группу
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-6">
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center">

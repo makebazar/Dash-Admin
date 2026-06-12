@@ -27,18 +27,21 @@ import {
 import { cn } from "@/lib/utils";
 
 import { BPActivationButton } from "./BPActivationButton";
+import { setPlayerLimitGroupAction } from "../actions";
 
 interface PlayersTabProps {
   clubId: string;
   players: any[];
   onRefresh: () => void;
+  settings?: any;
 }
 
-export function PlayersTab({ clubId, players: initialPlayers, onRefresh }: PlayersTabProps) {
+export function PlayersTab({ clubId, players: initialPlayers, onRefresh, settings }: PlayersTabProps) {
   // Local state for pagination & search
   const [localPlayers, setLocalPlayers] = useState<any[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isLoadingPlayers, setIsLoadingPlayers] = useState(false);
@@ -487,6 +490,48 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh }: Playe
           </button>
           
           <div className="flex items-center gap-3">
+            {settings?.limit_groups && settings.limit_groups.length > 0 && (
+              <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Группа:</span>
+                <select
+                  value={selectedPlayer.limit_group_id || "default"}
+                  disabled={isSavingGroup}
+                  onChange={async (e) => {
+                    const val = e.target.value;
+                    setIsSavingGroup(true);
+                    try {
+                      const res = await setPlayerLimitGroupAction(
+                        clubId,
+                        selectedPlayer.id,
+                        val === "default" ? null : val
+                      );
+                      if (res.success) {
+                        setSelectedPlayer({
+                          ...selectedPlayer,
+                          limit_group_id: val === "default" ? null : val
+                        });
+                        onRefresh();
+                      } else {
+                        alert("Ошибка: " + res.error);
+                      }
+                    } catch (err: any) {
+                      alert("Ошибка: " + err.message);
+                    } finally {
+                      setIsSavingGroup(false);
+                    }
+                  }}
+                  className="bg-transparent text-xs font-bold focus:outline-none cursor-pointer text-slate-800"
+                >
+                  <option value="default">Стандартная</option>
+                  {settings.limit_groups.map((g: any) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <BPActivationButton
               clubId={clubId}
               playerId={selectedPlayer.id}
@@ -510,6 +555,18 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh }: Playe
                     <Sparkles className="w-3 h-3" />
                     Battle Pass Premium
                   </div>
+                )}
+                {selectedPlayer.limit_group_id && settings?.limit_groups && (
+                  (() => {
+                    const group = settings.limit_groups.find((g: any) => g.id === selectedPlayer.limit_group_id);
+                    if (!group) return null;
+                    return (
+                      <div className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 text-[10px] font-black uppercase tracking-wider px-3.5 py-1.5 rounded-full shadow-lg shadow-teal-500/20">
+                        <Sparkles className="w-3 h-3" />
+                        {group.name}
+                      </div>
+                    );
+                  })()
                 )}
               </div>
               <div className="flex items-center gap-4 text-slate-400 font-bold text-sm">

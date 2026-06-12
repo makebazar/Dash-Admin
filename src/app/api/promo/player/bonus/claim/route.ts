@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     // 1. Get player balance
     const balanceResult = await client.query(
-      `SELECT bonus_balance
+      `SELECT bonus_balance, limit_group_id
        FROM promo_player_balances
        WHERE player_id = $1 AND club_id = $2`,
       [playerId, activeClubId],
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Balance not found" }, { status: 404 });
     }
 
-    const { bonus_balance } = balanceResult.rows[0];
+    const { bonus_balance, limit_group_id } = balanceResult.rows[0];
     const currentBalance = parseFloat(bonus_balance);
 
     if (withdrawAmount > currentBalance) {
@@ -75,10 +75,6 @@ export async function POST(request: Request) {
       );
       const hasPremiumBp = bpCheck.rows[0]?.has_premium === true;
 
-      const limitPercent = hasPremiumBp
-        ? parseFloat(promoSettings.withdraw_limit_percent_bp ?? 80)
-        : parseFloat(promoSettings.withdraw_limit_percent ?? 50);
-      
       const topupRes = await client.query(
         `SELECT COALESCE(SUM((result_data->>'amount')::float), 0) as total
          FROM promo_history
@@ -97,6 +93,48 @@ export async function POST(request: Request) {
       );
       const monthlyBarReal = parseFloat(barRealRes.rows[0].total);
       const monthlyTopups = topups + monthlyBarReal;
+
+      // Calculate base limit percentage based on monthly topups
+      let t1 = 1000;
+      let t2 = 3000;
+      let t3 = 5000;
+
+      if (limit_group_id && promoSettings.limit_groups && Array.isArray(promoSettings.limit_groups)) {
+        const group = promoSettings.limit_groups.find((g: any) => g.id === limit_group_id);
+        if (group) {
+          t1 = parseFloat(group.t1) || 0;
+          t2 = parseFloat(group.t2) || 0;
+          t3 = parseFloat(group.t3) || 0;
+        }
+      }
+
+      let basePercent = 30;
+      if (monthlyTopups > t3) {
+        basePercent = 90;
+      } else if (monthlyTopups > t2) {
+        basePercent = 70;
+      } else if (monthlyTopups > t1) {
+        basePercent = 50;
+      }
+
+      // Premium Battle Pass boost
+      let bpBoost = 15;
+      if (promoSettings.withdraw_limit_percent_bp !== undefined && promoSettings.withdraw_limit_percent !== undefined) {
+        bpBoost = Math.max(0, parseFloat(promoSettings.withdraw_limit_percent_bp) - parseFloat(promoSettings.withdraw_limit_percent));
+      }
+      
+      const finalPercent = hasPremiumBp ? Math.min(100, basePercent + bpBoost) : basePercent;
+
+      // Get extra limit from boosts
+      const balanceCheck = await client.query(
+        `SELECT extra_withdraw_limit
+         FROM promo_player_balances
+         WHERE player_id = $1 AND club_id = $2`,
+        [playerId, activeClubId],
+      );
+      const extraLimit = balanceCheck.rows.length > 0 && balanceCheck.rows[0].extra_withdraw_limit 
+        ? parseFloat(balanceCheck.rows[0].extra_withdraw_limit) 
+        : 0;
 
       const withdrawRes = await client.query(
         `SELECT COALESCE(SUM(withdraw_amount), 0) as total
@@ -117,7 +155,7 @@ export async function POST(request: Request) {
       const monthlyBarBonus = parseFloat(barBonusRes.rows[0].total);
       const monthlyWithdrawn = normalWithdraw + monthlyBarBonus;
 
-      const allowedLimit = monthlyTopups * (limitPercent / 100);
+      const allowedLimit = (monthlyTopups * (finalPercent / 100)) + extraLimit;
       const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
 
       if (withdrawAmount > remainingLimit) {

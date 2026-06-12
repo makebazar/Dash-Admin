@@ -288,6 +288,14 @@ export async function POST(request: Request) {
                  VALUES ($1, $2, $3, $4, 'pending')`,
           [historyId, playerId, activeClubId, wonPrize.id],
         );
+      } else if (wonPrize.type === "withdraw_boost") {
+        const boostVal = Math.floor(parseFloat(wonPrize.value) || 0);
+        await client.query(
+          `UPDATE promo_player_balances 
+           SET active_boost_percent = COALESCE(active_boost_percent, 0) + $1 
+           WHERE player_id = $2 AND club_id = $3`,
+          [boostVal, playerId, activeClubId],
+        );
       }
     }
 

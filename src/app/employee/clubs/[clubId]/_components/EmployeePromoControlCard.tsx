@@ -52,6 +52,7 @@ import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDi
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { BPActivationButton } from "@/app/clubs/[clubId]/promo/_components/BPActivationButton";
+import { setPlayerLimitGroupAction } from "@/app/clubs/[clubId]/promo/actions";
 
 export function EmployeePromoControlCard({
   clubId,
@@ -139,6 +140,7 @@ export function EmployeePromoControlCard({
   const [accrualTopupAmount, setAccrualTopupAmount] = useState("");
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [isAccruing, setIsAccruing] = useState(false);
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
 
   // Search State
   const [promoSearchQuery, setPromoSearchQuery] = useState("");
@@ -876,6 +878,51 @@ export function EmployeePromoControlCard({
                           1000
                         }
                       />
+                    </div>
+                  )}
+
+                  {/* Группа лимитов */}
+                  {promoSettings.limit_groups && promoSettings.limit_groups.length > 0 && (
+                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl space-y-3">
+                      <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                        <User className="w-3 h-3" /> Категория (Группа лимитов)
+                      </Label>
+                      <select
+                        value={accrualPlayer.limit_group_id || "default"}
+                        disabled={isSavingGroup}
+                        onChange={async (e) => {
+                          const val = e.target.value;
+                          setIsSavingGroup(true);
+                          try {
+                            const res = await setPlayerLimitGroupAction(
+                              clubId,
+                              accrualPlayer.id,
+                              val === "default" ? null : val
+                            );
+                            if (res.success) {
+                              setAccrualPlayer({
+                                ...accrualPlayer,
+                                limit_group_id: val === "default" ? null : val
+                              });
+                              refresh();
+                            } else {
+                              alert("Ошибка: " + res.error);
+                            }
+                          } catch (err: any) {
+                            alert("Ошибка: " + err.message);
+                          } finally {
+                            setIsSavingGroup(false);
+                          }
+                        }}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 px-3 text-xs font-bold focus:outline-none cursor-pointer text-zinc-200"
+                      >
+                        <option value="default">По умолчанию (Стандартная)</option>
+                        {promoSettings.limit_groups.map((g: any) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
 
