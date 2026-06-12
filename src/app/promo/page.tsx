@@ -935,17 +935,25 @@ export default function PromoLobby() {
                     }).filter(Boolean);
 
                     let triggerText = "";
+                    const items = [...triggerServices, ...triggerProducts];
                     if (program.type === "package_accumulation") {
-                      if (triggerServices.length > 0 || triggerProducts.length > 0) {
-                        const items = [...triggerServices, ...triggerProducts];
-                        triggerText = items.join(", ");
+                      if (items.length > 0) {
+                        triggerText = `Покупка: ${items.join(", ")}`;
                       } else {
-                        triggerText = "Любой пакет";
+                        triggerText = "Покупка любого пакета";
                       }
                     } else if (program.type === "visit_accumulation") {
-                      triggerText = "Посещение клуба и отметка у кассы";
+                      if (items.length > 0) {
+                        triggerText = `Визит с покупкой: ${items.join(", ")}`;
+                      } else {
+                        triggerText = "Визит с покупкой любого пакета";
+                      }
                     } else if (program.type === "visit_streak") {
-                      triggerText = "Каждый день подряд отмечаться у кассы";
+                      if (items.length > 0) {
+                        triggerText = `Каждый день покупка: ${items.join(", ")}`;
+                      } else {
+                        triggerText = "Каждый день покупка любого пакета";
+                      }
                     }
 
                     const rewardItems: { text: string; icon: string; className: string }[] = [];

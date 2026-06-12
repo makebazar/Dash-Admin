@@ -176,8 +176,8 @@ export function QuestsTab({
 
   const LOYALTY_PROGRAM_TYPES = [
     { id: "package_accumulation", label: "Накопление пакетов", icon: "📦", desc: "Купи N пакетов, получи приз" },
-    { id: "visit_accumulation", label: "Накопление посещений", icon: "🚶", desc: "Каждые N посещений — подарок" },
-    { id: "visit_streak", label: "Серия посещений (стрик)", icon: "🔥", desc: "N дней подряд — приз" },
+    { id: "visit_accumulation", label: "Визиты с покупкой пакета", icon: "🚶", desc: "Каждые N посещений с покупкой выбранного пакета — подарок" },
+    { id: "visit_streak", label: "Серия дней с покупкой", icon: "🔥", desc: "Покупка выбранного пакета N дней подряд — приз" },
   ];
 
   const getDefaultProgram = () => ({
