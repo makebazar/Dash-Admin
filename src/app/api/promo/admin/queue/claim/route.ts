@@ -22,7 +22,9 @@ export async function POST(request: Request) {
 
     // 1. Fetch details of the queue item first with row lock
     const itemRes = await client.query(
-      `SELECT player_id, club_id, withdraw_amount, status, loyalty_type, reward_type, reward_value FROM promo_prize_queue WHERE id = $1 FOR UPDATE`,
+      `SELECT player_id, club_id, withdraw_amount, status, loyalty_type, reward_type, reward_value,
+              prize_type, bar_product_id, deduct_inventory
+       FROM promo_prize_queue WHERE id = $1 FOR UPDATE`,
       [targetId]
     );
 
@@ -102,6 +104,16 @@ export async function POST(request: Request) {
         const { addPlayerXP } = await import("@/lib/promo-quests");
         await addPlayerXP(client, item.club_id, item.player_id, Math.floor(parseFloat(item.reward_value)));
       }
+    }
+
+    // 3b. If claimed and it is a bar item — deduct inventory
+    if (action === "claim" && item.prize_type === "bar_item" && item.deduct_inventory && item.bar_product_id) {
+      await client.query(
+        `UPDATE products
+         SET quantity = GREATEST(0, COALESCE(quantity, 0) - 1), updated_at = NOW()
+         WHERE id = $1`,
+        [item.bar_product_id]
+      );
     }
 
     // 4. If canceled and it is a withdrawal, refund player balance

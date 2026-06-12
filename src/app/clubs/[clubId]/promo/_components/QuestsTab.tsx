@@ -174,6 +174,58 @@ export function QuestsTab({
     }
   };
 
+  const LOYALTY_PROGRAM_TYPES = [
+    { id: "package_accumulation", label: "Накопление пакетов", icon: "📦", desc: "Купи N пакетов, получи приз" },
+    { id: "visit_accumulation", label: "Накопление посещений", icon: "🚶", desc: "Каждые N посещений — подарок" },
+    { id: "visit_streak", label: "Серия посещений (стрик)", icon: "🔥", desc: "N дней подряд — приз" },
+  ];
+
+  const getDefaultProgram = () => ({
+    id: Math.random().toString(36).slice(2),
+    enabled: true,
+    type: "package_accumulation",
+    title: "",
+    target: 5,
+    trigger_product_ids: [] as number[],
+    trigger_service_ids: [] as string[],
+    rewards: {
+      xp: 0,
+      tickets: 0,
+      bonus_balance: 0,
+      free_package: false,
+      free_package_name: "",
+      bar_reward_type: "none",
+      bar_product_id: null as number | null,
+      bar_category_id: null as string | null,
+    },
+  });
+
+  const getLoyaltyPrograms = (): any[] => localSettings?.loyalty_programs || [];
+
+  const updateProgram = (idx: number, updates: any) => {
+    const programs = [...getLoyaltyPrograms()];
+    programs[idx] = { ...programs[idx], ...updates };
+    setLocalSettings({ ...localSettings, loyalty_programs: programs });
+  };
+
+  const updateProgramRewards = (idx: number, rewardUpdates: any) => {
+    const programs = [...getLoyaltyPrograms()];
+    programs[idx] = { ...programs[idx], rewards: { ...(programs[idx].rewards || {}), ...rewardUpdates } };
+    setLocalSettings({ ...localSettings, loyalty_programs: programs });
+  };
+
+  const addProgram = () => {
+    setLocalSettings({
+      ...localSettings,
+      loyalty_programs: [...getLoyaltyPrograms(), getDefaultProgram()],
+    });
+  };
+
+  const removeProgram = (idx: number) => {
+    const programs = getLoyaltyPrograms().filter((_: any, i: number) => i !== idx);
+    setLocalSettings({ ...localSettings, loyalty_programs: programs });
+  };
+
   useEffect(() => {
     fetchQuests();
   }, [clubId]);
@@ -1438,310 +1490,255 @@ export function QuestsTab({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                  {/* Left Column: Loyalty campaigns (col-span 2) */}
-                  <div className="xl:col-span-2 space-y-6">
+                <div className="space-y-5">
                     
-                    {/* Campaign 1: Package Accumulation */}
-                    <div className="bg-slate-50 border border-slate-100 p-6 rounded-3xl space-y-6">
+                  {/* Dynamic Loyalty Programs List */}
+                  {getLoyaltyPrograms().map((prog: any, idx: number) => (
+                    <div key={prog.id || idx} className="bg-slate-50 border border-slate-100 p-6 rounded-3xl space-y-5">
+                      {/* Program Header */}
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg", localSettings.packages_promo_enabled ? "bg-amber-500/10 text-amber-500" : "bg-slate-200 text-slate-400")}>
-                            📦
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shrink-0", prog.enabled ? "bg-amber-500/10" : "bg-slate-200")}>
+                            {LOYALTY_PROGRAM_TYPES.find((t: any) => t.id === prog.type)?.icon || "📦"}
                           </div>
-                          <div>
-                            <h4 className="font-black uppercase italic text-sm text-slate-800 leading-tight">Накопление купленных пакетов</h4>
-                            <p className="text-[10px] text-slate-400 font-medium">Счетчик пакетов (например: «Купи 5, получи 6-й в подарок»)</p>
+                          <div className="min-w-0 flex-1">
+                            <select
+                              value={prog.type || "package_accumulation"}
+                              onChange={e => updateProgram(idx, { type: e.target.value })}
+                              className="font-black uppercase italic text-sm text-slate-800 bg-transparent border-none outline-none cursor-pointer w-full"
+                            >
+                              {LOYALTY_PROGRAM_TYPES.map((t: any) => (
+                                <option key={t.id} value={t.id}>{t.label}</option>
+                              ))}
+                            </select>
+                            <p className="text-[10px] text-slate-400 font-medium">{LOYALTY_PROGRAM_TYPES.find((t: any) => t.id === prog.type)?.desc}</p>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setLocalSettings({ ...localSettings, packages_promo_enabled: !localSettings.packages_promo_enabled })}
-                          className={cn("w-12 h-6 rounded-full relative transition-colors duration-300", localSettings.packages_promo_enabled ? "bg-amber-500" : "bg-slate-300")}
-                        >
-                          <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300", localSettings.packages_promo_enabled ? "left-7" : "left-1")} />
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => updateProgram(idx, { enabled: !prog.enabled })}
+                            className={cn("w-12 h-6 rounded-full relative transition-colors duration-300", prog.enabled ? "bg-amber-500" : "bg-slate-300")}
+                          >
+                            <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-sm", prog.enabled ? "left-7" : "left-1")} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeProgram(idx)}
+                            className="p-1.5 text-slate-300 hover:text-red-500 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
 
-                      {localSettings.packages_promo_enabled && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200/40">
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Цель накопления (штук)</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={localSettings.packages_accumulation_target ?? 5}
-                              onChange={(e) => setLocalSettings({ ...localSettings, packages_accumulation_target: parseInt(e.target.value) || 1 })}
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Название приза</label>
-                            <input
-                              type="text"
-                              value={localSettings.packages_accumulation_reward_name || ""}
-                              onChange={(e) => setLocalSettings({ ...localSettings, packages_accumulation_reward_name: e.target.value })}
-                              placeholder="Напр. 6-я ночь в подарок"
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Тип награды</label>
-                            <select
-                              value={localSettings.packages_accumulation_reward_type || "free_package"}
-                              onChange={(e) => setLocalSettings({ ...localSettings, packages_accumulation_reward_type: e.target.value })}
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                            >
-                              <option value="free_package">Очередь выдачи (Бесплатный пакет)</option>
-                              <option value="bonus_balance">Бонусный баланс (рубли)</option>
-                              <option value="ticket">Билеты для колеса удачи</option>
-                              <option value="xp">Опыт (XP)</option>
-                            </select>
-                          </div>
-                          {localSettings.packages_accumulation_reward_type !== "free_package" && (
+                      {prog.enabled && (
+                        <div className="space-y-5 pt-4 border-t border-slate-200/40">
+
+                          {/* Target & Title */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Размер награды</label>
+                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                                {prog.type === "visit_streak" ? "Дней подряд" : prog.type === "visit_accumulation" ? "Цель (посещений)" : "Цель (пакетов)"}
+                              </label>
                               <input
-                                type="number"
-                                min="0"
-                                value={localSettings.packages_accumulation_reward_value ?? 0}
-                                onChange={(e) => setLocalSettings({ ...localSettings, packages_accumulation_reward_value: parseFloat(e.target.value) || 0 })}
-                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
+                                type="number" min="1"
+                                value={prog.target ?? 5}
+                                onChange={e => updateProgram(idx, { target: parseInt(e.target.value) || 1 })}
+                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/20 transition-all outline-none"
                               />
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Campaign 2: Visit Accumulation */}
-                    <div className="bg-slate-50 border border-slate-100 p-6 rounded-3xl space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg", localSettings.packages_visits_enabled ? "bg-amber-500/10 text-amber-500" : "bg-slate-200 text-slate-400")}>
-                            🚶
-                          </div>
-                          <div>
-                            <h4 className="font-black uppercase italic text-sm text-slate-800 leading-tight">Накопительные посещения</h4>
-                            <p className="text-[10px] text-slate-400 font-medium">Счетчик посещений клуба (например: «Каждое 10-е посещение — подарок»)</p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setLocalSettings({ ...localSettings, packages_visits_enabled: !localSettings.packages_visits_enabled })}
-                          className={cn("w-12 h-6 rounded-full relative transition-colors duration-300", localSettings.packages_visits_enabled ? "bg-amber-500" : "bg-slate-300")}
-                        >
-                          <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300", localSettings.packages_visits_enabled ? "left-7" : "left-1")} />
-                        </button>
-                      </div>
-
-                      {localSettings.packages_visits_enabled && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200/40">
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Цель посещений (штук)</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={localSettings.packages_visits_target ?? 10}
-                              onChange={(e) => setLocalSettings({ ...localSettings, packages_visits_target: parseInt(e.target.value) || 1 })}
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Название приза</label>
-                            <input
-                              type="text"
-                              value={localSettings.packages_visits_reward_name || ""}
-                              onChange={(e) => setLocalSettings({ ...localSettings, packages_visits_reward_name: e.target.value })}
-                              placeholder="Напр. Подарок за 10 посещений"
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Тип награды</label>
-                            <select
-                              value={localSettings.packages_visits_reward_type || "free_package"}
-                              onChange={(e) => setLocalSettings({ ...localSettings, packages_visits_reward_type: e.target.value })}
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                            >
-                              <option value="free_package">Очередь выдачи (Бесплатный пакет)</option>
-                              <option value="bonus_balance">Бонусный баланс (рубли)</option>
-                              <option value="ticket">Билеты для колеса удачи</option>
-                              <option value="xp">Опыт (XP)</option>
-                            </select>
-                          </div>
-                          {localSettings.packages_visits_reward_type !== "free_package" && (
                             <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Размер награды</label>
+                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Название программы</label>
                               <input
-                                type="number"
-                                min="0"
-                                value={localSettings.packages_visits_reward_value ?? 0}
-                                onChange={(e) => setLocalSettings({ ...localSettings, packages_visits_reward_value: parseFloat(e.target.value) || 0 })}
-                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
+                                type="text"
+                                value={prog.title || ""}
+                                onChange={e => updateProgram(idx, { title: e.target.value })}
+                                placeholder="Напр. 6-я ночь в подарок"
+                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/20 transition-all outline-none"
                               />
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                          </div>
 
-                    {/* Campaign 3: Consecutive Streak */}
-                    <div className="bg-slate-50 border border-slate-100 p-6 rounded-3xl space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg", localSettings.packages_streak_enabled ? "bg-amber-500/10 text-amber-500" : "bg-slate-200 text-slate-400")}>
-                            🔥
-                          </div>
-                          <div>
-                            <h4 className="font-black uppercase italic text-sm text-slate-800 leading-tight">Серия посещений подряд (Стрик)</h4>
-                            <p className="text-[10px] text-slate-400 font-medium">Покупки в последовательные дни (например: «Посети 2 дня подряд, получи приз»)</p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setLocalSettings({ ...localSettings, packages_streak_enabled: !localSettings.packages_streak_enabled })}
-                          className={cn("w-12 h-6 rounded-full relative transition-colors duration-300", localSettings.packages_streak_enabled ? "bg-amber-500" : "bg-slate-300")}
-                        >
-                          <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300", localSettings.packages_streak_enabled ? "left-7" : "left-1")} />
-                        </button>
-                      </div>
-
-                      {localSettings.packages_streak_enabled && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200/40">
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Стрик (дней подряд)</label>
-                            <input
-                              type="number"
-                              min="2"
-                              value={localSettings.packages_streak_target ?? 2}
-                              onChange={(e) => setLocalSettings({ ...localSettings, packages_streak_target: parseInt(e.target.value) || 2 })}
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Название приза</label>
-                            <input
-                              type="text"
-                              value={localSettings.packages_streak_reward_name || ""}
-                              onChange={(e) => setLocalSettings({ ...localSettings, packages_streak_reward_name: e.target.value })}
-                              placeholder="Напр. 2 ночи в подарок за стрик"
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Тип награды</label>
-                            <select
-                              value={localSettings.packages_streak_reward_type || "free_package"}
-                              onChange={(e) => setLocalSettings({ ...localSettings, packages_streak_reward_type: e.target.value })}
-                              className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                            >
-                              <option value="free_package">Очередь выдачи (Бесплатный пакет)</option>
-                              <option value="bonus_balance">Бонусный баланс (рубли)</option>
-                              <option value="ticket">Билеты для колеса удачи</option>
-                              <option value="xp">Опыт (XP)</option>
-                            </select>
-                          </div>
-                          {localSettings.packages_streak_reward_type !== "free_package" && (
+                          {/* Per-Program Service/Product Selection */}
+                          {(products.length > 0 || serviceRules.length > 0) && (
                             <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Размер награды</label>
-                              <input
-                                type="number"
-                                min="0"
-                                value={localSettings.packages_streak_reward_value ?? 0}
-                                onChange={(e) => setLocalSettings({ ...localSettings, packages_streak_reward_value: parseFloat(e.target.value) || 0 })}
-                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/10 transition-all outline-none"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right Column: Active Packages & Service Rules Checklist (col-span 1) */}
-                  <div className="space-y-6">
-                    <div className="bg-slate-50 border border-slate-100 p-6 rounded-3xl space-y-4">
-                      <div>
-                        <h4 className="font-black uppercase italic text-sm text-slate-800 text-left">Участвующие пакеты услуг</h4>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 text-left">Выберите товары и услуги, покупка которых засчитывается в прогресс акций</p>
-                      </div>
-
-                      {/* Warehouse Products checklist */}
-                      <div className="space-y-3 pt-2 text-left">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Товары со склада (Компьютерное время)</span>
-                        <div className="max-h-48 overflow-y-auto space-y-2 pr-1 border-b border-slate-200/50 pb-4">
-                          {products.length === 0 ? (
-                            <div className="text-[10px] font-bold text-slate-400 italic">Склад пуст</div>
-                          ) : (
-                            products.map((prod) => {
-                              const activeProductIds = localSettings.accumulation_product_ids || [];
-                              const isChecked = activeProductIds.includes(Number(prod.id));
-
-                              const handleToggle = () => {
-                                const nextList = isChecked
-                                  ? activeProductIds.filter((id: number) => id !== Number(prod.id))
-                                  : [...activeProductIds, Number(prod.id)];
-                                setLocalSettings({ ...localSettings, accumulation_product_ids: nextList });
-                              };
-
-                              return (
-                                <label key={prod.id} className="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-200/60 hover:border-amber-500/40 transition-colors cursor-pointer select-none text-left">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={handleToggle}
-                                    className="accent-amber-500 w-4 h-4"
-                                  />
-                                  <div className="min-w-0">
-                                    <div className="text-[11px] font-bold text-slate-700 truncate">{prod.name}</div>
-                                    <div className="text-[8px] font-bold text-slate-400">{prod.selling_price} ₽</div>
+                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 block">Учитываемые услуги (оставьте пустым — все)</label>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {products.length > 0 && (
+                                  <div className="bg-white border border-slate-200 rounded-2xl p-3 space-y-2">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">📦 Склад (время)</span>
+                                    <div className="max-h-32 overflow-y-auto space-y-1">
+                                      {products.map((prod: any) => {
+                                        const isChecked = (prog.trigger_product_ids || []).includes(Number(prod.id));
+                                        return (
+                                          <label key={prod.id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                            <input
+                                              type="checkbox" checked={isChecked}
+                                              onChange={() => {
+                                                const ids = prog.trigger_product_ids || [];
+                                                updateProgram(idx, { trigger_product_ids: isChecked ? ids.filter((id: number) => id !== Number(prod.id)) : [...ids, Number(prod.id)] });
+                                              }}
+                                              className="accent-amber-500 w-3.5 h-3.5"
+                                            />
+                                            <div className="min-w-0">
+                                              <div className="text-[10px] font-bold text-slate-700 truncate">{prod.name}</div>
+                                              <div className="text-[9px] text-slate-400">{prod.selling_price} ₽</div>
+                                            </div>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </label>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Manual Service Rules checklist */}
-                      <div className="space-y-3 pt-1 text-left">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Ручные услуги (Билеты)</span>
-                        <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
-                          {serviceRules.length === 0 ? (
-                            <div className="text-[10px] font-bold text-slate-400 italic">Нет созданных услуг</div>
-                          ) : (
-                            serviceRules.map((rule) => {
-                              const activeServiceIds = localSettings.accumulation_service_ids || [];
-                              const isChecked = activeServiceIds.includes(String(rule.id));
-
-                              const handleToggle = () => {
-                                const nextList = isChecked
-                                  ? activeServiceIds.filter((id: string) => id !== String(rule.id))
-                                  : [...activeServiceIds, String(rule.id)];
-                                setLocalSettings({ ...localSettings, accumulation_service_ids: nextList });
-                              };
-
-                              return (
-                                <label key={rule.id} className="flex items-center gap-3 p-2 bg-white rounded-xl border border-slate-200/60 hover:border-amber-500/40 transition-colors cursor-pointer select-none text-left">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={handleToggle}
-                                    className="accent-amber-500 w-4 h-4"
-                                  />
-                                  <div className="min-w-0">
-                                    <div className="text-[11px] font-bold text-slate-700 truncate">{rule.name}</div>
-                                    <div className="text-[8px] font-bold text-slate-400">+{rule.tickets} билетов</div>
+                                )}
+                                {serviceRules.length > 0 && (
+                                  <div className="bg-white border border-slate-200 rounded-2xl p-3 space-y-2">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">💼 Пакеты времени</span>
+                                    <div className="max-h-32 overflow-y-auto space-y-1">
+                                      {serviceRules.map((rule: any) => {
+                                        const isChecked = (prog.trigger_service_ids || []).includes(String(rule.id));
+                                        return (
+                                          <label key={rule.id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                            <input
+                                              type="checkbox" checked={isChecked}
+                                              onChange={() => {
+                                                const ids = prog.trigger_service_ids || [];
+                                                updateProgram(idx, { trigger_service_ids: isChecked ? ids.filter((id: string) => id !== String(rule.id)) : [...ids, String(rule.id)] });
+                                              }}
+                                              className="accent-amber-500 w-3.5 h-3.5"
+                                            />
+                                            <div className="min-w-0">
+                                              <div className="text-[10px] font-bold text-slate-700 truncate">{rule.name}</div>
+                                              <div className="text-[9px] text-slate-400">+{rule.tickets} билетов</div>
+                                            </div>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </label>
-                              );
-                            })
+                                )}
+                              </div>
+                            </div>
                           )}
+
+                          {/* Rewards Section */}
+                          <div className="space-y-3">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 block">Награды за выполнение</label>
+
+                            {/* XP / Tickets / Bonus in a row */}
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3 space-y-1.5">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-orange-500">⚡ Опыт (XP)</span>
+                                <input
+                                  type="number" min="0"
+                                  value={prog.rewards?.xp || 0}
+                                  onChange={e => updateProgramRewards(idx, { xp: parseFloat(e.target.value) || 0 })}
+                                  className="w-full bg-white border border-orange-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-orange-200"
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 space-y-1.5">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-blue-500">🎫 Билеты</span>
+                                <input
+                                  type="number" min="0"
+                                  value={prog.rewards?.tickets || 0}
+                                  onChange={e => updateProgramRewards(idx, { tickets: parseFloat(e.target.value) || 0 })}
+                                  className="w-full bg-white border border-blue-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-200"
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 space-y-1.5">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">💰 Бонус (₽)</span>
+                                <input
+                                  type="number" min="0"
+                                  value={prog.rewards?.bonus_balance || 0}
+                                  onChange={e => updateProgramRewards(idx, { bonus_balance: parseFloat(e.target.value) || 0 })}
+                                  className="w-full bg-white border border-emerald-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-200"
+                                  placeholder="0"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Free Package */}
+                            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-amber-600">📦 Бесплатный пакет (очередь выдачи)</span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateProgramRewards(idx, { free_package: !prog.rewards?.free_package })}
+                                  className={cn("w-10 h-5 rounded-full relative transition-colors duration-200", prog.rewards?.free_package ? "bg-amber-500" : "bg-slate-200")}
+                                >
+                                  <div className={cn("absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all duration-200 shadow-sm", prog.rewards?.free_package ? "left-5" : "left-0.5")} />
+                                </button>
+                              </div>
+                              {prog.rewards?.free_package && (
+                                <input
+                                  type="text"
+                                  value={prog.rewards?.free_package_name || ""}
+                                  onChange={e => updateProgramRewards(idx, { free_package_name: e.target.value })}
+                                  placeholder="Название приза (напр. 6-я ночь в подарок)"
+                                  className="w-full bg-white border border-amber-200 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-200"
+                                />
+                              )}
+                            </div>
+
+                            {/* Bar Reward */}
+                            <div className="bg-purple-50 border border-purple-100 rounded-2xl p-3 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-purple-600">🍹 Подарок из бара</span>
+                                <select
+                                  value={prog.rewards?.bar_reward_type || "none"}
+                                  onChange={e => updateProgramRewards(idx, { bar_reward_type: e.target.value })}
+                                  className="text-[10px] font-bold bg-white border border-purple-100 rounded-lg px-2 py-1 outline-none"
+                                >
+                                  <option value="none">Нет</option>
+                                  <option value="product">Конкретный продукт</option>
+                                  <option value="category">Случайный из категории</option>
+                                </select>
+                              </div>
+                              {prog.rewards?.bar_reward_type === "product" && (
+                                <select
+                                  value={prog.rewards?.bar_product_id || ""}
+                                  onChange={e => updateProgramRewards(idx, { bar_product_id: Number(e.target.value) || null })}
+                                  className="w-full bg-white border border-purple-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-200"
+                                >
+                                  <option value="">— Выберите продукт —</option>
+                                  {products.map((p: any) => (
+                                    <option key={p.id} value={p.id}>{p.name} ({p.selling_price} ₽)</option>
+                                  ))}
+                                </select>
+                              )}
+                              {prog.rewards?.bar_reward_type === "category" && (
+                                <select
+                                  value={prog.rewards?.bar_category_id || ""}
+                                  onChange={e => updateProgramRewards(idx, { bar_category_id: e.target.value || null })}
+                                  className="w-full bg-white border border-purple-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-200"
+                                >
+                                  <option value="">— Выберите категорию —</option>
+                                  {categories.map((c: any) => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                  ))}
+                                </select>
+                              )}
+                              {(prog.rewards?.bar_reward_type || "none") !== "none" && (
+                                <p className="text-[9px] text-purple-400 font-medium">Кассир видит уведомление с призом. Случайный выбор из наличия на момент выдачи.</p>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
-                  </div>
+                  ))}
+
+                  {/* Add Program Button */}
+                  <button
+                    type="button"
+                    onClick={addProgram}
+                    className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 hover:border-amber-400 hover:text-amber-500 transition-all font-bold text-sm flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Добавить программу лояльности
+                  </button>
                 </div>
               </div>
             )}

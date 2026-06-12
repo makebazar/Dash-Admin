@@ -1001,8 +1001,43 @@ export default function PromoLobby() {
                     );
                   })()}
                 </div>
+
+                {/* Pending Prizes — show player what awaits them at the cashier */}
+                {(player.packageProgress?.pendingPrizes?.length ?? 0) > 0 && (
+                  <div className="mt-6 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🎁</span>
+                      <h4 className="text-xs font-black uppercase tracking-widest text-amber-400">
+                        Ваши призы ждут на кассе
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {player.packageProgress.pendingPrizes.map((prize: any) => (
+                        <div
+                          key={prize.id}
+                          className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3"
+                        >
+                          <span className="text-2xl shrink-0">
+                            {prize.prize_type === "bar_item" ? "🍹" : "📦"}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-white truncate">
+                              {prize.prize_name}
+                            </div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400/70 mt-0.5">
+                              {prize.prize_type === "bar_item"
+                                ? "Подойди на кассу — кассир выдаст напиток"
+                                : "Подойди на кассу для получения"}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
+
 
             {/* Info Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-16">

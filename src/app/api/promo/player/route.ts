@@ -138,10 +138,37 @@ export async function GET(request: Request) {
       );
       const pendingClaims = pendingClaimsRes.rows.map(r => r.loyalty_type);
 
+      // Fetch all pending prizes (including bar items) to show player
+      const pendingPrizesRes = await client.query(
+        `SELECT id, prize_name, prize_type, created_at
+         FROM promo_prize_queue
+         WHERE player_id = $1 AND club_id = $2 AND status = 'pending'
+         ORDER BY created_at DESC`,
+        [playerId, activeClubId]
+      );
+      const pendingPrizes = pendingPrizesRes.rows;
+
+      // Fetch per-program progress
+      const allProgressRes = await client.query(
+        `SELECT program_id, current_count, last_event_date
+         FROM promo_package_progress
+         WHERE player_id = $1 AND club_id = $2`,
+        [playerId, activeClubId]
+      );
+      const programProgress: Record<string, { current_count: number; last_event_date: string | null }> = {};
+      for (const row of allProgressRes.rows) {
+        programProgress[row.program_id] = {
+          current_count: row.current_count,
+          last_event_date: row.last_event_date,
+        };
+      }
+
       if (progressRes.rowCount > 0) {
         packageProgress = {
           ...progressRes.rows[0],
-          pendingClaims
+          pendingClaims,
+          pendingPrizes,
+          programProgress,
         };
       } else {
         packageProgress = {
@@ -150,7 +177,9 @@ export async function GET(request: Request) {
           current_streak: 0,
           last_visit_date: null,
           last_purchase_date: null,
-          pendingClaims
+          pendingClaims,
+          pendingPrizes,
+          programProgress,
         };
       }
     } catch (err) {
