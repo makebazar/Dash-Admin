@@ -328,6 +328,8 @@ export default function PromotionsPage() {
               products={products}
               categories={categories}
               serviceRules={serviceRules}
+              settings={settings}
+              saveSettings={saveSettings}
             />
           )}
           {activeTab === "verification" && (

@@ -445,26 +445,36 @@ export function EmployeePromoControlCard({
           </div>
         </div>
 
-        {/* Checked-in Players */}
-        {checkedInPlayers.length > 0 && (
+
+        {/* Visit Players (intent=visit) — сверху */}
+        {checkedInPlayers.filter((p) => p.intent === "visit").length > 0 && (
           <div className="space-y-2">
-            <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1">
-              Недавние чекины
+            <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+              Посещения
             </div>
-            <div className="flex flex-wrap gap-2">
-              {checkedInPlayers.map((p) => (
-                <div key={p.id} className="group relative">
-                  {p.intent === "visit" ? (
-                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-1.5 pl-2.5">
+            <div className="flex flex-col gap-2">
+              {checkedInPlayers
+                .filter((p) => p.intent === "visit")
+                .map((p) => (
+                  <div key={p.id} className="group relative">
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2 pl-3">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                      <div className="text-[10px] font-bold text-foreground truncate max-w-[120px]">
-                        {p.full_name} {p.seat_number ? `(ПК: ${p.seat_number})` : ""}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-bold text-foreground truncate">
+                          {p.full_name}{p.seat_number ? ` (ПК: ${p.seat_number})` : ""}
+                        </div>
+                        {p.phone && (
+                          <div className="text-[9px] text-muted-foreground font-medium mt-0.5">
+                            {normalizePhone(p.phone)}
+                          </div>
+                        )}
                       </div>
                       <Button
                         onClick={() => handleConfirmVisit(p.id, p.seat_number)}
                         disabled={confirmingVisitId === p.id}
                         size="sm"
-                        className="h-7 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[9px] font-black uppercase px-2 shadow-none"
+                        className="h-7 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[9px] font-black uppercase px-2 shadow-none shrink-0"
                       >
                         {confirmingVisitId === p.id ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
@@ -473,33 +483,67 @@ export function EmployeePromoControlCard({
                         )}
                       </Button>
                     </div>
-                  ) : (
+                    <button
+                      onClick={() =>
+                        setCheckedInPlayers((prev) =>
+                          prev.filter((item) => item.id !== p.id),
+                        )
+                      }
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-zinc-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 z-10"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Checkin Players (intent=topup) — снизу */}
+        {checkedInPlayers.filter((p) => p.intent !== "visit").length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[9px] font-black uppercase tracking-widest text-muted-foreground ml-1 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
+              Недавние чекины
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {checkedInPlayers
+                .filter((p) => p.intent !== "visit")
+                .map((p) => (
+                  <div key={p.id} className="group relative">
                     <button
                       onClick={() => {
                         setAccrualPlayer(p);
                         setIsAccrualDialogOpen(true);
                       }}
-                      className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-[10px] font-bold border border-border flex items-center gap-2"
+                      className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-[10px] font-bold border border-border flex flex-col items-start gap-0.5"
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      {p.full_name}
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        {p.full_name}
+                      </div>
+                      {p.phone && (
+                        <div className="text-[9px] text-muted-foreground font-medium pl-3.5">
+                          {normalizePhone(p.phone)}
+                        </div>
+                      )}
                     </button>
-                  )}
-                  <button
-                    onClick={() =>
-                      setCheckedInPlayers((prev) =>
-                        prev.filter((item) => item.id !== p.id),
-                      )
-                    }
-                    className="absolute -top-1 -right-1 w-4 h-4 bg-zinc-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 z-10"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </div>
-              ))}
+                    <button
+                      onClick={() =>
+                        setCheckedInPlayers((prev) =>
+                          prev.filter((item) => item.id !== p.id),
+                        )
+                      }
+                      className="absolute -top-1 -right-1 w-4 h-4 bg-zinc-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 z-10"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ))}
             </div>
           </div>
         )}
+
 
         {/* Quest Verifications */}
         {questRequests.length > 0 && (

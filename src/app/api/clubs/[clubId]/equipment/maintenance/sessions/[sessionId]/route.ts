@@ -121,13 +121,30 @@ export async function PATCH(
     const creatorId = sessionResult.rows[0].created_by;
 
     // Assign tasks to session and update their status to IN_PROGRESS
-    // Only bind tasks that are currently PENDING or REWORK and not already bound to another session
+    // Only bind tasks that are currently PENDING, REWORK, or IN_PROGRESS (if assigned to this user, unassigned, or expired/abandoned)
     const updateResult = await query(
       `UPDATE equipment_maintenance_tasks
              SET session_id = $1, status = 'IN_PROGRESS', assigned_user_id = $4
              WHERE id = ANY($2) 
                AND club_id = $3
-               AND (status = 'PENDING' OR status = 'REWORK')
+               AND (
+                 status = 'PENDING' 
+                 OR status = 'REWORK' 
+                 OR (
+                   status = 'IN_PROGRESS' 
+                   AND (
+                     assigned_user_id = $4 
+                     OR assigned_user_id IS NULL
+                     OR updated_at <= NOW() - INTERVAL '2 hours'
+                     OR NOT EXISTS (
+                       SELECT 1 FROM shifts s_active
+                       WHERE s_active.user_id = equipment_maintenance_tasks.assigned_user_id
+                         AND s_active.club_id = $3
+                         AND s_active.check_out IS NULL
+                     )
+                   )
+                 )
+               )
                AND session_id IS NULL
              RETURNING id`,
       [sessionId, taskIds, clubId, creatorId],

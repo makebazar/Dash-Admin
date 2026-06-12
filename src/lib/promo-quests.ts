@@ -250,6 +250,14 @@ export async function processReceiptEvent(
       productCategories,
     });
   }
+
+  // Update package loyalty progress
+  try {
+    const { processPackagePurchase } = await import("./promo-packages");
+    await processPackagePurchase(client, clubId, playerId, items);
+  } catch (err) {
+    console.error("Failed to process package purchase loyalty:", err);
+  }
 }
 
 /**
@@ -335,6 +343,14 @@ export async function processServiceAwardEvent(
       type: "service",
       serviceRuleId,
     });
+  }
+
+  // Update manual service loyalty progress
+  try {
+    const { processManualServiceAward } = await import("./promo-packages");
+    await processManualServiceAward(client, clubId, playerId, String(serviceRuleId));
+  } catch (err) {
+    console.error("Failed to process manual service award loyalty:", err);
   }
 }
 
@@ -810,9 +826,12 @@ export async function processVisitEvent(
           `UPDATE promo_player_quests
            SET last_visit_at = NOW(),
                seat_number = COALESCE(seat_number, $3)
-           WHERE quest_id = $1 AND player_id = $2
-           AND status IN ('active', 'completed')
-           ORDER BY assigned_at DESC LIMIT 1`,
+           WHERE id = (
+             SELECT id FROM promo_player_quests
+             WHERE quest_id = $1 AND player_id = $2
+             AND status IN ('active', 'completed')
+             ORDER BY assigned_at DESC LIMIT 1
+           )`,
           [quest.quest_id, playerId, seatNumber || null],
         );
       } else if (quest.trigger_type === "visit_streak") {
@@ -855,12 +874,23 @@ export async function processVisitEvent(
           `UPDATE promo_player_quests
            SET last_visit_at = NOW(),
                seat_number = COALESCE(seat_number, $3)
-           WHERE quest_id = $1 AND player_id = $2
-           AND status IN ('active', 'completed')
-           ORDER BY assigned_at DESC LIMIT 1`,
+           WHERE id = (
+             SELECT id FROM promo_player_quests
+             WHERE quest_id = $1 AND player_id = $2
+             AND status IN ('active', 'completed')
+             ORDER BY assigned_at DESC LIMIT 1
+           )`,
           [quest.quest_id, playerId, seatNumber || null],
         );
       }
     }
+  }
+
+  // Update visit loyalty progress
+  try {
+    const { processPlayerVisit } = await import("./promo-packages");
+    await processPlayerVisit(client, clubId, playerId);
+  } catch (err) {
+    console.error("Failed to process player visit loyalty:", err);
   }
 }

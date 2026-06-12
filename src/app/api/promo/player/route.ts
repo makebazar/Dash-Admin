@@ -120,6 +120,43 @@ export async function GET(request: Request) {
 
     const hasPremiumBp = bpInfo?.progress?.hasPremium === true;
 
+    // Fetch package progress
+    let packageProgress = null;
+    try {
+      const progressRes = await client.query(
+        `SELECT accumulated_packages, accumulated_visits, current_streak, last_visit_date, last_purchase_date
+         FROM promo_package_progress
+         WHERE player_id = $1 AND club_id = $2`,
+        [playerId, activeClubId]
+      );
+
+      // Fetch pending loyalty claims to prevent multiple claim requests
+      const pendingClaimsRes = await client.query(
+        `SELECT loyalty_type FROM promo_prize_queue 
+         WHERE player_id = $1 AND club_id = $2 AND status = 'pending' AND loyalty_type IS NOT NULL`,
+        [playerId, activeClubId]
+      );
+      const pendingClaims = pendingClaimsRes.rows.map(r => r.loyalty_type);
+
+      if (progressRes.rowCount > 0) {
+        packageProgress = {
+          ...progressRes.rows[0],
+          pendingClaims
+        };
+      } else {
+        packageProgress = {
+          accumulated_packages: 0,
+          accumulated_visits: 0,
+          current_streak: 0,
+          last_visit_date: null,
+          last_purchase_date: null,
+          pendingClaims
+        };
+      }
+    } catch (err) {
+      console.error("Failed to fetch package progress for player:", err);
+    }
+
     return NextResponse.json({
       player: {
         id: data.id,
@@ -137,6 +174,7 @@ export async function GET(request: Request) {
         monthlyBarReal,
         monthlyBarBonus,
         hasPremiumBp,
+        packageProgress,
       },
       allLevels: allLevelsResult.rows,
       tickets: ticketsResult.rows[0].count,

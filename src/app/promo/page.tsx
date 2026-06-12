@@ -26,6 +26,8 @@ import {
   ChevronRight,
   ShoppingCart,
   Target,
+  Award,
+  Flame,
 } from "lucide-react";
 import { PrizesSidebar } from "./components/PrizesSidebar";
 import { LandingView } from "./components/LandingView";
@@ -226,6 +228,35 @@ export default function PromoLobby() {
       console.error(err);
     } finally {
       setIsCheckingIn(false);
+    }
+  };
+
+  const [claimingLoyalty, setClaimingLoyalty] = React.useState<string | null>(null);
+
+  const handleClaimLoyalty = async (type: "packages" | "visits" | "streak") => {
+    setClaimingLoyalty(type);
+    try {
+      const res = await fetch("/api/promo/player/loyalty/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Refetch player info
+        const updatedRes = await fetch("/api/promo/player");
+        const updatedData = await updatedRes.json();
+        if (updatedData.player) {
+          setPlayer(updatedData.player);
+        }
+      } else {
+        alert(data.error || "Ошибка отправки запроса");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети");
+    } finally {
+      setClaimingLoyalty(null);
     }
   };
 
@@ -732,6 +763,244 @@ export default function PromoLobby() {
             {player?.bp && (
               <div className="mb-12">
                 <BPPlayerWidget bp={player.bp} />
+              </div>
+            )}
+
+            {/* Loyalty Programs Section */}
+            {player && (player.settings?.packages_promo_enabled || player.settings?.packages_visits_enabled || player.settings?.packages_streak_enabled) && (
+              <div className="mb-12">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                    <Award className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black uppercase italic tracking-tight">
+                      Программа лояльности
+                    </h3>
+                    <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mt-0.5">
+                      Копи посещения, пакеты и получай ценные подарки на кассе
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Package Accumulation Card */}
+                  {player.settings?.packages_promo_enabled && (() => {
+                    const current = player.packageProgress?.accumulated_packages ?? 0;
+                    const target = parseInt(player.settings.packages_accumulation_target || "5");
+                    const isCompleted = current >= target;
+                    const isPending = player.packageProgress?.pendingClaims?.includes("packages");
+
+                    return (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col justify-between min-h-[14rem] relative overflow-hidden group"
+                      >
+                        <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-2xl select-none">
+                          📦
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl">📦</span>
+                            <h4 className="font-black uppercase italic text-sm text-gray-200">Купленные пакеты</h4>
+                          </div>
+                          <p className="text-xs text-gray-400 font-medium line-clamp-2">
+                            {player.settings.packages_accumulation_reward_name || "6-я ночь в подарок"}
+                          </p>
+                        </div>
+
+                        <div className="space-y-4 mt-4">
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-gray-500">
+                              <span>Прогресс</span>
+                              <span className="text-amber-500">{current} / {target}</span>
+                            </div>
+                            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
+                                style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {isCompleted ? (
+                            isPending ? (
+                              <button
+                                disabled
+                                className="w-full py-2.5 bg-white/10 text-gray-400 rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 border border-white/5"
+                              >
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Ожидает на кассе
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleClaimLoyalty("packages")}
+                                disabled={claimingLoyalty !== null}
+                                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:scale-[1.02] shadow-lg shadow-orange-500/20 animate-pulse cursor-pointer"
+                              >
+                                {claimingLoyalty === "packages" ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" />
+                                ) : (
+                                  "Забрать подарок"
+                                )}
+                              </button>
+                            )
+                          ) : (
+                            <div className="text-[9px] font-black uppercase tracking-wider text-gray-400 text-center py-2 bg-white/3 rounded-xl border border-white/5">
+                              Осталось купить: {Math.max(0, target - current)} шт.
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })()}
+
+                  {/* Visit Accumulation Card */}
+                  {player.settings?.packages_visits_enabled && (() => {
+                    const current = player.packageProgress?.accumulated_visits ?? 0;
+                    const target = parseInt(player.settings.packages_visits_target || "10");
+                    const isCompleted = current >= target;
+                    const isPending = player.packageProgress?.pendingClaims?.includes("visits");
+
+                    return (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col justify-between min-h-[14rem] relative overflow-hidden group"
+                      >
+                        <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-2xl select-none">
+                          🚶
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl">🚶</span>
+                            <h4 className="font-black uppercase italic text-sm text-gray-200">Посещения клуба</h4>
+                          </div>
+                          <p className="text-xs text-gray-400 font-medium line-clamp-2">
+                            {player.settings.packages_visits_reward_name || "Подарок за посещения"}
+                          </p>
+                        </div>
+
+                        <div className="space-y-4 mt-4">
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-gray-500">
+                              <span>Прогресс</span>
+                              <span className="text-amber-500">{current} / {target}</span>
+                            </div>
+                            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
+                                style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {isCompleted ? (
+                            isPending ? (
+                              <button
+                                disabled
+                                className="w-full py-2.5 bg-white/10 text-gray-400 rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 border border-white/5"
+                              >
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Ожидает на кассе
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleClaimLoyalty("visits")}
+                                disabled={claimingLoyalty !== null}
+                                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:scale-[1.02] shadow-lg shadow-orange-500/20 animate-pulse cursor-pointer"
+                              >
+                                {claimingLoyalty === "visits" ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" />
+                                ) : (
+                                  "Забрать подарок"
+                                )}
+                              </button>
+                            )
+                          ) : (
+                            <div className="text-[9px] font-black uppercase tracking-wider text-gray-400 text-center py-2 bg-white/3 rounded-xl border border-white/5">
+                              Осталось посетить: {Math.max(0, target - current)} раз(а)
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })()}
+
+                  {/* Consecutive Streak Card */}
+                  {player.settings?.packages_streak_enabled && (() => {
+                    const current = player.packageProgress?.current_streak ?? 0;
+                    const target = parseInt(player.settings.packages_streak_target || "2");
+                    const isCompleted = current >= target;
+                    const isPending = player.packageProgress?.pendingClaims?.includes("streak");
+
+                    return (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white/5 border border-white/10 rounded-[2rem] p-6 flex flex-col justify-between min-h-[14rem] relative overflow-hidden group"
+                      >
+                        <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity text-2xl select-none">
+                          🔥
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Flame className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" />
+                            <h4 className="font-black uppercase italic text-sm text-gray-200">Серия (Стрик)</h4>
+                          </div>
+                          <p className="text-xs text-gray-400 font-medium line-clamp-2">
+                            {player.settings.packages_streak_reward_name || "Подарок за серию дней"}
+                          </p>
+                        </div>
+
+                        <div className="space-y-4 mt-4">
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-gray-500">
+                              <span>Дней подряд</span>
+                              <span className="text-amber-500">{current} / {target}</span>
+                            </div>
+                            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
+                                style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {isCompleted ? (
+                            isPending ? (
+                              <button
+                                disabled
+                                className="w-full py-2.5 bg-white/10 text-gray-400 rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 border border-white/5"
+                              >
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Ожидает на кассе
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleClaimLoyalty("streak")}
+                                disabled={claimingLoyalty !== null}
+                                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:scale-[1.02] shadow-lg shadow-orange-500/20 animate-pulse cursor-pointer"
+                              >
+                                {claimingLoyalty === "streak" ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" />
+                                ) : (
+                                  "Забрать подарок"
+                                )}
+                              </button>
+                            )
+                          ) : (
+                            <div className="text-[9px] font-black uppercase tracking-wider text-gray-400 text-center py-2 bg-white/3 rounded-xl border border-white/5 flex items-center justify-center gap-1">
+                              <Flame className="w-3 h-3 text-orange-500 animate-pulse" />
+                              Осталось: {Math.max(0, target - current)} дн.
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })()}
+                </div>
               </div>
             )}
 

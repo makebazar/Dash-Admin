@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     // 1. Fetch details of the queue item first with row lock
     const itemRes = await client.query(
-      `SELECT player_id, club_id, withdraw_amount, status FROM promo_prize_queue WHERE id = $1 FOR UPDATE`,
+      `SELECT player_id, club_id, withdraw_amount, status, loyalty_type, reward_type, reward_value FROM promo_prize_queue WHERE id = $1 FOR UPDATE`,
       [targetId]
     );
 
@@ -48,7 +48,63 @@ export async function POST(request: Request) {
        [status, userId, targetId]
     );
 
-    // 3. If canceled and it is a withdrawal, refund player balance
+    // 3. If claimed and it is a loyalty reward, deduct counters and apply rewards
+    if (action === "claim" && item.loyalty_type) {
+      // Fetch club settings to get targets
+      const clubRes = await client.query(
+        `SELECT promo_settings FROM clubs WHERE id = $1`,
+        [item.club_id]
+      );
+      const settings = clubRes.rows[0]?.promo_settings || {};
+
+      let target = 0;
+      if (item.loyalty_type === "packages") {
+        target = parseInt(settings.packages_accumulation_target || "5");
+        await client.query(
+          `UPDATE promo_package_progress 
+           SET accumulated_packages = GREATEST(0, accumulated_packages - $1), updated_at = NOW()
+           WHERE player_id = $2 AND club_id = $3`,
+          [target, item.player_id, item.club_id]
+        );
+      } else if (item.loyalty_type === "visits") {
+        target = parseInt(settings.packages_visits_target || "10");
+        await client.query(
+          `UPDATE promo_package_progress 
+           SET accumulated_visits = GREATEST(0, accumulated_visits - $1), updated_at = NOW()
+           WHERE player_id = $2 AND club_id = $3`,
+          [target, item.player_id, item.club_id]
+        );
+      } else if (item.loyalty_type === "streak") {
+        await client.query(
+          `UPDATE promo_package_progress 
+           SET current_streak = 0, updated_at = NOW()
+           WHERE player_id = $1 AND club_id = $2`,
+          [item.player_id, item.club_id]
+        );
+      }
+
+      // Credit digital rewards
+      if (item.reward_type === "bonus_balance" && parseFloat(item.reward_value) > 0) {
+        await client.query(
+          `UPDATE promo_player_balances 
+           SET bonus_balance = bonus_balance + $1, updated_at = NOW()
+           WHERE player_id = $2 AND club_id = $3`,
+          [parseFloat(item.reward_value), item.player_id, item.club_id]
+        );
+      } else if (item.reward_type === "ticket" && parseInt(item.reward_value) > 0) {
+        await client.query(
+          `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at, history_id)
+           SELECT $1::uuid, $2::int, 'available', 'loyalty_reward', NULL, $3::uuid
+           FROM generate_series(1, $4)`,
+          [item.player_id, item.club_id, targetId, Math.floor(parseFloat(item.reward_value))]
+        );
+      } else if (item.reward_type === "xp" && parseInt(item.reward_value) > 0) {
+        const { addPlayerXP } = await import("@/lib/promo-quests");
+        await addPlayerXP(client, item.club_id, item.player_id, Math.floor(parseFloat(item.reward_value)));
+      }
+    }
+
+    // 4. If canceled and it is a withdrawal, refund player balance
     if (action === "cancel" && item.withdraw_amount && parseFloat(item.withdraw_amount) > 0) {
       const refundAmount = parseFloat(item.withdraw_amount);
       await client.query(
