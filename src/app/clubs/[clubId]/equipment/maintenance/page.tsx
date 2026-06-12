@@ -276,15 +276,17 @@ export default function MaintenanceSchedule() {
     [clubId],
   );
 
-  const fetchData = useCallback(async () => {
-    setIsLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const firstDay = getLocalDateKey(
         new Date(selectedYear, selectedMonth - 1, 1),
       );
       const lastDay = getLocalDateKey(new Date(selectedYear, selectedMonth, 0));
 
-      await ensurePlan(firstDay, lastDay);
+      if (!silent) {
+        await ensurePlan(firstDay, lastDay);
+      }
 
       const [tasksRes, employeesRes, equipmentRes] = await Promise.all([
         fetch(
@@ -315,7 +317,7 @@ export default function MaintenanceSchedule() {
     } catch (error) {
       console.error("Error fetching maintenance data:", error);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [clubId, ensurePlan, selectedMonth, selectedYear]);
 
@@ -399,10 +401,10 @@ export default function MaintenanceSchedule() {
           maintenance_enabled: true,
         }),
       });
-      fetchData();
+      fetchData(true);
     } catch (error) {
       console.error("Error assigning equipment owner:", error);
-      fetchData();
+      fetchData(true);
     }
   };
 
@@ -988,10 +990,10 @@ export default function MaintenanceSchedule() {
           }),
         ),
       );
-      fetchData();
+      fetchData(true);
     } catch (error) {
       console.error("Error assigning place owner:", error);
-      fetchData();
+      fetchData(true);
     }
   };
 

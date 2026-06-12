@@ -428,7 +428,7 @@ export async function PATCH(
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Cookie: (await cookies()).toString(), // Pass cookies for auth
+                Cookie: request.headers.get("cookie") || "", // Pass cookies for auth
               },
               body: JSON.stringify({
                 date_from: todayDate,
