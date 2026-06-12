@@ -20,9 +20,11 @@ export interface LoyaltyProgram {
     bonus_balance?: number;
     free_package?: boolean;
     free_package_name?: string;
+    free_package_quantity?: number;
     bar_reward_type?: "none" | "product" | "category";
     bar_product_id?: number | null;
     bar_category_id?: string | null;
+    bar_reward_quantity?: number;
   };
 }
 
@@ -123,7 +125,7 @@ export async function issueRewards(
   // XP
   if ((rewards.xp || 0) > 0) {
     const { addPlayerXP } = await import("@/lib/promo-quests");
-    await addPlayerXP(client, Number(clubId), playerId, Math.floor(rewards.xp));
+    await addPlayerXP(client, Number(clubId), playerId, Math.floor(rewards.xp!));
   }
 
   // Tickets
@@ -132,7 +134,7 @@ export async function issueRewards(
       `INSERT INTO promo_tickets (player_id, club_id, status, source)
        SELECT $1::uuid, $2::int, 'available', 'loyalty_reward'
        FROM generate_series(1, $3)`,
-      [playerId, Number(clubId), Math.floor(rewards.tickets)]
+      [playerId, Number(clubId), Math.floor(rewards.tickets!)]
     );
   }
 
@@ -153,19 +155,22 @@ export async function issueRewards(
       [playerId]
     );
     const player = playerRes.rows[0];
+    const freeQty = Math.max(1, rewards.free_package_quantity || 1);
+    const freeQtySuffix = freeQty > 1 ? ` (x${freeQty})` : "";
 
     await client.query(
       `INSERT INTO promo_prize_queue (
         club_id, player_id, player_name, player_phone,
-        prize_name, prize_type, loyalty_type, status
-      ) VALUES ($1, $2::uuid, $3, $4, $5, 'free_package', $6, 'pending')`,
+        prize_name, prize_type, loyalty_type, status, reward_value
+      ) VALUES ($1, $2::uuid, $3, $4, $5, 'free_package', $6, 'pending', $7)`,
       [
         clubId,
         playerId,
         player?.full_name || "Гость",
         player?.phone || "",
-        rewards.free_package_name || prizeName,
+        `${rewards.free_package_name || prizeName}${freeQtySuffix}`,
         program.id,
+        freeQty,
       ]
     );
   }
@@ -173,6 +178,8 @@ export async function issueRewards(
   if (rewards.bar_reward_type && rewards.bar_reward_type !== "none") {
     let barPrizeName = "";
     let barProductId: number | null = null;
+    const barQty = Math.max(1, rewards.bar_reward_quantity || 1);
+    const qtySuffix = barQty > 1 ? ` (x${barQty})` : "";
 
     if (rewards.bar_reward_type === "product" && rewards.bar_product_id) {
       barProductId = rewards.bar_product_id;
@@ -181,7 +188,7 @@ export async function issueRewards(
         [rewards.bar_product_id]
       );
       barPrizeName = prodRes.rows[0]?.name
-        ? `🍹 Из бара: ${prodRes.rows[0].name}`
+        ? `🍹 Из бара: ${prodRes.rows[0].name}${qtySuffix}`
         : "🍹 Подарок из бара";
     } else if (rewards.bar_reward_type === "category" && rewards.bar_category_id) {
       // Pick a random available product from the category
@@ -195,7 +202,7 @@ export async function issueRewards(
       );
       if (prodRes.rows[0]) {
         barProductId = prodRes.rows[0].id;
-        barPrizeName = `🍹 Из бара: ${prodRes.rows[0].name}`;
+        barPrizeName = `🍹 Из бара: ${prodRes.rows[0].name}${qtySuffix}`;
       } else {
         barPrizeName = "🍹 Случайный подарок из бара";
       }
@@ -211,8 +218,8 @@ export async function issueRewards(
       await client.query(
         `INSERT INTO promo_prize_queue (
           club_id, player_id, player_name, player_phone,
-          prize_name, prize_type, bar_product_id, deduct_inventory, loyalty_type, status
-        ) VALUES ($1, $2::uuid, $3, $4, $5, 'bar_item', $6, $7, $8, 'pending')`,
+          prize_name, prize_type, bar_product_id, deduct_inventory, loyalty_type, status, reward_value
+        ) VALUES ($1, $2::uuid, $3, $4, $5, 'bar_item', $6, $7, $8, 'pending', $9)`,
         [
           clubId,
           playerId,
@@ -222,6 +229,7 @@ export async function issueRewards(
           barProductId,
           barProductId !== null, // deduct only if we know the product
           program.id,
+          barQty,
         ]
       );
     }

@@ -194,9 +194,11 @@ export function QuestsTab({
       bonus_balance: 0,
       free_package: false,
       free_package_name: "",
+      free_package_quantity: 1,
       bar_reward_type: "none",
       bar_product_id: null as number | null,
       bar_category_id: null as string | null,
+      bar_reward_quantity: 1,
     },
   });
 
@@ -1672,13 +1674,27 @@ export function QuestsTab({
                                 </button>
                               </div>
                               {prog.rewards?.free_package && (
-                                <input
-                                  type="text"
-                                  value={prog.rewards?.free_package_name || ""}
-                                  onChange={e => updateProgramRewards(idx, { free_package_name: e.target.value })}
-                                  placeholder="Название приза (напр. 6-я ночь в подарок)"
-                                  className="w-full bg-white border border-amber-200 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-200"
-                                />
+                                <div className="space-y-3">
+                                  <input
+                                    type="text"
+                                    value={prog.rewards?.free_package_name || ""}
+                                    onChange={e => updateProgramRewards(idx, { free_package_name: e.target.value })}
+                                    placeholder="Название приза (напр. 6-я ночь в подарок)"
+                                    className="w-full bg-white border border-amber-200 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-200"
+                                  />
+                                  <div className="space-y-1">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-amber-600 ml-2">
+                                      Количество (шт.)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={prog.rewards?.free_package_quantity ?? 1}
+                                      onChange={e => updateProgramRewards(idx, { free_package_quantity: parseInt(e.target.value) || 1 })}
+                                      className="w-full bg-white border border-amber-200 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-200"
+                                    />
+                                  </div>
+                                </div>
                               )}
                             </div>
 
@@ -1719,6 +1735,20 @@ export function QuestsTab({
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                   ))}
                                 </select>
+                              )}
+                              {(prog.rewards?.bar_reward_type || "none") !== "none" && (
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-black uppercase tracking-widest text-purple-600 ml-2">
+                                    Количество (шт.)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={prog.rewards?.bar_reward_quantity ?? 1}
+                                    onChange={e => updateProgramRewards(idx, { bar_reward_quantity: parseInt(e.target.value) || 1 })}
+                                    className="w-full bg-white border border-purple-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-200"
+                                  />
+                                </div>
                               )}
                               {(prog.rewards?.bar_reward_type || "none") !== "none" && (
                                 <p className="text-[9px] text-purple-400 font-medium">Кассир видит уведомление с призом. Случайный выбор из наличия на момент выдачи.</p>

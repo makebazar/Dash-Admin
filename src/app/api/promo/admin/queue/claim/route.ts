@@ -108,11 +108,12 @@ export async function POST(request: Request) {
 
     // 3b. If claimed and it is a bar item — deduct inventory
     if (action === "claim" && item.prize_type === "bar_item" && item.deduct_inventory && item.bar_product_id) {
+      const qtyToDeduct = Math.max(1, Math.floor(parseFloat(item.reward_value || "1")));
       await client.query(
         `UPDATE products
-         SET quantity = GREATEST(0, COALESCE(quantity, 0) - 1), updated_at = NOW()
+         SET quantity = GREATEST(0, COALESCE(quantity, 0) - $2), updated_at = NOW()
          WHERE id = $1`,
-        [item.bar_product_id]
+        [item.bar_product_id, qtyToDeduct]
       );
     }
 

@@ -972,22 +972,26 @@ export default function PromoLobby() {
                         });
                       }
                       if (program.rewards.free_package || program.rewards.free_package === "true") {
+                        const freeQty = Math.max(1, Number(program.rewards.free_package_quantity || 1));
+                        const freeQtySuffix = freeQty > 1 ? ` (x${freeQty})` : "";
                         rewardItems.push({
-                          text: `Пакет: ${program.rewards.free_package_name || "Бесплатный пакет"}`,
+                          text: `Пакет: ${program.rewards.free_package_name || "Бесплатный пакет"}${freeQtySuffix}`,
                           icon: "🎁",
                           className: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
                         });
                       }
+                      const qty = Math.max(1, Number(program.rewards.bar_reward_quantity || 1));
+                      const qtySuffix = qty > 1 ? ` (x${qty})` : "";
                       if (program.rewards.bar_reward_type === "product" && program.rewards.bar_product_id) {
                         const rewardProduct = products.find((p: any) => String(p.id) === String(program.rewards.bar_product_id));
                         rewardItems.push({
-                          text: rewardProduct ? `Товар: ${rewardProduct.name}` : "Товар из бара",
+                          text: rewardProduct ? `Товар: ${rewardProduct.name}${qtySuffix}` : `Товар из бара${qtySuffix}`,
                           icon: "🍔",
                           className: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
                         });
                       } else if (program.rewards.bar_reward_type === "category") {
                         rewardItems.push({
-                          text: "Товар из бара",
+                          text: `Товар из бара${qtySuffix}`,
                           icon: "🍔",
                           className: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
                         });
