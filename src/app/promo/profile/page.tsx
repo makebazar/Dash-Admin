@@ -253,6 +253,7 @@ export default function PromoProfile() {
       });
       if (res.ok) {
         await fetchData();
+        window.dispatchEvent(new CustomEvent("promo-player-updated"));
       } else {
         alert("Не удалось активировать предмет");
       }

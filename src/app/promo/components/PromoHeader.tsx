@@ -25,24 +25,55 @@ export function PromoHeader({
   const [tickets, setTickets] = useState<number>(initialTickets || 0);
 
   useEffect(() => {
+    async function fetchPlayer() {
+      try {
+        const res = await fetch("/api/promo/player");
+        if (res.ok) {
+          const data = await res.json();
+          setPlayer(data.player);
+          setTickets(data.tickets);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
     if (initialPlayer) {
       setPlayer(initialPlayer);
       setTickets(initialTickets || 0);
     } else {
-      async function fetchPlayer() {
-        try {
-          const res = await fetch("/api/promo/player");
-          if (res.ok) {
-            const data = await res.json();
-            setPlayer(data.player);
-            setTickets(data.tickets);
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      }
       fetchPlayer();
     }
+
+    // Listen to window focus (return from background)
+    const handleFocus = () => {
+      fetchPlayer();
+    };
+
+    // Listen to custom update event
+    const handleCustomUpdate = (event: Event) => {
+      const customEv = event as CustomEvent;
+      if (customEv.detail && customEv.detail.player) {
+        setPlayer(customEv.detail.player);
+        if (typeof customEv.detail.tickets !== "undefined") {
+          setTickets(customEv.detail.tickets);
+        }
+      } else {
+        fetchPlayer();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("promo-player-updated", handleCustomUpdate);
+
+    // Poll every 5 seconds to keep header fresh across PWA pages
+    const interval = setInterval(fetchPlayer, 5000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("promo-player-updated", handleCustomUpdate);
+      clearInterval(interval);
+    };
   }, [initialPlayer, initialTickets]);
 
   return (

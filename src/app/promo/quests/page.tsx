@@ -130,6 +130,7 @@ export default function QuestsPage() {
       if (res.ok) {
         await fetchQuests();
         setSelectedQuest(null);
+        window.dispatchEvent(new CustomEvent("promo-player-updated"));
       }
     } catch (e) {
       console.error(e);

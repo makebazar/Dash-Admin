@@ -214,13 +214,16 @@ async function issueBPReward(
     const historyId = histRes.rows[0].id;
 
     await client.query(
-      `INSERT INTO promo_prize_queue (history_id, player_id, club_id, prize_id, status)
-       VALUES ($1, $2, $3, $4, 'pending')`,
+      `INSERT INTO promo_prize_queue (
+        history_id, player_id, club_id, prize_id, status, 
+        prize_type, bar_product_id, custom_reward_name, deduct_inventory
+      ) VALUES ($1, $2, $3, NULL, 'pending', 'bar_item', $4, $5, TRUE)`,
       [
         historyId,
         playerId,
         clubId,
-        reward_value, // Here reward_value should be the product_id or prize_id from promo_prizes
+        Math.floor(reward_value), // Here reward_value should be the product_id
+        reward_name, // custom_reward_name
       ],
     );
   }

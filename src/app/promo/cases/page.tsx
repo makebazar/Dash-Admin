@@ -316,6 +316,7 @@ export default function CasesPage() {
       });
       if (res.ok) {
         await fetchData(true);
+        window.dispatchEvent(new CustomEvent("promo-player-updated"));
       } else {
         alert("Не удалось активировать предмет");
       }
@@ -365,6 +366,7 @@ export default function CasesPage() {
         ...prev,
         bonusBalance: data.newBalance,
       }));
+      window.dispatchEvent(new CustomEvent("promo-player-updated"));
 
       const possibleItems = c.items;
       const itemsForReel: CaseItem[] = [];

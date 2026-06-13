@@ -142,6 +142,30 @@ export function EmployeePromoControlCard({
   const [isAccruing, setIsAccruing] = useState(false);
   const [isSavingGroup, setIsSavingGroup] = useState(false);
 
+  const minTopup = useMemo(() => {
+    if (!promoSettings || !promoSettings.accrual_rules || promoSettings.accrual_rules.length === 0) {
+      return 0;
+    }
+    const limitGroupId = accrualPlayer?.limit_group_id || null;
+    const thresholdRules = promoSettings.accrual_rules.filter((r: any) => r.type === "threshold");
+    if (thresholdRules.length === 0) return 0;
+
+    let minVal = Infinity;
+    for (const rule of thresholdRules) {
+      let amount = parseFloat(rule.amount);
+      if (limitGroupId && rule.group_amounts && typeof rule.group_amounts[limitGroupId] !== 'undefined') {
+        const groupVal = parseFloat(rule.group_amounts[limitGroupId]);
+        if (!isNaN(groupVal)) {
+          amount = groupVal;
+        }
+      }
+      if (amount < minVal) {
+        minVal = amount;
+      }
+    }
+    return minVal === Infinity ? 0 : minVal;
+  }, [promoSettings.accrual_rules, accrualPlayer]);
+
   // Search State
   const [promoSearchQuery, setPromoSearchQuery] = useState("");
   const [promoSearchResults, setPromoSearchResults] = useState<any[]>([]);
@@ -954,6 +978,11 @@ export function EmployeePromoControlCard({
                       placeholder="Введите сумму..."
                       className="h-14 bg-zinc-900 border-zinc-800 rounded-2xl text-2xl font-black text-center text-orange-500 shadow-none"
                     />
+                    {Number(accrualTopupAmount) > 0 && Number(accrualTopupAmount) < minTopup && (
+                      <p className="text-red-500 text-[10px] font-black uppercase text-center mt-1.5 animate-pulse">
+                        ⚠️ Минимум для {accrualPlayer?.limit_group_id ? "этой группы" : "пополнения"}: {minTopup} ₽
+                      </p>
+                    )}
                   </div>
 
                   {/* Services Section */}
@@ -1063,6 +1092,8 @@ export function EmployeePromoControlCard({
                     disabled={
                       (Number(accrualTopupAmount) <= 0 &&
                         selectedServiceIds.length === 0) ||
+                      (Number(accrualTopupAmount) > 0 &&
+                        Number(accrualTopupAmount) < minTopup) ||
                       isAccruing
                     }
                     className="flex-3 h-14 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-black text-lg shadow-none"

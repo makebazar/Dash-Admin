@@ -1261,18 +1261,43 @@ export async function bulkAccruePromoSafe(
     const rules = settings.service_rules || [];
 
     // 2. Resolve player balance record
-    await client.query(
+    const balanceRes = await client.query(
       `INSERT INTO promo_player_balances (player_id, club_id, bonus_balance)
-          VALUES ($1::uuid, $2::int, 0)
-          ON CONFLICT (player_id, club_id)
-          DO UPDATE SET updated_at = NOW()`,
+       VALUES ($1::uuid, $2::int, 0)
+       ON CONFLICT (player_id, club_id)
+       DO UPDATE SET updated_at = NOW()
+       RETURNING limit_group_id`,
       [data.player_id, clubId],
     );
+    const limitGroupId = balanceRes.rows[0]?.limit_group_id || null;
 
     const historyIds: string[] = [];
 
     // 3. Handle Topup
     if (data.topup_amount > 0) {
+      // Foolproof check: validate minimum topup threshold according to player group
+      const accrualRules = settings.accrual_rules || [];
+      const thresholdRules = accrualRules.filter((r: any) => r.type === "threshold");
+      
+      if (thresholdRules.length > 0) {
+        let minAmount = Infinity;
+        for (const rule of thresholdRules) {
+          let ruleAmount = parseFloat(rule.amount);
+          if (limitGroupId && rule.group_amounts && typeof rule.group_amounts[limitGroupId] !== 'undefined') {
+            const groupVal = parseFloat(rule.group_amounts[limitGroupId]);
+            if (!isNaN(groupVal)) {
+              ruleAmount = groupVal;
+            }
+          }
+          if (ruleAmount < minAmount) {
+            minAmount = ruleAmount;
+          }
+        }
+        
+        if (minAmount !== Infinity && data.topup_amount < minAmount) {
+          throw new Error(`Сумма пополнения (${data.topup_amount} ₽) меньше минимального порога (${minAmount} ₽)`);
+        }
+      }
       // Apply active withdraw boost if exists
       const boostCheck = await client.query(
         `SELECT active_boost_percent FROM promo_player_balances 
