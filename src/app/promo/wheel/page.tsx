@@ -314,7 +314,7 @@ export default function RealisticWheel() {
 
       // Update counters instantly for the animation
       if (data.won && data.prize) {
-        if (data.prize.type === "virtual") {
+        if (data.prize.type === "virtual" || data.prize.type === "bonus_limitless") {
           setBonusBalance((prev) => prev + parseFloat(data.prize.value));
         } else if (data.prize.type === "attempt") {
           setTicketsCount(

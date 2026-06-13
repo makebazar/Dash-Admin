@@ -26,7 +26,7 @@ import {
 export type Prize = {
   id?: number;
   name: string;
-  type: "physical" | "virtual" | "bonus" | "attempt";
+  type: "physical" | "virtual" | "bonus" | "attempt" | "withdraw_boost" | "bonus_limitless";
   value: number;
   probability: number;
   daily_limit: number;
@@ -846,6 +846,7 @@ export function GamesTab({
                             }}
                           >
                             <option value="virtual">Баланс (₽)</option>
+                            <option value="bonus_limitless">Безлимитный вывод (₽)</option>
                             <option value="physical">Товар (Queue)</option>
                             <option value="attempt">Билеты (+шт)</option>
                             <option value="bonus">Опыт (+XP)</option>

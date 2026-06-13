@@ -70,14 +70,14 @@ export async function GET(request: Request) {
     if (effectiveLevel !== null && !showAllLevels) {
       prizes = prizes.map((p) => ({
         ...p,
-        is_available: p.target_level === effectiveLevel,
+        is_available: (p.target_level || 1) === effectiveLevel,
         player_level: effectiveLevel,
       }));
 
       // If this is for a specific game instance (not just a sidebar list),
       // we might want to return ONLY the relevant level prizes
       if (searchParams.has("gameType")) {
-        prizes = prizes.filter((p) => p.target_level === effectiveLevel);
+        prizes = prizes.filter((p) => (p.target_level || 1) === effectiveLevel);
       }
     }
 

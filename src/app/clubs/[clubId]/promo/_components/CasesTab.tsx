@@ -263,7 +263,7 @@ export function CasesTab({ clubId, products, categories, serviceRules }: CasesTa
                   <label className="text-[10px] font-black uppercase text-slate-400">Название кейса</label>
                   <input
                     type="text"
-                    value={editingCase.name}
+                    value={editingCase.name || ""}
                     onChange={(e) => setEditingCase({ ...editingCase, name: e.target.value })}
                     placeholder="Например: Бронзовый сундук"
                     className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-orange-500"
@@ -273,7 +273,7 @@ export function CasesTab({ clubId, products, categories, serviceRules }: CasesTa
                   <label className="text-[10px] font-black uppercase text-slate-400">Цена открытия (в бонусах)</label>
                   <input
                     type="number"
-                    value={editingCase.price_bonus}
+                    value={editingCase.price_bonus === null || editingCase.price_bonus === undefined ? "" : editingCase.price_bonus}
                     onChange={(e) => setEditingCase({ ...editingCase, price_bonus: parseFloat(e.target.value) || 0 })}
                     placeholder="100"
                     className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-orange-500"
@@ -284,7 +284,7 @@ export function CasesTab({ clubId, products, categories, serviceRules }: CasesTa
               <div className="space-y-1">
                 <label className="text-[10px] font-black uppercase text-slate-400">Описание</label>
                 <textarea
-                  value={editingCase.description}
+                  value={editingCase.description || ""}
                   onChange={(e) => setEditingCase({ ...editingCase, description: e.target.value })}
                   placeholder="Опишите, какие призы содержатся внутри..."
                   rows={2}
@@ -297,7 +297,7 @@ export function CasesTab({ clubId, products, categories, serviceRules }: CasesTa
                   <label className="text-[10px] font-black uppercase text-slate-400">Ссылка на изображение</label>
                   <input
                     type="text"
-                    value={editingCase.image_url}
+                    value={editingCase.image_url || ""}
                     onChange={(e) => setEditingCase({ ...editingCase, image_url: e.target.value })}
                     placeholder="https://example.com/case.png (или пусто для дефолта)"
                     className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-orange-500"
@@ -403,7 +403,7 @@ export function CasesTab({ clubId, products, categories, serviceRules }: CasesTa
                       <label className="text-[10px] font-black uppercase text-slate-400">Название приза</label>
                       <input
                         type="text"
-                        value={item.name}
+                        value={item.name || ""}
                         onChange={(e) => handleItemChange(index, "name", e.target.value)}
                         placeholder="Coca-Cola 0.5"
                         disabled={item.reward_type === "bar_item" || (item.reward_type === "club_service" && item.club_service_id !== null)}
@@ -415,7 +415,7 @@ export function CasesTab({ clubId, products, categories, serviceRules }: CasesTa
                     <div className="md:col-span-2 space-y-1">
                       <label className="text-[10px] font-black uppercase text-slate-400">Тип награды</label>
                       <select
-                        value={item.reward_type}
+                        value={item.reward_type || ""}
                         onChange={(e) => {
                           const val = e.target.value;
                           handleItemChange(index, "reward_type", val);
@@ -429,8 +429,8 @@ export function CasesTab({ clubId, products, categories, serviceRules }: CasesTa
                       >
                         <option value="bonus_limitless">Безлимитный вывод (₽)</option>
                         <option value="bonus_standard">Бонусы (с лимитом) (₽)</option>
-                        <option value="bar_item">Товар из Бара (определенный)</option>
-                        <option value="bar_category">Случайный товар из категории</option>
+                        {/* <option value="bar_item">Товар из Бара (определенный)</option>
+                        <option value="bar_category">Случайный товар из категории</option> */}
                         <option value="club_service">Услуга</option>
                         <option value="withdraw_boost">Буст процента вывода (%)</option>
                         <option value="bp_xp">Опыт (XP)</option>
@@ -533,7 +533,7 @@ export function CasesTab({ clubId, products, categories, serviceRules }: CasesTa
                         </label>
                         <input
                           type="number"
-                          value={item.reward_value}
+                          value={item.reward_value === null || item.reward_value === undefined ? "" : item.reward_value}
                           onChange={(e) => handleItemChange(index, "reward_value", parseFloat(e.target.value) || 0)}
                           placeholder="Ценность"
                           className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500"
@@ -551,7 +551,7 @@ export function CasesTab({ clubId, products, categories, serviceRules }: CasesTa
                       </label>
                       <input
                         type="number"
-                        value={item.weight}
+                        value={item.weight === null || item.weight === undefined ? "" : item.weight}
                         onChange={(e) => handleItemChange(index, "weight", parseInt(e.target.value) || 0)}
                         placeholder="100"
                         className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500"

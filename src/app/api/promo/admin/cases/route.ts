@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         `UPDATE promo_cases 
          SET name = $1, description = $2, price_bonus = $3, rtp = $4, image_url = $5, is_active = $6, updated_at = NOW()
          WHERE id = $7 AND club_id = $8`,
-        [name, parseFloat(price_bonus), parseFloat(rtp), image_url, is_active, caseId, clubId]
+        [name, description, parseFloat(price_bonus), parseFloat(rtp), image_url, is_active, caseId, clubId]
       );
     } else {
       const insertCaseRes = await client.query(

@@ -127,7 +127,7 @@ export async function POST(request: Request) {
 
       // Filter prizes specifically for this level tier
       let prizes = prizesResult.rows.filter(
-        (p) => p.target_level === playerLevel,
+        (p) => (p.target_level || 1) === playerLevel,
       );
 
       if (gameType === "dice") {
@@ -270,6 +270,15 @@ export async function POST(request: Request) {
       } else if (wonPrize.type === "virtual") {
         await client.query(
           `UPDATE promo_player_balances SET bonus_balance = COALESCE(bonus_balance, 0) + $1 WHERE player_id = $2 AND club_id = $3`,
+          [wonPrize.value, playerId, activeClubId],
+        );
+      } else if (wonPrize.type === "bonus_limitless") {
+        await client.query(
+          `UPDATE promo_player_balances 
+           SET bonus_balance = COALESCE(bonus_balance, 0) + $1,
+               extra_withdraw_limit = COALESCE(extra_withdraw_limit, 0) + $1,
+               updated_at = NOW()
+           WHERE player_id = $2 AND club_id = $3`,
           [wonPrize.value, playerId, activeClubId],
         );
       } else if (wonPrize.type === "attempt") {

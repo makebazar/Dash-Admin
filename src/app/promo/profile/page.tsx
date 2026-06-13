@@ -460,6 +460,16 @@ export default function PromoProfile() {
                           {item.reward_type === "custom" && "Приз"}
                           {item.reward_type === "club_time" && "Игровое время"}
                         </p>
+                        {item.reward_type === "bonus_limitless" && (
+                          <p className="text-[8px] text-orange-400 font-bold tracking-wide mt-1 leading-normal max-w-[220px]">
+                            💡 Вывод без ограничений (даже если исчерпан месячный лимит)
+                          </p>
+                        )}
+                        {item.reward_type === "withdraw_boost" && (
+                          <p className="text-[8px] text-yellow-400 font-bold tracking-wide mt-1 leading-normal max-w-[220px]">
+                            💡 Буст к лимиту (начисляется автоматически при следующем пополнении)
+                          </p>
+                        )}
                       </div>
 
                       <span

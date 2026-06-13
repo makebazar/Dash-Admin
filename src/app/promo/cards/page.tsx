@@ -446,7 +446,7 @@ export default function LuckyCardsGame() {
       if (
         isActualWin &&
         !isEmptyPrize &&
-        serverResult.prize.type === "virtual"
+        (serverResult.prize.type === "virtual" || serverResult.prize.type === "bonus_limitless")
       ) {
         setBonusBalance((prev) => prev + parseFloat(serverResult.prize.value));
       }

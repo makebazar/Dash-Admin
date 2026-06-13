@@ -575,7 +575,7 @@ export default function BowlPhysicsDice() {
               sub: data.prize.name,
               color: "text-orange-500",
             });
-            if (data.prize.type === "virtual")
+            if (data.prize.type === "virtual" || data.prize.type === "bonus_limitless")
               setBonusBalance((prev) => prev + parseFloat(data.prize.value));
             else if (data.prize.type === "attempt")
               setTickets((prev) => prev + parseInt(data.prize.value));

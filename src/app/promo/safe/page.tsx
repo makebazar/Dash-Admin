@@ -188,7 +188,7 @@ export default function DeepDiveSafeDemo() {
           setWonPrize(data.prize);
 
           // Update counters instantly for the animation
-          if (data.prize.type === "virtual") {
+          if (data.prize.type === "virtual" || data.prize.type === "bonus_limitless") {
             setBonusBalance((prev) => prev + parseFloat(data.prize.value));
           } else if (data.prize.type === "attempt") {
             setTicketsCount(
@@ -406,7 +406,7 @@ export default function DeepDiveSafeDemo() {
                 >
                   {wonPrize?.type === "attempt"
                     ? "🎟️"
-                    : wonPrize?.type === "virtual"
+                    : wonPrize?.type === "virtual" || wonPrize?.type === "bonus_limitless"
                       ? "💎"
                       : wonPrize?.type === "bonus"
                         ? "⚡"
@@ -425,7 +425,7 @@ export default function DeepDiveSafeDemo() {
                     +{wonPrize.value}{" "}
                     {wonPrize.type === "bonus"
                       ? "XP"
-                      : wonPrize.type === "virtual"
+                      : wonPrize.type === "virtual" || wonPrize.type === "bonus_limitless"
                         ? "₽"
                         : "шт"}
                   </div>
