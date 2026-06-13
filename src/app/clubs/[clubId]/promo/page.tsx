@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   ShoppingCart,
   Users,
+  Package,
 } from "lucide-react";
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -34,6 +35,7 @@ import { ServicesTab } from "@/app/clubs/[clubId]/promo/_components/ServicesTab"
 import { AccrualTab } from "@/app/clubs/[clubId]/promo/_components/AccrualTab";
 import { BarTab } from "@/app/clubs/[clubId]/promo/_components/BarTab";
 import { ReferralsTab } from "@/app/clubs/[clubId]/promo/_components/ReferralsTab";
+import { CasesTab } from "@/app/clubs/[clubId]/promo/_components/CasesTab";
 import {
   GamesTab,
   type Prize,
@@ -60,6 +62,7 @@ export default function PromotionsPage() {
     | "battlepass"
     | "accrual"
     | "referrals"
+    | "cases"
   >("queue");
 
   const [settings, setSettings] = useState<any>(null);
@@ -257,6 +260,7 @@ export default function PromotionsPage() {
               { id: "games", label: "Игры", icon: Gamepad2, color: "indigo" },
               { id: "levels", label: "Уровни", icon: Target, color: "purple" },
               { id: "quests", label: "Квесты", icon: Plus, color: "pink" },
+              { id: "cases", label: "Кейсы", icon: Package, color: "orange" },
               {
                 id: "battlepass",
                 label: "Battle Pass",
@@ -368,6 +372,9 @@ export default function PromotionsPage() {
               settings={settings}
               saveSettings={saveSettings}
             />
+          )}
+          {activeTab === "cases" && (
+            <CasesTab clubId={clubId as string} products={products} serviceRules={serviceRules} categories={categories} />
           )}
           {activeTab === "verification" && (
             <VerificationTab clubId={clubId as string} />

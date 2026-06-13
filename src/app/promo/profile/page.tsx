@@ -26,6 +26,7 @@ import {
   Clock,
   Smartphone,
   Download,
+  Package,
 } from "lucide-react";
 import Link from "next/link";
 import { getPhoneDisplay } from "@/lib/phone-utils";
@@ -40,6 +41,10 @@ export default function PromoProfile() {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState("");
   const router = useRouter();
+
+  // Inventory states
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
 
   // Referral states
   const [referralData, setReferralData] = useState<any>(null);
@@ -100,10 +105,13 @@ export default function PromoProfile() {
 
   const fetchData = async () => {
     try {
-      const [playerRes, clubsRes, referralsRes] = await Promise.all([
+      const [playerRes, clubsRes, referralsRes, inventoryRes] = await Promise.all([
         fetch("/api/promo/player"),
         fetch("/api/promo/player/clubs"),
         fetch("/api/promo/player/referrals").then((res) =>
+          res.ok ? res.json() : null,
+        ),
+        fetch("/api/promo/inventory").then((res) =>
           res.ok ? res.json() : null,
         ),
       ]);
@@ -120,6 +128,9 @@ export default function PromoProfile() {
       setClubs(clubsData.clubs || []);
       if (referralsRes) {
         setReferralData(referralsRes);
+      }
+      if (inventoryRes) {
+        setInventory(inventoryRes.inventory || []);
       }
     } catch (err) {
       console.error("Failed to fetch profile data", err);
@@ -229,6 +240,26 @@ export default function PromoProfile() {
       }
     } catch (err) {
       console.error("Failed to switch club", err);
+    }
+  };
+
+  const handleUseItem = async (inventoryId: string) => {
+    try {
+      setActivatingId(inventoryId);
+      const res = await fetch("/api/promo/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inventoryId }),
+      });
+      if (res.ok) {
+        await fetchData();
+      } else {
+        alert("Не удалось активировать предмет");
+      }
+    } catch (err) {
+      console.error("Failed to activate item:", err);
+    } finally {
+      setActivatingId(null);
     }
   };
 
@@ -374,6 +405,106 @@ export default function PromoProfile() {
             </div>
           </div>
         )}
+        {/* Inventory Section */}
+        <div className="mb-10 bg-[#151515] border border-white/5 rounded-[2.5rem] p-6 shadow-2xl">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center">
+              <Package className="w-5 h-5 text-orange-500" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black uppercase italic tracking-tight text-white">
+                Мой <span className="text-orange-500">Инвентарь</span>
+              </h3>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">
+                Выигранные призы и бонусы
+              </p>
+            </div>
+          </div>
+
+          {inventory.length === 0 ? (
+            <div className="bg-black/20 border border-white/5 rounded-2xl p-6 text-center text-gray-500 text-xs font-bold uppercase tracking-wider">
+              Ваш инвентарь пока пуст. Открывайте кейсы в разделе «Кейсы», чтобы выиграть призы!
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1 scrollbar-thin">
+              {inventory.map((item) => {
+                const isAcquired = item.status === "acquired";
+                const isActivated = item.status === "activated";
+                const isClaimed = item.status === "claimed";
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`bg-black/30 border rounded-2xl p-4 flex flex-col gap-3 transition ${
+                      item.is_rare ? "border-orange-500/20" : "border-white/5"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="text-xs font-black uppercase tracking-wide text-white flex items-center gap-1.5">
+                          {item.name}
+                          {item.is_rare && (
+                            <span className="text-[7px] font-black bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                              Редкий
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">
+                          {item.reward_type === "bonus_limitless" && "Безлимитные бонусы"}
+                          {item.reward_type === "bonus_standard" && "Стандартные бонусы"}
+                          {(item.reward_type === "bar_item" || item.reward_type === "bar_category") && "Товар Бара"}
+                          {item.reward_type === "club_service" && "Услуга клуба"}
+                          {(item.reward_type === "withdraw_boost" || item.reward_type === "xp_boost") && "Буст лимита вывода"}
+                          {item.reward_type === "bp_xp" && "Опыт"}
+                          {item.reward_type === "ticket" && "Билет"}
+                          {item.reward_type === "custom" && "Приз"}
+                          {item.reward_type === "club_time" && "Игровое время"}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                          isAcquired
+                            ? "bg-orange-500/10 text-orange-400 border-orange-500/20"
+                            : isActivated
+                              ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        }`}
+                      >
+                        {isAcquired && "В инвентаре"}
+                        {isActivated && "Ожидает выдачи"}
+                        {isClaimed && "Использовано"}
+                      </span>
+                    </div>
+
+                    {isAcquired && (
+                      <button
+                        onClick={() => handleUseItem(item.id)}
+                        disabled={activatingId === item.id}
+                        className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-black uppercase italic text-[10px] tracking-widest py-2.5 rounded-xl transition active:scale-95 flex items-center justify-center gap-1"
+                      >
+                        {activatingId === item.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          "Использовать / Активировать"
+                        )}
+                      </button>
+                    )}
+
+                    {isActivated && (
+                      <div className="bg-yellow-500/5 border border-yellow-500/10 rounded-xl p-3 text-[10px] text-yellow-400 font-bold uppercase tracking-wider leading-relaxed text-center space-y-1">
+                        <p>Покажите этот экран администратору на кассе</p>
+                        <p className="text-[8px] text-gray-500 font-mono tracking-normal not-italic">
+                          Код приза: {item.id.slice(0, 8).toUpperCase()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Referral Program */}
         {referralData && (

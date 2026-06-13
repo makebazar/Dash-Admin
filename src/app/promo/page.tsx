@@ -899,18 +899,13 @@ export default function PromoLobby() {
             {/* Loyalty Programs Section */}
             {player && getActivePrograms(player.settings).length > 0 && (
               <div className="mb-12">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center">
-                    <Award className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black uppercase italic tracking-tight">
-                      Программы лояльности
-                    </h3>
-                    <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mt-0.5">
-                      Копи посещения, пакеты и получай ценные подарки на кассе
-                    </p>
-                  </div>
+                <div className="mb-6">
+                  <h3 className="text-xl font-black uppercase italic tracking-tight">
+                    Программы лояльности
+                  </h3>
+                  <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mt-0.5">
+                    Копи посещения, пакеты и получай ценные подарки в клубе
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1102,7 +1097,7 @@ export default function PromoLobby() {
                                 className="w-full py-2.5 bg-white/10 text-gray-400 rounded-xl font-black uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 border border-white/5"
                               >
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                Ожидает на кассе
+                                Ожидает выдачи в клубе
                               </button>
                             ) : (
                               <button
@@ -1137,9 +1132,9 @@ export default function PromoLobby() {
                   <div className="mt-6 space-y-3">
                     <div className="flex items-center gap-2">
                       <Gift className="w-4 h-4 text-amber-400" />
-                      <h4 className="text-xs font-black uppercase tracking-widest text-amber-400">
-                        Ваши призы ждут на кассе
-                      </h4>
+                    <h4 className="text-xs font-black uppercase tracking-widest text-amber-400">
+                      Ваши призы ждут в клубе
+                    </h4>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {player.packageProgress.pendingPrizes.map((prize: any) => (

@@ -10,12 +10,10 @@ import {
   Store,
   Zap,
   Gift,
-  Gamepad2,
-  User,
-  Wallet,
-  ShoppingCart,
 } from "lucide-react";
 import Link from "next/link";
+import { PromoHeader } from "../components/PromoHeader";
+import { BottomNav } from "../components/BottomNav";
 
 export default function AccrualsPage() {
   const [loading, setLoading] = useState(true);
@@ -61,17 +59,24 @@ export default function AccrualsPage() {
   const settings = player?.settings || {};
   const accrualRules = settings.accrual_rules || [];
   const barAccrualRules = settings.bar_accrual_rules || [];
-  const totalReceived = history.reduce((acc, curr) => acc + curr.count, 0);
+  const totalReceived = history.reduce((acc: number, curr: any) => acc + curr.count, 0);
+  const playerGroupId = player?.limitGroupId || null;
+  const limitGroups: any[] = settings.limit_groups || [];
+  const playerGroup = playerGroupId ? limitGroups.find((g: any) => g.id === playerGroupId) : null;
+
+  // Returns the effective amount for a rule respecting the player's group
+  const getRuleAmount = (rule: any): { amount: number; isGroupOverride: boolean } => {
+    if (playerGroupId && rule.group_amounts && rule.group_amounts[playerGroupId] !== undefined) {
+      return { amount: parseFloat(rule.group_amounts[playerGroupId]) || 0, isGroupOverride: true };
+    }
+    return { amount: parseFloat(rule.amount) || 0, isGroupOverride: false };
+  };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white p-6 pb-32 font-sans">
-      <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-10">
-          <h1 className="text-2xl font-black uppercase italic tracking-tight">
-            История <span className="text-orange-500">Билетов</span>
-          </h1>
-        </div>
+    <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-orange-500/30 overflow-x-hidden">
+      <PromoHeader title="История билетов" />
+
+      <main className="max-w-md mx-auto p-6 pb-32">
 
         {/* Balance Card (Styled like Profile) */}
         <motion.div
@@ -118,6 +123,22 @@ export default function AccrualsPage() {
           </h3>
         </div>
 
+        {!playerGroup && (
+          <div className="bg-[#151515] border border-orange-500/20 rounded-[2rem] p-6 mb-6 flex items-start gap-4 shadow-[0_10px_30px_rgba(249,115,22,0.05)]">
+            <div className="w-10 h-10 bg-orange-500/10 rounded-2xl flex items-center justify-center text-orange-500 shrink-0">
+              <Gift className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-extrabold uppercase italic text-xs text-orange-500 tracking-wider">
+                Особое предложение
+              </div>
+              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wide mt-1 leading-relaxed">
+                Есть особое предложение, подробности узнавай у администратора на стойке.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3 mb-12">
           {/* Welcome Bonus */}
           {settings.welcome_bonus_tickets > 0 && (
@@ -141,29 +162,41 @@ export default function AccrualsPage() {
 
           {/* Top-up Rules */}
           <div className="bg-[#151515] border border-white/5 rounded-[2rem] overflow-hidden">
-            <div className="bg-white/5 px-6 py-3 flex items-center gap-2">
-              <Zap className="w-3 h-3 text-orange-500" />
-              <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                Пополнение баланса
+            <div className="bg-white/5 px-6 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className="w-3 h-3 text-orange-500" />
+                <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                  Пополнение баланса
+                </div>
               </div>
             </div>
             <div className="p-2 space-y-1">
               {accrualRules.length > 0 ? (
-                accrualRules.map((rule: any, idx: number) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-4 hover:bg-white/5 rounded-2xl transition-colors"
-                  >
-                    <div className="text-sm font-bold text-gray-300">
-                      {rule.type === "threshold"
-                        ? `От ${rule.amount} ₽`
-                        : `Каждые ${rule.amount} ₽`}
+                accrualRules.map((rule: any, idx: number) => {
+                  const { amount, isGroupOverride } = getRuleAmount(rule);
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-4 hover:bg-white/5 rounded-2xl transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-bold text-gray-300">
+                          {rule.type === "threshold"
+                            ? `От ${amount.toLocaleString("ru-RU")} ₽`
+                            : `Каждые ${amount.toLocaleString("ru-RU")} ₽`}
+                        </div>
+                        {isGroupOverride && (
+                          <span className="text-[8px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">
+                            {playerGroup?.name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm font-black text-orange-500">
+                        +{rule.tickets} 🎟
+                      </div>
                     </div>
-                    <div className="text-sm font-black text-orange-500">
-                      +{rule.tickets} 🎟
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="flex items-center justify-between p-4 hover:bg-white/5 rounded-2xl transition-colors">
                   <div className="text-sm font-bold text-gray-300">
@@ -190,21 +223,31 @@ export default function AccrualsPage() {
               </div>
               <div className="p-2 space-y-1">
                 {barAccrualRules.length > 0 ? (
-                  barAccrualRules.map((rule: any, idx: number) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-4 hover:bg-white/5 rounded-2xl transition-colors"
-                    >
-                      <div className="text-sm font-bold text-gray-300">
-                        {rule.type === "threshold"
-                          ? `От ${rule.amount} ₽`
-                          : `Каждые ${rule.amount} ₽`}
+                  barAccrualRules.map((rule: any, idx: number) => {
+                    const { amount, isGroupOverride } = getRuleAmount(rule);
+                    return (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-4 hover:bg-white/5 rounded-2xl transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-bold text-gray-300">
+                            {rule.type === "threshold"
+                              ? `От ${amount.toLocaleString("ru-RU")} ₽`
+                              : `Каждые ${amount.toLocaleString("ru-RU")} ₽`}
+                          </div>
+                          {isGroupOverride && (
+                            <span className="text-[8px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">
+                              {playerGroup?.name}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm font-black text-blue-500">
+                          +{rule.tickets} 🎟
+                        </div>
                       </div>
-                      <div className="text-sm font-black text-blue-500">
-                        +{rule.tickets} 🎟
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="flex items-center justify-between p-4 hover:bg-white/5 rounded-2xl transition-colors text-gray-500">
                     <div className="text-sm font-bold italic">
@@ -297,38 +340,9 @@ export default function AccrualsPage() {
             ))
           )}
         </div>
-      </div>
+      </main>
 
-      {/* Sticky Bottom Navigation */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl border border-white/10 rounded-full px-8 py-4 flex items-center gap-8 sm:gap-10 shadow-2xl z-50">
-        <Link
-          href="/promo"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <Gamepad2 className="w-6 h-6" />
-        </Link>
-        <Link
-          href="/promo?tab=shop"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <ShoppingCart className="w-6 h-6" />
-        </Link>
-        <button className="text-orange-500">
-          <Ticket className="w-6 h-6" />
-        </button>
-        <Link
-          href="/promo/withdraw"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <Wallet className="w-6 h-6" />
-        </Link>
-        <Link
-          href="/promo/profile"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <User className="w-6 h-6" />
-        </Link>
-      </div>
+      <BottomNav />
     </div>
   );
 }

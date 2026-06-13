@@ -19,6 +19,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import { PromoHeader } from "../components/PromoHeader";
+import { BottomNav } from "../components/BottomNav";
 
 /**
  * Resolves the effective amount threshold for a step, applying group override if available.
@@ -254,17 +256,10 @@ export default function PromoWithdraw() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white p-6 pb-32 font-sans selection:bg-yellow-500/30">
-      <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="flex flex-col mb-10">
-          <h1 className="text-2xl font-black uppercase italic tracking-tight mb-2">
-            Зачисление <span className="text-yellow-500">Бонусов</span>
-          </h1>
-          <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">
-            Переведи бонусы на клубный аккаунт
-          </p>
-        </div>
+    <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-yellow-500/30 overflow-x-hidden">
+      <PromoHeader title="Вывод бонусов" />
+
+      <main className="max-w-md mx-auto p-6 pb-32">
 
         {/* Balance Card */}
         <div className="bg-[#151515] border border-white/5 rounded-[2.5rem] p-8 mb-8 shadow-2xl relative overflow-hidden group">
@@ -360,7 +355,7 @@ export default function PromoWithdraw() {
                   </div>
                   {player?.hasPremiumBp ? (
                     <span className="text-[10px] font-black uppercase bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded-xl border border-indigo-500/20">
-                      🔥 BP {limitPercent}%
+                      {limitPercent}%
                     </span>
                   ) : (
                     <span className="text-[10px] font-black uppercase bg-yellow-500/10 text-yellow-500 px-2 py-1 rounded-xl border border-yellow-500/20">
@@ -701,38 +696,9 @@ export default function PromoWithdraw() {
             )}
           </div>
         </section>
-      </div>
+      </main>
 
-      {/* Bottom Nav Simulation */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl border border-white/10 rounded-full px-8 py-4 flex items-center gap-8 sm:gap-10 shadow-2xl z-50">
-        <Link
-          href="/promo"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <Gamepad2 className="w-6 h-6" />
-        </Link>
-        <Link
-          href="/promo?tab=shop"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <ShoppingCart className="w-6 h-6" />
-        </Link>
-        <Link
-          href="/promo/accruals"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <Ticket className="w-6 h-6" />
-        </Link>
-        <button className="text-yellow-500">
-          <Wallet className="w-6 h-6" />
-        </button>
-        <Link
-          href="/promo/profile"
-          className="text-gray-500 hover:text-white transition-colors"
-        >
-          <User className="w-6 h-6" />
-        </Link>
-      </div>
+      <BottomNav />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   AlertCircle,
   Loader2,
   TrendingUp,
+  Info,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -71,7 +72,8 @@ export default function BattlePassPage() {
     );
   }
 
-  const { season, progress, currentLevel, allTiers, nextTier } = data;
+  const { season, progress, currentLevel, allTiers, nextTier, settings } = data;
+  const xpPerRub = settings?.bp_xp_per_rub ?? 1;
   const claimedRewards = progress.claimedRewards || [];
   const progressPercent = nextTier
     ? Math.min(100, (progress.xp / nextTier.xp_required) * 100)
@@ -165,6 +167,14 @@ export default function BattlePassPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Info Box: How to earn XP */}
+        <div className="mb-10 p-6 bg-[#121212] border border-white/5 rounded-[2rem] text-xs text-gray-400 leading-relaxed space-y-2">
+          <h4 className="font-black text-white uppercase tracking-wider text-xs leading-none">Как получать XP?</h4>
+          <p className="text-gray-400 leading-normal">
+            Опыт начисляется за <span className="text-amber-500 font-bold">пополнение баланса</span> в клубе (1 ₽ = {xpPerRub} XP), а также за выполнение ежедневных квестов и победы в играх. Накапливайте XP, повышайте уровень и открывайте ценные призы!
+          </p>
         </div>
 
         {/* Premium Upgrade Banner */}

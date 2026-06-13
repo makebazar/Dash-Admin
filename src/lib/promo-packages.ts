@@ -150,24 +150,17 @@ export async function issueRewards(
 
   // Free package — add to prize queue for cashier to issue
   if (rewards.free_package) {
-    const playerRes = await client.query(
-      `SELECT full_name, phone FROM players WHERE id = $1::uuid`,
-      [playerId]
-    );
-    const player = playerRes.rows[0];
     const freeQty = Math.max(1, rewards.free_package_quantity || 1);
     const freeQtySuffix = freeQty > 1 ? ` (x${freeQty})` : "";
 
     await client.query(
       `INSERT INTO promo_prize_queue (
-        club_id, player_id, player_name, player_phone,
-        prize_name, prize_type, loyalty_type, status, reward_value
-      ) VALUES ($1, $2::uuid, $3, $4, $5, 'free_package', $6, 'pending', $7)`,
+        club_id, player_id, 
+        custom_reward_name, prize_type, loyalty_type, status, reward_value
+      ) VALUES ($1, $2::uuid, $3, 'free_package', $4, 'pending', $5)`,
       [
         clubId,
         playerId,
-        player?.full_name || "Гость",
-        player?.phone || "",
         `${rewards.free_package_name || prizeName}${freeQtySuffix}`,
         program.id,
         freeQty,
@@ -209,22 +202,14 @@ export async function issueRewards(
     }
 
     if (barPrizeName) {
-      const playerRes = await client.query(
-        `SELECT full_name, phone FROM players WHERE id = $1::uuid`,
-        [playerId]
-      );
-      const player = playerRes.rows[0];
-
       await client.query(
         `INSERT INTO promo_prize_queue (
-          club_id, player_id, player_name, player_phone,
-          prize_name, prize_type, bar_product_id, deduct_inventory, loyalty_type, status, reward_value
-        ) VALUES ($1, $2::uuid, $3, $4, $5, 'bar_item', $6, $7, $8, 'pending', $9)`,
+          club_id, player_id, 
+          custom_reward_name, prize_type, bar_product_id, deduct_inventory, loyalty_type, status, reward_value
+        ) VALUES ($1, $2::uuid, $3, 'bar_item', $4, $5, $6, 'pending', $7)`,
         [
           clubId,
           playerId,
-          player?.full_name || "Гость",
-          player?.phone || "",
           barPrizeName,
           barProductId,
           barProductId !== null, // deduct only if we know the product

@@ -57,6 +57,7 @@ export async function GET(request: Request) {
           ? {
               enabled: data.promo_settings?.bp_enabled ?? true,
               price: data.promo_settings?.bp_price ?? 1000,
+              bp_xp_per_rub: data.promo_settings?.bp_xp_per_rub ?? 1,
             }
           : null;
 
@@ -140,10 +141,14 @@ export async function GET(request: Request) {
 
       // Fetch all pending prizes (including bar items) to show player
       const pendingPrizesRes = await client.query(
-        `SELECT id, prize_name, prize_type, created_at
-         FROM promo_prize_queue
-         WHERE player_id = $1 AND club_id = $2 AND status = 'pending'
-         ORDER BY created_at DESC`,
+        `SELECT q.id, 
+                COALESCE(p.name, q.custom_reward_name, 'Приз') as prize_name, 
+                q.prize_type, 
+                q.created_at
+         FROM promo_prize_queue q
+         LEFT JOIN promo_prizes p ON q.prize_id = p.id
+         WHERE q.player_id = $1 AND q.club_id = $2 AND q.status = 'pending'
+         ORDER BY q.created_at DESC`,
         [playerId, activeClubId]
       );
       const pendingPrizes = pendingPrizesRes.rows;

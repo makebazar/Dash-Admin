@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     // 1. Fetch details of the queue item first with row lock
     const itemRes = await client.query(
       `SELECT player_id, club_id, withdraw_amount, status, loyalty_type, reward_type, reward_value,
-              prize_type, bar_product_id, deduct_inventory
+              prize_type, bar_product_id, deduct_inventory, inventory_item_id
        FROM promo_prize_queue WHERE id = $1 FOR UPDATE`,
       [targetId]
     );
@@ -49,6 +49,25 @@ export async function POST(request: Request) {
        WHERE id = $3`,
        [status, userId, targetId]
     );
+
+    // Update linked inventory item status if exists
+    if (item.inventory_item_id) {
+      if (action === "claim") {
+        await client.query(
+          `UPDATE promo_player_inventory
+           SET status = 'claimed', claimed_at = NOW()
+           WHERE id = $1`,
+          [item.inventory_item_id]
+        );
+      } else if (action === "cancel") {
+        await client.query(
+          `UPDATE promo_player_inventory
+           SET status = 'acquired', activated_at = NULL
+           WHERE id = $1`,
+          [item.inventory_item_id]
+        );
+      }
+    }
 
     // 3. If claimed and it is a loyalty reward, deduct counters and apply rewards
     if (action === "claim" && item.loyalty_type) {
