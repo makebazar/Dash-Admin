@@ -1647,6 +1647,12 @@ export function EmployeeSalesWizard({
                             )}
                           </div>
 
+                          {item.prize_type === "club_service" && (
+                            <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-2xl text-[10px] leading-snug text-amber-500 font-semibold">
+                              ⚠️ <strong>Внимание:</strong> вы должны пополнить баланс игрока на сумму стоимости пакета (<strong>{parseFloat(item.reward_value || 0)} ₽</strong>) в биллинге и убедиться, что клиент купил этот пакет!
+                            </div>
+                          )}
+
                           <Button
                             onClick={() =>
                               handleClaimItem(item.id, item.prize_name)

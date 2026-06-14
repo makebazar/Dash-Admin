@@ -1007,9 +1007,10 @@ export async function getPromoQueue(clubId: string, userId: string) {
   await assertUserCanAccessClub(clubId, userId);
   const result = await query(
     `SELECT q.id, p.full_name as player_name, p.phone_number as player_phone,
-            COALESCE(pr.name, 'Вывод бонусов: ' || q.withdraw_amount || ' ₽') as prize_name,
-            COALESCE(pr.type, 'withdraw') as prize_type,
+            COALESCE(pr.name, q.custom_reward_name, 'Вывод бонусов: ' || q.withdraw_amount || ' ₽') as prize_name,
+            COALESCE(pr.type, q.prize_type, 'withdraw') as prize_type,
             q.withdraw_amount,
+            q.reward_value,
             q.status, q.created_at
      FROM promo_prize_queue q
      JOIN promo_players p ON q.player_id = p.id

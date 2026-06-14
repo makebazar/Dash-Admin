@@ -16,6 +16,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Fetch club settings to get targets & limits configuration
+    const clubResult = await query(
+      `SELECT promo_settings FROM clubs WHERE id = $1`,
+      [clubId],
+    );
+    const promoSettings = clubResult.rows[0]?.promo_settings || {};
+
     let whereClause = "";
     const params: any[] = [clubId];
 
@@ -56,6 +63,25 @@ export async function GET(request: Request) {
         COALESCE(b.total_xp, 0) as total_xp,
         COALESCE(b.bonus_balance, 0) as bonus_balance,
         b.limit_group_id,
+        COALESCE(b.extra_withdraw_limit, 0) as extra_withdraw_limit,
+        COALESCE((
+          SELECT SUM((result_data->>'amount')::numeric)
+          FROM promo_history
+          WHERE player_id = p.id AND club_id = $1 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)
+        ), 0) + COALESCE((
+          SELECT SUM(total_amount)
+          FROM shift_receipts
+          WHERE promo_player_id = p.id AND club_id = $1 AND payment_type IN ('cash', 'card', 'mixed') AND committed_at >= date_trunc('month', CURRENT_DATE)
+        ), 0) as monthly_topups,
+        COALESCE((
+          SELECT SUM(withdraw_amount)
+          FROM promo_prize_queue
+          WHERE player_id = p.id AND club_id = $1 AND status != 'canceled' AND created_at >= date_trunc('month', CURRENT_DATE)
+        ), 0) + COALESCE((
+          SELECT SUM((result_data->>'bonus_cost')::numeric)
+          FROM promo_history
+          WHERE player_id = p.id AND club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE' AND created_at >= date_trunc('month', CURRENT_DATE)
+        ), 0) as monthly_withdrawn,
         (SELECT COUNT(*)::int FROM promo_tickets t WHERE t.player_id = p.id AND t.club_id = $1 AND t.status = 'available' AND (t.expires_at IS NULL OR t.expires_at > NOW())) as tickets_count,
         COALESCE((
           SELECT COUNT(*)::int
@@ -130,7 +156,55 @@ export async function GET(request: Request) {
       params,
     );
 
-    return NextResponse.json({ players: result.rows, total });
+    // Calculate remaining limits in JS
+    const playersWithLimits = result.rows.map(row => {
+      let t1 = 1000;
+      let t2 = 3000;
+      let t3 = 5000;
+
+      const limit_group_id = row.limit_group_id;
+      if (limit_group_id && promoSettings.limit_groups && Array.isArray(promoSettings.limit_groups)) {
+        const group = promoSettings.limit_groups.find((g: any) => g.id === limit_group_id);
+        if (group) {
+          t1 = parseFloat(group.t1) || 0;
+          t2 = parseFloat(group.t2) || 0;
+          t3 = parseFloat(group.t3) || 0;
+        }
+      }
+
+      const monthlyTopups = parseFloat(row.monthly_topups || 0);
+
+      let basePercent = 30;
+      if (monthlyTopups > t3) {
+        basePercent = 90;
+      } else if (monthlyTopups > t2) {
+        basePercent = 70;
+      } else if (monthlyTopups > t1) {
+        basePercent = 50;
+      }
+
+      let bpBoost = 15;
+      if (promoSettings.withdraw_limit_percent_bp !== undefined && promoSettings.withdraw_limit_percent !== undefined) {
+        bpBoost = Math.max(0, parseFloat(promoSettings.withdraw_limit_percent_bp) - parseFloat(promoSettings.withdraw_limit_percent));
+      }
+      
+      const finalPercent = row.bp_is_premium ? Math.min(100, basePercent + bpBoost) : basePercent;
+
+      const extraLimit = parseFloat(row.extra_withdraw_limit || 0);
+      const monthlyWithdrawn = parseFloat(row.monthly_withdrawn || 0);
+
+      const allowedLimit = (monthlyTopups * (finalPercent / 100)) + extraLimit;
+      const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
+
+      return {
+        ...row,
+        allowed_withdraw_limit: allowedLimit,
+        remaining_withdraw_limit: remainingLimit,
+        withdraw_limit_enabled: promoSettings.withdraw_limit_enabled === true
+      };
+    });
+
+    return NextResponse.json({ players: playersWithLimits, total });
   } catch (error) {
     console.error("Fetch Players Error:", error);
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });

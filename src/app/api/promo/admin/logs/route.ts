@@ -44,6 +44,7 @@ export async function GET(request: Request) {
         p.full_name as player_name,
         p.phone_number as player_phone,
         h.game_type,
+        pr.value as prize_value,
         COALESCE(
           pr.name,
           CASE
@@ -66,6 +67,8 @@ export async function GET(request: Request) {
             WHEN h.game_type = 'BAR_BONUS_PURCHASE' THEN 'Покупка в баре: ' || COALESCE(h.result_data->>'bonus_cost', '0') || ' 🪙'
             WHEN h.game_type = 'WITHDRAW' THEN 'Вывод: ' || COALESCE(h.result_data->>'amount', '0') || ' ₽'
             WHEN h.game_type = 'QUEST_REWARD' THEN 'Награда за квест'
+            WHEN h.game_type = 'CASE_OPEN' THEN 'Кейс: ' || COALESCE(h.result_data->>'case_name', 'Без названия') || ' (Выпал: ' || COALESCE(h.result_data->>'won_item_name', '?') || ')'
+            WHEN h.game_type = 'CASE_REFUND' THEN 'Возврат за кейс: ' || COALESCE(h.result_data->>'case_name', 'Без названия')
             ELSE 'Проигрыш'
           END
         ) as prize_name,
@@ -80,6 +83,8 @@ export async function GET(request: Request) {
             WHEN h.game_type = 'BAR_BONUS_PURCHASE' THEN 'bar'
             WHEN h.game_type = 'WITHDRAW' THEN 'withdraw'
             WHEN h.game_type = 'QUEST_REWARD' THEN 'quest'
+            WHEN h.game_type = 'CASE_OPEN' THEN 'case'
+            WHEN h.game_type = 'CASE_REFUND' THEN 'refund'
             ELSE 'other'
           END
         ) as prize_type,
@@ -135,11 +140,59 @@ export async function GET(request: Request) {
       [clubId],
     );
 
+    let inventory: any[] = [];
+    let loyalty: any = null;
+    let quests: any[] = [];
+
+    if (playerId) {
+      // 1. Fetch player inventory
+      const invRes = await query(
+        `SELECT i.id, i.status, i.created_at, i.activated_at, i.claimed_at, i.bar_product_id,
+                COALESCE(p.name, ci.name) as name, 
+                ci.description, ci.reward_type, 
+                COALESCE(p.selling_price, ci.reward_value) as reward_value, 
+                ci.image_url, ci.is_rare,
+                q.id as queue_id, q.status as queue_status
+         FROM promo_player_inventory i
+         JOIN promo_case_items ci ON i.item_id = ci.id
+         LEFT JOIN warehouse_products p ON i.bar_product_id = p.id
+         LEFT JOIN promo_prize_queue q ON q.inventory_item_id = i.id
+         WHERE i.player_id = $1 AND i.club_id = $2
+         ORDER BY i.created_at DESC`,
+        [playerId, parseInt(clubId)]
+      );
+      inventory = invRes.rows;
+
+      // 2. Fetch loyalty progress
+      const loyaltyRes = await query(
+        `SELECT accumulated_packages, accumulated_visits, current_streak, last_visit_date, last_purchase_date
+         FROM promo_package_progress
+         WHERE player_id = $1 AND club_id = $2`,
+        [playerId, parseInt(clubId)]
+      );
+      loyalty = loyaltyRes.rows[0] || null;
+
+      // 3. Fetch player quests
+      const questsRes = await query(
+        `SELECT pq.id, pq.current_progress, pq.status, pq.expires_at, pq.completed_at, pq.verification_photo_url, pq.seat_number, pq.assigned_at,
+                q.title as quest_title, q.description as quest_description, q.target_value, q.reward_xp, q.reward_tickets, q.reward_bonus_balance
+         FROM promo_player_quests pq
+         JOIN promo_quests q ON pq.quest_id = q.id
+         WHERE pq.player_id = $1 AND pq.club_id = $2
+         ORDER BY pq.assigned_at DESC`,
+        [playerId, parseInt(clubId)]
+      );
+      quests = questsRes.rows;
+    }
+
     return NextResponse.json({
       success: true,
       issuanceLogs: issuanceLogs.rows,
       gameLogs: gameLogs.rows,
       stats: stats.rows[0],
+      inventory,
+      loyalty,
+      quests,
     });
   } catch (error) {
     console.error("Fetch Logs Error:", error);

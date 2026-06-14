@@ -490,9 +490,9 @@ export function EmployeePromoControlCard({
                         <div className="text-[11px] font-bold text-foreground truncate">
                           {p.full_name}{p.seat_number ? ` (ПК: ${p.seat_number})` : ""}
                         </div>
-                        {p.phone && (
+                        {(p.phone_number || p.phone) && (
                           <div className="text-[9px] text-muted-foreground font-medium mt-0.5">
-                            {normalizePhone(p.phone)}
+                            {normalizePhone(p.phone_number || p.phone)}
                           </div>
                         )}
                       </div>
@@ -548,9 +548,9 @@ export function EmployeePromoControlCard({
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                         {p.full_name}
                       </div>
-                      {p.phone && (
+                      {(p.phone_number || p.phone) && (
                         <div className="text-[9px] text-muted-foreground font-medium pl-3.5">
-                          {normalizePhone(p.phone)}
+                          {normalizePhone(p.phone_number || p.phone)}
                         </div>
                       )}
                     </button>
@@ -589,8 +589,13 @@ export function EmployeePromoControlCard({
                       <div className="font-bold text-xs text-orange-600 dark:text-orange-400 truncate">
                         {req.quest_title}
                       </div>
-                      <div className="text-[10px] font-bold text-foreground mt-0.5">
-                        {req.player_name || "Гость"}
+                      <div className="text-[10px] font-bold text-foreground mt-0.5 flex flex-wrap items-center gap-1.5">
+                        <span>{req.player_name || "Гость"}</span>
+                        {req.player_phone && (
+                          <span className="text-[9px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border/50">
+                            {normalizePhone(req.player_phone)}
+                          </span>
+                        )}
                       </div>
                       {req.seat_number && (
                         <div className="text-[9px] font-black uppercase text-orange-500 mt-1 flex items-center gap-1">
@@ -698,6 +703,12 @@ export function EmployeePromoControlCard({
                     </button>
                   )}
                 </div>
+
+                {item.prize_type === "club_service" && (
+                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-xl text-[9px] leading-snug text-amber-600 dark:text-amber-400 font-semibold">
+                    ⚠️ <strong>Внимание:</strong> вы должны пополнить баланс игрока на сумму стоимости пакета (<strong>{parseFloat(item.reward_value || 0)} ₽</strong>) в биллинге и убедиться, что клиент купил этот пакет!
+                  </div>
+                )}
 
                 <Button
                   onClick={() => handleClaimItem(item.id, item.prize_name)}

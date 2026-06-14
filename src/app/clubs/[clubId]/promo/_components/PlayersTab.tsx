@@ -48,11 +48,22 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
 
   // Detail view state
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
-  const [playerLogs, setPlayerLogs] = useState<{ issuance: any[]; games: any[] }>({
+  const [playerLogs, setPlayerLogs] = useState<{
+    issuance: any[];
+    games: any[];
+    inventory: any[];
+    loyalty: any;
+    quests: any[];
+  }>({
     issuance: [],
     games: [],
+    inventory: [],
+    loyalty: null,
+    quests: [],
   });
-  const [activeLogTab, setActiveLogTab] = useState<"games" | "tickets">("games");
+  const [activeLogTab, setActiveLogTab] = useState<
+    "games_tickets" | "games_bets" | "cases" | "transactions" | "tickets" | "inventory" | "quests"
+  >("games_tickets");
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
   // Common UI states
@@ -116,11 +127,41 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
       setPlayerLogs({
         issuance: data.issuanceLogs || [],
         games: data.gameLogs || [],
+        inventory: data.inventory || [],
+        loyalty: data.loyalty || null,
+        quests: data.quests || [],
       });
     } catch (e) {
       console.error("Fetch player logs error:", e);
     } finally {
       setIsLoadingLogs(false);
+    }
+  };
+
+  const handleRefundInventoryItem = async (inventoryId: string) => {
+    if (!confirm("Вы уверены, что хотите вернуть средства за этот предмет и отменить его выдачу?")) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/promo/admin/players/refund`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inventoryId, clubId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Средства успешно возвращены игроку! Сумма возврата: ${data.refundedAmount} ₽`);
+        if (selectedPlayer) {
+          fetchPlayerLogs(selectedPlayer.id);
+          fetchPlayers();
+          onRefresh();
+        }
+      } else {
+        alert("Ошибка при возврате средств: " + data.error);
+      }
+    } catch (e) {
+      console.error("Refund error:", e);
+      alert("Не удалось выполнить возврат средств.");
     }
   };
 
@@ -256,6 +297,26 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
     return pages;
   };
 
+  const getLogTypeRussian = (type: string) => {
+    switch (type?.toLowerCase()) {
+      case "mines": return "Мины";
+      case "rocket": return "Ракета";
+      case "dice": return "Кости";
+      case "safe": return "Сейф";
+      case "cards": return "Карты";
+      case "flappy": return "Флаппи";
+      case "topup": return "Пополнение";
+      case "service_award": return "Услуга";
+      case "bar_bonus_purchase": return "Покупка в баре";
+      case "withdraw": return "Вывод";
+      case "quest_reward": return "Квест";
+      case "case_open": return "Открытие кейса";
+      case "case_refund": return "Возврат за кейс";
+      case "wheel": return "Колесо фортуны";
+      default: return type || "Другое";
+    }
+  };
+
   // Helper to format log transaction details
   const getLogDetails = (log: any) => {
     const icon = (() => {
@@ -281,7 +342,34 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
     let sumText = "";
     let sumColor = "text-slate-400";
     
-    if (log.result_data) {
+    const prizeVal = log.prize_value ? parseFloat(log.prize_value) : 0;
+    if (prizeVal > 0) {
+      if (log.prize_type === "virtual") {
+        sumText = `+${Math.round(prizeVal)} ₽`;
+        sumColor = "text-emerald-500 font-extrabold";
+      } else if (log.prize_type === "bonus") {
+        sumText = `+${Math.round(prizeVal)} XP`;
+        sumColor = "text-indigo-500 font-extrabold";
+      } else if (log.prize_type === "attempt") {
+        sumText = `+${Math.round(prizeVal)} 🎟️`;
+        sumColor = "text-amber-500 font-extrabold";
+      } else {
+        sumText = `+${Math.round(prizeVal)}`;
+        sumColor = "text-slate-500 font-extrabold";
+      }
+    } else if (log.game_type === "SERVICE_AWARD") {
+      const tix = log.result_data?.tickets || 1;
+      sumText = `+${tix} 🎟️`;
+      sumColor = "text-amber-500 font-extrabold";
+    } else if (log.game_type === "QUEST_REWARD") {
+      const rewards = [];
+      if (log.result_data?.reward_bonus_balance) rewards.push(`+${Math.round(log.result_data.reward_bonus_balance)} ₽`);
+      if (log.result_data?.reward_tickets) rewards.push(`+${log.result_data.reward_tickets} 🎟️`);
+      if (log.result_data?.reward_xp) rewards.push(`+${log.result_data.reward_xp} XP`);
+      
+      sumText = rewards.join(" | ") || "Награда 🎁";
+      sumColor = "text-emerald-500 font-extrabold";
+    } else if (log.result_data) {
       const amt = parseFloat(log.result_data.amount || "0");
       if (amt !== 0) {
         sumText = amt > 0 ? `+${Math.round(amt)} ₽` : `${Math.round(amt)} ₽`;
@@ -289,6 +377,12 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
       } else if (log.result_data.bonus_cost) {
         sumText = `-${Math.round(log.result_data.bonus_cost)} 🪙`;
         sumColor = "text-amber-500 font-extrabold";
+      } else if (log.game_type === "CASE_OPEN" && log.result_data.cost) {
+        sumText = `-${Math.round(log.result_data.cost)} 🪙`;
+        sumColor = "text-amber-500 font-extrabold";
+      } else if (log.game_type === "CASE_REFUND" && log.result_data.amount) {
+        sumText = `+${Math.round(log.result_data.amount)} 🪙`;
+        sumColor = "text-emerald-500 font-extrabold";
       }
     }
 
@@ -471,6 +565,72 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
   // DEDICATED FULL-PAGE PLAYER PROFILE RENDER
   // ────────────────────────────────────────────────────────
   if (selectedPlayer) {
+    const gamesTicketsLogs = playerLogs.games.filter((log) => 
+      ["wheel", "safe", "dice", "cards", "flappy"].includes(log.game_type)
+    );
+
+    const gamesBetsLogs = playerLogs.games.filter((log) => 
+      ["mines", "rocket"].includes(log.game_type)
+    );
+
+    const casesLogs = playerLogs.games.filter((log) => 
+      ["CASE_OPEN", "CASE_REFUND"].includes(log.game_type)
+    );
+
+    const transactionsLogs = playerLogs.games.filter((log) => 
+      ["TOPUP", "SERVICE_AWARD", "BAR_BONUS_PURCHASE", "WITHDRAW", "QUEST_REWARD"].includes(log.game_type)
+    );
+
+    const renderGameLogsTable = (logs: any[], emptyMessage: string) => {
+      if (logs.length === 0) {
+        return (
+          <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
+            {emptyMessage}
+          </div>
+        );
+      }
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <th className="pb-4">Событие / Игра</th>
+                <th className="pb-4">Тип</th>
+                <th className="pb-4">Дата и время</th>
+                <th className="pb-4 text-right">Изменение баланса</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
+              {logs.map((log) => {
+                const details = getLogDetails(log);
+                return (
+                  <tr key={log.id} className="hover:bg-slate-50/40">
+                    <td className="py-4">
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/50">{details.icon}</span>
+                        <span className="font-extrabold uppercase text-slate-900 tracking-tight">{log.prize_name}</span>
+                      </div>
+                    </td>
+                    <td className="py-4">
+                      <span className="uppercase text-[10px] font-extrabold tracking-widest text-slate-400">
+                        {getLogTypeRussian(log.game_type)}
+                      </span>
+                    </td>
+                    <td className="py-4 text-slate-400 font-medium">
+                      {new Date(log.created_at).toLocaleString("ru-RU")}
+                    </td>
+                    <td className={cn("py-4 text-right text-sm", details.sumColor)}>
+                      {details.sumText || "0 ₽"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+    };
+
     return (
       <motion.div
         key="player-detail-page"
@@ -677,7 +837,7 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Финансовый Оборот</span>
               <CreditCard className="w-4 h-4 text-indigo-500" />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2 text-sm font-extrabold">
                 <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-2 text-center">
                   <p className="text-[8px] font-black uppercase text-emerald-600 tracking-wider mb-0.5">Пополнил</p>
@@ -687,6 +847,16 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                   <p className="text-[8px] font-black uppercase text-rose-500 tracking-wider mb-0.5">Списал</p>
                   <p className="text-rose-700 text-base font-black">-{Math.round(selectedPlayer.total_withdrawn || 0)} ₽</p>
                 </div>
+              </div>
+              <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-[9px] font-black uppercase text-slate-400 tracking-wide">
+                <span>Лимит вывода:</span>
+                {selectedPlayer.withdraw_limit_enabled ? (
+                  <span className="text-indigo-600 font-extrabold normal-case text-xs">
+                    {Math.round(selectedPlayer.remaining_withdraw_limit)} ₽ / {Math.round(selectedPlayer.allowed_withdraw_limit)} ₽
+                  </span>
+                ) : (
+                  <span className="text-slate-500 font-extrabold">Без лимита</span>
+                )}
               </div>
             </div>
           </div>
@@ -733,7 +903,7 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
 
         {/* Large Layout Activity logs table */}
         <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm p-6 md:p-8 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-5 gap-4">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between border-b border-slate-100 pb-5 gap-4">
             <div className="flex items-center gap-3">
               <History className="w-5 h-5 text-indigo-500" />
               <div>
@@ -744,28 +914,83 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
               </div>
             </div>
 
-            <div className="flex bg-slate-100 p-1 rounded-xl max-w-fit">
+            <div className="flex flex-wrap bg-slate-100 p-1.5 rounded-2xl gap-1 max-w-full">
               <button
-                onClick={() => setActiveLogTab("games")}
+                onClick={() => setActiveLogTab("games_tickets")}
                 className={cn(
-                  "px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
-                  activeLogTab === "games"
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                  activeLogTab === "games_tickets"
                     ? "bg-white text-indigo-600 shadow-sm"
                     : "text-slate-400 hover:text-slate-600"
                 )}
               >
-                Игры и Выплаты
+                Игры за билеты
+              </button>
+              <button
+                onClick={() => setActiveLogTab("games_bets")}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                  activeLogTab === "games_bets"
+                    ? "bg-white text-indigo-600 shadow-sm"
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                Игры-ставки
+              </button>
+              <button
+                onClick={() => setActiveLogTab("cases")}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                  activeLogTab === "cases"
+                    ? "bg-white text-indigo-600 shadow-sm"
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                Кейсы
+              </button>
+              <button
+                onClick={() => setActiveLogTab("transactions")}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                  activeLogTab === "transactions"
+                    ? "bg-white text-indigo-600 shadow-sm"
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                Транзакции
               </button>
               <button
                 onClick={() => setActiveLogTab("tickets")}
                 className={cn(
-                  "px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
                   activeLogTab === "tickets"
                     ? "bg-white text-indigo-600 shadow-sm"
                     : "text-slate-400 hover:text-slate-600"
                 )}
               >
                 История билетов
+              </button>
+              <button
+                onClick={() => setActiveLogTab("inventory")}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                  activeLogTab === "inventory"
+                    ? "bg-white text-indigo-600 shadow-sm"
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                Инвентарь ({playerLogs.inventory.length})
+              </button>
+              <button
+                onClick={() => setActiveLogTab("quests")}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                  activeLogTab === "quests"
+                    ? "bg-white text-indigo-600 shadow-sm"
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+              >
+                Квесты и Лояльность
               </button>
             </div>
           </div>
@@ -774,36 +999,59 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
             <div className="py-24 flex items-center justify-center">
               <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
             </div>
-          ) : activeLogTab === "games" ? (
+          ) : activeLogTab === "games_tickets" ? (
+            renderGameLogsTable(gamesTicketsLogs, "Записи об играх за билеты отсутствуют")
+          ) : activeLogTab === "games_bets" ? (
+            renderGameLogsTable(gamesBetsLogs, "Записи об играх-ставках отсутствуют")
+          ) : activeLogTab === "cases" ? (
             <div className="overflow-x-auto">
-              {playerLogs.games.length === 0 ? (
+              {casesLogs.length === 0 ? (
                 <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
-                  Записи об играх и выплатах отсутствуют
+                  Записи о кейсах отсутствуют
                 </div>
               ) : (
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <th className="pb-4">Событие / Игра</th>
+                      <th className="pb-4">Кейс</th>
+                      <th className="pb-4">Выпавший приз</th>
                       <th className="pb-4">Тип</th>
                       <th className="pb-4">Дата и время</th>
                       <th className="pb-4 text-right">Изменение баланса</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
-                    {playerLogs.games.map((log) => {
+                    {casesLogs.map((log) => {
                       const details = getLogDetails(log);
+                      const isRefund = log.game_type === "CASE_REFUND";
+                      const caseName = log.result_data?.case_name || "Кейс";
+                      const wonItem = log.result_data?.won_item_name || log.result_data?.item_name || "-";
+                      
                       return (
                         <tr key={log.id} className="hover:bg-slate-50/40">
                           <td className="py-4">
                             <div className="flex items-center gap-3">
-                              <span className="text-lg w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/50">{details.icon}</span>
-                              <span className="font-extrabold uppercase text-slate-900 tracking-tight">{log.prize_name}</span>
+                              <span className="text-lg w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/50">
+                                📦
+                              </span>
+                              <span className="font-extrabold uppercase text-slate-900 tracking-tight">
+                                {caseName}
+                              </span>
                             </div>
                           </td>
                           <td className="py-4">
-                            <span className="uppercase text-[10px] font-extrabold tracking-widest text-slate-400">
-                              {log.game_type}
+                            <span className="text-slate-700 font-extrabold">
+                              {wonItem}
+                            </span>
+                          </td>
+                          <td className="py-4">
+                            <span className={cn(
+                              "px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border",
+                              isRefund 
+                                ? "bg-slate-50 border-slate-200 text-slate-500" 
+                                : "bg-indigo-50 border-indigo-100 text-indigo-600"
+                            )}>
+                              {isRefund ? "Возврат" : "Открытие"}
                             </span>
                           </td>
                           <td className="py-4 text-slate-400 font-medium">
@@ -819,7 +1067,9 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                 </table>
               )}
             </div>
-          ) : (
+          ) : activeLogTab === "transactions" ? (
+            renderGameLogsTable(transactionsLogs, "Записи о транзакциях отсутствуют")
+          ) : activeLogTab === "tickets" ? (
             <div className="overflow-x-auto">
               {playerLogs.issuance.length === 0 ? (
                 <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
@@ -865,6 +1115,257 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                   </tbody>
                 </table>
               )}
+            </div>
+          ) : activeLogTab === "inventory" ? (
+            <div className="overflow-x-auto">
+              {playerLogs.inventory.length === 0 ? (
+                <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
+                  Инвентарь игрока пуст
+                </div>
+              ) : (
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      <th className="pb-4">Предмет</th>
+                      <th className="pb-4">Тип</th>
+                      <th className="pb-4">Статус</th>
+                      <th className="pb-4">Дата получения</th>
+                      <th className="pb-4 text-right">Действие</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
+                    {playerLogs.inventory.map((item) => {
+                      const isRare = item.is_rare;
+                      const canRefund = item.status === "pending" || item.status === "activated";
+                      
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/40">
+                          <td className="py-4">
+                            <div className="flex items-center gap-3">
+                              <span className={cn(
+                                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-xl border",
+                                isRare 
+                                  ? "bg-amber-50 border-amber-200 text-amber-500 animate-pulse" 
+                                  : "bg-slate-50 border-slate-200 text-slate-600"
+                              )}>
+                                {item.reward_type === "club_service" ? "⏱️" : "🍔"}
+                              </span>
+                              <div className="space-y-0.5">
+                                <span className={cn(
+                                  "font-black uppercase tracking-tight",
+                                  isRare ? "text-amber-600" : "text-slate-900"
+                                )}>
+                                  {item.name}
+                                </span>
+                                {item.description && (
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                    {item.description}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4">
+                            <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-slate-100 border border-slate-200 text-slate-600">
+                              {item.reward_type === "club_service" ? "Услуга" : "Товар из бара"}
+                            </span>
+                          </td>
+                          <td className="py-4">
+                            {item.status === "pending" && (
+                              <span className="px-2.5 py-1 bg-amber-50 border border-amber-100 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                В инвентаре
+                              </span>
+                            )}
+                            {item.status === "activated" && (
+                              <span className="px-2.5 py-1 bg-blue-50 border border-blue-100 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse">
+                                В очереди ({item.queue_status === "pending" ? "Ожидает" : item.queue_status})
+                              </span>
+                            )}
+                            {item.status === "claimed" && (
+                              <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                Выдан
+                              </span>
+                            )}
+                            {item.status === "refunded" && (
+                              <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-wider line-through">
+                                Возврат
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 text-slate-400 font-medium">
+                            {new Date(item.created_at).toLocaleString("ru-RU")}
+                          </td>
+                          <td className="py-4 text-right">
+                            {canRefund ? (
+                              <button
+                                onClick={() => handleRefundInventoryItem(item.id)}
+                                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-[0.98] shadow-sm shadow-rose-500/10"
+                              >
+                                Вернуть средства
+                              </button>
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                Недоступно
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Loyalty Progress Section */}
+              <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-6">
+                <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">
+                  Программа лояльности
+                </h4>
+                {playerLogs.loyalty ? (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-sm">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Куплено пакетов</p>
+                      <p className="text-slate-800 text-xl font-black mt-1">
+                        {playerLogs.loyalty.accumulated_packages || 0} шт
+                      </p>
+                      {playerLogs.loyalty.last_purchase_date && (
+                        <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">
+                          Последний: {new Date(playerLogs.loyalty.last_purchase_date).toLocaleDateString("ru-RU")}
+                        </p>
+                      )}
+                    </div>
+                    
+                    <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-sm">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Посещения клуба</p>
+                      <p className="text-slate-800 text-xl font-black mt-1">
+                        {playerLogs.loyalty.accumulated_visits || 0} раз
+                      </p>
+                      {playerLogs.loyalty.last_visit_date && (
+                        <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">
+                          Последнее: {new Date(playerLogs.loyalty.last_visit_date).toLocaleDateString("ru-RU")}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-sm">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Серия посещений</p>
+                      <p className="text-amber-600 text-xl font-black mt-1">
+                        🔥 {playerLogs.loyalty.current_streak || 0} дней
+                      </p>
+                      <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">
+                        Серия активна
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider py-4">
+                    Данные о лояльности отсутствуют (игрок еще не совершал визитов или покупок)
+                  </p>
+                )}
+              </div>
+
+              {/* Active and Past Quests Section */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">
+                  История и прогресс квестов
+                </h4>
+                {playerLogs.quests.length === 0 ? (
+                  <div className="text-center py-16 bg-slate-50/30 border border-slate-100 rounded-2xl text-slate-400 text-sm font-bold uppercase tracking-wider">
+                    Квесты не назначались
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          <th className="pb-4">Квест</th>
+                          <th className="pb-4">Прогресс</th>
+                          <th className="pb-4">Награды</th>
+                          <th className="pb-4">Статус</th>
+                          <th className="pb-4 text-right">Назначен / Выполнен</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
+                        {playerLogs.quests.map((quest) => {
+                          const isCompleted = quest.status === "completed";
+                          const isExpired = quest.status === "expired" || (quest.expires_at && new Date(quest.expires_at) < new Date() && quest.status === "active");
+                          const rewards = [];
+                          if (quest.reward_xp) rewards.push(`${quest.reward_xp} XP`);
+                          if (quest.reward_tickets) rewards.push(`🎟️ ${quest.reward_tickets}`);
+                          if (quest.reward_bonus_balance) rewards.push(`${quest.reward_bonus_balance} ₽`);
+
+                          return (
+                            <tr key={quest.id} className="hover:bg-slate-50/40">
+                              <td className="py-4">
+                                <div className="space-y-0.5">
+                                  <span className="font-extrabold uppercase text-slate-900 tracking-tight">
+                                    {quest.quest_title}
+                                  </span>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter max-w-[250px] truncate">
+                                    {quest.quest_description}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="py-4">
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-[10px] text-slate-400 font-extrabold">
+                                    <span>{quest.current_progress || 0} / {quest.target_value}</span>
+                                    <span>{Math.round(((quest.current_progress || 0) / quest.target_value) * 100)}%</span>
+                                  </div>
+                                  <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div 
+                                      className={cn(
+                                        "h-full rounded-full transition-all duration-500",
+                                        isCompleted ? "bg-emerald-500" : isExpired ? "bg-slate-300" : "bg-indigo-500"
+                                      )}
+                                      style={{ width: `${Math.min(100, ((quest.current_progress || 0) / quest.target_value) * 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4 text-slate-900 font-extrabold">
+                                {rewards.join(" | ") || "Нет награды"}
+                              </td>
+                              <td className="py-4">
+                                {quest.status === "active" && !isExpired && (
+                                  <span className="px-2.5 py-1 bg-blue-50 border border-blue-100 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse">
+                                    Активен
+                                  </span>
+                                )}
+                                {isCompleted && (
+                                  <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                    Выполнен
+                                  </span>
+                                )}
+                                {isExpired && (
+                                  <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                    Истек
+                                  </span>
+                                )}
+                                {quest.status === "pending_verification" && (
+                                  <span className="px-2.5 py-1 bg-amber-50 border border-amber-100 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse">
+                                    Проверка ({quest.seat_number ? `ПК ${quest.seat_number}` : "ПК не указан"})
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-4 text-right text-slate-400 font-medium">
+                                <div>{new Date(quest.assigned_at).toLocaleDateString("ru-RU")}</div>
+                                {quest.completed_at && (
+                                  <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                                    Вып: {new Date(quest.completed_at).toLocaleDateString("ru-RU")}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1048,6 +1549,9 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                     Баланс 🪙
                   </th>
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Лимит вывода
+                  </th>
+                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
                     Пополнил (₽)
                   </th>
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -1061,7 +1565,7 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
               <tbody className="divide-y divide-slate-50">
                 {localPlayers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-8 py-12 text-center text-sm font-bold text-slate-400">
+                    <td colSpan={7} className="px-8 py-12 text-center text-sm font-bold text-slate-400">
                       Игроки не найдены
                     </td>
                   </tr>
@@ -1112,6 +1616,23 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                         <div className="font-black text-emerald-600 italic text-lg flex items-center gap-1">
                           {Math.round(player.bonus_balance || 0)} <span className="text-sm font-bold text-emerald-500/80">₽</span>
                         </div>
+                      </td>
+                      <td className="px-8 py-5" onClick={(e) => e.stopPropagation()}>
+                        {player.withdraw_limit_enabled ? (
+                          <div className={cn(
+                            "font-black italic text-base",
+                            player.remaining_withdraw_limit > 0 ? "text-indigo-600" : "text-slate-400"
+                          )}>
+                            {Math.round(player.remaining_withdraw_limit)} <span className="text-xs font-bold">₽</span>
+                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tight not-italic mt-0.5">
+                              из {Math.round(player.allowed_withdraw_limit)} ₽
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                            Без лимита
+                          </span>
+                        )}
                       </td>
                       <td className="px-8 py-5">
                         <div className="font-black text-amber-600 italic text-base">
