@@ -218,6 +218,10 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
           totalXp: editingPlayer.total_xp,
           bonusBalance: editingPlayer.bonus_balance,
           ticketsCount: editingPlayer.tickets_count,
+          phoneNumber: editingPlayer.phone_number,
+          extraWithdrawLimit: editingPlayer.extra_withdraw_limit,
+          limitGroupId: editingPlayer.limit_group_id,
+          activeBoostPercent: editingPlayer.active_boost_percent,
         }),
       });
       if (res.ok) {
@@ -462,23 +466,42 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
             </button>
           </div>
 
-          <div className="p-8 space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                Имя игрока
-              </label>
-              <div className="relative">
-                <Edit2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                  Имя игрока
+                </label>
+                <div className="relative">
+                  <Edit2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={editingPlayer.full_name || ""}
+                    onChange={(e) =>
+                      setEditingPlayer({
+                        ...editingPlayer,
+                        full_name: e.target.value,
+                      })
+                    }
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-11 pr-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 transition-all outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                  Номер телефона
+                </label>
                 <input
                   type="text"
-                  value={editingPlayer.full_name || ""}
+                  value={editingPlayer.phone_number || ""}
                   onChange={(e) =>
                     setEditingPlayer({
                       ...editingPlayer,
-                      full_name: e.target.value,
+                      phone_number: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-11 pr-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 transition-all outline-none"
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 transition-all outline-none"
                 />
               </div>
             </div>
@@ -522,21 +545,77 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                Бонусный баланс (₽)
-              </label>
-              <input
-                type="number"
-                value={editingPlayer.bonus_balance}
-                onChange={(e) =>
-                  setEditingPlayer({
-                    ...editingPlayer,
-                    bonus_balance: parseFloat(e.target.value),
-                  })
-                }
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                  Бонусный баланс (₽)
+                </label>
+                <input
+                  type="number"
+                  value={editingPlayer.bonus_balance}
+                  onChange={(e) =>
+                    setEditingPlayer({
+                      ...editingPlayer,
+                      bonus_balance: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500/10 transition-all outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                  Лимит вывода (₽)
+                </label>
+                <input
+                  type="number"
+                  value={editingPlayer.extra_withdraw_limit || 0}
+                  onChange={(e) =>
+                    setEditingPlayer({
+                      ...editingPlayer,
+                      extra_withdraw_limit: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                  Буст опыта (%)
+                </label>
+                <input
+                  type="number"
+                  value={editingPlayer.active_boost_percent || 0}
+                  onChange={(e) =>
+                    setEditingPlayer({
+                      ...editingPlayer,
+                      active_boost_percent: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-indigo-500/10 transition-all outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+                  ID группы лимитов
+                </label>
+                <input
+                  type="number"
+                  value={editingPlayer.limit_group_id || ""}
+                  onChange={(e) =>
+                    setEditingPlayer({
+                      ...editingPlayer,
+                      limit_group_id: e.target.value ? parseInt(e.target.value) : "",
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 px-6 text-sm font-bold focus:bg-white focus:ring-2 focus:ring-slate-500/10 transition-all outline-none"
+                  placeholder="Нет группы"
+                />
+              </div>
             </div>
 
             <div className="pt-4">

@@ -64,6 +64,7 @@ export async function GET(request: Request) {
         COALESCE(b.bonus_balance, 0) as bonus_balance,
         b.limit_group_id,
         COALESCE(b.extra_withdraw_limit, 0) as extra_withdraw_limit,
+        COALESCE(b.active_boost_percent, 0) as active_boost_percent,
         COALESCE((
           SELECT SUM((result_data->>'amount')::numeric)
           FROM promo_history
@@ -213,8 +214,18 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { playerId, clubId, totalXp, bonusBalance, fullName, ticketsCount } =
-      await request.json();
+    const {
+      playerId,
+      clubId,
+      totalXp,
+      bonusBalance,
+      fullName,
+      ticketsCount,
+      phoneNumber,
+      extraWithdrawLimit,
+      limitGroupId,
+      activeBoostPercent
+    } = await request.json();
 
     if (!clubId || !playerId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -232,20 +243,41 @@ export async function PATCH(request: Request) {
     try {
       await client.query("BEGIN");
 
-      // 1. Update Profile (Name)
-      if (fullName !== undefined) {
+      // 1. Update Profile (Name, Phone)
+      if (fullName !== undefined || phoneNumber !== undefined) {
         await client.query(
-          `UPDATE promo_players SET full_name = $1 WHERE id = $2`,
-          [fullName, playerId],
+          `UPDATE promo_players 
+           SET full_name = COALESCE($1, full_name), 
+               phone_number = COALESCE($2, phone_number),
+               updated_at = NOW() 
+           WHERE id = $3`,
+          [
+            fullName !== undefined ? fullName : null, 
+            phoneNumber !== undefined ? phoneNumber : null, 
+            playerId
+          ],
         );
       }
 
-      // 2. Update Balances (XP, Bonus)
+      // 2. Update Balances (XP, Bonus, Extra Limit, Limit Group, Boost)
       await client.query(
         `UPDATE promo_player_balances
-         SET total_xp = $1, bonus_balance = $2, updated_at = NOW()
-         WHERE player_id = $3 AND club_id = $4`,
-        [totalXp, bonusBalance, playerId, clubId],
+         SET total_xp = $1, 
+             bonus_balance = $2, 
+             extra_withdraw_limit = $3,
+             limit_group_id = $4,
+             active_boost_percent = $5,
+             updated_at = NOW()
+         WHERE player_id = $6 AND club_id = $7`,
+        [
+          totalXp,
+          bonusBalance,
+          extraWithdrawLimit !== undefined ? parseFloat(String(extraWithdrawLimit)) : 0,
+          limitGroupId !== undefined && limitGroupId !== "" ? parseInt(String(limitGroupId)) : null,
+          activeBoostPercent !== undefined ? parseFloat(String(activeBoostPercent)) : 0,
+          playerId,
+          clubId
+        ],
       );
 
       // 3. Update Tickets if provided
