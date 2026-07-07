@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
+import { verifySessionValue } from "@/lib/session";
 import { isSuperAdmin } from "@/lib/admin";
 import { resolveSubscriptionState } from "@/lib/subscriptions";
 import { hasColumn } from "@/lib/db-compat";
@@ -10,7 +11,8 @@ const LEGAL_ACCEPTANCE_VERSION = "2026-04-01";
 
 export async function GET() {
   try {
-    const userId = (await cookies()).get("session_user_id")?.value;
+    const signedCookie = (await cookies()).get("session_user_id")?.value;
+    const userId = signedCookie ? verifySessionValue(signedCookie) : null;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -42,17 +42,19 @@ export async function GET(
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
         // Fetch all tasks for this user in this month (assigned OR completed by them)
-        // Including tasks from "Free Pool" that they completed
+        // Excluding FREE_POOL equipment — no one is formally responsible for it
         const statsRes = await query(
             `SELECT 
                 COUNT(*) as total_tasks,
-                COUNT(*) FILTER (WHERE status = 'COMPLETED') as completed_tasks,
-                SUM(bonus_earned) FILTER (WHERE status = 'COMPLETED') as raw_bonus,
-                COUNT(*) FILTER (WHERE status = 'COMPLETED' AND applied_kpi_multiplier < 1) as late_tasks
-             FROM equipment_maintenance_tasks
+                COUNT(*) FILTER (WHERE mt.status = 'COMPLETED') as completed_tasks,
+                SUM(mt.bonus_earned) FILTER (WHERE mt.status = 'COMPLETED') as raw_bonus,
+                COUNT(*) FILTER (WHERE mt.status = 'COMPLETED' AND mt.applied_kpi_multiplier < 1) as late_tasks
+             FROM equipment_maintenance_tasks mt
+             JOIN equipment e ON mt.equipment_id = e.id
              WHERE 
-                (assigned_user_id = $1 OR completed_by = $1)
-                AND due_date >= $2 AND due_date < $3`,
+                (mt.assigned_user_id = $1 OR mt.completed_by = $1)
+                AND mt.due_date >= $2 AND mt.due_date < $3
+                AND e.assignment_mode != 'FREE_POOL'`,
             [userId, startOfMonth, nextMonth]
         );
 

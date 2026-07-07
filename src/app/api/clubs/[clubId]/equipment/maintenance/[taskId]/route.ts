@@ -334,6 +334,9 @@ export async function PATCH(
           const wasOverdue = overdueDaysAtCompletion > 0;
           const responsibleUserIdAtCompletion = task.effective_task_assigned_user_id || userId;
 
+          // FREE_POOL equipment: no one is responsible → no bonus, no penalty
+          const isFreePools = task.effective_assignment_mode === 'FREE_POOL';
+
           if (config?.enabled) {
             // Penalties removed as per request
             const multiplier = 1.0;
@@ -367,11 +370,11 @@ export async function PATCH(
           }
 
           updates.push(`overdue_days_at_completion = $${paramIndex}`);
-          values.push(overdueDaysAtCompletion);
+          values.push(isFreePools ? 0 : overdueDaysAtCompletion);
           paramIndex++;
 
           updates.push(`was_overdue = $${paramIndex}`);
-          values.push(wasOverdue);
+          values.push(isFreePools ? false : wasOverdue);
           paramIndex++;
 
           updates.push(`responsible_user_id_at_completion = $${paramIndex}`);

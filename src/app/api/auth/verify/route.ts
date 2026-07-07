@@ -3,6 +3,7 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcrypt';
 import { normalizePhone } from '@/lib/phone-utils';
+import { signSessionValue } from '@/lib/session';
 
 export async function POST(request: Request) {
     try {
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
             // If password setup is required, create session and return flag
             if (requiresPasswordSetup) {
                 const cookieStore = await cookies();
-                cookieStore.set('session_user_id', userId, {
+                cookieStore.set('session_user_id', signSessionValue(userId), {
                     httpOnly: true,
                     secure: false,
                     sameSite: 'lax',
@@ -109,7 +110,7 @@ export async function POST(request: Request) {
 
         // 3. Set Session Cookie (only if not requiresPasswordSetup)
         const cookieStore = await cookies();
-        cookieStore.set('session_user_id', userId, {
+        cookieStore.set('session_user_id', signSessionValue(userId), {
             httpOnly: true,
             secure: false,
             sameSite: 'lax',

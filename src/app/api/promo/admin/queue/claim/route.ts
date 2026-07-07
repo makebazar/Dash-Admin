@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 export async function POST(request: Request) {
   let client;
   try {
-    const { id, itemId, action } = await request.json();
+    const { id, itemId, action, customAmount } = await request.json();
     const targetId = id || itemId;
     const userId = (await cookies()).get("session_user_id")?.value;
 
@@ -35,6 +35,18 @@ export async function POST(request: Request) {
 
     const item = itemRes.rows[0];
 
+    // Check admin access to the club
+    try {
+      const { requireClubAccess } = await import("@/lib/club-api-access");
+      await requireClubAccess(String(item.club_id));
+    } catch (e: any) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        { error: e.message || "Forbidden" },
+        { status: e.status || 403 }
+      );
+    }
+
     if (item.status !== "pending") {
       await client.query("ROLLBACK");
       return NextResponse.json({ error: "Item is not in pending status" }, { status: 400 });
@@ -42,13 +54,55 @@ export async function POST(request: Request) {
 
     const status = action === "cancel" ? "canceled" : "claimed";
 
+    let finalWithdrawAmount = parseFloat(item.withdraw_amount || "0");
+    let refundDiff = 0;
+
+    if (action === "claim" && customAmount !== undefined && customAmount !== null) {
+      const amountToClaim = parseFloat(String(customAmount));
+      if (isNaN(amountToClaim) || amountToClaim < 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ error: "Некорректная измененная сумма" }, { status: 400 });
+      }
+      if (amountToClaim > finalWithdrawAmount) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ error: "Измененная сумма превышает запрошенную" }, { status: 400 });
+      }
+      refundDiff = finalWithdrawAmount - amountToClaim;
+      finalWithdrawAmount = amountToClaim;
+    }
+
     // 2. Update queue entry
     await client.query(
       `UPDATE promo_prize_queue
-       SET status = $1, claimed_at = NOW(), claimed_by_admin_id = $2
-       WHERE id = $3`,
-       [status, userId, targetId]
+       SET status = $1, withdraw_amount = $2, claimed_at = NOW(), claimed_by_admin_id = $3
+       WHERE id = $4`,
+       [status, finalWithdrawAmount, userId, targetId]
     );
+
+    if (refundDiff > 0) {
+      // Refund the remaining difference to player's balance
+      await client.query(
+        `UPDATE promo_player_balances 
+         SET bonus_balance = bonus_balance + $1, updated_at = NOW()
+         WHERE player_id = $2 AND club_id = $3`,
+        [refundDiff, item.player_id, item.club_id]
+      );
+
+      // Log refund
+      await client.query(
+        `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+         VALUES ($1, $2, 'WITHDRAW_REFUND', $3)`,
+        [
+          item.player_id,
+          item.club_id,
+          JSON.stringify({
+            amount: refundDiff,
+            original_queue_id: targetId,
+            note: `Частичный вывод: запрошено ${item.withdraw_amount} ₽, выдано ${finalWithdrawAmount} ₽`
+          })
+        ]
+      );
+    }
 
     // Update linked inventory item status if exists
     if (item.inventory_item_id) {

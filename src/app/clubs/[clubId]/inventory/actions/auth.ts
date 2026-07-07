@@ -4,6 +4,7 @@ import { getClubApiAccess, hasModuleAccess } from "@/lib/club-api-access";
 import { normalizeInventorySettings, getShiftZoneLabel } from "@/lib/inventory-settings";
 import { query, getClient } from "@/db";
 import type { InventoryAccessScope } from "./types";
+import { verifySessionValue } from "@/lib/session";
 
 export async function assertSessionUserCanAccessClub(
   clubId: string,
@@ -40,7 +41,8 @@ export async function requireClubAccess(clubId: string) {
 }
 
 export async function requireSessionUserId() {
-  const sessionUserId = (await cookies()).get("session_user_id")?.value;
+  const signedCookie = (await cookies()).get("session_user_id")?.value;
+  const sessionUserId = signedCookie ? verifySessionValue(signedCookie) : null;
   if (!sessionUserId)
     throw new Error("Недостаточно прав для выполнения операции");
   return sessionUserId;
@@ -49,7 +51,8 @@ export async function requireSessionUserId() {
 export async function assertUserCanAccessClub(clubId: string, userId: string) {
   if (!userId) throw new Error("Недостаточно прав для выполнения операции");
 
-  const sessionUserId = (await cookies()).get("session_user_id")?.value;
+  const signedCookie = (await cookies()).get("session_user_id")?.value;
+  const sessionUserId = signedCookie ? verifySessionValue(signedCookie) : null;
   if (!sessionUserId || sessionUserId !== userId) {
     throw new Error("Недостаточно прав для выполнения операции");
   }

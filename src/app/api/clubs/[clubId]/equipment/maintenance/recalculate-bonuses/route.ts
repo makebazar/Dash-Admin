@@ -30,13 +30,16 @@ export async function POST(
         const endOfMonth = new Date(year, month, 0, 23, 59, 59);
 
         // 1. Get all completed tasks for the month
+        // Include FREE_POOL tasks (employee gets bonus for doing the work)
+        // but we will suppress the overdue penalty for them below
         const tasksToRecalculate = await query(
             `SELECT 
                 mt.id as task_id,
                 mt.completed_by as user_id,
                 mt.completed_at,
                 mt.due_date,
-                e.type as equipment_type
+                e.type as equipment_type,
+                e.assignment_mode
              FROM equipment_maintenance_tasks mt
              JOIN equipment e ON mt.equipment_id = e.id
              WHERE e.club_id = $1
@@ -155,7 +158,11 @@ export async function POST(
                 ));
                 const wasOverdue = overdueDaysAtCompletion > 0;
 
-                const overduePenaltyPreview = calculateMaintenanceOverduePenalty(
+                // FREE_POOL equipment: employee gets the bonus for doing the work,
+                // but overdue penalty is suppressed — no one was formally responsible
+                const isFreePool = task.assignment_mode === 'FREE_POOL';
+
+                const overduePenalty = isFreePool ? 0 : calculateMaintenanceOverduePenalty(
                     {
                         overdue_tolerance_days: kpiBonus?.overdue_tolerance_days,
                         overdue_penalty_mode: kpiBonus?.overdue_penalty_mode,
@@ -163,16 +170,14 @@ export async function POST(
                         late_penalty_multiplier: kpiBonus?.late_penalty_multiplier
                     },
                     [{ overdue_days_at_completion: overdueDaysAtCompletion, bonus_earned: bonusEarned, was_overdue: wasOverdue }]
-                );
-        
-                const overduePenalty = overduePenaltyPreview.total;
+                ).total;
 
                 // Save full rate (bonusEarned) and penalty separately
                 await query(
                     `UPDATE equipment_maintenance_tasks
                      SET bonus_earned = $1, overdue_penalty = $2, overdue_days_at_completion = $3, was_overdue = $4
                      WHERE id = $5`,
-                    [bonusEarned, overduePenalty, overdueDaysAtCompletion, wasOverdue, task.task_id]
+                    [bonusEarned, overduePenalty, isFreePool ? 0 : overdueDaysAtCompletion, isFreePool ? false : wasOverdue, task.task_id]
                 );
                 updatedCount++;
             }

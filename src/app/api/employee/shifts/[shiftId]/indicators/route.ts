@@ -69,11 +69,15 @@ export async function GET(
 
     const tasksRes = await query(
       `SELECT mt.id, mt.status, mt.updated_at, mt.due_date, mt.bonus_earned, mt.task_type,
-              e.name as equipment_name, w.name as workstation_name, w.zone as workstation_zone
+              e.name as equipment_name, e.assignment_mode,
+              w.name as workstation_name, w.zone as workstation_zone
        FROM equipment_maintenance_tasks mt
        LEFT JOIN equipment e ON mt.equipment_id = e.id
        LEFT JOIN club_workstations w ON e.workstation_id = w.id
-       WHERE mt.club_id = $1 AND mt.assigned_user_id = $2 AND mt.created_at <= $3`,
+       WHERE mt.club_id = $1
+         AND mt.assigned_user_id = $2
+         AND mt.created_at <= $3
+         AND COALESCE(e.assignment_mode, 'DIRECT') != 'FREE_POOL'`,
       [shift.club_id, userId, shiftEnd.toISOString()],
     );
 

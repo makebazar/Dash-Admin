@@ -1,5 +1,6 @@
 import { query } from "@/db";
 import { cookies } from "next/headers";
+import { verifySessionValue } from "@/lib/session";
 
 type AccessError = Error & { status?: number };
 
@@ -95,7 +96,8 @@ function canAccessManagement(
 }
 
 export async function getApiAccess(): Promise<{ userId: string }> {
-  const userId = (await cookies()).get("session_user_id")?.value;
+  const signedCookie = (await cookies()).get("session_user_id")?.value;
+  const userId = signedCookie ? verifySessionValue(signedCookie) : null;
   if (!userId) {
     const error = new Error("Unauthorized") as AccessError;
     error.status = 401;

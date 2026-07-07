@@ -25,12 +25,17 @@ export async function POST(
     today.setHours(0, 0, 0, 0);
 
     const equipmentResult = await query(
-      `SELECT e.id, e.name, e.cleaning_interval_days, e.last_cleaned_at, e.assigned_user_id, e.is_active,
-                    et.code as type_code, et.name_ru as type_name
+      `SELECT e.id, e.name, e.cleaning_interval_days, e.last_cleaned_at, 
+              COALESCE(e.assigned_user_id, pe.assigned_user_id) as assigned_user_id, 
+              e.is_active, pe.is_active as parent_is_active,
+              et.code as type_code, et.name_ru as type_name
              FROM equipment e
              JOIN equipment_types et ON e.type = et.code
+             LEFT JOIN equipment pe ON e.parent_equipment_id = pe.id
              WHERE e.club_id = $1 AND e.is_active = TRUE
-               AND (e.cleaning_interval_days IS NOT NULL AND e.cleaning_interval_days > 0)`,
+               AND (pe.id IS NULL OR pe.is_active = TRUE)
+               AND (e.cleaning_interval_days IS NOT NULL AND e.cleaning_interval_days > 0)
+               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)`,
       [clubId],
     );
 

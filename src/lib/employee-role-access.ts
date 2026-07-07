@@ -1,5 +1,6 @@
 import { query } from "@/db";
 import { cookies } from "next/headers";
+import { verifySessionValue } from "@/lib/session";
 
 export type EmployeeShiftEndMode = "FULL_REPORT" | "NO_REPORT";
 export type EmployeeHandoverChecklistMode =
@@ -76,7 +77,8 @@ export async function getEmployeeRoleAccess(
 ): Promise<EmployeeRoleAccess> {
   let userId = userIdOverride;
   if (!userId) {
-    userId = (await cookies()).get("session_user_id")?.value;
+    const signedCookie = (await cookies()).get("session_user_id")?.value;
+    userId = signedCookie ? verifySessionValue(signedCookie) : undefined;
   }
 
   if (!userId) {

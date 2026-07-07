@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import bcrypt from "bcrypt";
 import { normalizePhone } from "@/lib/phone-utils";
 import crypto from "crypto";
+import { signSessionValue } from "@/lib/session";
 
 export async function POST(request: Request) {
   let client;
@@ -144,17 +145,33 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "PIN is required" }, { status: 400 });
       }
 
-      const isValid = await bcrypt.compare(String(pin), player.pin_hash);
-
-      if (!isValid) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "Неверный ПИН-код" },
-          { status: 401 },
+      if (player.pin_hash === "PENDING") {
+        if (!pin || String(pin).length < 4) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "PIN must be at least 4 digits" },
+            { status: 400 },
+          );
+        }
+        const pinHash = await bcrypt.hash(String(pin), 10);
+        await client.query(
+          `UPDATE promo_players SET pin_hash = $1, updated_at = NOW() WHERE id = $2`,
+          [pinHash, player.id],
         );
-      }
+        playerId = player.id;
+      } else {
+        const isValid = await bcrypt.compare(String(pin), player.pin_hash);
 
-      playerId = player.id;
+        if (!isValid) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "Неверный ПИН-код" },
+            { status: 401 },
+          );
+        }
+
+        playerId = player.id;
+      }
     }
 
     let numericClubId;
@@ -245,7 +262,7 @@ export async function POST(request: Request) {
 
     // Set cookies
     const cookieStore = await cookies();
-    cookieStore.set("promo_player_id", String(playerId), {
+    cookieStore.set("promo_player_id", signSessionValue(String(playerId)), {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

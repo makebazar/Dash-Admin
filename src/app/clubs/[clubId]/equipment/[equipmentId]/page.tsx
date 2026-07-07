@@ -506,11 +506,6 @@ export default function EquipmentDetailsPage() {
     fetchPageData();
   }, [clubId, equipmentId]);
 
-  useEffect(() => {
-    if (activeTab === "maintenance" && equipment?.parent_equipment_id) {
-      setActiveTab("details");
-    }
-  }, [activeTab, equipment]);
 
   useEffect(() => {
     const query =
@@ -774,15 +769,13 @@ export default function EquipmentDetailsPage() {
                   <span className="sm:hidden">Основное</span>
                   <span className="hidden sm:inline">Основные данные</span>
                 </TabsTrigger>
-                {!equipment.parent_equipment_id && (
-                  <TabsTrigger
-                    value="maintenance"
-                    className="shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-0 py-3 data-[state=active]:border-primary data-[state=active]:shadow-none"
-                  >
-                    <span className="sm:hidden">Сервис</span>
-                    <span className="hidden sm:inline">Обслуживание</span>
-                  </TabsTrigger>
-                )}
+                <TabsTrigger
+                  value="maintenance"
+                  className="shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-0 py-3 data-[state=active]:border-primary data-[state=active]:shadow-none"
+                >
+                  <span className="sm:hidden">Сервис</span>
+                  <span className="hidden sm:inline">Обслуживание</span>
+                </TabsTrigger>
                 {equipment.type === "PC" && (
                   <TabsTrigger
                     value="performance"
@@ -1204,6 +1197,36 @@ export default function EquipmentDetailsPage() {
                                   Инциденты: {component.open_issues_count}
                                 </Badge>
                               )}
+                              {(() => {
+                                if (component.maintenance_enabled === false || !component.cleaning_interval_days) {
+                                  return null;
+                                }
+                                if (!component.last_cleaned_at) {
+                                  return (
+                                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-amber-200 bg-amber-50 text-amber-700">
+                                      <Wrench className="mr-1 h-3 w-3 text-amber-600" />
+                                      Не обслуживалось
+                                    </Badge>
+                                  );
+                                }
+                                const last = new Date(component.last_cleaned_at);
+                                const next = new Date(last.getTime() + component.cleaning_interval_days * 24 * 60 * 60 * 1000);
+                                const diffDays = Math.ceil((next.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                if (diffDays < 0) {
+                                  return (
+                                    <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-red-200 bg-red-50 text-red-700">
+                                      <Wrench className="mr-1 h-3 w-3 text-red-600" />
+                                      Просрочено: {Math.abs(diffDays)} дн.
+                                    </Badge>
+                                  );
+                                }
+                                return (
+                                  <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-emerald-200 bg-emerald-50 text-emerald-700">
+                                    <Wrench className="mr-1 h-3 w-3 text-emerald-600" />
+                                    Обслуживание: через {diffDays} дн.
+                                  </Badge>
+                                );
+                              })()}
                             </div>
 
                             <div className="mt-4 flex gap-2 pt-2">

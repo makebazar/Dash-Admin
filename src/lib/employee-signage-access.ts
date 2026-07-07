@@ -1,5 +1,6 @@
 import { cookies } from "next/headers"
 import { query } from "@/db"
+import { verifySessionValue } from "@/lib/session";
 
 type AccessError = Error & { status?: number }
 
@@ -9,7 +10,8 @@ export type EmployeeSignageAccess = {
 }
 
 export async function requireEmployeeActiveShift(clubId: string): Promise<EmployeeSignageAccess> {
-  const userId = (await cookies()).get("session_user_id")?.value
+  const signedCookie = (await cookies()).get("session_user_id")?.value
+  const userId = signedCookie ? verifySessionValue(signedCookie) : null
   if (!userId) {
     const error = new Error("Unauthorized") as AccessError
     error.status = 401

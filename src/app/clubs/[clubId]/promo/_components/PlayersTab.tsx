@@ -840,13 +840,16 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2 text-sm font-extrabold">
                 <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-2 text-center">
-                  <p className="text-[8px] font-black uppercase text-emerald-600 tracking-wider mb-0.5">Пополнил</p>
-                  <p className="text-emerald-700 text-base font-black">+{Math.round(selectedPlayer.total_deposited || 0)} ₽</p>
+                  <p className="text-[8px] font-black uppercase text-emerald-600 tracking-wider mb-0.5">Пополнил (мес)</p>
+                  <p className="text-emerald-700 text-base font-black">+{Math.round(selectedPlayer.monthly_topups || 0)} ₽</p>
                 </div>
                 <div className="bg-rose-50 border border-rose-100 rounded-xl p-2 text-center">
-                  <p className="text-[8px] font-black uppercase text-rose-500 tracking-wider mb-0.5">Списал</p>
-                  <p className="text-rose-700 text-base font-black">-{Math.round(selectedPlayer.total_withdrawn || 0)} ₽</p>
+                  <p className="text-[8px] font-black uppercase text-rose-500 tracking-wider mb-0.5">Списал (мес)</p>
+                  <p className="text-rose-700 text-base font-black">-{Math.round(selectedPlayer.monthly_withdrawn || 0)} ₽</p>
                 </div>
+              </div>
+              <div className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-tight">
+                Всего: пополнил {Math.round(selectedPlayer.total_deposited || 0)} ₽ / списал {Math.round(selectedPlayer.total_withdrawn || 0)} ₽
               </div>
               <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-[9px] font-black uppercase text-slate-400 tracking-wide">
                 <span>Лимит вывода:</span>
@@ -1552,10 +1555,10 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                     Лимит вывода
                   </th>
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    Пополнил (₽)
+                    Пополнил за месяц (₽)
                   </th>
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    Списал (₽)
+                    Списал за месяц (₽)
                   </th>
                   <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">
                     Действия
@@ -1636,12 +1639,12 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                       </td>
                       <td className="px-8 py-5">
                         <div className="font-black text-amber-600 italic text-base">
-                          {Math.round(player.total_deposited || 0)}
+                          {Math.round(player.monthly_topups || 0)}
                         </div>
                       </td>
                       <td className="px-8 py-5">
                         <div className="font-black text-red-500 italic text-base">
-                          {Math.round(player.total_withdrawn || 0)}
+                          {Math.round(player.monthly_withdrawn || 0)}
                         </div>
                       </td>
                       <td className="px-8 py-5 text-right" onClick={(e) => e.stopPropagation()}>

@@ -492,8 +492,8 @@ export async function POST(
       "cleaning_interval_override_days",
     );
     const maintenanceEligibleStatusSql = hasEquipmentStatusColumn
-      ? `COALESCE(e.status, CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END) = 'ACTIVE'`
-      : `e.is_active = TRUE AND e.workstation_id IS NOT NULL`;
+      ? `COALESCE(e.status, CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN COALESCE(e.workstation_id, pe.workstation_id) IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END) = 'ACTIVE'`
+      : `e.is_active = TRUE AND COALESCE(e.workstation_id, pe.workstation_id) IS NOT NULL`;
     const effectiveCleaningIntervalSql = hasCleaningIntervalOverrideColumn
       ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
       : `e.cleaning_interval_days`;
@@ -529,11 +529,11 @@ export async function POST(
                 e.name,
                 ${effectiveCleaningIntervalSql} as cleaning_interval_days,
                 e.last_cleaned_at,
-                e.workstation_id,
-                CASE
-                    WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
-                    ELSE NULL
-                END as assigned_user_id,
+                COALESCE(e.workstation_id, pe.workstation_id) as workstation_id,
+                COALESCE(
+                    CASE WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id ELSE NULL END,
+                    CASE WHEN pe.assignment_mode = 'DIRECT' THEN pe.assigned_user_id ELSE NULL END
+                ) as assigned_user_id,
                 (
                     SELECT MAX(due_date)
                     FROM equipment_maintenance_tasks
@@ -541,17 +541,18 @@ export async function POST(
                       AND task_type = $2
                 ) as last_task_due_date
             FROM equipment e
+            LEFT JOIN equipment pe ON e.parent_equipment_id = pe.id
             WHERE e.club_id = $1
               AND ${maintenanceEligibleStatusSql}
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
-              AND e.parent_equipment_id IS NULL
+              AND (pe.id IS NULL OR pe.is_active = TRUE)
         `;
 
     if (equipment_ids && equipment_ids.length > 0) {
       queryStr += ` AND e.id = ANY($3)`;
       baseParams.push(equipment_ids);
     } else if (workstation_ids && workstation_ids.length > 0) {
-      queryStr += ` AND e.workstation_id = ANY($3)`;
+      queryStr += ` AND COALESCE(e.workstation_id, pe.workstation_id) = ANY($3)`;
       baseParams.push(workstation_ids);
     }
 

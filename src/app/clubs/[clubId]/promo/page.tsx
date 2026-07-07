@@ -199,12 +199,12 @@ export default function PromotionsPage() {
     }
   };
 
-  const handleClaim = async (id: string) => {
+  const handleClaim = async (id: string, customAmount?: number) => {
     try {
       await fetch(`/api/promo/admin/queue/claim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action: "claim" }),
+        body: JSON.stringify({ id, action: "claim", customAmount }),
       });
       fetchData();
     } catch (error) {

@@ -86,8 +86,8 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
             getProducts(clubId).then(setAllProducts)
             getWarehouses(clubId).then(whs => {
                 setWarehouses(whs)
-                const def = whs.find(w => w.is_default) || whs[0]
-                if (def) setSelectedWarehouseId(def.id.toString())
+                // Do NOT auto-select — employee must choose explicitly
+                setSelectedWarehouseId("")
             })
             getClubSettings(clubId).then(settings => setInventorySettings(settings.inventory_settings))
         }
@@ -96,6 +96,12 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
     const handleAddProduct = () => {
         const product = allProducts.find(p => p.id === Number(selectedProductId))
         if (!product) return
+
+        const parsedQty = Number(itemQty)
+        if (!parsedQty || parsedQty <= 0 || !Number.isFinite(parsedQty)) {
+            showMessage({ title: "Неверное количество", description: "Укажите количество не менее 1" })
+            return
+        }
 
         let priceToRecord = product.selling_price || 0
         let customPrice: number | undefined = undefined
@@ -109,7 +115,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
         const existingIdx = items.findIndex(i => i.product_id === product.id && i.type === 'WASTE')
         if (existingIdx > -1) {
             const newItems = [...items]
-            newItems[existingIdx].quantity += Number(itemQty)
+            newItems[existingIdx].quantity += parsedQty
             newItems[existingIdx].custom_price = customPrice
             newItems[existingIdx].price = priceToRecord
             setItems(newItems)
@@ -117,7 +123,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
             setItems(prev => [...prev, {
                 product_id: product.id,
                 name: product.name,
-                quantity: Number(itemQty),
+                quantity: parsedQty,
                 type: 'WASTE',
                 price: priceToRecord,
                 custom_price: customPrice
@@ -227,9 +233,11 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                             <div className="space-y-4 pb-4">
                                 {/* Warehouse Selector */}
                                 <div className="space-y-2">
-                                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                                    <Label className="text-[10px] uppercase tracking-wider flex items-center gap-2 font-bold"
+                                        style={{ color: selectedWarehouseId ? '#6b7280' : '#f87171' }}
+                                    >
                                         <Warehouse className="h-3 w-3" />
-                                        Списать со склада
+                                        {selectedWarehouseId ? 'Списать со склада' : '⚠ Выберите склад'}
                                     </Label>
                                     <div className="grid grid-cols-2 gap-2">
                                         {warehouses.map(wh => (
@@ -237,8 +245,10 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                                 key={wh.id}
                                                 variant="outline"
                                                 className={cn(
-                                                    "h-10 border-slate-800 bg-primary/50 hover:bg-primary/90 text-[10px] justify-start px-3",
-                                                    selectedWarehouseId === wh.id.toString() && "border-red-500 bg-red-500/10 text-red-400"
+                                                    "h-10 border-slate-700 bg-primary/30 hover:bg-primary/90 text-[10px] justify-start px-3 transition-all",
+                                                    selectedWarehouseId === wh.id.toString()
+                                                        ? "border-red-500 bg-red-500/10 text-red-400 ring-1 ring-red-500/30"
+                                                        : !selectedWarehouseId && "border-dashed border-slate-600 animate-pulse-slow"
                                                 )}
                                                 onClick={() => setSelectedWarehouseId(wh.id.toString())}
                                             >
@@ -249,21 +259,28 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                             </Button>
                                         ))}
                                     </div>
+                                    {!selectedWarehouseId && (
+                                        <p className="text-[10px] text-red-400/70 text-center pt-1">
+                                            Нужно выбрать склад перед добавлением товаров
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-2">
                                     <Button 
                                         variant="outline" 
-                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs"
+                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs disabled:opacity-40"
                                         onClick={() => setIsScannerOpen(true)}
+                                        disabled={!selectedWarehouseId}
                                     >
                                         <Camera className="mr-2 h-4 w-4 text-red-400" />
                                         Сканер
                                     </Button>
                                     <Button 
                                         variant="outline" 
-                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs"
+                                        className="h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-xs disabled:opacity-40"
                                         onClick={() => setIsAddDialogOpen(true)}
+                                        disabled={!selectedWarehouseId}
                                     >
                                         <Search className="mr-2 h-4 w-4 text-red-400" />
                                         Поиск
@@ -342,7 +359,7 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                     "w-full h-12 font-bold rounded-xl shadow-lg",
                                     "bg-red-600 hover:bg-red-700 text-primary-foreground shadow-red-900/20"
                                 )}
-                                disabled={items.length === 0}
+                                disabled={items.length === 0 || !selectedWarehouseId}
                                 onClick={() => setStep(2)}
                             >
                                 Далее
@@ -411,7 +428,17 @@ export function EmployeeWriteOffWizard({ isOpen, onClose, clubId, userId, active
                                         <Input 
                                             type="number" 
                                             value={itemQty} 
-                                            onChange={e => setItemQty(e.target.value)}
+                                            min="1"
+                                            step="1"
+                                            onChange={e => {
+                                                const val = e.target.value
+                                                // Prevent zero, negative or non-numeric
+                                                if (val === '' || Number(val) >= 1) setItemQty(val)
+                                            }}
+                                            onBlur={e => {
+                                                const n = Number(e.target.value)
+                                                if (!n || n < 1) setItemQty('1')
+                                            }}
                                             className="bg-primary/50 border-slate-800 h-14 text-xl font-black text-center rounded-2xl focus:ring-red-500/20 focus:border-red-500/50 transition-all text-base"
                                         />
                                     </div>

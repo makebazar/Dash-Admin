@@ -2364,6 +2364,118 @@ export default function WorkstationDetailsPage() {
                       )}
                     </div>
                   </div>
+
+                  {componentEquipment.length > 0 && (
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-sm mt-6">
+                      <div className="p-6 sm:p-8 pb-4">
+                        <h3 className="text-lg font-bold text-slate-900">
+                          Комплектующие
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-1">
+                          Плановое обслуживание внутренних деталей системного блока
+                        </p>
+                      </div>
+                      <div className="space-y-6 p-6 sm:p-8 pt-0">
+                        {componentEquipment.map((item) => {
+                          const standardInterval = getStandardCleaningInterval(
+                            item.type,
+                          );
+                          const currentIntervalDraft =
+                            cleaningIntervalDrafts[item.id] ??
+                            String(
+                              item.cleaning_interval_days ?? standardInterval,
+                            );
+                          const isCustomInterval =
+                            item.cleaning_interval_override_days != null;
+
+                          return (
+                            <div key={item.id} className="space-y-2">
+                              <PeripheralMaintenanceItem
+                                item={item}
+                                expanded={Boolean(
+                                  expandedPeripheralIds[item.id],
+                                )}
+                                lastCleanedValue={
+                                  lastCleanedDrafts[item.id] ?? ""
+                                }
+                                isSaving={savingMaintenanceId === item.id}
+                                renderEquipmentIcon={getEquipmentIcon}
+                                onToggleExpanded={(id) =>
+                                  setExpandedPeripheralIds((prev) => ({
+                                    ...prev,
+                                    [id]: !prev[id],
+                                  }))
+                                }
+                                onToggleMaintenance={handleToggleMaintenance}
+                                onLastCleanedChange={(equipmentId, value) =>
+                                  setLastCleanedDrafts((prev) => ({
+                                    ...prev,
+                                    [equipmentId]: value,
+                                  }))
+                                }
+                                onSaveMaintenance={(equipmentId, payload) =>
+                                  handleSaveMaintenance(equipmentId, {
+                                    ...payload,
+                                    cleaningIntervalOverrideDays:
+                                      currentIntervalDraft &&
+                                      parseInt(currentIntervalDraft, 10) !==
+                                        standardInterval
+                                        ? parseInt(currentIntervalDraft, 10)
+                                        : null,
+                                  })
+                                }
+                              />
+                              {expandedPeripheralIds[item.id] ? (
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
+                                  <div className="flex-1 text-xs text-muted-foreground leading-snug">
+                                    {isCustomInterval
+                                      ? `Индивидуальный интервал • стандарт ${standardInterval} дн.`
+                                      : `По стандарту типа • ${standardInterval} дн.`}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      disabled={
+                                        item.maintenance_enabled === false
+                                      }
+                                      className="h-10 w-24 bg-white text-sm rounded-lg"
+                                      value={currentIntervalDraft}
+                                      onChange={(e) =>
+                                        setCleaningIntervalDrafts((prev) => ({
+                                          ...prev,
+                                          [item.id]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-10 px-4 rounded-lg"
+                                      disabled={
+                                        savingMaintenanceId === item.id ||
+                                        item.maintenance_enabled === false ||
+                                        !isCustomInterval
+                                      }
+                                      onClick={() =>
+                                        handleResetCleaningInterval(
+                                          item.id,
+                                          item.type,
+                                          lastCleanedDrafts[item.id] || null,
+                                        )
+                                      }
+                                    >
+                                      Сброс
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </TabsContent>

@@ -215,10 +215,17 @@ export async function PATCH(request: Request) {
   try {
     const { playerId, clubId, totalXp, bonusBalance, fullName, ticketsCount } =
       await request.json();
-    const userId = (await cookies()).get("session_user_id")?.value;
 
-    if (!userId || !clubId || !playerId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!clubId || !playerId) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    let userId;
+    try {
+      const { requireClubAccess } = await import("@/lib/club-api-access");
+      userId = await requireClubAccess(String(clubId));
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || "Forbidden" }, { status: e.status || 403 });
     }
 
     const client = await queryClient();

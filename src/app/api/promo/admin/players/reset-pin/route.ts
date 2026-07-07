@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
-import { cookies } from "next/headers";
 
-export async function PATCH(request: Request) {
+async function resetPinHandler(request: Request) {
   try {
-    const { playerId } = await request.json();
-    const userId = (await cookies()).get("session_user_id")?.value;
+    const { playerId, clubId } = await request.json();
 
-    if (!userId || !playerId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!clubId || !playerId) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    try {
+      const { requireClubAccess } = await import("@/lib/club-api-access");
+      await requireClubAccess(String(clubId));
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || "Forbidden" }, { status: e.status || 403 });
     }
 
     // Reset PIN by setting pin_hash to 'PENDING'
@@ -26,3 +31,5 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
+
+export { resetPinHandler as POST, resetPinHandler as PATCH };

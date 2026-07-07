@@ -13,11 +13,12 @@ export type QueueItem = {
   prize_type: string;
   status: "pending" | "claimed" | "canceled";
   created_at: string;
+  withdraw_amount?: string;
 };
 
 interface QueueTabProps {
   queue: QueueItem[];
-  handleClaim: (id: string) => Promise<void>;
+  handleClaim: (id: string, customAmount?: number) => Promise<void>;
   handleCancel: (id: string) => Promise<void>;
 }
 
@@ -92,7 +93,7 @@ export function QueueTab({ queue, handleClaim, handleCancel }: QueueTabProps) {
                       <div className="flex items-center justify-end gap-2">
                         <span
                           className={cn(
-                            "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest",
+                             "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest",
                             item.prize_type === "physical"
                               ? "bg-purple-100 text-purple-600"
                               : "bg-emerald-100 text-emerald-600",
@@ -108,7 +109,24 @@ export function QueueTab({ queue, handleClaim, handleCancel }: QueueTabProps) {
 
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleClaim(item.id)}
+                        onClick={async () => {
+                          const withdrawAmt = item.withdraw_amount ? parseFloat(item.withdraw_amount) : 0;
+                          if (withdrawAmt > 0) {
+                            const val = prompt(
+                              `Введите сумму к выдаче (максимум ${withdrawAmt} ₽):`,
+                              String(withdrawAmt)
+                            );
+                            if (val === null) return; // отмена
+                            const parsed = parseFloat(val);
+                            if (isNaN(parsed) || parsed < 0 || parsed > withdrawAmt) {
+                              alert("Некорректная сумма");
+                              return;
+                            }
+                            await handleClaim(item.id, parsed);
+                          } else {
+                            await handleClaim(item.id);
+                          }
+                        }}
                         className="h-12 px-6 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl flex items-center gap-2 font-black uppercase italic text-xs transition-all active:scale-95"
                       >
                         <CheckCircle2 className="w-4 h-4" />

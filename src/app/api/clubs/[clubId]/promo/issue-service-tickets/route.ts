@@ -8,10 +8,12 @@ export async function POST(
 ) {
   const { clubId } = await params;
   const { playerId, ruleId } = await request.json();
-  const userId = (await cookies()).get("session_user_id")?.value;
-
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let userId;
+  try {
+    const { requireClubAccess } = await import("@/lib/club-api-access");
+    userId = await requireClubAccess(clubId);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || "Forbidden" }, { status: e.status || 403 });
   }
 
   const client = await getClient();

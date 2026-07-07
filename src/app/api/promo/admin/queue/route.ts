@@ -6,10 +6,16 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const clubId = searchParams.get("clubId");
-    const userId = (await cookies()).get("session_user_id")?.value;
 
-    if (!userId || !clubId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!clubId) {
+      return NextResponse.json({ error: "Missing clubId" }, { status: 400 });
+    }
+
+    try {
+      const { requireClubAccess } = await import("@/lib/club-api-access");
+      await requireClubAccess(clubId);
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message || "Forbidden" }, { status: e.status || 403 });
     }
 
     const result = await query(
@@ -19,7 +25,7 @@ export async function GET(request: Request) {
                         WHEN COALESCE(pr.type, q.prize_type, 'withdraw') IN ('withdraw', 'bonus_limitless', 'bonus_standard') THEN 'withdraw'
                         ELSE 'physical'
                     END as prize_type,
-                    q.status, q.created_at
+                    q.status, q.created_at, q.withdraw_amount
              FROM promo_prize_queue q
              JOIN promo_players p ON q.player_id = p.id
              LEFT JOIN promo_prizes pr ON q.prize_id = pr.id

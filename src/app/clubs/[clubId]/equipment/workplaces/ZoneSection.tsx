@@ -209,6 +209,25 @@ export default memo(function ZoneSection({
             servicedMaintenanceCountByWorkstationId.get(ws.id) ?? 0;
           const wsDisabledMaintenanceCount =
             disabledMaintenanceCountByWorkstationId.get(ws.id) ?? 0;
+
+          const wsMaxOverdueRatio = (() => {
+            let max = 0;
+            wsEquipment.forEach((item) => {
+              const status = maintenanceStatusByEquipmentId.get(item.id);
+              if (status === "overdue" && item.maintenance_enabled !== false) {
+                const overdueDays = overdueDaysByEquipmentId.get(item.id) ?? 0;
+                const intervalDays = Math.max(
+                  1,
+                  Number(
+                    item.cleaning_interval_override_days ?? item.cleaning_interval_days,
+                  ) || 30,
+                );
+                const ratio = overdueDays / intervalDays;
+                if (ratio > max) max = ratio;
+              }
+            });
+            return max;
+          })();
           const sortedEquipment = [...wsEquipment].sort((a, b) => {
             const aType = a.base_type_code || a.type;
             const bType = b.base_type_code || b.type;
@@ -314,6 +333,24 @@ export default memo(function ZoneSection({
                           </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
+                          {wsOverdueMaintenanceCount > 0 ? (
+                            <span
+                              className={cn(
+                                "text-[10px] font-medium",
+                                wsMaxOverdueRatio <= 0.15 && "text-amber-700",
+                                wsMaxOverdueRatio > 0.15 &&
+                                  wsMaxOverdueRatio <= 0.50 &&
+                                  "text-orange-700",
+                                wsMaxOverdueRatio > 0.50 &&
+                                  wsMaxOverdueRatio <= 1.00 &&
+                                  "text-rose-700",
+                                wsMaxOverdueRatio > 1.00 &&
+                                  "text-purple-700 font-semibold animate-pulse",
+                              )}
+                            >
+                              Просрочено ТО: {wsOverdueMaintenanceCount}
+                            </span>
+                          ) : null}
                           {wsOverdueMaintenanceCount === 0 &&
                           wsServicedMaintenanceCount > 0 ? (
                             <span className="text-[10px] font-medium text-emerald-700">
@@ -368,6 +405,38 @@ export default memo(function ZoneSection({
                           const isExpandable = componentCount > 0;
                           const isExpanded = expandedPcIds.includes(item.id);
 
+                          let overdueSeverityClass = "";
+                          let overdueTextClass = "";
+                          let overdueSeverityLabel = "";
+
+                          if (maintenanceStatus === "overdue" && item.maintenance_enabled !== false) {
+                            const intervalDays = Math.max(
+                              1,
+                              Number(
+                                item.cleaning_interval_override_days ?? item.cleaning_interval_days,
+                              ) || 30,
+                            );
+                            const ratio = overdueDays / intervalDays;
+
+                            if (ratio <= 0.15) {
+                              overdueSeverityClass = "border-l-[3px] border-l-amber-500 border-amber-200 bg-amber-50/20 pl-2.5";
+                              overdueTextClass = "text-amber-700 group-hover/item:text-amber-850 dark:text-amber-500";
+                              overdueSeverityLabel = " (низкая)";
+                            } else if (ratio <= 0.50) {
+                              overdueSeverityClass = "border-l-[3px] border-l-orange-500 border-orange-200 bg-orange-50/20 pl-2.5";
+                              overdueTextClass = "text-orange-700 group-hover/item:text-orange-800 dark:text-orange-500";
+                              overdueSeverityLabel = " (средняя)";
+                            } else if (ratio <= 1.00) {
+                              overdueSeverityClass = "border-l-[3px] border-l-rose-500 border-rose-200 bg-rose-50/20 pl-2.5";
+                              overdueTextClass = "text-rose-700 group-hover/item:text-rose-800 dark:text-rose-500";
+                              overdueSeverityLabel = " (высокая)";
+                            } else {
+                              overdueSeverityClass = "border-l-[3px] border-l-purple-600 border-purple-200 bg-purple-50/20 pl-2.5";
+                              overdueTextClass = "text-purple-700 group-hover/item:text-purple-800 dark:text-purple-500";
+                              overdueSeverityLabel = " (критическая)";
+                            }
+                          }
+
                           return (
                             <div
                               key={item.id}
@@ -383,7 +452,7 @@ export default memo(function ZoneSection({
                                   "border-l-[3px] border-l-orange-500 border-orange-200 bg-orange-50/20 pl-2.5",
                                 itemIssueCount === 0 &&
                                   maintenanceStatus === "overdue" &&
-                                  "border-l-[3px] border-l-rose-500 border-rose-200 bg-rose-50/20 pl-2.5",
+                                  overdueSeverityClass,
                                 itemIssueCount === 0 &&
                                   maintenanceStatus === "serviced" &&
                                   "border-l-[3px] border-l-emerald-500 border-emerald-200 bg-emerald-50/20 pl-2.5",
@@ -400,7 +469,7 @@ export default memo(function ZoneSection({
                                     itemIssueCount > 0 && "text-orange-700",
                                     itemIssueCount === 0 &&
                                       maintenanceStatus === "overdue" &&
-                                      "text-rose-700",
+                                      overdueTextClass,
                                     itemIssueCount === 0 &&
                                       maintenanceStatus === "serviced" &&
                                       "text-emerald-700",
@@ -434,11 +503,12 @@ export default memo(function ZoneSection({
                                     itemIssueCount === 0 && (
                                       <div className="flex flex-wrap items-center gap-1.5">
                                         {maintenanceStatus === "overdue" ? (
-                                          <span className="text-[10px] font-medium text-rose-700">
+                                          <span className={cn("text-[10px] font-medium", overdueTextClass)}>
                                             • ТО просрочено
                                             {overdueDays > 0
                                               ? ` на ${overdueDays} дн.`
                                               : ""}
+                                            {overdueSeverityLabel}
                                           </span>
                                         ) : null}
                                         {maintenanceStatus === "serviced" ? (
