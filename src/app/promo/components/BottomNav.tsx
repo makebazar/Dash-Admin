@@ -1,7 +1,7 @@
 import React, { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Gamepad2, ShoppingCart, User, Package } from "lucide-react";
+import { Gamepad2, ShoppingCart, User, Package, Swords } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,7 @@ function BottomNavContent({ cartCount = 0 }: { cartCount?: number }) {
   const isGames = pathname === "/promo" && !isShop;
   const isQuests = pathname === "/promo/quests";
   const isCases = pathname === "/promo/cases";
+  const isFrag = pathname === "/promo/frag";
   const isProfile = pathname === "/promo/profile";
 
   const [activeQuestsCount, setActiveQuestsCount] = useState<number>(0);
@@ -78,6 +79,9 @@ function BottomNavContent({ cartCount = 0 }: { cartCount?: number }) {
           Кейсы
         </Link>
       )}
+      <Link href="/promo/frag" className={cn("transition-colors", isFrag ? "text-orange-500" : "text-gray-500 hover:text-white")} title="DashFrag">
+        <Swords className="w-5 h-5" />
+      </Link>
       <Link href="/promo?tab=shop" className={cn("relative transition-colors", isShop ? "text-orange-500" : "text-gray-500 hover:text-white")}>
         <ShoppingCart className="w-6 h-6" />
         {cartCount > 0 && (

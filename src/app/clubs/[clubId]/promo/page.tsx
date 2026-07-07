@@ -41,6 +41,7 @@ import {
   type Prize,
   GAMES,
 } from "@/app/clubs/[clubId]/promo/_components/GamesTab";
+import { FragTab } from "@/app/clubs/[clubId]/promo/_components/FragTab";
 
 /**
  * ПАНЕЛЬ УПРАВЛЕНИЯ АКЦИЯМИ (ДЛЯ ВЛАДЕЛЬЦА / УПРАВА)
@@ -63,6 +64,7 @@ export default function PromotionsPage() {
     | "accrual"
     | "referrals"
     | "cases"
+    | "frag"
   >("queue");
 
   const [settings, setSettings] = useState<any>(null);
@@ -298,6 +300,12 @@ export default function PromotionsPage() {
                 icon: Settings,
                 color: "slate",
               },
+              {
+                id: "frag",
+                label: "Frag",
+                icon: Gamepad2,
+                color: "indigo",
+              },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -398,6 +406,9 @@ export default function PromotionsPage() {
           )}
           {activeTab === "referrals" && (
             <ReferralsTab settings={settings} saveSettings={saveSettings} />
+          )}
+          {activeTab === "frag" && (
+            <FragTab settings={settings} saveSettings={saveSettings} />
           )}
         </AnimatePresence>
       </div>
