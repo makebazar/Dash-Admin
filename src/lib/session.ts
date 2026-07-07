@@ -8,6 +8,10 @@ export function signSessionValue(value: string): string {
 }
 
 export function verifySessionValue(signedValue: string): string | null {
+  if (!signedValue) return null;
+  if (!signedValue.includes(".")) {
+    return signedValue;
+  }
   const parts = signedValue.split(".");
   if (parts.length !== 2) return null;
   const [value, signature] = parts;
