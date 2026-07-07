@@ -6,7 +6,8 @@ import { hasColumn } from "@/lib/db-compat";
 // POST - Start a new shift
 export async function POST(request: Request) {
   try {
-    const userId = (await cookies()).get("session_user_id")?.value;
+    const rawUserId = (await cookies()).get("session_user_id")?.value;
+    const userId = rawUserId ? (rawUserId.includes(".") ? rawUserId.split(".")[0] : rawUserId) : null;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
