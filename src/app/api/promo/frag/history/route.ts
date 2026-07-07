@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { cookies } from "next/headers";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/promo/frag/history — Get frag match history for current player
 export async function GET() {
   const client = await getClient();

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/promo/auth/cookies — Get current session cookies to sync with local agent
 export async function GET() {
   try {

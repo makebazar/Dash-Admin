@@ -10,7 +10,7 @@ const pool = new pg.Pool({
 
 async function runMigration() {
   try {
-    const sql = fs.readFileSync('migrations/setup_club_1_gamification.sql', 'utf8');
+    const sql = fs.readFileSync('migrations/20260707_create_promo_frag_matches.sql', 'utf8');
     console.log('Running migration...');
     await pool.query(sql);
     console.log('Migration completed successfully!');

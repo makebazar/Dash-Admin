@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { cookies } from "next/headers";
 
+export const dynamic = "force-dynamic";
+
 // POST /api/promo/frag/match — Save a completed frag match from the local agent
 export async function POST(request: Request) {
   const client = await getClient();
