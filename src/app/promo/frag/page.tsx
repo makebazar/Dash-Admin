@@ -23,6 +23,7 @@ import {
 import { PromoHeader } from "../components/PromoHeader";
 import { BottomNav } from "../components/BottomNav";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 const AGENT_URL = "http://localhost:3033";
 
@@ -92,6 +93,7 @@ const DEFAULT_DOTA_TARIFFS = [
 ];
 
 export default function FragPage() {
+  const router = useRouter();
   const [agentState, setAgentState] = useState<AgentState | null>(null);
   const [agentOnline, setAgentOnline] = useState(false);
   const [history, setHistory] = useState<FragMatch[]>([]);
@@ -145,6 +147,10 @@ export default function FragPage() {
       let serverMatches: FragMatch[] = [];
       try {
         const res = await fetch("/api/promo/frag/history");
+        if (res.status === 401) {
+          router.push("/promo/login");
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           serverMatches = data.matches || [];
@@ -202,12 +208,16 @@ export default function FragPage() {
     } finally {
       setHistoryLoading(false);
     }
-  }, []);
+  }, [router]);
 
   // Fetch player details
   const loadPlayer = useCallback(async () => {
     try {
       const res = await fetch("/api/promo/player");
+      if (res.status === 401) {
+        router.push("/promo/login");
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setPlayer(data.player);
@@ -215,7 +225,7 @@ export default function FragPage() {
     } catch (e) {
       console.error(e);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     setMounted(true);
