@@ -40,8 +40,15 @@ public sealed class ConfigService
 
     public void Save(AgentConfig config)
     {
-        var path = GetConfigPath();
-        var json = JsonSerializer.Serialize(config, Options);
-        File.WriteAllText(path, json);
+        try
+        {
+            var path = GetConfigPath();
+            var tempPath = path + ".tmp";
+            var json = JsonSerializer.Serialize(config, Options);
+            File.WriteAllText(tempPath, json);
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(tempPath, path);
+        }
+        catch { }
     }
 }

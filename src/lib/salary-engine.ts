@@ -491,30 +491,40 @@ export async function generateMonthlySalaryReport(
     };
   });
 
-  // Get shifts for the period
+  // Get shifts for the period with dynamic schedule matching for lateness
   const shiftsRes = await query(
     `SELECT
-                id,
-                user_id,
-                calculated_salary,
-                total_hours,
-                cash_income,
-                card_income,
-                bar_purchases,
-                report_data,
-                salary_snapshot,
-                salary_breakdown,
-                status,
-                check_in,
-                check_out,
-                shift_role_id_snapshot,
-                shift_role_name_snapshot,
-                shift_type
-             FROM shifts
-             WHERE club_id = $1
-               AND check_in >= $2
-               AND check_in <= $3
-               AND status IN ('CLOSED', 'PAID', 'VERIFIED', 'ACTIVE')`,
+                s.id,
+                s.user_id,
+                s.calculated_salary,
+                s.total_hours,
+                s.cash_income,
+                s.card_income,
+                s.bar_purchases,
+                s.report_data,
+                s.salary_snapshot,
+                s.salary_breakdown,
+                s.status,
+                s.check_in,
+                s.check_out,
+                s.shift_role_id_snapshot,
+                s.shift_role_name_snapshot,
+                s.shift_type,
+                s.lateness_minutes,
+                s.lateness_status,
+                s.lateness_penalty,
+                ws.shift_type as scheduled_shift_type,
+                (ws.date + (CASE WHEN ws.shift_type = 'DAY' THEN c.day_start_hour ELSE c.night_start_hour END * INTERVAL '1 hour')) AT TIME ZONE c.timezone AS planned_start,
+                c.lateness_settings
+             FROM shifts s
+             LEFT JOIN clubs c ON s.club_id = c.id
+             LEFT JOIN work_schedules ws ON s.club_id = ws.club_id 
+                                        AND s.user_id = ws.user_id 
+                                        AND ws.date = (s.check_in AT TIME ZONE 'UTC' AT TIME ZONE c.timezone)::date
+             WHERE s.club_id = $1
+               AND s.check_in >= $2
+               AND s.check_in <= $3
+               AND s.status IN ('CLOSED', 'PAID', 'VERIFIED', 'ACTIVE')`,
     [clubId, startOfMonth.toISOString(), endOfMonth.toISOString()],
   );
 
@@ -784,6 +794,7 @@ export async function generateMonthlySalaryReport(
         .slice(0, 3); // Last 3 payments
 
       // 0. Pre-calculate monthly totals for KPI metrics
+      const matchedShiftIds = new Set<string>();
       const finishedShifts = empShifts.filter(
         (s: any) =>
           s.status !== "ACTIVE" &&
@@ -1147,6 +1158,10 @@ export async function generateMonthlySalaryReport(
                 s.salary_snapshot?.source === metricKey),
           );
 
+          if (existingAccrual) {
+            matchedShiftIds.add(existingAccrual.id);
+          }
+
           let target_value = 0;
           let progress_percent = 0;
           let is_met = false;
@@ -1457,11 +1472,64 @@ export async function generateMonthlySalaryReport(
               "Сотрудник",
           );
 
+          // Dynamic Retroactive Lateness Calculation for past shifts
+          let latMinutes = s.lateness_minutes || 0;
+          let latStatus = s.lateness_status || 'NONE';
+          let latPenalty = parseFloat(s.lateness_penalty || 0);
+
+          if (latStatus === 'NONE' && s.planned_start) {
+            const checkInDate = new Date(s.check_in);
+            const plannedStart = new Date(s.planned_start);
+            const diffMs = checkInDate.getTime() - plannedStart.getTime();
+            const diffMinutes = Math.floor(diffMs / 60000);
+
+            const settings = s.lateness_settings || {};
+            const gracePeriod = settings.grace_period ?? 5;
+
+            if (diffMinutes > gracePeriod) {
+              latMinutes = diffMinutes;
+              latStatus = 'PENDING';
+
+              const thresholds = settings.thresholds || [];
+              if (Array.isArray(thresholds) && thresholds.length > 0) {
+                const sorted = [...thresholds].sort((a, b) => b.minutes - a.minutes);
+                const matchedThreshold = sorted.find((t: any) => diffMinutes >= t.minutes);
+                if (matchedThreshold) {
+                  latPenalty = parseFloat(matchedThreshold.penalty) || 0;
+                }
+              }
+            }
+          }
+
+          s.lateness_minutes = latMinutes;
+          s.lateness_status = latStatus;
+          s.lateness_penalty = latPenalty;
+
           if (s.salary_snapshot?.paid_at || s.status === "PAID") {
             return {
               ...s,
               calculated_salary: parseFloat(s.calculated_salary || "0"),
               breakdown: s.salary_breakdown || {},
+              role_name: roleName,
+            };
+          }
+
+          if (s.salary_snapshot?.type === "PERIOD_BONUS") {
+            const amount = parseFloat(s.calculated_salary || "0");
+            return {
+              ...s,
+              calculated_salary: amount,
+              breakdown: s.salary_breakdown || {
+                base: 0,
+                bonuses: [{
+                  name: s.salary_snapshot.name || "Ручное начисление",
+                  amount: amount,
+                  type: "MANUAL_BONUS",
+                  payout_type: "REAL_MONEY"
+                }],
+                deductions: [],
+                total: amount
+              },
               role_name: roleName,
             };
           }
@@ -1583,6 +1651,8 @@ export async function generateMonthlySalaryReport(
               bar_purchases: parseFloat(s.bar_purchases || 0),
               shift_type: s.shift_type || "DAY",
               day_of_week: dayOfWeek,
+              lateness_penalty: s.lateness_status === 'CONFIRMED' ? parseFloat(s.lateness_penalty || 0) : 0,
+              lateness_minutes: s.lateness_status === 'CONFIRMED' ? parseInt(s.lateness_minutes || 0) : 0,
             },
             schemeWithRewards,
             reportMetricsForShift,
@@ -1880,8 +1950,16 @@ export async function generateMonthlySalaryReport(
         }
       }
 
-      // Final totals: base + shift bonuses + kpi bonuses
-      let final_total_accrued = base_salary + shift_bonuses + kpi_bonus_amount;
+      // standalone manual bonuses
+      const manual_bonuses_sum = empShifts
+        .filter((s: any) => 
+          s.salary_snapshot?.type === 'PERIOD_BONUS' && 
+          !matchedShiftIds.has(s.id)
+        )
+        .reduce((sum: number, s: any) => sum + parseFloat(s.calculated_salary || 0), 0);
+
+      // Final totals: base + shift bonuses + kpi bonuses + manual bonuses
+      let final_total_accrued = base_salary + shift_bonuses + kpi_bonus_amount + manual_bonuses_sum;
       let final_virtual_balance_accrued =
         virtual_shift_bonuses + virtual_kpi_bonus_amount;
 
@@ -2080,6 +2158,20 @@ export async function generateMonthlySalaryReport(
         has_kpi_feature,
         has_virtual_balance_feature,
         scheme_features,
+        manual_bonuses: empShifts
+          .filter((s: any) => 
+            s.salary_snapshot?.type === 'PERIOD_BONUS' && 
+            !matchedShiftIds.has(s.id)
+          )
+          .map((s: any) => ({
+            id: s.id,
+            date: s.check_in,
+            amount: parseFloat(s.calculated_salary || 0),
+            name: s.salary_snapshot?.name || "Ручное начисление",
+            comment: s.salary_snapshot?.comment || "",
+            accrued_by: s.salary_snapshot?.accrued_by,
+            accrued_at: s.salary_snapshot?.accrued_at
+          })),
         // New detailed data
         breakdown: {
           base_salary,
@@ -2198,6 +2290,9 @@ export async function generateMonthlySalaryReport(
               bonuses: breakdown.bonuses || [],
               real_money_bonuses: realMoneyBonuses,
               virtual_bonuses: virtualBonuses,
+              lateness_minutes: s.lateness_minutes || 0,
+              lateness_status: s.lateness_status || 'NONE',
+              lateness_penalty: parseFloat(s.lateness_penalty || 0)
             };
           }),
         ].sort(

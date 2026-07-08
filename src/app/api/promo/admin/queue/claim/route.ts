@@ -137,23 +137,29 @@ export async function POST(request: Request) {
         target = parseInt(settings.packages_accumulation_target || "5");
         await client.query(
           `UPDATE promo_package_progress 
-           SET accumulated_packages = GREATEST(0, accumulated_packages - $1), updated_at = NOW()
-           WHERE player_id = $2 AND club_id = $3`,
+           SET current_count = GREATEST(0, current_count - $1),
+               accumulated_packages = GREATEST(0, COALESCE(accumulated_packages, 0) - $1),
+               updated_at = NOW()
+           WHERE player_id = $2 AND club_id = $3 AND (program_id = 'legacy_packages' OR program_id = 'legacy')`,
           [target, item.player_id, item.club_id]
         );
       } else if (item.loyalty_type === "visits") {
         target = parseInt(settings.packages_visits_target || "10");
         await client.query(
           `UPDATE promo_package_progress 
-           SET accumulated_visits = GREATEST(0, accumulated_visits - $1), updated_at = NOW()
-           WHERE player_id = $2 AND club_id = $3`,
+           SET current_count = GREATEST(0, current_count - $1),
+               accumulated_visits = GREATEST(0, COALESCE(accumulated_visits, 0) - $1),
+               updated_at = NOW()
+           WHERE player_id = $2 AND club_id = $3 AND (program_id = 'legacy_visits' OR program_id = 'legacy')`,
           [target, item.player_id, item.club_id]
         );
       } else if (item.loyalty_type === "streak") {
         await client.query(
           `UPDATE promo_package_progress 
-           SET current_streak = 0, updated_at = NOW()
-           WHERE player_id = $1 AND club_id = $2`,
+           SET current_count = 0,
+               current_streak = 0,
+               updated_at = NOW()
+           WHERE player_id = $1 AND club_id = $2 AND (program_id = 'legacy_streak' OR program_id = 'legacy')`,
           [item.player_id, item.club_id]
         );
       }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { requireModuleAccess } from "@/lib/club-api-access";
+import { query } from "@/db";
 import { generateMonthlySalaryReport } from "@/lib/salary-engine";
 
 export async function GET(
@@ -32,6 +33,10 @@ export async function GET(
     const { reports, leaderboardState, leaderboardTop } =
       await generateMonthlySalaryReport(clubId, month, year);
 
+    // Get club timezone
+    const clubRes = await query(`SELECT timezone FROM clubs WHERE id = $1`, [clubId]);
+    const timezone = clubRes.rows[0]?.timezone || "Europe/Moscow";
+
     // Apply filtering logic
     const employeeIdFilter = searchParams.get("employee_id");
     let filteredSummary = reports.map((r: any) => r._legacy_summary_format);
@@ -44,6 +49,7 @@ export async function GET(
 
     return NextResponse.json({
       summary: filteredSummary,
+      timezone,
       leaderboard: leaderboardState
         ? {
             ...leaderboardState.meta,

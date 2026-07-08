@@ -20,7 +20,7 @@ export async function GET(
     await requireClubApiAccess(clubId);
 
     const result = await query(
-      `SELECT id, name, address, timezone, day_start_hour, night_start_hour, inventory_required, inventory_settings FROM clubs WHERE id = $1`,
+      `SELECT id, name, address, timezone, day_start_hour, night_start_hour, inventory_required, inventory_settings, lateness_settings FROM clubs WHERE id = $1`,
       [clubId],
     );
 
@@ -107,6 +107,10 @@ export async function PATCH(
       updates.push(`inventory_settings = $${idx++}`);
       values.push(normalizeInventorySettings(body.inventory_settings));
     }
+    if (body.lateness_settings !== undefined) {
+      updates.push(`lateness_settings = $${idx++}`);
+      values.push(JSON.stringify(body.lateness_settings));
+    }
 
     if (updates.length === 0) {
       return NextResponse.json(
@@ -118,7 +122,7 @@ export async function PATCH(
     values.push(clubId);
 
     const result = await query(
-      `UPDATE clubs SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, address, timezone, day_start_hour, night_start_hour, inventory_required, inventory_settings`,
+      `UPDATE clubs SET ${updates.join(", ")} WHERE id = $${idx} RETURNING id, name, address, timezone, day_start_hour, night_start_hour, inventory_required, inventory_settings, lateness_settings`,
       values,
     );
 

@@ -268,7 +268,7 @@ export async function processPackagePurchase(
   const programs = getActivePrograms(settings);
 
   const packagePrograms = programs.filter(
-    (p) => p.type === "package_accumulation" || p.type === "visit_streak"
+    (p) => p.type === "package_accumulation" || p.type === "visit_streak" || p.type === "visit_accumulation"
   );
   if (packagePrograms.length === 0) return;
 
@@ -339,6 +339,13 @@ export async function processPackagePurchase(
       } else {
         newCount = 1; // restart
       }
+    } else if (program.type === "visit_accumulation") {
+      // Daily visit with purchase
+      if (lastDateStr === todayStr) {
+        // Already counted today
+      } else {
+        newCount += 1;
+      }
     }
 
     // Check if target reached, cap count at target
@@ -372,7 +379,12 @@ export async function processPlayerVisit(
   const timezone = clubRes.rows[0]?.timezone || "Europe/Moscow";
   const programs = getActivePrograms(settings);
 
-  const visitPrograms = programs.filter((p) => p.type === "visit_accumulation");
+  // Only process programs that have no specific package or service filters (pure visits)
+  const visitPrograms = programs.filter(
+    (p) => p.type === "visit_accumulation" &&
+           (!p.trigger_product_ids || p.trigger_product_ids.length === 0) &&
+           (!p.trigger_service_ids || p.trigger_service_ids.length === 0)
+  );
   if (visitPrograms.length === 0) return;
 
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: timezone });

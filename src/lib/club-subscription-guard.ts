@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { hasColumn } from "@/lib/db-compat";
+import { verifySessionValue } from "@/lib/session";
 import {
   resolveSubscriptionState,
   getGracePeriodInfo,
@@ -27,7 +28,8 @@ export async function ensureOwnerSubscriptionActive(
       hasAccess = access.isFullAccess;
     }
 
-    if (!hasAccess || access.userId !== userId) {
+    const verifiedUserId = verifySessionValue(userId) || userId;
+    if (!hasAccess || access.userId !== verifiedUserId) {
       return {
         ok: false as const,
         response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),

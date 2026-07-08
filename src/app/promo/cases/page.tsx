@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Package, Award, Sparkles, X, ShoppingCart, HelpCircle, Loader2 } from "lucide-react";
 import { PromoHeader } from "../components/PromoHeader";
@@ -29,6 +30,7 @@ interface Case {
 }
 
 export default function CasesPage() {
+  const router = useRouter();
   const [cases, setCases] = useState<Case[]>([]);
   const [player, setPlayer] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -81,7 +83,7 @@ export default function CasesPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (selectedCase && canvasRef.current) {
@@ -289,6 +291,11 @@ export default function CasesPage() {
         fetch("/api/promo/player"),
         fetch("/api/promo/inventory").then((res) => (res.ok ? res.json() : null)),
       ]);
+
+      if (playerRes.status === 401 || casesRes.status === 401) {
+        router.push("/promo/login");
+        return;
+      }
 
       if (casesRes.ok && playerRes.ok) {
         const casesData = await casesRes.json();

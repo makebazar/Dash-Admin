@@ -165,12 +165,37 @@ export async function GET(request: Request) {
 
       // 2. Fetch loyalty progress
       const loyaltyRes = await query(
-        `SELECT accumulated_packages, accumulated_visits, current_streak, last_visit_date, last_purchase_date
+        `SELECT program_id, current_count, last_event_date
          FROM promo_package_progress
          WHERE player_id = $1 AND club_id = $2`,
         [playerId, parseInt(clubId)]
       );
-      loyalty = loyaltyRes.rows[0] || null;
+
+      let accumulated_packages = 0;
+      let accumulated_visits = 0;
+      let current_streak = 0;
+      let last_purchase_date = null;
+      let last_visit_date = null;
+
+      for (const row of loyaltyRes.rows) {
+        if (row.program_id === "legacy_packages" || row.program_id === "legacy") {
+          accumulated_packages = row.current_count;
+          last_purchase_date = row.last_event_date;
+        } else if (row.program_id === "legacy_visits") {
+          accumulated_visits = row.current_count;
+          last_visit_date = row.last_event_date;
+        } else if (row.program_id === "legacy_streak") {
+          current_streak = row.current_count;
+        }
+      }
+
+      loyalty = {
+        accumulated_packages,
+        accumulated_visits,
+        current_streak,
+        last_purchase_date,
+        last_visit_date,
+      };
 
       // 3. Fetch player quests
       const questsRes = await query(

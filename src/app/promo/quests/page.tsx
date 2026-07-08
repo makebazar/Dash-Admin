@@ -67,7 +67,7 @@ export default function QuestsPage() {
     try {
       const res = await fetch("/api/promo/player/quests");
       if (res.status === 401) {
-        router.push("/promo");
+        router.push("/promo/login");
         return;
       }
       const data = await res.json();

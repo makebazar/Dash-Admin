@@ -37,6 +37,8 @@ interface ShiftData {
   bar_purchases?: number; // Added to support bar deductions
   shift_type?: "DAY" | "NIGHT";
   day_of_week?: "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
+  lateness_penalty?: number;
+  lateness_minutes?: number;
 }
 
 export async function calculateSalary(
@@ -609,6 +611,18 @@ export async function calculateSalary(
     });
     total -= deduction;
     breakdown.accrued_payout -= deduction;
+  }
+
+  // 6. Lateness Penalty (from shift.lateness_penalty)
+  const latenessPenalty = (shift as any).lateness_penalty;
+  if (latenessPenalty && latenessPenalty > 0) {
+    const penalty = parseFloat(latenessPenalty.toFixed(2));
+    breakdown.deductions.push({
+      name: `Штраф за опоздание (${(shift as any).lateness_minutes || 0} мин)`,
+      amount: penalty,
+    });
+    total -= penalty;
+    breakdown.accrued_payout -= penalty;
   }
 
   breakdown.total = parseFloat(total.toFixed(2));

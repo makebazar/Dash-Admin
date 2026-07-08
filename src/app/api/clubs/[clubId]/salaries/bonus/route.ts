@@ -12,7 +12,7 @@ export async function POST(
 
         if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        const { employee_id, amount, date, bonus_name, metric_key } = await request.json();
+        const { employee_id, amount, date, bonus_name, metric_key, comment } = await request.json();
 
         if (!employee_id || !amount || !date) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -28,6 +28,7 @@ export async function POST(
             type: 'PERIOD_BONUS',
             name: bonus_name,
             metric_key: metric_key,
+            comment: comment || '',
             accrued_by: userId,
             accrued_at: new Date().toISOString()
         };

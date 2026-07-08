@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Save, Globe, Building, MapPin, Sun, Moon } from "lucide-react"
+import { Loader2, Save, Globe, Building, MapPin, Sun, Moon, Plus, Trash2 } from "lucide-react"
 import { PageShell } from "@/components/layout/PageShell"
 
 // Common Russian timezones
@@ -47,6 +47,8 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
     const [timezone, setTimezone] = useState('Europe/Moscow')
     const [dayStartHour, setDayStartHour] = useState(8)
     const [nightStartHour, setNightStartHour] = useState(20)
+    const [gracePeriod, setGracePeriod] = useState(5)
+    const [thresholds, setThresholds] = useState<{ minutes: number; penalty: number }[]>([])
 
     useEffect(() => {
         params.then(p => {
@@ -66,6 +68,9 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                 setTimezone(data.club.timezone || 'Europe/Moscow')
                 setDayStartHour(data.club.day_start_hour ?? 8)
                 setNightStartHour(data.club.night_start_hour ?? 20)
+                const latSettings = data.club.lateness_settings || {}
+                setGracePeriod(latSettings.grace_period ?? 5)
+                setThresholds(latSettings.thresholds || [])
             }
         } catch (error) {
             console.error('Error:', error)
@@ -86,6 +91,10 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                     timezone,
                     day_start_hour: dayStartHour,
                     night_start_hour: nightStartHour,
+                    lateness_settings: {
+                        grace_period: gracePeriod,
+                        thresholds: thresholds
+                    }
                 })
             })
 
@@ -262,6 +271,98 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                                     Ночная смена: с {formatHour(nightStartHour)} до {formatHour(dayStartHour)}
                                 </li>
                             </ul>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Lateness settings */}
+                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 relative overflow-hidden">
+                    <div className="mb-6">
+                        <h3 className="flex items-center gap-2 text-xl font-bold text-slate-900">
+                            Дисциплина и опоздания
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-1 font-medium">Настройте правила контроля опозданий сотрудников</p>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="gracePeriod">Допустимое опоздание (минут)</Label>
+                            <Input
+                                id="gracePeriod"
+                                type="number"
+                                className="h-11 rounded-xl"
+                                value={gracePeriod}
+                                onChange={e => setGracePeriod(parseInt(e.target.value) || 0)}
+                                placeholder="5"
+                            />
+                            <p className="text-xs text-muted-foreground">Сотрудники, опоздавшие на это время или меньше, не будут считаться опоздавшими.</p>
+                        </div>
+
+                        <div className="space-y-4 pt-4 border-t">
+                            <div className="flex items-center justify-between">
+                                <Label>Пороги штрафов за опоздание</Label>
+                                <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="rounded-xl flex items-center gap-1"
+                                    onClick={() => setThresholds([...thresholds, { minutes: 15, penalty: 100 }])}
+                                >
+                                    <Plus className="h-3.5 w-3.5" />
+                                    Добавить порог
+                                </Button>
+                            </div>
+                            
+                            {thresholds.length === 0 ? (
+                                <div className="text-sm text-slate-400 text-center py-4 bg-slate-50 rounded-2xl border border-dashed">
+                                    Пороги штрафов не заданы. Вы можете добавить их для автоматического расчета.
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {thresholds.map((t, idx) => (
+                                        <div key={idx} className="flex items-center gap-2">
+                                            <div className="flex-1 flex items-center gap-2">
+                                                <span className="text-xs text-slate-500 whitespace-nowrap">Опоздание от</span>
+                                                <Input
+                                                    type="number"
+                                                    className="h-10 rounded-xl"
+                                                    value={t.minutes}
+                                                    onChange={e => {
+                                                        const newT = [...thresholds];
+                                                        newT[idx].minutes = parseInt(e.target.value) || 0;
+                                                        setThresholds(newT);
+                                                    }}
+                                                />
+                                                <span className="text-xs text-slate-500">мин</span>
+                                            </div>
+                                            <div className="flex-1 flex items-center gap-2">
+                                                <span className="text-xs text-slate-500 whitespace-nowrap">Штраф</span>
+                                                <Input
+                                                    type="number"
+                                                    className="h-10 rounded-xl"
+                                                    value={t.penalty}
+                                                    onChange={e => {
+                                                        const newT = [...thresholds];
+                                                        newT[idx].penalty = parseInt(e.target.value) || 0;
+                                                        setThresholds(newT);
+                                                    }}
+                                                />
+                                                <span className="text-xs text-slate-500">₽</span>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl h-10 w-10 p-0 shrink-0"
+                                                onClick={() => {
+                                                    setThresholds(thresholds.filter((_, i) => i !== idx));
+                                                }}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

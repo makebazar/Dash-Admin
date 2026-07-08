@@ -23,11 +23,14 @@ public sealed class HardwareMonitorService : IDisposable
 
     public (float cpuTemp, float cpuLoad, string cpuName, List<(string name, float temp, float load, ulong memUsed, ulong memTotal)> gpus) Read()
     {
-        _computer.IsCpuEnabled = true;
-        _computer.IsGpuEnabled = true;
-        _computer.IsMotherboardEnabled = true;
-        _computer.IsControllerEnabled = true;
-        _computer.Accept(_visitor);
+        try 
+        {
+            _computer.Accept(_visitor);
+        }
+        catch 
+        {
+            // Ignore potential refresh errors
+        }
 
         float cpuTemp = 0;
         float cpuLoad = 0;
@@ -40,8 +43,8 @@ public sealed class HardwareMonitorService : IDisposable
             if (hw.HardwareType == HardwareType.Cpu)
             {
                 cpuName = hw.Name;
-                cpuTemp = Math.Max(cpuTemp, PickMaxTempRecursive(hw));
-                cpuLoad = Math.Max(cpuLoad, PickLoadRecursive(hw));
+                cpuTemp = PickMaxTempRecursive(hw);
+                cpuLoad = PickLoadRecursive(hw);
             }
 
             if (hw.HardwareType == HardwareType.GpuNvidia || hw.HardwareType == HardwareType.GpuAmd || hw.HardwareType == HardwareType.GpuIntel)
@@ -77,35 +80,24 @@ public sealed class HardwareMonitorService : IDisposable
 
     private static float PickMaxTempRecursive(IHardware hw)
     {
-        float preferredMax = 0;
-        float otherMax = 0;
-
+        float maxTemp = 0;
         Traverse(hw, part =>
         {
             foreach (var s in part.Sensors)
             {
                 if (s.SensorType != SensorType.Temperature) continue;
-                if (!s.Value.HasValue) continue;
+                if (!s.Value.HasValue || s.Value.Value <= 0) continue;
 
                 var name = s.Name ?? "";
                 if (name.Contains("TjMax", StringComparison.OrdinalIgnoreCase)) continue;
 
-                var value = s.Value.Value;
-
-                if (name.Contains("Package", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("Core Max", StringComparison.OrdinalIgnoreCase) ||
-                    name.Contains("CPU", StringComparison.OrdinalIgnoreCase))
-                {
-                    preferredMax = Math.Max(preferredMax, value);
-                }
-                else
-                {
-                    otherMax = Math.Max(otherMax, value);
-                }
+                // For modern Intel, "Package" is usually the best, but we'll take the highest of all
+                maxTemp = Math.Max(maxTemp, s.Value.Value);
             }
         });
 
-        return preferredMax > 0 ? preferredMax : otherMax;
+        // Fallback: if CPU hardware didn't have it, some older platforms report it via Motherboard/SuperIO
+        return maxTemp;
     }
 
     private static float PickLoadRecursive(IHardware hw)

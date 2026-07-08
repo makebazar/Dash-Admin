@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     }
 
     // Get player global data + club-specific balance
-    const result = await client.query(
+    let result = await client.query(
       `SELECT p.id, p.full_name, p.phone_number, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
              FROM promo_players p
              JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
@@ -22,6 +22,38 @@ export async function GET(request: Request) {
              WHERE p.id = $1`,
       [playerId, activeClubId],
     );
+
+    if (result.rowCount === 0) {
+      // Check if player exists globally and club exists
+      const playerCheck = await client.query(
+        `SELECT id FROM promo_players WHERE id = $1::uuid`,
+        [playerId]
+      );
+      const clubCheck = await client.query(
+        `SELECT id FROM clubs WHERE id = $1::int`,
+        [activeClubId]
+      );
+
+      if (playerCheck.rowCount && playerCheck.rowCount > 0 && clubCheck.rowCount && clubCheck.rowCount > 0) {
+        // Create balance record for this club
+        await client.query(
+          `INSERT INTO promo_player_balances (player_id, club_id, total_xp, bonus_balance)
+           VALUES ($1::uuid, $2::int, 0, 0)
+           ON CONFLICT (player_id, club_id) DO NOTHING`,
+          [playerId, activeClubId]
+        );
+
+        // Fetch again
+        result = await client.query(
+          `SELECT p.id, p.full_name, p.phone_number, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
+                 FROM promo_players p
+                 JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
+                 JOIN clubs c ON c.id = b.club_id
+                 WHERE p.id = $1`,
+          [playerId, activeClubId],
+        );
+      }
+    }
 
     if (result.rowCount === 0) {
       return NextResponse.json({ error: "Data not found" }, { status: 404 });
@@ -124,8 +156,9 @@ export async function GET(request: Request) {
     // Fetch package progress
     let packageProgress = null;
     try {
-      const progressRes = await client.query(
-        `SELECT accumulated_packages, accumulated_visits, current_streak, last_visit_date, last_purchase_date
+      // Fetch all program progress rows for this player in this club
+      const allProgressRes = await client.query(
+        `SELECT program_id, current_count, last_event_date
          FROM promo_package_progress
          WHERE player_id = $1 AND club_id = $2`,
         [playerId, activeClubId]
@@ -153,40 +186,41 @@ export async function GET(request: Request) {
       );
       const pendingPrizes = pendingPrizesRes.rows;
 
-      // Fetch per-program progress
-      const allProgressRes = await client.query(
-        `SELECT program_id, current_count, last_event_date
-         FROM promo_package_progress
-         WHERE player_id = $1 AND club_id = $2`,
-        [playerId, activeClubId]
-      );
       const programProgress: Record<string, { current_count: number; last_event_date: string | null }> = {};
+      
+      let accumulated_packages = 0;
+      let accumulated_visits = 0;
+      let current_streak = 0;
+      let last_purchase_date = null;
+      let last_visit_date = null;
+
       for (const row of allProgressRes.rows) {
         programProgress[row.program_id] = {
           current_count: row.current_count,
           last_event_date: row.last_event_date,
         };
+
+        if (row.program_id === "legacy_packages" || row.program_id === "legacy") {
+          accumulated_packages = row.current_count;
+          last_purchase_date = row.last_event_date;
+        } else if (row.program_id === "legacy_visits") {
+          accumulated_visits = row.current_count;
+          last_visit_date = row.last_event_date;
+        } else if (row.program_id === "legacy_streak") {
+          current_streak = row.current_count;
+        }
       }
 
-      if (progressRes.rows.length > 0) {
-        packageProgress = {
-          ...progressRes.rows[0],
-          pendingClaims,
-          pendingPrizes,
-          programProgress,
-        };
-      } else {
-        packageProgress = {
-          accumulated_packages: 0,
-          accumulated_visits: 0,
-          current_streak: 0,
-          last_visit_date: null,
-          last_purchase_date: null,
-          pendingClaims,
-          pendingPrizes,
-          programProgress,
-        };
-      }
+      packageProgress = {
+        accumulated_packages,
+        accumulated_visits,
+        current_streak,
+        last_visit_date,
+        last_purchase_date,
+        pendingClaims,
+        pendingPrizes,
+        programProgress,
+      };
     } catch (err) {
       console.error("Failed to fetch package progress for player:", err);
     }

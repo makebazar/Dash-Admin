@@ -1,19 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\USER\\Desktop\\dashadmin-agent-dotnet\\DashAdminAgent\\DashAdminAgent.csproj": {}
+    "C:\\Users\\USER\\Desktop\\DashAdminAgent\\DashAdminAgent.csproj": {}
   },
   "projects": {
-    "C:\\Users\\USER\\Desktop\\dashadmin-agent-dotnet\\DashAdminAgent\\DashAdminAgent.csproj": {
+    "C:\\Users\\USER\\Desktop\\DashAdminAgent\\DashAdminAgent.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\USER\\Desktop\\dashadmin-agent-dotnet\\DashAdminAgent\\DashAdminAgent.csproj",
-        "projectName": "dashadmin-agent",
-        "projectPath": "C:\\Users\\USER\\Desktop\\dashadmin-agent-dotnet\\DashAdminAgent\\DashAdminAgent.csproj",
+        "projectUniqueName": "C:\\Users\\USER\\Desktop\\DashAdminAgent\\DashAdminAgent.csproj",
+        "projectName": "DashAdminAgent",
+        "projectPath": "C:\\Users\\USER\\Desktop\\DashAdminAgent\\DashAdminAgent.csproj",
         "packagesPath": "C:\\Users\\USER\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\USER\\Desktop\\dashadmin-agent-dotnet\\DashAdminAgent\\obj\\",
+        "outputPath": "C:\\Users\\USER\\Desktop\\DashAdminAgent\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
+          "C:\\Users\\USER\\Desktop\\DashAdminAgent\\NuGet.Config",
           "C:\\Users\\USER\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -48,17 +49,51 @@
           "framework": "net8.0-windows7.0",
           "targetAlias": "net8.0-windows",
           "dependencies": {
+            "Avalonia": {
+              "target": "Package",
+              "version": "[11.0.10, )"
+            },
+            "Avalonia.Controls.DataGrid": {
+              "target": "Package",
+              "version": "[11.0.10, )"
+            },
+            "Avalonia.Desktop": {
+              "target": "Package",
+              "version": "[11.0.10, )"
+            },
+            "Avalonia.Diagnostics": {
+              "target": "Package",
+              "version": "[11.0.10, )"
+            },
+            "Avalonia.Fonts.Inter": {
+              "target": "Package",
+              "version": "[11.0.10, )"
+            },
+            "Avalonia.ReactiveUI": {
+              "target": "Package",
+              "version": "[11.0.10, )"
+            },
+            "Avalonia.Themes.Fluent": {
+              "target": "Package",
+              "version": "[11.0.10, )"
+            },
             "LibreHardwareMonitorLib": {
               "target": "Package",
               "version": "[0.9.7-pre675, )"
             },
-            "Microsoft.VisualBasic": {
+            "Microsoft.NET.ILLink.Tasks": {
+              "suppressParent": "All",
               "target": "Package",
-              "version": "[10.1.0, )"
+              "version": "[8.0.27, )",
+              "autoReferenced": true
             },
             "System.Management": {
               "target": "Package",
               "version": "[10.0.6, )"
+            },
+            "System.Text.Encoding.CodePages": {
+              "target": "Package",
+              "version": "[8.0.0, )"
             }
           },
           "imports": [
@@ -78,6 +113,10 @@
               "version": "[8.0.27, 8.0.27]"
             },
             {
+              "name": "Microsoft.AspNetCore.App.Runtime.win-x64",
+              "version": "[8.0.27, 8.0.27]"
+            },
+            {
               "name": "Microsoft.NETCore.App.Host.win-x64",
               "version": "[8.0.27, 8.0.27]"
             },
@@ -86,19 +125,29 @@
               "version": "[8.0.27, 8.0.27]"
             },
             {
+              "name": "Microsoft.NETCore.App.Runtime.win-x64",
+              "version": "[8.0.27, 8.0.27]"
+            },
+            {
               "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[8.0.27, 8.0.27]"
+            },
+            {
+              "name": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
               "version": "[8.0.27, 8.0.27]"
             }
           ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
-            },
-            "Microsoft.WindowsDesktop.App": {
-              "privateAssets": "none"
             }
           },
           "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.300/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "win-x64": {
+          "#import": []
         }
       }
     }

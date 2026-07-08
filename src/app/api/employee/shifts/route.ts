@@ -251,12 +251,82 @@ export async function POST(request: Request) {
       }
     }
 
-    // Create new shift
+    // 1. Format check-in date to local date in timezone
+    const checkInDateStr = new Intl.DateTimeFormat("en-CA", {
+      timeZone: clubTimezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(checkIn);
+
+    // 2. Query work_schedules to see if they are planned to work
+    const scheduleRes = await query(
+      `SELECT 
+         ws.shift_type,
+         c.lateness_settings,
+         (ws.date + (CASE WHEN ws.shift_type = 'DAY' THEN c.day_start_hour ELSE c.night_start_hour END * INTERVAL '1 hour')) AT TIME ZONE c.timezone AS planned_start
+       FROM work_schedules ws
+       JOIN clubs c ON ws.club_id = c.id
+       WHERE ws.club_id = $1 AND ws.user_id = $2 AND ws.date = $3::date
+       LIMIT 1`,
+      [club_id, userId, checkInDateStr]
+    );
+
+    let latenessMinutes = 0;
+    let latenessStatus = "NONE";
+    let latenessPenalty = 0;
+
+    if (scheduleRes.rows.length > 0) {
+      const row = scheduleRes.rows[0];
+      const plannedStart = new Date(row.planned_start);
+      const diffMs = checkIn.getTime() - plannedStart.getTime();
+      const diffMinutes = Math.floor(diffMs / 60000);
+
+      const settings = row.lateness_settings || {};
+      const gracePeriod = settings.grace_period ?? 5;
+
+      if (diffMinutes > gracePeriod) {
+        latenessMinutes = diffMinutes;
+        latenessStatus = "PENDING";
+
+        // Calculate suggested penalty
+        const thresholds = settings.thresholds || [];
+        if (Array.isArray(thresholds) && thresholds.length > 0) {
+          const sorted = [...thresholds].sort((a, b) => b.minutes - a.minutes);
+          const matchedThreshold = sorted.find((t: any) => diffMinutes >= t.minutes);
+          if (matchedThreshold) {
+            latenessPenalty = parseFloat(matchedThreshold.penalty) || 0;
+          }
+        }
+      }
+    }
+
+    // Create new shift with lateness fields
     const result = await query(
-      `INSERT INTO shifts (user_id, club_id, check_in, shift_type, shift_role_id_snapshot, shift_role_name_snapshot)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id`,
-      [userId, club_id, checkIn, shiftType, effectiveRoleId, effectiveRoleName],
+      `INSERT INTO shifts (
+        user_id, 
+        club_id, 
+        check_in, 
+        shift_type, 
+        shift_role_id_snapshot, 
+        shift_role_name_snapshot,
+        lateness_minutes,
+        lateness_status,
+        lateness_penalty
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id`,
+      [
+        userId,
+        club_id,
+        checkIn,
+        shiftType,
+        effectiveRoleId,
+        effectiveRoleName,
+        latenessMinutes,
+        latenessStatus,
+        latenessPenalty
+      ],
     );
 
     return NextResponse.json({

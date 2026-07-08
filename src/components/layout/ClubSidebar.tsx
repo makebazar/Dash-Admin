@@ -25,7 +25,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Gift,
-  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -113,16 +112,6 @@ export function ClubSidebarContent({
         />
       ),
       visible: hasModuleAccess("dashboard") || isExpiredForOwnerUi,
-    },
-    {
-      href: `/clubs/${clubId}/analytics`,
-      label: "AI Аналитика",
-      icon: (
-        <TrendingUp
-          className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")}
-        />
-      ),
-      visible: !isExpiredForOwnerUi && hasModuleAccess("shifts"),
     },
     {
       href: `/clubs/${clubId}/shifts`,

@@ -158,6 +158,7 @@ interface Employee {
       maintenance_overdue_completed_days: number;
     };
   } | null;
+  manual_bonuses?: any[];
 }
 
 interface PayrollData {
@@ -174,6 +175,7 @@ interface PayrollData {
       score: number;
     }>;
   };
+  timezone?: string;
 }
 
 export default function PayrollDashboard({ clubId }: { clubId: string }) {
@@ -211,6 +213,104 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     total: number;
   }>(null);
   const [useActualKpi, setUseActualKpi] = useState(true);
+
+  // Bonus modal state
+  const [bonusModal, setBonusModal] = useState<{
+    open: boolean;
+    employee: any | null;
+  }>({ open: false, employee: null });
+  const [bonusForm, setBonusForm] = useState({
+    amount: "",
+    name: "Ручная премия",
+    comment: "",
+    date: new Date().toLocaleDateString("en-CA"),
+    type: "PREMIUM" as "PREMIUM" | "FINE",
+  });
+  const [processingBonus, setProcessingBonus] = useState(false);
+  // Lateness modal state
+  const [latenessModal, setLatenessModal] = useState<{
+    open: boolean;
+    employeeId: number;
+    employeeName: string;
+    shift: any | null;
+  }>({ open: false, employeeId: 0, employeeName: "", shift: null });
+  const [customPenalty, setCustomPenalty] = useState("");
+  const [processingLateness, setProcessingLateness] = useState(false);
+
+  const handleLatenessResolve = async (status: "CONFIRMED" | "CANCELLED", penaltyAmount?: number) => {
+    if (!latenessModal.shift) return;
+    setProcessingLateness(true);
+    try {
+      const response = await fetch(`/api/clubs/${clubId}/shifts/${latenessModal.shift.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lateness_status: status,
+          lateness_penalty: penaltyAmount !== undefined ? penaltyAmount : latenessModal.shift.lateness_penalty,
+        }),
+      });
+
+      if (response.ok) {
+        alert(status === "CONFIRMED" ? "Штраф подтвержден!" : "Опоздание прощено!");
+        setLatenessModal({ open: false, employeeId: 0, employeeName: "", shift: null });
+        setCustomPenalty("");
+        fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Lateness resolve error:", error);
+      alert("Ошибка при сохранении решения");
+    } finally {
+      setProcessingLateness(false);
+    }
+  };
+  const handleAccrueBonusSubmit = async () => {
+    if (!bonusModal.employee) return;
+    if (!bonusForm.amount || isNaN(parseFloat(bonusForm.amount))) {
+      alert("Введите корректную сумму");
+      return;
+    }
+    setProcessingBonus(true);
+    const amountValue = parseFloat(bonusForm.amount);
+    const finalAmount = bonusForm.type === "FINE" ? -amountValue : amountValue;
+
+    try {
+      const response = await fetch(`/api/clubs/${clubId}/salaries/bonus`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employee_id: bonusModal.employee.id,
+          amount: finalAmount,
+          date: bonusForm.date,
+          bonus_name: bonusForm.name,
+          comment: bonusForm.comment,
+        }),
+      });
+
+      if (response.ok) {
+        alert(bonusForm.type === "FINE" ? "Штраф успешно выписан!" : "Начисление успешно добавлено!");
+        setBonusModal({ open: false, employee: null });
+        setBonusForm({
+          amount: "",
+          name: "Ручная премия",
+          comment: "",
+          date: new Date().toLocaleDateString("en-CA"),
+          type: "PREMIUM",
+        });
+        fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Accrual error:", error);
+      alert("Ошибка при добавлении начисления");
+    } finally {
+      setProcessingBonus(false);
+    }
+  };
 
   const toggleCard = (employeeId: number) => {
     setExpandedCards((prev) => {
@@ -617,6 +717,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
               : [],
           })),
           leaderboard: json.leaderboard,
+          timezone: json.timezone,
         });
       } else {
         setData(json);
@@ -815,6 +916,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 <div className="mt-1 text-3xl font-black tracking-tight text-slate-900">
                   {formatCurrency(total)}
                 </div>
+
               </div>
               <div className="grid grid-cols-2 gap-2 min-w-65">
                 <div className="rounded-2xl border border-orange-200 bg-orange-50/60 p-3 text-center">
@@ -984,6 +1086,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                             </div>
                           </div>
                         )}
+
                       </>
                     );
                   })()}
@@ -1991,6 +2094,31 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                           </div>
                         );
                       })()}
+                      {(() => {
+                        const lateShifts = (employee.shifts || []).filter(
+                          (s: any) => s.lateness_status && s.lateness_status !== "NONE"
+                        );
+                        const pendingLate = lateShifts.filter((s: any) => s.lateness_status === "PENDING").length;
+                        const totalLate = lateShifts.length;
+                        
+                        if (totalLate === 0) return null;
+
+                        return (
+                          <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-3 animate-in fade-in duration-200">
+                            <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-rose-600/80">
+                              Опоздания
+                            </p>
+                            <p className="font-bold text-rose-700">
+                              {totalLate} {totalLate === 1 ? 'раз' : 'раза'}
+                              {pendingLate > 0 && (
+                                <span className="text-[9px] text-amber-600 font-bold block mt-0.5">
+                                  ({pendingLate} ожидает)
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        );
+                      })()}
                       {employee.total_bar_purchases &&
                       employee.total_bar_purchases > 0 ? (
                         <div className="rounded-xl border border-rose-100/60 bg-rose-50/40 p-3">
@@ -2035,7 +2163,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                     <div className="flex border-b mb-6 overflow-x-auto scrollbar-hide">
                       {[
                         { id: "overview", label: "Обзор" },
-                        { id: "kpi", label: "KPI и Начисления" },
+                        { id: "kpi", label: "KPI" },
+                        { id: "adjustments", label: "Начисления и штрафы" },
                         { id: "shifts", label: "Смены" },
                         { id: "bar", label: "Бар" },
                         { id: "payments", label: "Выплаты" },
@@ -2388,6 +2517,54 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                       </div>
                     )}
 
+                    {activeTabs[employee.id] === "adjustments" && (
+                      <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
+                        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                          <h4 className="font-bold text-base text-slate-900 mb-6">
+                            Ручные начисления и штрафы
+                          </h4>
+
+                          {(!employee.manual_bonuses || employee.manual_bonuses.length === 0) ? (
+                            <div className="py-12 text-center text-muted-foreground italic border border-dashed border-slate-200 rounded-2xl bg-slate-50/20">
+                              Нет ручных начислений или штрафов в этом периоде
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-slate-100">
+                              {employee.manual_bonuses.map((b: any) => (
+                                <div key={b.id} className="py-4 flex items-center justify-between gap-4 first:pt-0 last:pb-0">
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-sm text-slate-800">{b.name}</div>
+                                    {b.comment && (
+                                      <div className="text-xs text-muted-foreground mt-0.5 max-w-md break-words italic">
+                                        &ldquo;{b.comment}&rdquo;
+                                      </div>
+                                    )}
+                                    <div className="text-[10px] text-slate-400 mt-1">
+                                      {new Date(b.date).toLocaleDateString("ru-RU")}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-4 shrink-0">
+                                    <span className={`text-sm font-black ${b.amount >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                                      {b.amount >= 0 ? "+" : ""}
+                                      {formatCurrency(b.amount)}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteShift(b.id)}
+                                      className="text-slate-400 hover:text-rose-600 p-2 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                                      title="Удалить"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {activeTabs[employee.id] === "shifts" && (
                       <div className="space-y-4 animate-in slide-in-from-left-2 duration-300">
                         {/* Define identification again for the table below */}
@@ -2518,6 +2695,16 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 {shiftTypeLabel(
                                                   shift.shift_type,
                                                 )}
+                                                {shift.date && (
+                                                  <>
+                                                    {" • "}
+                                                    {new Date(shift.date).toLocaleTimeString("ru-RU", {
+                                                      hour: "2-digit",
+                                                      minute: "2-digit",
+                                                      timeZone: data?.timezone || "Europe/Moscow"
+                                                    })}
+                                                  </>
+                                                )}
                                               </div>
                                               {shift.role_name ? (
                                                 <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight border bg-slate-50 text-slate-700 border-slate-200">
@@ -2529,6 +2716,31 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                               >
                                                 {statusLabel}
                                               </span>
+                                              {shift.lateness_status && shift.lateness_status !== 'NONE' && (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation(); // Prevent row collapse/expand
+                                                    setLatenessModal({
+                                                      open: true,
+                                                      employeeId: employee.id,
+                                                      employeeName: employee.full_name,
+                                                      shift: shift
+                                                    });
+                                                  }}
+                                                  className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tight shadow-sm border transition-all cursor-pointer hover:brightness-90 flex items-center gap-1 ${
+                                                    shift.lateness_status === 'PENDING'
+                                                      ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
+                                                      : shift.lateness_status === 'CONFIRMED'
+                                                        ? 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
+                                                        : 'bg-slate-100 text-slate-500 border-slate-300 hover:bg-slate-200'
+                                                  }`}
+                                                >
+                                                  {shift.lateness_status === 'PENDING' && `⚠️ Опоздание: ${shift.lateness_minutes} мин`}
+                                                  {shift.lateness_status === 'CONFIRMED' && `⚠️ Опоздание (Штраф: ${formatCurrency(shift.lateness_penalty)})`}
+                                                  {shift.lateness_status === 'CANCELLED' && `✓ Опоздание ${shift.lateness_minutes} мин (прощено)`}
+                                                </button>
+                                              )}
                                             </div>
 
                                             <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
@@ -2747,6 +2959,134 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                               </div>
                                             )}
                                           </div>
+
+                                          {shift.lateness_status && shift.lateness_status !== 'NONE' && (
+                                            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                                                  Управление опозданием ({shift.lateness_minutes} мин)
+                                                </span>
+                                              </div>
+
+                                              <div className="text-sm text-slate-600">
+                                                {shift.lateness_status === 'PENDING' ? (
+                                                  <p>
+                                                    Сотрудник опоздал на <span className="font-bold text-slate-900">{shift.lateness_minutes} мин</span>. 
+                                                    Рекомендуемый штраф по настройкам: <span className="font-bold text-slate-900">{formatCurrency(shift.lateness_penalty)}</span>.
+                                                  </p>
+                                                ) : shift.lateness_status === 'CONFIRMED' ? (
+                                                  <p className="text-rose-700 font-medium">
+                                                    Штраф в размере <span className="font-black">{formatCurrency(shift.lateness_penalty)}</span> подтвержден.
+                                                  </p>
+                                                ) : (
+                                                  <p className="text-slate-500 font-medium">
+                                                    Опоздание прощено. Штраф списан.
+                                                  </p>
+                                                )}
+                                              </div>
+
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <button
+                                                  type="button"
+                                                  onClick={async () => {
+                                                    try {
+                                                      const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`, {
+                                                        method: 'PATCH',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({
+                                                          lateness_status: 'CONFIRMED',
+                                                          lateness_penalty: shift.lateness_penalty
+                                                        })
+                                                      });
+                                                      if (res.ok) {
+                                                        alert('Штраф успешно подтвержден!');
+                                                        fetchData();
+                                                      } else {
+                                                        alert('Ошибка обновления статуса');
+                                                      }
+                                                    } catch (e) {
+                                                      console.error(e);
+                                                      alert('Ошибка соединения');
+                                                    }
+                                                  }}
+                                                  className="h-9 px-3 text-xs font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-sm cursor-pointer"
+                                                >
+                                                  Подтвердить штраф
+                                                </button>
+
+                                                <button
+                                                  type="button"
+                                                  onClick={async () => {
+                                                    try {
+                                                      const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`, {
+                                                        method: 'PATCH',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({
+                                                          lateness_status: 'CANCELLED',
+                                                          lateness_penalty: 0
+                                                        })
+                                                      });
+                                                      if (res.ok) {
+                                                        alert('Опоздание прощено!');
+                                                        fetchData();
+                                                      } else {
+                                                        alert('Ошибка обновления статуса');
+                                                      }
+                                                    } catch (e) {
+                                                      console.error(e);
+                                                      alert('Ошибка соединения');
+                                                    }
+                                                  }}
+                                                  className="h-9 px-3 text-xs font-semibold rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
+                                                >
+                                                  Простить
+                                                </button>
+
+                                                <div className="flex items-center gap-1.5 ml-auto border border-slate-200 rounded-xl p-1 bg-slate-50/50">
+                                                  <input
+                                                    type="number"
+                                                    id={`custom-penalty-${shift.id}`}
+                                                    placeholder="Своя сумма"
+                                                    className="w-20 h-7 bg-white text-xs font-semibold text-slate-800 rounded-lg px-2 border focus:outline-none focus:border-slate-400"
+                                                  />
+                                                  <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                      const inputEl = document.getElementById(`custom-penalty-${shift.id}`) as HTMLInputElement;
+                                                      const val = parseFloat(inputEl?.value || '');
+                                                      if (isNaN(val) || val < 0) {
+                                                        alert('Введите корректную сумму');
+                                                        return;
+                                                      }
+                                                      try {
+                                                        const res = await fetch(`/api/clubs/${clubId}/shifts/${shift.id}`, {
+                                                          method: 'PATCH',
+                                                          headers: { 'Content-Type': 'application/json' },
+                                                          body: JSON.stringify({
+                                                            lateness_status: 'CONFIRMED',
+                                                            lateness_penalty: val
+                                                          })
+                                                        });
+                                                        if (res.ok) {
+                                                          alert('Штраф с произвольной суммой сохранен!');
+                                                          if (inputEl) inputEl.value = '';
+                                                          fetchData();
+                                                        } else {
+                                                          alert('Ошибка обновления статуса');
+                                                        }
+                                                      } catch (e) {
+                                                        console.error(e);
+                                                        alert('Ошибка соединения');
+                                                      }
+                                                    }}
+                                                    className="h-7 px-2.5 text-[10px] font-black uppercase tracking-wider rounded-lg bg-rose-600 text-white hover:bg-rose-700 transition-colors shadow-sm cursor-pointer"
+                                                  >
+                                                    Штраф
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
                                         </div>
                                       )}
                                     </div>
@@ -3003,6 +3343,25 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 )}
 
                 <div className="flex items-center gap-2 mt-4 justify-end">
+                  {expandedCards.has(employee.id) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium flex items-center gap-1.5 shadow-sm cursor-pointer"
+                      onClick={() => {
+                        setBonusForm({
+                          amount: "",
+                          name: "Ручная премия",
+                          comment: "",
+                          date: new Date().toLocaleDateString("en-CA"),
+                          type: "PREMIUM",
+                        });
+                        setBonusModal({ open: true, employee });
+                      }}
+                    >
+                      + Начислить / Списать
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -3324,6 +3683,217 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 className="flex-1"
               >
                 Удалить
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bonusModal.open && bonusModal.employee && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-stretch justify-stretch sm:items-center sm:justify-center sm:p-4">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto sm:rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 sm:max-w-md animate-in zoom-in-95 duration-150 animate-out fade-out-0">
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-6">
+              Ручная корректировка: {bonusModal.employee.full_name}
+            </h2>
+            <div className="space-y-4 pb-6 sm:pb-0">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                  Тип операции
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBonusForm({ ...bonusForm, type: "PREMIUM", name: "Ручная премия" })}
+                    className={`flex-1 h-10 rounded-xl font-semibold text-xs border transition-all cursor-pointer ${
+                      bonusForm.type === "PREMIUM"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    Начисление (Премия)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBonusForm({ ...bonusForm, type: "FINE", name: "Ручной штраф" })}
+                    className={`flex-1 h-10 rounded-xl font-semibold text-xs border transition-all cursor-pointer ${
+                      bonusForm.type === "FINE"
+                        ? "bg-rose-50 text-rose-700 border-rose-300"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    Списание (Штраф)
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                  Дата проведения
+                </label>
+                <input
+                  type="date"
+                  value={bonusForm.date}
+                  onChange={(e) =>
+                    setBonusForm({ ...bonusForm, date: e.target.value })
+                  }
+                  className="w-full h-12 bg-slate-50/50 border border-slate-200 rounded-xl px-4 font-medium text-slate-900 focus:bg-white transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                  Название операции
+                </label>
+                <input
+                  type="text"
+                  value={bonusForm.name}
+                  onChange={(e) =>
+                    setBonusForm({ ...bonusForm, name: e.target.value })
+                  }
+                  className="w-full h-12 bg-slate-50/50 border border-slate-200 rounded-xl px-4 font-medium text-slate-900 focus:bg-white transition-colors"
+                  placeholder={bonusForm.type === "FINE" ? "Ручной штраф" : "Ручная премия"}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                  Сумма (₽)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={bonusForm.amount}
+                  onChange={(e) =>
+                    setBonusForm({ ...bonusForm, amount: e.target.value })
+                  }
+                  className="w-full h-12 bg-slate-50/50 border border-slate-200 rounded-xl px-4 font-medium text-slate-900 focus:bg-white transition-colors"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                  Комментарий
+                </label>
+                <textarea
+                  value={bonusForm.comment}
+                  onChange={(e) =>
+                    setBonusForm({ ...bonusForm, comment: e.target.value })
+                  }
+                  className="w-full h-20 bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2 font-medium text-slate-900 focus:bg-white transition-colors resize-none"
+                  placeholder={bonusForm.type === "FINE" ? "Причина списания / штрафа" : "За отличную работу, дежурство и т.д."}
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setBonusModal({ open: false, employee: null })}
+                className="flex-1"
+                disabled={processingBonus}
+              >
+                Отмена
+              </Button>
+              <Button
+                onClick={handleAccrueBonusSubmit}
+                className={`flex-1 text-white ${bonusForm.type === "FINE" ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                disabled={
+                  processingBonus ||
+                  !bonusForm.amount ||
+                  parseFloat(bonusForm.amount) <= 0
+                }
+              >
+                {processingBonus ? "Обработка..." : bonusForm.type === "FINE" ? "Списать" : "Начислить"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {latenessModal.open && latenessModal.shift && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-stretch justify-stretch sm:items-center sm:justify-center sm:p-4">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto sm:rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 sm:max-w-md animate-in zoom-in-95 duration-150">
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-6">
+              Опоздание: {latenessModal.employeeName}
+            </h2>
+            <div className="space-y-4 pb-6 sm:pb-0">
+              <div className="bg-slate-50 border rounded-2xl p-4 text-sm text-slate-600">
+                <p className="mb-2">
+                  Дата смены: <span className="font-bold text-slate-900">{new Date(latenessModal.shift.date).toLocaleDateString("ru-RU")}</span>
+                </p>
+                <p className="mb-2">
+                  Опоздание на: <span className="font-bold text-slate-900">{latenessModal.shift.lateness_minutes} минут</span>
+                </p>
+                <p className="mb-2">
+                  Рекомендуемый штраф по настройкам: <span className="font-bold text-slate-900">{formatCurrency(latenessModal.shift.lateness_penalty)}</span>
+                </p>
+                <p>
+                  Текущий статус: <span className="font-bold text-slate-900">
+                    {latenessModal.shift.lateness_status === 'PENDING' && "Ожидает подтверждения"}
+                    {latenessModal.shift.lateness_status === 'CONFIRMED' && "Подтвержден"}
+                    {latenessModal.shift.lateness_status === 'CANCELLED' && "Прощено"}
+                  </span>
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Button
+                  onClick={() => handleLatenessResolve('CONFIRMED', latenessModal.shift.lateness_penalty)}
+                  className="w-full bg-slate-900 text-white hover:bg-slate-800 h-11 rounded-xl font-medium cursor-pointer"
+                  disabled={processingLateness}
+                >
+                  Подтвердить штраф {formatCurrency(latenessModal.shift.lateness_penalty)}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => handleLatenessResolve('CANCELLED', 0)}
+                  className="w-full h-11 rounded-xl font-medium border-slate-200 text-slate-700 bg-white hover:bg-slate-50 cursor-pointer"
+                  disabled={processingLateness}
+                >
+                  Простить / Списать штраф
+                </Button>
+
+                <div className="border-t border-slate-100 pt-4 mt-2 space-y-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Своя сумма штрафа (₽)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={customPenalty}
+                      onChange={(e) => setCustomPenalty(e.target.value)}
+                      placeholder="Например: 250"
+                      className="flex-1 h-11 bg-slate-50/50 border border-slate-200 rounded-xl px-4 font-medium text-slate-900 focus:bg-white transition-colors"
+                    />
+                    <Button
+                      onClick={() => {
+                        const val = parseFloat(customPenalty);
+                        if (isNaN(val) || val < 0) {
+                          alert("Введите корректную сумму");
+                          return;
+                        }
+                        handleLatenessResolve('CONFIRMED', val);
+                      }}
+                      className="bg-rose-600 hover:bg-rose-700 text-white h-11 rounded-xl font-medium px-4 cursor-pointer"
+                      disabled={processingLateness || !customPenalty}
+                    >
+                      Применить
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setLatenessModal({ open: false, employeeId: 0, employeeName: "", shift: null });
+                  setCustomPenalty("");
+                }}
+                className="text-slate-500 hover:text-slate-800 cursor-pointer"
+                disabled={processingLateness}
+              >
+                Закрыть
               </Button>
             </div>
           </div>

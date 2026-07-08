@@ -850,7 +850,8 @@ export async function PATCH(
         // Fetch current shift data to merge with updates for calculation
         const currentShiftRes = await query(
             `SELECT user_id, total_hours, cash_income, card_income, expenses, report_data, report_comment,
-                    check_in, check_out, shift_type, status, verified_by, owner_correction_changes
+                    check_in, check_out, shift_type, status, verified_by, owner_correction_changes,
+                    lateness_minutes, lateness_status, lateness_penalty
              FROM shifts WHERE id = $1`,
             [shiftId]
         );
@@ -917,12 +918,88 @@ export async function PATCH(
             reportFieldLabels
         );
 
+        // Recalculate or override lateness settings
+        const targetUserId = body.user_id !== undefined ? body.user_id : currentShift.user_id;
+        
+        let latenessMinutes = currentShift.lateness_minutes || 0;
+        let latenessStatus = currentShift.lateness_status || 'NONE';
+        let latenessPenalty = parseFloat(currentShift.lateness_penalty || 0);
+
+        if (body.check_in !== undefined) {
+            const clubRes = await query(
+                `SELECT timezone, day_start_hour, night_start_hour, lateness_settings FROM clubs WHERE id = $1`,
+                [clubId]
+            );
+            const clubInfo = clubRes.rows[0] || {};
+            const clubTimezone = clubInfo.timezone || "Europe/Moscow";
+            const dayStartHour = clubInfo.day_start_hour ?? 8;
+            const nightStartHour = clubInfo.night_start_hour ?? 20;
+            const latenessSettings = clubInfo.lateness_settings || {};
+
+            const checkInDate = new Date(body.check_in);
+            const checkInDateStr = new Intl.DateTimeFormat("en-CA", {
+                timeZone: clubTimezone,
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit"
+            }).format(checkInDate);
+
+            const scheduleRes = await query(
+                `SELECT 
+                   ws.shift_type,
+                   (ws.date + (CASE WHEN ws.shift_type = 'DAY' THEN $1 ELSE $2 END * INTERVAL '1 hour')) AT TIME ZONE $3 AS planned_start
+                 FROM work_schedules ws
+                 WHERE ws.club_id = $4 AND ws.user_id = $5 AND ws.date = $6::date
+                 LIMIT 1`,
+                [dayStartHour, nightStartHour, clubTimezone, clubId, targetUserId, checkInDateStr]
+            );
+
+            if (scheduleRes.rows.length > 0) {
+                const row = scheduleRes.rows[0];
+                const plannedStart = new Date(row.planned_start);
+                const diffMs = checkInDate.getTime() - plannedStart.getTime();
+                const diffMinutes = Math.floor(diffMs / 60000);
+
+                const gracePeriod = latenessSettings.grace_period ?? 5;
+
+                if (diffMinutes > gracePeriod) {
+                    latenessMinutes = diffMinutes;
+                    latenessStatus = 'PENDING';
+                    
+                    let defaultPenalty = 0;
+                    const thresholds = latenessSettings.thresholds || [];
+                    if (Array.isArray(thresholds) && thresholds.length > 0) {
+                        const sorted = [...thresholds].sort((a, b) => b.minutes - a.minutes);
+                        const matchedThreshold = sorted.find(t => diffMinutes >= t.minutes);
+                        if (matchedThreshold) {
+                            defaultPenalty = parseFloat(matchedThreshold.penalty) || 0;
+                        }
+                    }
+                    latenessPenalty = defaultPenalty;
+                } else {
+                    latenessMinutes = 0;
+                    latenessStatus = 'NONE';
+                    latenessPenalty = 0;
+                }
+            } else {
+                latenessMinutes = 0;
+                latenessStatus = 'NONE';
+                latenessPenalty = 0;
+            }
+        }
+
+        if (body.lateness_status !== undefined) {
+            latenessStatus = body.lateness_status;
+        }
+        if (body.lateness_penalty !== undefined) {
+            latenessPenalty = parseFloat(body.lateness_penalty);
+        }
+
         // Calculate Salary
         let calculatedSalary = null;
         let salaryBreakdown = null;
 
         // Get assigned scheme
-        const targetUserId = body.user_id !== undefined ? body.user_id : currentShift.user_id;
         const schemeRes = await query(
             `SELECT ss.id, ss.name, ss.standard_monthly_shifts, sv.formula
              FROM employee_salary_assignments esa
@@ -1007,7 +1084,9 @@ export async function PATCH(
                 report_data: mergedData.report_data || {},
                 evaluations: evaluations,
                 shift_type: mergedData.shift_type || 'DAY',
-                day_of_week: dayOfWeek
+                day_of_week: dayOfWeek,
+                lateness_penalty: latenessStatus === 'CONFIRMED' ? latenessPenalty : 0,
+                lateness_minutes: latenessStatus === 'CONFIRMED' ? latenessMinutes : 0
             }, { ...(scheme.formula || {}), standard_monthly_shifts: scheme.standard_monthly_shifts }, (() => {
                 const metrics: Record<string, number> = {
                     total_revenue: totalRevenue,
@@ -1036,6 +1115,15 @@ export async function PATCH(
         if (body.cash_income !== undefined) {
             updates.push(`cash_income = $${paramIndex++}`);
             values.push(body.cash_income);
+        }
+
+        if (body.check_in !== undefined || body.lateness_status !== undefined || body.lateness_penalty !== undefined) {
+            updates.push(`lateness_minutes = $${paramIndex++}`);
+            values.push(latenessMinutes);
+            updates.push(`lateness_status = $${paramIndex++}`);
+            values.push(latenessStatus);
+            updates.push(`lateness_penalty = $${paramIndex++}`);
+            values.push(latenessPenalty);
         }
         if (body.card_income !== undefined) {
             updates.push(`card_income = $${paramIndex++}`);

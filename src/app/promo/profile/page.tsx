@@ -117,7 +117,7 @@ export default function PromoProfile() {
       ]);
 
       if (playerRes.status === 401) {
-        router.push("/promo");
+        router.push("/promo/login");
         return;
       }
 

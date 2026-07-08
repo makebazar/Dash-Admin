@@ -11,12 +11,12 @@
 using System;
 using System.Reflection;
 
-[assembly: System.Reflection.AssemblyCompanyAttribute("dashadmin-agent")]
+[assembly: System.Reflection.AssemblyCompanyAttribute("DashAdminAgent")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
 [assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
-[assembly: System.Reflection.AssemblyProductAttribute("dashadmin-agent")]
-[assembly: System.Reflection.AssemblyTitleAttribute("dashadmin-agent")]
+[assembly: System.Reflection.AssemblyProductAttribute("DashAdminAgent")]
+[assembly: System.Reflection.AssemblyTitleAttribute("DashAdminAgent")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
 [assembly: System.Runtime.Versioning.TargetPlatformAttribute("Windows7.0")]
 [assembly: System.Runtime.Versioning.SupportedOSPlatformAttribute("Windows7.0")]

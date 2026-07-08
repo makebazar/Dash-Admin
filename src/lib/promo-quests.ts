@@ -388,7 +388,7 @@ export async function checkAndResetPlayerQuests(
      WHERE pq.player_id = $1::uuid
        AND pq.club_id = $2::int
        AND q.reset_period != 'none'
-       AND pq.status IN ('completed', 'claimed')`,
+       AND pq.status IN ('active', 'completed', 'claimed')`,
     [playerId, clubId],
   );
 
@@ -764,7 +764,7 @@ export async function processVisitEvent(
                 const lastVisitDate = new Date(lastVisit.getFullYear(), lastVisit.getMonth(), lastVisit.getDate());
                 const currentDate = new Date(confirmedAt.getFullYear(), confirmedAt.getMonth(), confirmedAt.getDate());
                 const diffTime = Math.abs(currentDate.getTime() - lastVisitDate.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
                 if (diffDays === 0) {
                   continue; // Already processed today
@@ -821,6 +821,16 @@ export async function processVisitEvent(
     } else {
       // Non-combo visit logic (standard)
       if (quest.trigger_type === "visit_cumulative") {
+        const lastVisit = quest.last_visit_at ? new Date(quest.last_visit_at) : null;
+        if (lastVisit) {
+          const lastVisitDate = new Date(lastVisit.getFullYear(), lastVisit.getMonth(), lastVisit.getDate());
+          const currentDate = new Date(confirmedAt.getFullYear(), confirmedAt.getMonth(), confirmedAt.getDate());
+          const diffDays = Math.round((currentDate.getTime() - lastVisitDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays === 0) {
+            continue; // Already processed today
+          }
+        }
+
         await progressQuest(client, clubId, playerId, quest, 1);
         await client.query(
           `UPDATE promo_player_quests
@@ -850,19 +860,14 @@ export async function processVisitEvent(
             const lastVisitDate = new Date(lastVisit.getFullYear(), lastVisit.getMonth(), lastVisit.getDate());
             const currentDate = new Date(confirmedAt.getFullYear(), confirmedAt.getMonth(), confirmedAt.getDate());
             const diffTime = Math.abs(currentDate.getTime() - lastVisitDate.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
             if (diffDays === 0) {
               continue;
             } else if (diffDays === 1) {
               delta = 1;
             } else {
-              await client.query(
-                `UPDATE promo_player_quests
-                 SET current_progress = 0
-                 WHERE quest_id = $1 AND player_id = $2`,
-                [quest.quest_id, playerId],
-              );
+              // Streak broken! Reset progress in-memory, progressQuest will write the updated value
               quest.current_progress = 0;
               delta = 1;
             }

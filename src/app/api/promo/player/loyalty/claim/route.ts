@@ -108,19 +108,31 @@ export async function POST(request: Request) {
       // Legacy loyalty program path
       // 2. Fetch player loyalty progress
       const progressRes = await client.query(
-        `SELECT accumulated_packages, accumulated_visits, current_streak
+        `SELECT program_id, current_count
          FROM promo_package_progress
-         WHERE player_id = $1::uuid AND club_id = $2::int
-         FOR UPDATE`,
+         WHERE player_id = $1::uuid AND club_id = $2::int`,
         [playerId, activeClubId]
       );
 
-      if (progressRes.rowCount === 0) {
-        await client.query("ROLLBACK");
-        return NextResponse.json({ error: "Progress record not found" }, { status: 400 });
+      let accumulated_packages = 0;
+      let accumulated_visits = 0;
+      let current_streak = 0;
+
+      for (const row of progressRes.rows) {
+        if (row.program_id === "legacy_packages" || row.program_id === "legacy") {
+          accumulated_packages = row.current_count;
+        } else if (row.program_id === "legacy_visits") {
+          accumulated_visits = row.current_count;
+        } else if (row.program_id === "legacy_streak") {
+          current_streak = row.current_count;
+        }
       }
 
-      const progress = progressRes.rows[0];
+      const progress = {
+        accumulated_packages,
+        accumulated_visits,
+        current_streak,
+      };
 
       // 3. Verify target requirements and extract reward details
       let target = 0;

@@ -1,122 +1,142 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace DashAdminAgent.Services;
 
 public sealed class NetworkSyncService
 {
+    private readonly CustomSyncEngine _syncEngine = new();
+
     public NetworkSyncService() { }
 
-    public async Task RunSyncAsync(int appId, string installDir, string sourceLibrary, string destLibrary, Action<string> log)
+    public async Task RunSyncAsync(
+        int appId, string gameName, string installDir, string sourceLibrary, string destLibrary, 
+        string priority,
+        Action<string, double, string, string, string> onProgress,
+        Action<string, string, string> log)
     {
         bool hasPermit = false;
         var masterIp = ExtractIp(sourceLibrary);
         var queueUrl = $"http://{masterIp}:5556";
+        var clientName = Environment.MachineName;
+
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
 
         try
         {
-            // 0. Request permission from Master's Queue
-            log("[Sync] Запрос места в очереди...");
+            onProgress("Запрос очереди...", 0, "0 MB/s", "-", "-");
+            
+            int attempts = 0;
             while (!hasPermit)
             {
-                try {
-                    var resp = await http.GetAsync($"{queueUrl}/request");
-                    if (resp.IsSuccessStatusCode) {
-                        hasPermit = true;
-                        log("[Sync] Место получено. Начинаю работу.");
-                    } else {
-                        log("[Sync] Мастер занят. Ожидание очереди (5 сек)...");
-                        await Task.Delay(5000);
+                try 
+                {
+                    var url = $"{queueUrl}/request?client={Uri.EscapeDataString(clientName)}&appId={appId}&priority={priority}";
+                    var resp = await http.GetAsync(url);
+                    if (resp.IsSuccessStatusCode) 
+                    {
+                        var body = await resp.Content.ReadAsStringAsync();
+                        using var doc = JsonDocument.Parse(body);
+                        var status = doc.RootElement.GetProperty("status").GetString();
+                        
+                        if (status == "approved") 
+                        {
+                            hasPermit = true;
+                        }
+                        else 
+                        {
+                            int pos = doc.RootElement.GetProperty("position").GetInt32();
+                            int total = doc.RootElement.GetProperty("total_queued").GetInt32();
+                            onProgress($"В очереди (Позиция: {pos}/{total})...", 0, "0 MB/s", "-", "-");
+                        }
                     }
-                } catch {
-                    log("[Sync] Ошибка связи с очередью Мастера. Пробую без очереди...");
-                    hasPermit = true; // Fallback
+                    else 
+                    {
+                        attempts++;
+                        if (attempts >= 3) 
+                        {
+                            log("warning", "Служба очередей выдала ошибку", "Вход в обход очереди (резервный путь)");
+                            hasPermit = true;
+                        }
+                        else
+                        {
+                            await Task.Delay(3000);
+                        }
+                    }
+                } 
+                catch (Exception ex)
+                {
+                    attempts++;
+                    if (attempts >= 3) 
+                    {
+                        log("warning", "Мастер-сервер очередей недоступен", $"Ошибка: {ex.Message}. Запуск в обход очереди.");
+                        hasPermit = true;
+                    }
+                    else
+                    {
+                        await Task.Delay(3000);
+                    }
                 }
             }
 
-            log($"[Sync] Синхронизация {installDir} по локальной сети...");
+            // High-performance Copy
+            var lastReportTime = DateTime.MinValue;
 
-            // 1. Copy the ACF manifest file first so Steam recognizes the game
-            var acfName = $"appmanifest_{appId}.acf";
-            var sourceAcf = Path.Combine(sourceLibrary.TrimEnd('\\'), "steamapps", acfName);
-            var destAcf = Path.Combine(destLibrary.TrimEnd('\\'), "steamapps", acfName);
+            await _syncEngine.RunSyncAsync(appId, gameName, installDir, sourceLibrary, destLibrary,
+                (fileName, progressPercentage, speedVal, downloadedText, totalText) =>
+                {
+                    onProgress(fileName, progressPercentage, speedVal, downloadedText, totalText);
 
-            if (File.Exists(sourceAcf))
-            {
-                log($"[Sync] Копирование манифеста {acfName}...");
-                try { File.Copy(sourceAcf, destAcf, true); }
-                catch (Exception ex) { log($"⚠️ Ошибка копирования манифеста: {ex.Message}"); }
-            }
-
-            // 2. Sync game files
-            var sourcePath = Path.Combine(sourceLibrary.TrimEnd('\\'), "steamapps", "common", installDir);
-            var destPath = Path.Combine(destLibrary.TrimEnd('\\'), "steamapps", "common", installDir);
-
-            if (!Directory.Exists(sourcePath))
-            {
-                log($"❌ Ошибка: Сетевой путь не найден: {sourcePath}");
-                log("Убедитесь, что эталонная машина включена и папка расшарена.");
-                return;
-            }
-
-            log($"[Sync] Источник: {sourcePath}");
-            log($"[Sync] Назначение: {destPath}");
-
-            // Robocopy command:
-            // /MIR - Mirror (sync)
-            // /MT:16 - Multithreaded (16 threads)
-            // /R:3 /W:5 - 3 retries, 5 sec wait
-            // /Z - Restartable mode (for network drops)
-            // /NDL - No directory logging (cleaner output)
-            // /NFL - No file logging (cleaner output)
-            var args = $"\"{sourcePath}\" \"{destPath}\" /MIR /MT:16 /R:3 /W:5 /Z /NDL /NFL";
-
-            log($"[Robocopy] Запуск: robocopy {args}");
-
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "robocopy.exe",
-                Arguments = args,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            };
-
-            using var process = new Process { StartInfo = startInfo };
-            
-            process.OutputDataReceived += (s, e) => { if (e.Data != null) log($"[Robocopy] {e.Data.Trim()}"); };
-            
-            process.Start();
-            process.BeginOutputReadLine();
-            
-            await process.WaitForExitAsync();
-
-            // Robocopy exit codes < 8 are successful
-            if (process.ExitCode < 8)
-            {
-                log($"[Sync] Синхронизация {installDir} успешно завершена!");
-            }
-            else
-            {
-                log($"[Sync] Robocopy завершился с кодом {process.ExitCode}. Проверьте логи.");
-            }
+                    // Send telemetry report to Master every 1 second
+                    var now = DateTime.UtcNow;
+                    if ((now - lastReportTime).TotalMilliseconds >= 1000)
+                    {
+                        lastReportTime = now;
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var payload = new
+                                {
+                                    client = clientName,
+                                    app_id = appId,
+                                    game_name = gameName,
+                                    speed = speedVal,
+                                    progress = progressPercentage,
+                                    remaining_size = downloadedText,
+                                    total_size = totalText,
+                                    current_file = fileName.StartsWith("Копирование: ") ? fileName.Substring("Копирование: ".Length) : fileName
+                                };
+                                var json = JsonSerializer.Serialize(payload);
+                                using var content = new StringContent(json, Encoding.UTF8, "application/json");
+                                await http.PostAsync($"{queueUrl}/report", content);
+                            }
+                            catch { }
+                        });
+                    }
+                },
+                (level, message, detail) => log(level, message, detail));
         }
         finally
         {
-            if (hasPermit)
-            {
-                try { await http.GetAsync($"{queueUrl}/release"); } catch { }
+            if (hasPermit) 
+            { 
+                try 
+                { 
+                    await http.GetAsync($"{queueUrl}/release?client={Uri.EscapeDataString(clientName)}&appId={appId}"); 
+                } 
+                catch { } 
             }
         }
     }
 
     private string ExtractIp(string path)
     {
-        // Path looks like \\192.168.1.1\SteamGames
         var parts = path.Split('\\', StringSplitOptions.RemoveEmptyEntries);
         return parts.Length > 0 ? parts[0] : "localhost";
     }

@@ -1,93 +1,81 @@
 using System;
 using System.Diagnostics;
-using System.Threading.Tasks;
-using Microsoft.Win32;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace DashAdminAgent.Services;
 
 public sealed class SteamCmdService
 {
-    private const string SteamRegistryKey = @"Software\Valve\Steam";
-    private const string SteamActiveProcessKey = @"Software\Valve\Steam\ActiveProcess";
+    public SteamCmdService() { }
 
-    public SteamCmdService()
+    public async Task RunUpdateAsync(int appId, string installDir, string libraryPath, Action<string, double> onProgress, Action<string, string, string> log)
     {
+        // 1. Check if SteamCMD exists
+        var steamCmdPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "steamcmd", "steamcmd.exe");
+        if (!File.Exists(steamCmdPath))
+        {
+            log("error", "SteamCMD не найден", steamCmdPath);
+            onProgress("Ошибка: SteamCMD", 0);
+            return;
+        }
+
+        // 2. Build arguments
+        // +force_install_dir "path" +login anonymous +app_update ID +quit
+        var installPath = Path.Combine(libraryPath, "steamapps", "common", installDir);
+        var args = $"+force_install_dir \"{installPath}\" +login anonymous +app_update {appId} validate +quit";
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = steamCmdPath,
+            Arguments = args,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true
+        };
+
+        using var process = new Process { StartInfo = startInfo };
+        
+        process.OutputDataReceived += (s, e) =>
+        {
+            if (string.IsNullOrEmpty(e.Data)) return;
+            log("debug", "SteamCMD", e.Data);
+            
+            // Basic parsing of SteamCMD progress: "Update state (0x...) 45.12% ..."
+            if (e.Data.Contains("%"))
+            {
+                var parts = e.Data.Split(' ');
+                foreach (var p in parts)
+                {
+                    if (p.EndsWith("%") && double.TryParse(p.TrimEnd('%'), out var prg))
+                    {
+                        onProgress("Загрузка из Steam...", prg);
+                        break;
+                    }
+                }
+            }
+        };
+
+        process.Start();
+        process.BeginOutputReadLine();
+        await process.WaitForExitAsync();
+
+        if (process.ExitCode == 0)
+        {
+            onProgress("Готово!", 100);
+        }
+        else
+        {
+            log("error", "SteamCMD завершился с ошибкой", $"Код: {process.ExitCode}");
+        }
     }
 
-    private string? GetSteamExePath()
-    {
-        using var key = Registry.CurrentUser.OpenSubKey(SteamRegistryKey);
-        return key?.GetValue("SteamExe") as string;
-    }
-
-    private int GetActiveUserId()
-    {
-        using var key = Registry.CurrentUser.OpenSubKey(SteamActiveProcessKey);
-        var val = key?.GetValue("ActiveUser");
-        return val is int userId ? userId : 0;
-    }
-
-    public async Task RunUpdateAsync(int appId, string gameName, string libraryDir, Action<string> log)
+    public void InstallViaSteamProtocol(int appId)
     {
         try
         {
-            log($"[Steam] Подготовка обновления для {gameName}...");
-
-            var steamExe = GetSteamExePath();
-            var steamProcesses = Process.GetProcessesByName("steam");
-
-            // 1. Проверяем, запущен ли Steam
-            if (steamProcesses.Length == 0)
-            {
-                log("⚠️ Steam не запущен. Пытаюсь запустить...");
-                if (!string.IsNullOrEmpty(steamExe) && File.Exists(steamExe))
-                {
-                    Process.Start(new ProcessStartInfo(steamExe) { UseShellExecute = true });
-                    log("[Steam] Ожидание запуска клиента (10 сек)...");
-                    await Task.Delay(10000);
-                }
-                else
-                {
-                    log("❌ Ошибка: Не удалось найти путь к steam.exe в реестре.");
-                    return;
-                }
-            }
-
-            // 2. Проверяем, залогинен ли пользователь
-            int activeUser = GetActiveUserId();
-            if (activeUser == 0)
-            {
-                log("⚠️ ВНИМАНИЕ: В Steam не выполнен вход!");
-                log("⚠️ Пожалуйста, войдите в свой Steam аккаунт в открывшемся окне.");
-                
-                // Ждем немного, вдруг пользователь как раз заходит
-                for (int i = 0; i < 5; i++)
-                {
-                    await Task.Delay(3000);
-                    activeUser = GetActiveUserId();
-                    if (activeUser != 0) break;
-                }
-
-                if (activeUser == 0)
-                {
-                    log("❌ Обновление отменено: требуется авторизация в Steam.");
-                    return;
-                }
-            }
-
-            // 3. Отправляем команду обновления
-            string uri = $"steam://validate/{appId}";
-            log($"[Steam] Отправка команды на обновление: {uri}");
-
-            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
-            log($"[Steam] Успешно! Проверьте прогресс в окне Steam.");
+            Process.Start(new ProcessStartInfo($"steam://install/{appId}") { UseShellExecute = true });
         }
-        catch (Exception ex)
-        {
-            log($"[Steam] Ошибка: {ex.Message}");
-        }
+        catch { }
     }
-
-    public async Task<bool> EnsureInstalledAsync(Action<string> log) => await Task.FromResult(true);
 }
