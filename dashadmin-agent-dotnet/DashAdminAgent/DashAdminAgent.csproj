@@ -7,6 +7,7 @@
     <RootNamespace>DashAdminAgent</RootNamespace>
     <AssemblyName>DashAdminAgent</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     
