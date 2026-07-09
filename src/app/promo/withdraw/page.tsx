@@ -259,29 +259,12 @@ export default function PromoWithdraw() {
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-yellow-500/30 overflow-x-hidden">
       <PromoHeader title="Вывод бонусов" />
 
-      <main className="max-w-md mx-auto p-6 pb-32">
+      <main className="max-w-md lg:max-w-6xl mx-auto p-6 pb-32">
 
-        {/* Balance Card */}
-        <div className="bg-[#151515] border border-white/5 rounded-[2.5rem] p-8 mb-8 shadow-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-            <Coins className="w-24 h-24 text-yellow-500" />
-          </div>
-          <div className="relative z-10 flex flex-col gap-4">
-            <div className="w-12 h-12 bg-yellow-500/20 rounded-2xl flex items-center justify-center">
-              <Coins className="w-6 h-6 text-yellow-500" />
-            </div>
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-1">
-                Доступно для перевода
-              </div>
-              <div className="text-5xl font-black text-white tracking-tighter">
-                {Math.floor(player?.bonusBalance || 0)}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {player?.settings?.withdraw_limit_enabled === true && (() => {
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column */}
+          <div className="lg:col-span-7 space-y-8">
+                    {player?.settings?.withdraw_limit_enabled === true && (() => {
           const monthlyTopups = player?.monthlyTopups || 0;
           const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
           const extraLimit = parseFloat(player?.extraWithdrawLimit || 0);
@@ -546,7 +529,31 @@ export default function PromoWithdraw() {
           );
         })()}
 
-        {/* Withdraw Form */}
+        </div>
+
+          {/* Right Column */}
+          <div className="lg:col-span-5 space-y-8">
+            {/* Balance Card */}
+        <div className="bg-[#151515] border border-white/5 rounded-[2.5rem] p-8 mb-8 shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Coins className="w-24 h-24 text-yellow-500" />
+          </div>
+          <div className="relative z-10 flex flex-col gap-4">
+            <div className="w-12 h-12 bg-yellow-500/20 rounded-2xl flex items-center justify-center">
+              <Coins className="w-6 h-6 text-yellow-500" />
+            </div>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-1">
+                Доступно для перевода
+              </div>
+              <div className="text-5xl font-black text-white tracking-tighter">
+                {Math.floor(player?.bonusBalance || 0)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+            {/* Withdraw Form */}
         <form onSubmit={handleWithdraw} className="mb-12">
           <div className="flex items-center gap-4 mb-6">
             <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/30 whitespace-nowrap">
@@ -696,6 +703,8 @@ export default function PromoWithdraw() {
             )}
           </div>
         </section>
+      </div>
+        </div>
       </main>
 
       <BottomNav />

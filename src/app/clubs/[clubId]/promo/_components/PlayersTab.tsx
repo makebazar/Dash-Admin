@@ -259,14 +259,20 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
     )
       return;
     try {
-      await fetch(`/api/promo/admin/players/reset-pin`, {
+      const res = await fetch(`/api/promo/admin/players/reset-pin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playerId, clubId }),
       });
-      alert("PIN-код сброшен");
+      if (res.ok) {
+        alert("PIN-код сброшен");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert("Ошибка сброса: " + (data.error || "неизвестная ошибка"));
+      }
     } catch (error) {
       console.error("Reset PIN Error:", error);
+      alert("Ошибка сети");
     }
   };
 

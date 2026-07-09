@@ -423,7 +423,9 @@ export default function RocketGame() {
         accentColor="text-indigo-500"
       />
 
-      <div className="w-full relative mt-16" style={{ height: "55vh" }}>
+      {/* Arcade Cabinet Frame */}
+      <div className="w-full max-w-md lg:max-w-lg flex flex-col flex-1 lg:my-8 lg:border lg:border-white/10 lg:rounded-[2.5rem] lg:bg-[#0a0a0f] lg:shadow-2xl overflow-hidden mt-16 lg:mt-24 mb-32">
+        <div className="w-full relative" style={{ height: "45vh" }}>
         <canvas
           ref={canvasRef}
           className="absolute inset-0 z-0 w-full h-full"
@@ -466,7 +468,9 @@ export default function RocketGame() {
         </div>
       </div>
 
-      <main className="flex-1 w-full flex flex-col items-center p-4 z-20 bg-[#0a0a0f] border-t border-white/5 relative">
+        </div>
+
+        <main className="flex-1 w-full flex flex-col items-center p-4 z-20 bg-[#0a0a0f] border-t border-white/5 relative">
         <AnimatePresence mode="wait">
           {gameState === "betting" ||
           gameState === "crashed" ||

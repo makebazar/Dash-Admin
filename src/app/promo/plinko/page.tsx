@@ -485,7 +485,7 @@ export default function PlinkoGame() {
         accentColor="text-orange-500"
       />
 
-      <main className="flex-1 w-full flex flex-col items-center justify-center p-4 pt-16 pb-36 max-w-md">
+      <main className="flex-1 w-full flex flex-col items-center justify-center p-4 pt-16 pb-36 max-w-md lg:max-w-lg mx-auto lg:my-8 lg:p-8 lg:bg-[#111113]/50 lg:border lg:border-white/10 lg:rounded-[2.5rem] lg:shadow-2xl">
         <div className="text-center mb-2">
           <h1 className="text-3xl sm:text-4xl font-black text-orange-500 tracking-tighter uppercase italic leading-none">
             Plinko <span className="text-white">Dash</span>

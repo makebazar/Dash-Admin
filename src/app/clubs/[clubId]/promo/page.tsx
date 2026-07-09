@@ -408,7 +408,7 @@ export default function PromotionsPage() {
             <ReferralsTab settings={settings} saveSettings={saveSettings} />
           )}
           {activeTab === "frag" && (
-            <FragTab settings={settings} saveSettings={saveSettings} />
+            <FragTab settings={settings} saveSettings={saveSettings} clubId={clubId as string} />
           )}
         </AnimatePresence>
       </div>

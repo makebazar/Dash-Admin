@@ -19,7 +19,7 @@ export async function GET() {
     const result = await client.query(
       `SELECT id, game, map, score, kills, deaths, assists, headshots, last_hits, earned, events, played_at
        FROM promo_frag_matches
-       WHERE player_id = $1 AND club_id = $2
+       WHERE player_id = $1 AND club_id = $2 AND map NOT ILIKE '%training%'
        ORDER BY played_at DESC
        LIMIT 30`,
       [playerId, activeClubId]

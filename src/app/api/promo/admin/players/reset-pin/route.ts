@@ -10,8 +10,8 @@ async function resetPinHandler(request: Request) {
     }
 
     try {
-      const { requireClubAccess } = await import("@/lib/club-api-access");
-      await requireClubAccess(String(clubId));
+      const { requireClubApiAccess } = await import("@/lib/club-api-access");
+      await requireClubApiAccess(String(clubId));
     } catch (e: any) {
       return NextResponse.json({ error: e.message || "Forbidden" }, { status: e.status || 403 });
     }
@@ -20,7 +20,7 @@ async function resetPinHandler(request: Request) {
     // This allows the player to set a new PIN on next login
     await query(
       `UPDATE promo_players
-       SET pin_hash = 'PENDING', updated_at = NOW()
+       SET pin_hash = 'PENDING'
        WHERE id = $1`,
       [playerId]
     );

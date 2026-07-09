@@ -37,8 +37,8 @@ export async function POST(request: Request) {
 
     // Check admin access to the club
     try {
-      const { requireClubAccess } = await import("@/lib/club-api-access");
-      await requireClubAccess(String(item.club_id));
+      const { requireClubApiAccess } = await import("@/lib/club-api-access");
+      await requireClubApiAccess(String(item.club_id));
     } catch (e: any) {
       await client.query("ROLLBACK");
       return NextResponse.json(

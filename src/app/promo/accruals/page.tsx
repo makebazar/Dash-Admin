@@ -76,9 +76,12 @@ export default function AccrualsPage() {
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-orange-500/30 overflow-x-hidden">
       <PromoHeader title="История билетов" />
 
-      <main className="max-w-md mx-auto p-6 pb-32">
+      <main className="max-w-md lg:max-w-6xl mx-auto p-6 pb-32">
 
-        {/* Balance Card (Styled like Profile) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column */}
+          <div className="lg:col-span-5 space-y-8">
+            {/* Balance Card (Styled like Profile) */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -260,7 +263,11 @@ export default function AccrualsPage() {
           )}
         </div>
 
-        {/* History List */}
+        </div>
+
+          {/* Right Column */}
+          <div className="lg:col-span-7 space-y-8">
+            {/* History List */}
         <div className="mb-6 flex items-center px-2">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
             История начислений
@@ -339,6 +346,8 @@ export default function AccrualsPage() {
               </div>
             ))
           )}
+        </div>
+      </div>
         </div>
       </main>
 

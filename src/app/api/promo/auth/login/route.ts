@@ -137,7 +137,10 @@ export async function POST(request: Request) {
         // Wait, the frontend checks if `requiresRegistration` is true.
         // If it's false, frontend asks for PIN.
         await client.query("ROLLBACK");
-        return NextResponse.json({ requiresRegistration: false });
+        return NextResponse.json({ 
+          requiresRegistration: false,
+          pinPending: player.pin_hash === "PENDING"
+        });
       }
 
       if (!pin) {
@@ -155,7 +158,7 @@ export async function POST(request: Request) {
         }
         const pinHash = await bcrypt.hash(String(pin), 10);
         await client.query(
-          `UPDATE promo_players SET pin_hash = $1, updated_at = NOW() WHERE id = $2`,
+          `UPDATE promo_players SET pin_hash = $1 WHERE id = $2`,
           [pinHash, player.id],
         );
         playerId = player.id;

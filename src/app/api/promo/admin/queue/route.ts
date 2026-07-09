@@ -12,8 +12,8 @@ export async function GET(request: Request) {
     }
 
     try {
-      const { requireClubAccess } = await import("@/lib/club-api-access");
-      await requireClubAccess(clubId);
+      const { requireClubApiAccess } = await import("@/lib/club-api-access");
+      await requireClubApiAccess(clubId);
     } catch (e: any) {
       return NextResponse.json({ error: e.message || "Forbidden" }, { status: e.status || 403 });
     }

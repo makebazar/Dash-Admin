@@ -459,8 +459,11 @@ export default function CasesPage() {
     <div className="min-h-screen bg-neutral-950 text-white flex flex-col justify-between pb-32">
       <PromoHeader title="Кейсы" />
 
-      <div className="flex-1 max-w-md mx-auto w-full px-4 pt-6 space-y-6">
-        <div className="space-y-1">
+      <div className="flex-1 max-w-md lg:max-w-6xl mx-auto w-full px-4 pt-6 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column */}
+          <div className="lg:col-span-8 space-y-6">
+            <div className="space-y-1">
           <h1 className="text-2xl font-black italic uppercase tracking-tight flex items-center gap-2">
             Кейсы <span className="text-orange-500">удачи</span>
           </h1>
@@ -483,7 +486,7 @@ export default function CasesPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {cases.map((c) => (
             <div
               key={c.id}
@@ -546,7 +549,11 @@ export default function CasesPage() {
           )}
         </div>
 
-        {/* Inventory Section */}
+        </div>
+
+          {/* Right Column */}
+          <div className="lg:col-span-4 space-y-6">
+            {/* Inventory Section */}
         <div className="bg-neutral-900/40 backdrop-blur-md border border-white/5 rounded-[2rem] p-6 shadow-2xl mt-8">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center">
@@ -655,7 +662,9 @@ export default function CasesPage() {
             </div>
           )}
         </div>
-      </div>
+</div>
+        </div>
+            </div>
 
       {/* ROULETTE OPEN MODAL */}
       <AnimatePresence>

@@ -397,7 +397,7 @@ export default function FlappyDashGame() {
 
       <main
         ref={containerRef}
-        className="flex-1 relative w-full overflow-hidden"
+        className="flex-1 relative w-full overflow-hidden max-w-md lg:max-w-lg mx-auto lg:my-8 lg:border lg:border-white/10 lg:rounded-[2.5rem] lg:shadow-2xl lg:bg-[#0a0a0f]"
         onMouseDown={(e) => {
           e.preventDefault();
           if (gameState === "playing") jump();

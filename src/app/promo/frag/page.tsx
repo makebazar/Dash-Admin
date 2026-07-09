@@ -19,6 +19,7 @@ import {
   Swords,
   CircleCheck,
   Check,
+  X,
 } from "lucide-react";
 import { PromoHeader } from "../components/PromoHeader";
 import { BottomNav } from "../components/BottomNav";
@@ -71,6 +72,7 @@ interface FragMatch {
   last_hits: number;
   earned: string;
   played_at: string;
+  events?: any;
 }
 
 const DEFAULT_CS2_TARIFFS = [
@@ -102,6 +104,12 @@ export default function FragPage() {
   const [activeTab, setActiveTab] = useState<"CS2" | "Dota2">("CS2");
   const [mounted, setMounted] = useState(false);
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
+
+  // Tournament states
+  const [tournaments, setTournaments] = useState<any[]>([]);
+  const [tournamentsLoading, setTournamentsLoading] = useState(true);
+  const [selectedTournament, setSelectedTournament] = useState<any>(null);
+  const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
 
   const toggleMatchExpand = (matchId: string) => {
     setExpandedMatchId(expandedMatchId === matchId ? null : matchId);
@@ -227,20 +235,38 @@ export default function FragPage() {
     }
   }, [router]);
 
+  // Fetch player tournaments
+  const loadTournaments = useCallback(async () => {
+    try {
+      const res = await fetch("/api/promo/tournaments");
+      if (res.ok) {
+        const data = await res.json();
+        setTournaments(data.tournaments || []);
+      }
+    } catch (e) {
+      console.error("Failed to load player tournaments:", e);
+    } finally {
+      setTournamentsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     setMounted(true);
     pollAgent();
     loadPlayer();
     loadHistory();
+    loadTournaments();
 
     const agentInterval = setInterval(pollAgent, 1000);
     const historyInterval = setInterval(loadHistory, 12000);
+    const tournamentInterval = setInterval(loadTournaments, 30000);
 
     return () => {
       clearInterval(agentInterval);
       clearInterval(historyInterval);
+      clearInterval(tournamentInterval);
     };
-  }, [pollAgent, loadHistory, loadPlayer]);
+  }, [pollAgent, loadHistory, loadPlayer, loadTournaments]);
 
   // Auto-switch tab if game is running
   useEffect(() => {
@@ -279,12 +305,21 @@ export default function FragPage() {
     { label: "Победа", value: st.dota_win ?? 10.00 },
   ] : DEFAULT_DOTA_TARIFFS;
 
+  const filteredHistory = history.filter(match => {
+    if (activeTab === "CS2") return match.game === "CS2";
+    if (activeTab === "Dota2") return match.game === "Dota2" || match.game === "Dota 2";
+    return true;
+  });
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white pb-28 font-sans">
-      <PromoHeader initialPlayer={player} title="Игровая зона" />
-      <div className="max-w-xl mx-auto px-4 pt-6 space-y-6">
+      <PromoHeader initialPlayer={player} title="frag зона" />
+      <div className="max-w-xl lg:max-w-6xl mx-auto px-4 pt-6 space-y-6">
 
-        {/* TYPOGRAPHY HEADER */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column */}
+          <div className="lg:col-span-7 space-y-6">
+            {/* TYPOGRAPHY HEADER */}
         <div className="text-center py-2">
           <h1 className="text-2xl font-black uppercase tracking-tight mb-2">
             Играй и получай <span className="text-orange-500">бонусы</span>
@@ -324,27 +359,83 @@ export default function FragPage() {
           )}
         </div>
 
-        {/* GAME TAB SELECTOR */}
-        <div className="bg-white/5 p-1 rounded-2xl flex items-center border border-white/5">
-          <button
-            onClick={() => setActiveTab("CS2")}
-            className={cn(
-              "flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
-              activeTab === "CS2" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
-            )}
-          >
-            Counter-Strike 2
-          </button>
-          <button
-            onClick={() => setActiveTab("Dota2")}
-            className={cn(
-              "flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
-              activeTab === "Dota2" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
-            )}
-          >
-            Dota 2
-          </button>
-        </div>
+        {/* TOURNAMENTS SECTION - PREMIUM BANNER */}
+        {tournaments.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center gap-2 px-1">
+              <Trophy className="w-4 h-4 text-orange-500 animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600">
+                Рейтинговые Турниры
+              </span>
+            </div>
+
+            {/* Displaying active or most recent tournament summary */}
+            {(() => {
+              const activeT = tournaments.find(t => t.status === "active") || tournaments[0];
+              const daysLeft = (() => {
+                const diffTime = new Date(activeT.end_date).getTime() - new Date().getTime();
+                if (diffTime <= 0) return 0;
+                return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              })();
+              
+              return (
+                <div
+                  onClick={() => router.push(`/promo/frag/tournaments`)}
+                  className="relative overflow-hidden group cursor-pointer bg-gradient-to-br from-indigo-950/20 via-slate-900/60 to-purple-950/20 border border-indigo-500/20 hover:border-indigo-500/40 rounded-[2rem] p-6 shadow-[0_0_30px_rgba(99,102,241,0.03)] transition-all hover:scale-[1.01] hover:shadow-[0_0_30px_rgba(99,102,241,0.1)] flex flex-col justify-between gap-5 min-h-[140px]"
+                >
+                  {/* Decorative neon spots */}
+                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-indigo-500/20 transition-colors" />
+                  <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/20 transition-colors" />
+
+                  <div className="flex justify-between items-start gap-4 relative z-10">
+                    <div className="space-y-1">
+                      <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-emerald-400">Активен</span>
+                        <span className="text-gray-600 select-none">•</span>
+                        <span>{daysLeft > 0 ? `Осталось: ${daysLeft} дн.` : "Сезон завершен"}</span>
+                      </div>
+                      <h4 className="text-base font-black uppercase italic leading-tight text-white mt-1.5 group-hover:text-indigo-300 transition-colors">
+                        {activeT.title}
+                      </h4>
+                      {activeT.description && (
+                        <p className="text-[11px] text-gray-400 mt-1 leading-relaxed line-clamp-2 max-w-[260px] font-medium">
+                          {activeT.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="text-gray-500 uppercase tracking-wider text-[8px] font-bold">Ваше место</div>
+                      <div className="text-xl font-black text-indigo-400 mt-0.5">
+                        {activeT.myStats?.rank ? `#${activeT.myStats.rank}` : "—"}
+                      </div>
+                      <div className="text-[10px] font-bold text-gray-400">
+                        {activeT.myStats?.points ?? 0} PTS
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-white/5 relative z-10 text-[11px]">
+                    <div className="text-gray-400 font-medium flex items-center gap-1">
+                      {activeT.myStats?.qualified ? (
+                        <span className="text-emerald-400 flex items-center gap-1">✓ Квалификация пройдена</span>
+                      ) : (
+                        <span className="text-orange-400">
+                          Игры: {activeT.myStats?.matches_count ?? 0} из {activeT.min_matches} для зачета
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-black uppercase italic text-[10px] tracking-wider text-indigo-400 group-hover:text-indigo-300 flex items-center gap-1 transition-colors">
+                      Лидерборд и Правила <span className="translate-x-0 group-hover:translate-x-1 transition-transform">→</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
 
         {/* ACTIVE CS2 SESSION IN TAB */}
         <AnimatePresence mode="wait">
@@ -488,22 +579,8 @@ export default function FragPage() {
           )}
         </AnimatePresence>
 
-        {/* ULTRA-COMPACT TARIFFS LIST */}
-        <div className="space-y-3">
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600 px-1">
-            Тарифы начисления ({activeTab})
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {(activeTab === "CS2" ? cs2Tariffs : dotaTariffs).map((t, i) => (
-              <div key={i} className="flex items-center justify-between px-3 py-2 bg-white/[0.015] border border-white/5 rounded-xl">
-                <span className="text-xs text-gray-400">{t.label}</span>
-                <span className="text-xs font-black text-green-400">+{t.value.toFixed(1)} ₽</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* DYNAMIC HOW IT WORKS WITHOUT HEAVY BOXES */}
+        
+            {/* DYNAMIC HOW IT WORKS WITHOUT HEAVY BOXES */}
         <div className="space-y-3 pt-2">
           <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600 px-1">
             Быстрый старт
@@ -523,17 +600,45 @@ export default function FragPage() {
             ))}
           </div>
         </div>
-
-        {/* SECURITY INFO BANNER */}
-        <div className="bg-green-500/5 border border-green-500/10 rounded-2xl p-4 space-y-2 text-xs text-gray-400">
-          <div className="flex items-center gap-2 font-bold text-green-400 uppercase tracking-wider text-[10px]">
-            <CircleCheck className="w-3.5 h-3.5 text-green-400" />
-            <span>100% Безопасно для вашего аккаунта</span>
           </div>
-          <p className="text-[11px] leading-relaxed">
-            Агент использует официальный встроенный протокол разработчиков <span className="text-white font-medium">Valve Game State Integration (GSI)</span>. 
-            Он работает в пассивном режиме чтения, не внедряется в память игры, не изменяет файлы и полностью разрешен античитами <span className="text-white font-medium">VAC</span> и <span className="text-white font-medium">Faceit Anti-Cheat</span>.
-          </p>
+
+          {/* Right Column */}
+          <div className="lg:col-span-5 space-y-6">
+            {/* GAME TAB SELECTOR */}
+            <div className="bg-white/5 p-1 rounded-2xl flex items-center border border-white/5">
+              <button
+                onClick={() => setActiveTab("CS2")}
+                className={cn(
+                  "flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+                  activeTab === "CS2" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
+                )}
+              >
+                Counter-Strike 2
+              </button>
+              <button
+                onClick={() => setActiveTab("Dota2")}
+                className={cn(
+                  "flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+                  activeTab === "Dota2" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
+                )}
+              >
+                Dota 2
+              </button>
+            </div>
+
+            {/* ULTRA-COMPACT TARIFFS LIST */}
+        <div className="space-y-3">
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600 px-1">
+            Тарифы начисления ({activeTab})
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {(activeTab === "CS2" ? cs2Tariffs : dotaTariffs).map((t, i) => (
+              <div key={i} className="flex items-center justify-between px-3 py-2 bg-white/[0.015] border border-white/5 rounded-xl">
+                <span className="text-xs text-gray-400">{t.label}</span>
+                <span className="text-xs font-black text-green-400">+{t.value.toFixed(1)} ₽</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* RECENT MATCHES HISTORY */}
@@ -546,11 +651,11 @@ export default function FragPage() {
 
           {historyLoading ? (
             <div className="text-center py-6 text-gray-600 text-xs">Загрузка...</div>
-          ) : history.length === 0 ? (
+          ) : filteredHistory.length === 0 ? (
             <div className="text-center py-6 text-gray-700 text-xs">Матчи ещё не сыграны</div>
           ) : (
             <div className="divide-y divide-white/5">
-              {history.slice(0, 10).map((match) => {
+              {filteredHistory.slice(0, 10).map((match) => {
                 const date = new Date(match.played_at);
                 const timeStr = date.toLocaleString("ru-RU", {
                   day: "2-digit",
@@ -657,6 +762,107 @@ export default function FragPage() {
         </div>
 
       </div>
+
+      {/* Tournament Leaderboard Modal */}
+      <AnimatePresence>
+        {showLeaderboardModal && selectedTournament && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#121214] border border-white/5 rounded-[2rem] p-6 shadow-2xl w-full max-w-md relative max-h-[85vh] overflow-y-auto space-y-5"
+            >
+              <button
+                onClick={() => {
+                  setShowLeaderboardModal(false);
+                  setSelectedTournament(null);
+                }}
+                className="absolute top-5 right-5 text-gray-500 hover:text-gray-400 p-1"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div>
+                <span className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-white/5 text-orange-400">
+                  {selectedTournament.game === "ALL" ? "CS2 + Dota 2" : selectedTournament.game}
+                </span>
+                <h4 className="text-lg font-black uppercase italic mt-1.5 leading-snug">{selectedTournament.title}</h4>
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-0.5 font-bold">
+                  Топ-10 игроков клуба
+                </p>
+              </div>
+
+              {/* Prizes list */}
+              <div className="bg-white/[0.01] border border-white/5 p-4 rounded-2xl space-y-2">
+                <div className="text-[8px] font-black uppercase text-gray-500 tracking-wider">Призовые места</div>
+                {selectedTournament.prizes?.slice(0, 3).map((p: any) => (
+                  <div key={p.place} className="flex justify-between items-center text-xs">
+                    <span className="flex items-center gap-1 font-bold text-gray-400">
+                      🏆 {p.place} место:
+                    </span>
+                    <span className="font-black text-green-400">+{p.reward} ₽</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Leaderboard Table */}
+              <div className="space-y-2">
+                <div className="text-[8px] font-black uppercase text-gray-500 tracking-wider px-1">Таблица</div>
+                <div className="divide-y divide-white/5 border border-white/5 rounded-2xl bg-white/[0.005] overflow-hidden">
+                  {selectedTournament.leaderboard?.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-gray-600 font-bold uppercase">
+                      Нет результатов
+                    </div>
+                  ) : (
+                    selectedTournament.leaderboard.map((item: any) => {
+                      const isCurrentUser = item.player_id === player?.id;
+                      const maskedName = item.full_name
+                        ? item.full_name.split(" ").map((n: string, i: number) => i === 0 ? n : `${n[0]}.`).join(" ")
+                        : "Игрок";
+                      
+                      return (
+                        <div
+                          key={item.player_id}
+                          className={cn(
+                            "flex items-center justify-between px-4 py-3 text-xs",
+                            isCurrentUser && "bg-indigo-500/10 border-y border-indigo-500/20"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className={cn(
+                              "w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px]",
+                              item.rank === 1 ? "bg-amber-500/20 text-amber-400" :
+                              item.rank === 2 ? "bg-slate-400/20 text-slate-300" :
+                              item.rank === 3 ? "bg-amber-700/20 text-amber-600" : "text-gray-500"
+                            )}>
+                              {item.rank || "—"}
+                            </span>
+                            <span className={cn(
+                              "font-bold",
+                              isCurrentUser ? "text-indigo-400" : "text-gray-200"
+                            )}>
+                              {maskedName} {isCurrentUser && <span className="text-[9px] bg-indigo-500/20 px-1 py-0.5 rounded uppercase tracking-wider ml-1">Вы</span>}
+                            </span>
+                          </div>
+
+                          <div className="text-right font-black">
+                            <div className="text-white">{item.points} PTS</div>
+                            <div className="text-[9px] text-gray-600">{item.wins}W / {item.losses}L</div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      </div>
+        </div>
       <BottomNav />
     </div>
   );

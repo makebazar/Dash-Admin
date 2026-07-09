@@ -233,8 +233,8 @@ export async function PATCH(request: Request) {
 
     let userId;
     try {
-      const { requireClubAccess } = await import("@/lib/club-api-access");
-      userId = await requireClubAccess(String(clubId));
+      const { requireClubApiAccess } = await import("@/lib/club-api-access");
+      userId = await requireClubApiAccess(String(clubId));
     } catch (e: any) {
       return NextResponse.json({ error: e.message || "Forbidden" }, { status: e.status || 403 });
     }

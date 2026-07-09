@@ -30,6 +30,11 @@ export async function POST(request: Request) {
       events = [],
     } = body;
 
+    // Ignore training matches
+    if (map && typeof map === "string" && map.toLowerCase().includes("training")) {
+      return NextResponse.json({ success: true, ignored: true, message: "Training matches are ignored" });
+    }
+
     await client.query(
       `INSERT INTO promo_frag_matches
          (player_id, club_id, game, map, score, kills, deaths, assists, headshots, last_hits, earned, events)

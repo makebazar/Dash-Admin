@@ -285,7 +285,7 @@ export default function PromoProfile() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-6 pb-24 font-sans">
-      <div className="max-w-md mx-auto">
+      <div className="max-w-md lg:max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-10">
           <h1 className="text-2xl font-black uppercase italic tracking-tight">
@@ -299,7 +299,10 @@ export default function PromoProfile() {
           </button>
         </div>
 
-        {/* Player Card */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column */}
+          <div className="lg:col-span-5 space-y-8">
+            {/* Player Card */}
         <div className="bg-linear-to-br from-orange-500 to-red-600 rounded-[2.5rem] p-8 mb-10 shadow-[0_20px_40px_rgba(234,88,12,0.2)] relative overflow-hidden">
           <div className="absolute top-0 right-0 p-8 opacity-20">
             <Trophy className="w-24 h-24 text-white" />
@@ -406,7 +409,109 @@ export default function PromoProfile() {
             </div>
           </div>
         )}
-        {/* Inventory Section */}
+        
+            {/* Clubs List */}
+        <div className="mb-6 flex items-center justify-between px-2">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
+            Мои Клубы
+          </h3>
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 flex items-center gap-1 hover:text-orange-400 transition-colors"
+          >
+            <PlusCircle className="w-3 h-3" /> Добавить
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {clubs.length === 0 ? (
+            <div className="bg-white/5 border border-white/5 rounded-3xl p-8 text-center">
+              <MapPin className="w-10 h-10 text-gray-600 mx-auto mb-4 opacity-20" />
+              <p className="text-gray-500 text-sm font-medium">
+                Вы еще не добавили ни одного клуба
+              </p>
+            </div>
+          ) : (
+            clubs.map((club, idx) => {
+              const isSelected = String(club.id) === String(player?.clubId);
+              return (
+                <motion.button
+                  key={club.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                  onClick={() => !isSelected && handleSwitchClub(club.id)}
+                  className={`w-full border rounded-3xl p-6 flex items-center gap-4 group transition-all active:scale-98 ${
+                    isSelected
+                      ? "bg-orange-500/10 border-orange-500/50"
+                      : "bg-[#151515] border-white/5 hover:border-orange-500/30"
+                  }`}
+                >
+                  <div className="flex-1 text-left">
+                    <div
+                      className={`text-lg font-black uppercase italic tracking-tight transition-colors ${
+                        isSelected
+                          ? "text-orange-500"
+                          : "group-hover:text-orange-500"
+                      }`}
+                    >
+                      {club.name}
+                    </div>
+                    {club.address && (
+                      <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
+                        {club.address}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 mt-3">
+                      <div className="flex items-center gap-1">
+                        <Ticket
+                          className={`w-3 h-3 ${isSelected ? "text-orange-500" : "text-gray-600"}`}
+                        />
+                        <span className="text-[10px] font-bold text-gray-500">
+                          {club.tickets} бил.
+                        </span>
+                      </div>
+                      <div className="w-1 h-1 bg-white/10 rounded-full" />
+                      <div className="text-[10px] font-bold text-gray-500 uppercase">
+                        {Math.floor(club.bonusBalance)} бонусов
+                      </div>
+                    </div>
+                  </div>
+                  {isSelected ? (
+                    <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full" />
+                    </div>
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-gray-700 group-hover:text-white transition-colors" />
+                  )}
+                </motion.button>
+              );
+            })
+          )}
+        </div>
+
+            {/* Global Stats Footer */}
+        <div className="mt-12 p-6 border-t border-white/5 grid grid-cols-2 gap-8">
+          <div className="flex flex-col gap-1">
+            <History className="w-5 h-5 text-gray-600 mb-2" />
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-600">
+              Всего игр
+            </div>
+            <div className="text-lg font-black italic">124</div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Trophy className="w-5 h-5 text-gray-600 mb-2" />
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-600">
+              Призов получено
+            </div>
+            <div className="text-lg font-black italic">12</div>
+          </div>
+        </div>
+          </div>
+
+          {/* Right Column */}
+          <div className="lg:col-span-7 space-y-8">
+            {/* Inventory Section */}
         <div className="mb-10 bg-[#151515] border border-white/5 rounded-[2.5rem] p-6 shadow-2xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-orange-500/10 rounded-xl flex items-center justify-center">
@@ -842,102 +947,7 @@ export default function PromoProfile() {
           </div>
         )}
 
-        {/* Clubs List */}
-        <div className="mb-6 flex items-center justify-between px-2">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
-            Мои Клубы
-          </h3>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 flex items-center gap-1 hover:text-orange-400 transition-colors"
-          >
-            <PlusCircle className="w-3 h-3" /> Добавить
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          {clubs.length === 0 ? (
-            <div className="bg-white/5 border border-white/5 rounded-3xl p-8 text-center">
-              <MapPin className="w-10 h-10 text-gray-600 mx-auto mb-4 opacity-20" />
-              <p className="text-gray-500 text-sm font-medium">
-                Вы еще не добавили ни одного клуба
-              </p>
-            </div>
-          ) : (
-            clubs.map((club, idx) => {
-              const isSelected = String(club.id) === String(player?.clubId);
-              return (
-                <motion.button
-                  key={club.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  onClick={() => !isSelected && handleSwitchClub(club.id)}
-                  className={`w-full border rounded-3xl p-6 flex items-center gap-4 group transition-all active:scale-98 ${
-                    isSelected
-                      ? "bg-orange-500/10 border-orange-500/50"
-                      : "bg-[#151515] border-white/5 hover:border-orange-500/30"
-                  }`}
-                >
-                  <div className="flex-1 text-left">
-                    <div
-                      className={`text-lg font-black uppercase italic tracking-tight transition-colors ${
-                        isSelected
-                          ? "text-orange-500"
-                          : "group-hover:text-orange-500"
-                      }`}
-                    >
-                      {club.name}
-                    </div>
-                    {club.address && (
-                      <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">
-                        {club.address}
-                      </div>
-                    )}
-                    <div className="flex items-center gap-3 mt-3">
-                      <div className="flex items-center gap-1">
-                        <Ticket
-                          className={`w-3 h-3 ${isSelected ? "text-orange-500" : "text-gray-600"}`}
-                        />
-                        <span className="text-[10px] font-bold text-gray-500">
-                          {club.tickets} бил.
-                        </span>
-                      </div>
-                      <div className="w-1 h-1 bg-white/10 rounded-full" />
-                      <div className="text-[10px] font-bold text-gray-500 uppercase">
-                        {Math.floor(club.bonusBalance)} бонусов
-                      </div>
-                    </div>
                   </div>
-                  {isSelected ? (
-                    <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
-                      <div className="w-2 h-2 bg-white rounded-full" />
-                    </div>
-                  ) : (
-                    <ChevronRight className="w-5 h-5 text-gray-700 group-hover:text-white transition-colors" />
-                  )}
-                </motion.button>
-              );
-            })
-          )}
-        </div>
-
-        {/* Global Stats Footer */}
-        <div className="mt-12 p-6 border-t border-white/5 grid grid-cols-2 gap-8">
-          <div className="flex flex-col gap-1">
-            <History className="w-5 h-5 text-gray-600 mb-2" />
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-600">
-              Всего игр
-            </div>
-            <div className="text-lg font-black italic">124</div>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Trophy className="w-5 h-5 text-gray-600 mb-2" />
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-600">
-              Призов получено
-            </div>
-            <div className="text-lg font-black italic">12</div>
-          </div>
         </div>
       </div>
 

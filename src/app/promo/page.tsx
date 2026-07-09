@@ -896,6 +896,42 @@ export default function PromoLobby() {
               </motion.div>
             )}
 
+            {/* FRAG RATING SYSTEM INFO BANNER */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative overflow-hidden group cursor-pointer bg-gradient-to-br from-indigo-950/20 via-slate-900/60 to-purple-950/20 border border-indigo-500/20 hover:border-indigo-500/40 rounded-[2.5rem] p-6 sm:p-8 shadow-[0_0_40px_rgba(99,102,241,0.02)] transition-all hover:scale-[1.005] hover:shadow-[0_0_40px_rgba(99,102,241,0.08)] mb-8"
+              onClick={() => router.push("/promo/frag")}
+            >
+              {/* Neon circles */}
+              <div className="absolute -top-16 -right-16 w-44 h-44 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-indigo-500/20 transition-colors" />
+              <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-purple-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/20 transition-colors" />
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider">
+                      Клубная Игровая Зона
+                    </span>
+                    <span className="text-[9px] font-bold text-emerald-400 uppercase flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      frag доступен
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-black uppercase italic leading-tight text-white group-hover:text-indigo-300 transition-colors">
+                    Рейтинг FRAG & Сезоны Наград
+                  </h3>
+                  <p className="text-xs text-gray-400 max-w-md leading-relaxed font-medium">
+                    Играй в CS2 и Dota 2 на клубных ПК, зарабатывай рубли на баланс за каждое убийство/победу в реальном времени и участвуй в автоматических кубках за крутые скины Steam!
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[11px] font-black uppercase italic tracking-wider text-indigo-400 group-hover:text-indigo-300 shrink-0 transition-colors">
+                  Играть и Побеждать <ArrowRight className="w-4 h-4 translate-x-0 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </div>
+            </motion.div>
+
             {/* Loyalty Programs Section */}
             {player && getActivePrograms(player.settings).length > 0 && (
               <div className="mb-12">

@@ -9,14 +9,16 @@ export default function PromoLogin() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [pin, setPin] = useState("");
+  const [pinValues, setPinValues] = useState(["", "", "", ""]);
   const [fullName, setFullName] = useState("");
   const [clubCode, setClubCode] = useState("");
   const [step, setStep] = useState<"phone" | "pin" | "register">("phone");
+  const [isPinPending, setIsPinPending] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const clubId = searchParams.get("clubId");
+  const pin = pinValues.join("");
 
   const formatPhoneInput = (value: string): string => {
     // Strip all non-digits
@@ -85,6 +87,7 @@ export default function PromoLogin() {
         setStep("register");
       } else {
         setStep("pin");
+        setIsPinPending(data.pinPending === true);
       }
     } catch (err) {
       setError("Ошибка соединения");
@@ -95,6 +98,10 @@ export default function PromoLogin() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (pin.length < 4) {
+      setError("Введите 4-значный ПИН-код");
+      return;
+    }
     setError("");
     setLoading(true);
 
@@ -130,6 +137,49 @@ export default function PromoLogin() {
       setError("Ошибка соединения");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePinChange = (index: number, val: string) => {
+    const cleaned = val.replace(/\D/g, "");
+    if (!cleaned) {
+      const newVals = [...pinValues];
+      newVals[index] = "";
+      setPinValues(newVals);
+      return;
+    }
+
+    const lastChar = cleaned.slice(-1);
+    const newVals = [...pinValues];
+    newVals[index] = lastChar;
+    setPinValues(newVals);
+
+    // Auto-focus next input
+    if (index < 3) {
+      const nextInput = document.getElementById(`pin-input-${index + 1}`);
+      if (nextInput) {
+        (nextInput as HTMLInputElement).focus();
+      }
+    }
+  };
+
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace") {
+      const newVals = [...pinValues];
+      
+      if (pinValues[index] === "") {
+        if (index > 0) {
+          newVals[index - 1] = "";
+          setPinValues(newVals);
+          const prevInput = document.getElementById(`pin-input-${index - 1}`);
+          if (prevInput) {
+            (prevInput as HTMLInputElement).focus();
+          }
+        }
+      } else {
+        newVals[index] = "";
+        setPinValues(newVals);
+      }
     }
   };
 
@@ -256,24 +306,31 @@ export default function PromoLogin() {
                   </>
                 )}
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 ml-4">
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 block text-center">
                     {step === "register"
                       ? "Придумайте ПИН-код (4 цифры)"
-                      : "Введите Ваш ПИН-код"}
+                      : isPinPending
+                        ? "Придумайте новый ПИН-код (4 цифры)"
+                        : "Введите Ваш ПИН-код"}
                   </label>
-                  <div className="relative">
-                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-600" />
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={4}
-                      value={pin}
-                      onChange={(e) => setPin(e.target.value)}
-                      placeholder="••••"
-                      className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-14 pr-6 focus:border-orange-500/50 outline-none transition-all text-2xl font-black tracking-[0.5em]"
-                      autoFocus={step === "pin"}
-                    />
+                  
+                  <div className="flex justify-center gap-4 py-2">
+                    {[0, 1, 2, 3].map((index) => (
+                      <input
+                        key={index}
+                        id={`pin-input-${index}`}
+                        type="password"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={1}
+                        value={pinValues[index]}
+                        onChange={(e) => handlePinChange(index, e.target.value)}
+                        onKeyDown={(e) => handlePinKeyDown(index, e)}
+                        className="w-14 h-16 bg-black border border-white/10 focus:border-orange-500/50 rounded-2xl text-center text-2xl font-black text-white outline-none transition-all"
+                        autoFocus={index === 0}
+                      />
+                    ))}
                   </div>
                 </div>
 
@@ -293,13 +350,18 @@ export default function PromoLogin() {
                       <Loader2 className="w-6 h-6 animate-spin" />
                     ) : step === "register" ? (
                       "ЗАРЕГИСТРИРОВАТЬСЯ"
+                    ) : isPinPending ? (
+                      "УСТАНОВИТЬ ПИН И ВОЙТИ"
                     ) : (
                       "ВОЙТИ"
                     )}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStep("phone")}
+                    onClick={() => {
+                      setPinValues(["", "", "", ""]);
+                      setStep("phone");
+                    }}
                     className="text-gray-600 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors"
                   >
                     Изменить номер
