@@ -59,7 +59,7 @@ export async function GET(
        JOIN promo_players p ON m.player_id = p.id
        WHERE m.club_id = $1 
          AND m.played_at BETWEEN $2 AND $3
-         AND m.map NOT ILIKE '%training%'
+         AND m.map !~* 'training|aim_|botz|reflex|practice|workshop|custom|tutorial|test|csstats'
          ${gameFilter}`,
       queryParams
     );

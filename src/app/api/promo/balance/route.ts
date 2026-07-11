@@ -20,6 +20,47 @@ export async function POST(request: Request) {
 
     await client.query("BEGIN");
 
+    // Validation for win requests to prevent balance abuse
+    // ponytail: relies on promo_history permanence to validate game sequences; if history is archived/cleared, this check will need a separate active_sessions table.
+    const isWin = amount > 0;
+    if (isWin) {
+      const gameType = reason.split("_")[0] || "unknown";
+      
+      const lastActionRes = await client.query(
+        `SELECT result_data FROM promo_history
+         WHERE player_id = $1 AND club_id = $2 AND game_type = $3
+         ORDER BY created_at DESC LIMIT 1`,
+        [playerId, activeClubId, gameType]
+      );
+      
+      const lastAction = lastActionRes.rows[0]?.result_data?.action;
+      const expectedBetAction = `${gameType}_bet`;
+      
+      if (lastAction !== expectedBetAction) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: `Invalid game flow: expected ${expectedBetAction}, but last action was ${lastAction || 'none'}` },
+          { status: 400 }
+        );
+      }
+      
+      const lastBetAmount = Math.abs(lastActionRes.rows[0]?.result_data?.amount || 0);
+      if (lastBetAmount <= 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ error: "Invalid bet amount" }, { status: 400 });
+      }
+      
+      // Maximum allowed win is 10000x the bet amount
+      const maxAllowedWin = lastBetAmount * 10000;
+      if (amount > maxAllowedWin) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: `Win amount exceeds maximum allowed multiplier. Max: ${maxAllowedWin}, Got: ${amount}` },
+          { status: 400 }
+        );
+      }
+    }
+
     // 1. Check if balance record exists and update it
     const updateResult = await client.query(
       `UPDATE promo_player_balances

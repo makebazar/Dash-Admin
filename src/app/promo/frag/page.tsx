@@ -76,22 +76,28 @@ interface FragMatch {
 }
 
 const DEFAULT_CS2_TARIFFS = [
-  { label: "Килл", value: 0.50 },
-  { label: "Хедшот", value: 1.00 },
-  { label: "С ножа", value: 5.00 },
-  { label: "Зевс", value: 3.00 },
-  { label: "Ассист", value: 0.25 },
+  { label: "Килл", value: 0.60 },
+  { label: "Хедшот", value: 1.00 }, // 0.60 + 0.40
+  { label: "С ножа", value: 5.00 }, // 0.60 + 4.40
+  { label: "Зевс", value: 3.00 }, // 0.60 + 2.40
+  { label: "Ассист", value: 0.20 },
   { label: "MVP", value: 1.00 },
   { label: "Победа", value: 10.00 },
 ];
 
 const DEFAULT_DOTA_TARIFFS = [
-  { label: "Килл героя", value: 0.50 },
-  { label: "Ассист", value: 0.25 },
-  { label: "Ластхит (10)", value: 0.05 },
-  { label: "Денай (5)", value: 0.05 },
+  { label: "Килл героя", value: 0.80 },
+  { label: "Ассист", value: 0.40 },
+  { label: "Ластхит (10)", value: 0.10 },
+  { label: "Денай (5)", value: 0.10 },
   { label: "Неворт (1k)", value: 0.10 },
   { label: "Победа", value: 10.00 },
+];
+
+const DEFAULT_PUBG_TARIFFS = [
+  { label: "Килл", value: 2.00 },
+  { label: "Топ-1 (Победа)", value: 15.00 },
+  { label: "Топ-10", value: 6.00 },
 ];
 
 export default function FragPage() {
@@ -101,7 +107,7 @@ export default function FragPage() {
   const [history, setHistory] = useState<FragMatch[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [player, setPlayer] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<"CS2" | "Dota2">("CS2");
+  const [activeTab, setActiveTab] = useState<"CS2" | "Dota2" | "PUBG">("CS2");
   const [mounted, setMounted] = useState(false);
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
 
@@ -271,7 +277,7 @@ export default function FragPage() {
   // Auto-switch tab if game is running
   useEffect(() => {
     if (agentOnline && agentState?.ActiveGame && agentState.ActiveGame !== "None") {
-      setActiveTab(agentState.ActiveGame === "Dota2" ? "Dota2" : "CS2");
+      setActiveTab(agentState.ActiveGame === "Dota2" ? "Dota2" : agentState.ActiveGame === "PUBG" ? "PUBG" : "CS2");
     }
   }, [agentOnline, agentState?.ActiveGame]);
 
@@ -280,6 +286,7 @@ export default function FragPage() {
   const isPlaying = agentState?.ActiveGame !== "None" && agentState?.ActiveGame != null;
   const isPlayingCS2 = agentOnline && isPlaying && agentState?.ActiveGame === "CS2";
   const isPlayingDota = agentOnline && isPlaying && agentState?.ActiveGame === "Dota2";
+  const isPlayingPubg = agentOnline && isPlaying && agentState?.ActiveGame === "PUBG";
 
   const fragSettings = player?.settings?.frag;
   const fragEnabled = fragSettings?.is_active !== false;
@@ -287,27 +294,34 @@ export default function FragPage() {
 
   // Compile tariffs
   const cs2Tariffs = st ? [
-    { label: "Килл", value: st.cs2_kill ?? 0.50 },
-    { label: "Хедшот", value: (st.cs2_kill ?? 0.50) + (st.cs2_hs ?? 0.50) },
-    { label: "С ножа", value: (st.cs2_kill ?? 0.50) + (st.cs2_knife ?? 4.50) },
-    { label: "Зевс", value: (st.cs2_kill ?? 0.50) + (st.cs2_zeus ?? 2.50) },
-    { label: "Ассист", value: st.cs2_assist ?? 0.25 },
+    { label: "Килл", value: st.cs2_kill ?? 0.60 },
+    { label: "Хедшот", value: (st.cs2_kill ?? 0.60) + (st.cs2_hs ?? 0.40) },
+    { label: "С ножа", value: (st.cs2_kill ?? 0.60) + (st.cs2_knife ?? 4.40) },
+    { label: "Зевс", value: (st.cs2_kill ?? 0.60) + (st.cs2_zeus ?? 2.40) },
+    { label: "Ассист", value: st.cs2_assist ?? 0.20 },
     { label: "MVP", value: st.cs2_mvp ?? 1.00 },
     { label: "Победа", value: st.cs2_win ?? 10.00 },
   ] : DEFAULT_CS2_TARIFFS;
 
   const dotaTariffs = st ? [
-    { label: "Килл героя", value: st.dota_kill ?? 0.50 },
-    { label: "Ассист", value: st.dota_assist ?? 0.25 },
-    { label: "Ластхит (10)", value: st.dota_lasthit_10 ?? 0.05 },
-    { label: "Денай (5)", value: st.dota_denies_5 ?? 0.05 },
+    { label: "Килл героя", value: st.dota_kill ?? 0.80 },
+    { label: "Ассист", value: st.dota_assist ?? 0.40 },
+    { label: "Ластхит (10)", value: st.dota_lasthit_10 ?? 0.10 },
+    { label: "Денай (5)", value: st.dota_denies_5 ?? 0.10 },
     { label: "Неворт (1k)", value: st.dota_networth_1000 ?? 0.10 },
     { label: "Победа", value: st.dota_win ?? 10.00 },
   ] : DEFAULT_DOTA_TARIFFS;
 
+  const pubgTariffs = st ? [
+    { label: "Килл", value: st.pubg_kill ?? 2.00 },
+    { label: "Топ-1 (Победа)", value: st.pubg_win ?? 15.00 },
+    { label: "Топ-10", value: st.pubg_top10 ?? 6.00 },
+  ] : DEFAULT_PUBG_TARIFFS;
+
   const filteredHistory = history.filter(match => {
     if (activeTab === "CS2") return match.game === "CS2";
     if (activeTab === "Dota2") return match.game === "Dota2" || match.game === "Dota 2";
+    if (activeTab === "PUBG") return match.game === "PUBG";
     return true;
   });
 
@@ -577,6 +591,47 @@ export default function FragPage() {
               )}
             </motion.div>
           )}
+
+          {/* ACTIVE PUBG SESSION IN TAB */}
+          {activeTab === "PUBG" && isPlayingPubg && agentState && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="bg-yellow-500/5 border border-yellow-500/10 rounded-3xl p-5 space-y-4"
+            >
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-yellow-400 tracking-wider uppercase">Игровой матч PUBG</span>
+                <span className="font-black text-white bg-white/10 px-2 py-0.5 rounded">
+                  Место: #{agentState.MyTeamScore}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-center bg-white/[0.02] p-4 rounded-2xl border border-white/5">
+                <div>
+                  <div className="text-xl font-black">{agentState.Kills}</div>
+                  <div className="text-[9px] uppercase tracking-wider text-gray-500">Киллы</div>
+                </div>
+                <div>
+                  <div className="text-xl font-black">+{agentState.EarnedBonuses.toFixed(1)} ₽</div>
+                  <div className="text-[9px] uppercase tracking-wider text-yellow-400 font-bold font-black">Награда</div>
+                </div>
+              </div>
+              {agentState.ActivityFeed && agentState.ActivityFeed.length > 0 && (
+                <div className="pt-3 border-t border-white/5">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-yellow-400/80 mb-2">Лента событий матча</div>
+                  <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 mt-1.5">
+                    {agentState.ActivityFeed.map((log, idx) => (
+                      <div key={idx} className="text-[10px] text-gray-300 flex items-start gap-2 py-0.5 border-b border-white/[0.02] last:border-0">
+                        <span className="text-yellow-500 select-none">•</span>
+                        <span>{log}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
         </AnimatePresence>
 
         
@@ -609,20 +664,29 @@ export default function FragPage() {
               <button
                 onClick={() => setActiveTab("CS2")}
                 className={cn(
-                  "flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+                  "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
                   activeTab === "CS2" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
                 )}
               >
-                Counter-Strike 2
+                CS2
               </button>
               <button
                 onClick={() => setActiveTab("Dota2")}
                 className={cn(
-                  "flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all",
+                  "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
                   activeTab === "Dota2" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
                 )}
               >
                 Dota 2
+              </button>
+              <button
+                onClick={() => setActiveTab("PUBG")}
+                className={cn(
+                  "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                  activeTab === "PUBG" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
+                )}
+              >
+                PUBG
               </button>
             </div>
 
@@ -632,7 +696,7 @@ export default function FragPage() {
             Тарифы начисления ({activeTab})
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {(activeTab === "CS2" ? cs2Tariffs : dotaTariffs).map((t, i) => (
+            {(activeTab === "CS2" ? cs2Tariffs : activeTab === "Dota2" ? dotaTariffs : pubgTariffs).map((t, i) => (
               <div key={i} className="flex items-center justify-between px-3 py-2 bg-white/[0.015] border border-white/5 rounded-xl">
                 <span className="text-xs text-gray-400">{t.label}</span>
                 <span className="text-xs font-black text-green-400">+{t.value.toFixed(1)} ₽</span>
@@ -728,6 +792,11 @@ export default function FragPage() {
                                 <>
                                   <div className="text-gray-500 uppercase tracking-wider text-[8px]">Хедшоты</div>
                                   <div className="font-bold text-white mt-0.5">{match.headshots ?? 0}</div>
+                                </>
+                              ) : match.game === "PUBG" ? (
+                                <>
+                                  <div className="text-gray-500 uppercase tracking-wider text-[8px]">Результат</div>
+                                  <div className="font-bold text-white mt-0.5">{match.score ?? "-"}</div>
                                 </>
                               ) : (
                                 <>

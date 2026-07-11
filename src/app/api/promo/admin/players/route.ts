@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     const clubId = searchParams.get("clubId");
     const phone = searchParams.get("phone");
     const search = searchParams.get("search");
+    const playerId = searchParams.get("playerId");
     const limitParam = searchParams.get("limit");
     const offsetParam = searchParams.get("offset");
     const userId = (await cookies()).get("session_user_id")?.value;
@@ -26,7 +27,10 @@ export async function GET(request: Request) {
     let whereClause = "";
     const params: any[] = [clubId];
 
-    if (phone) {
+    if (playerId) {
+      whereClause = "AND p.id = $2";
+      params.push(playerId);
+    } else if (phone) {
       if (phone.length < 4) {
         return NextResponse.json({ players: [], total: 0 });
       }
@@ -248,8 +252,7 @@ export async function PATCH(request: Request) {
         await client.query(
           `UPDATE promo_players 
            SET full_name = COALESCE($1, full_name), 
-               phone_number = COALESCE($2, phone_number),
-               updated_at = NOW() 
+               phone_number = COALESCE($2, phone_number) 
            WHERE id = $3`,
           [
             fullName !== undefined ? fullName : null, 

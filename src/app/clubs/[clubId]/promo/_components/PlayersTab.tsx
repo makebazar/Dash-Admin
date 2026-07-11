@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User,
@@ -37,6 +38,10 @@ interface PlayersTabProps {
 }
 
 export function PlayersTab({ clubId, players: initialPlayers, onRefresh, settings }: PlayersTabProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const playerIdParam = searchParams.get("playerId");
+
   // Local state for pagination & search
   const [localPlayers, setLocalPlayers] = useState<any[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
@@ -65,6 +70,99 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
     "games_tickets" | "games_bets" | "cases" | "transactions" | "tickets" | "inventory" | "quests"
   >("games_tickets");
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+  // Pagination for logs panel on the player details page
+  const [logPage, setLogPage] = useState(1);
+  const [logPageSize] = useState(20);
+  const [logTotal, setLogTotal] = useState(0);
+  const [paginatedLogs, setPaginatedLogs] = useState<any[]>([]);
+  const [isLogsLoading, setIsLogsLoading] = useState(false);
+
+  // Helper to change selected player and update URL
+  const selectPlayer = (player: any) => {
+    const params = new URLSearchParams(window.location.search);
+    if (player) {
+      params.set("playerId", player.id);
+    } else {
+      params.delete("playerId");
+    }
+    router.replace(`?${params.toString()}`);
+  };
+
+  // Sync selectedPlayer with URL playerId parameter
+  useEffect(() => {
+    if (playerIdParam) {
+      if (!selectedPlayer || selectedPlayer.id !== playerIdParam) {
+        const fetchSinglePlayer = async () => {
+          try {
+            const res = await fetch(`/api/promo/admin/players?clubId=${clubId}&playerId=${playerIdParam}`);
+            const data = await res.json();
+            if (data.players && data.players.length > 0) {
+              setSelectedPlayer(data.players[0]);
+            }
+          } catch (e) {
+            console.error("Error fetching single player:", e);
+          }
+        };
+        fetchSinglePlayer();
+      }
+    } else {
+      setSelectedPlayer(null);
+    }
+  }, [playerIdParam, clubId]);
+
+  // Reset log page when activeLogTab changes
+  useEffect(() => {
+    setLogPage(1);
+    setPaginatedLogs([]);
+    setLogTotal(0);
+  }, [activeLogTab]);
+
+  // Fetch paginated logs for the active tab on player details page
+  useEffect(() => {
+    if (!selectedPlayer) return;
+    if (activeLogTab === "inventory" || activeLogTab === "quests") return;
+
+    let active = true;
+    const fetchTabLogs = async () => {
+      setIsLogsLoading(true);
+      try {
+        const offset = (logPage - 1) * logPageSize;
+        let url = `/api/promo/admin/logs?clubId=${clubId}&playerId=${selectedPlayer.id}&limit=${logPageSize}&offset=${offset}`;
+        
+        if (activeLogTab === "tickets") {
+          url += `&logType=issuance`;
+        } else {
+          url += `&logType=games`;
+          if (activeLogTab === "games_tickets") {
+            url += `&gameType=games_tickets`;
+          } else if (activeLogTab === "games_bets") {
+            url += `&gameType=games_bets`;
+          } else if (activeLogTab === "cases") {
+            url += `&gameType=cases`;
+          } else if (activeLogTab === "transactions") {
+            url += `&gameType=transactions`;
+          }
+        }
+
+        const res = await fetch(url);
+        const data = await res.json();
+        if (active && data.success) {
+          setPaginatedLogs(data.logs || []);
+          setLogTotal(data.total || 0);
+        }
+      } catch (err) {
+        console.error("Error fetching player tab logs:", err);
+      } finally {
+        if (active) setIsLogsLoading(false);
+      }
+    };
+
+    fetchTabLogs();
+    return () => {
+      active = false;
+    };
+  }, [selectedPlayer?.id, activeLogTab, logPage, logPageSize, clubId]);
 
   // Common UI states
   const [isIssuing, setIsIssuing] = useState(false);
@@ -666,6 +764,37 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
       ["TOPUP", "SERVICE_AWARD", "BAR_BONUS_PURCHASE", "WITHDRAW", "QUEST_REWARD"].includes(log.game_type)
     );
 
+    const renderLogPagination = () => {
+      const totalPages = Math.ceil(logTotal / logPageSize);
+      if (totalPages <= 1) return null;
+      return (
+        <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-4">
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Показано {paginatedLogs.length} из {logTotal}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setLogPage((p) => Math.max(1, p - 1))}
+              disabled={logPage === 1 || isLogsLoading}
+              className="p-2 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 rounded-xl transition-all outline-none"
+            >
+              <ChevronLeft className="w-4 h-4 text-slate-600" />
+            </button>
+            <div className="text-xs font-black uppercase italic tracking-wider text-slate-900 px-3">
+              {logPage} / {totalPages}
+            </div>
+            <button
+              onClick={() => setLogPage((p) => Math.min(totalPages, p + 1))}
+              disabled={logPage === totalPages || isLogsLoading}
+              className="p-2 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 rounded-xl transition-all outline-none"
+            >
+              <ChevronRight className="w-4 h-4 text-slate-600" />
+            </button>
+          </div>
+        </div>
+      );
+    };
+
     const renderGameLogsTable = (logs: any[], emptyMessage: string) => {
       if (logs.length === 0) {
         return (
@@ -727,7 +856,7 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
         {/* Back Button & Main Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <button
-            onClick={() => setSelectedPlayer(null)}
+            onClick={() => selectPlayer(null)}
             className="flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-black uppercase italic tracking-wider transition-all shadow-sm max-w-fit"
           >
             <ArrowLeft className="w-4 h-4 text-slate-500" />
@@ -1083,377 +1212,391 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
             </div>
           </div>
 
-          {isLoadingLogs ? (
-            <div className="py-24 flex items-center justify-center">
-              <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
-            </div>
-          ) : activeLogTab === "games_tickets" ? (
-            renderGameLogsTable(gamesTicketsLogs, "Записи об играх за билеты отсутствуют")
-          ) : activeLogTab === "games_bets" ? (
-            renderGameLogsTable(gamesBetsLogs, "Записи об играх-ставках отсутствуют")
-          ) : activeLogTab === "cases" ? (
-            <div className="overflow-x-auto">
-              {casesLogs.length === 0 ? (
-                <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
-                  Записи о кейсах отсутствуют
-                </div>
-              ) : (
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <th className="pb-4">Кейс</th>
-                      <th className="pb-4">Выпавший приз</th>
-                      <th className="pb-4">Тип</th>
-                      <th className="pb-4">Дата и время</th>
-                      <th className="pb-4 text-right">Изменение баланса</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
-                    {casesLogs.map((log) => {
-                      const details = getLogDetails(log);
-                      const isRefund = log.game_type === "CASE_REFUND";
-                      const caseName = log.result_data?.case_name || "Кейс";
-                      const wonItem = log.result_data?.won_item_name || log.result_data?.item_name || "-";
-                      
-                      return (
-                        <tr key={log.id} className="hover:bg-slate-50/40">
-                          <td className="py-4">
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/50">
-                                📦
-                              </span>
-                              <span className="font-extrabold uppercase text-slate-900 tracking-tight">
-                                {caseName}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-4">
-                            <span className="text-slate-700 font-extrabold">
-                              {wonItem}
-                            </span>
-                          </td>
-                          <td className="py-4">
-                            <span className={cn(
-                              "px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border",
-                              isRefund 
-                                ? "bg-slate-50 border-slate-200 text-slate-500" 
-                                : "bg-indigo-50 border-indigo-100 text-indigo-600"
-                            )}>
-                              {isRefund ? "Возврат" : "Открытие"}
-                            </span>
-                          </td>
-                          <td className="py-4 text-slate-400 font-medium">
-                            {new Date(log.created_at).toLocaleString("ru-RU")}
-                          </td>
-                          <td className={cn("py-4 text-right text-sm", details.sumColor)}>
-                            {details.sumText || "0 ₽"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          ) : activeLogTab === "transactions" ? (
-            renderGameLogsTable(transactionsLogs, "Записи о транзакциях отсутствуют")
-          ) : activeLogTab === "tickets" ? (
-            <div className="overflow-x-auto">
-              {playerLogs.issuance.length === 0 ? (
-                <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
-                  Записи о выдаче билетов отсутствуют
-                </div>
-              ) : (
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <th className="pb-4">Активность</th>
-                      <th className="pb-4">Источник</th>
-                      <th className="pb-4">Дата и время</th>
-                      <th className="pb-4 text-right">Количество билетов</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
-                    {playerLogs.issuance.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-50/40">
-                        <td className="py-4">
-                          <div className="flex items-center gap-3">
-                            <span className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500 shrink-0 border border-amber-100"><Ticket className="w-4 h-4" /></span>
-                            <div className="space-y-0.5">
-                              <span className="font-extrabold uppercase text-slate-900 tracking-tight">Выдача билета</span>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                                {getTicketReason(log)}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4">
-                          <span className="px-2.5 py-1 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
-                            {log.source}
-                          </span>
-                        </td>
-                        <td className="py-4 text-slate-400 font-medium">
-                          {new Date(log.created_at).toLocaleString("ru-RU")}
-                        </td>
-                        <td className="py-4 text-right text-slate-900 font-black text-sm">
-                          +{log.batch_count || 1} шт
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          ) : activeLogTab === "inventory" ? (
-            <div className="overflow-x-auto">
-              {playerLogs.inventory.length === 0 ? (
-                <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
-                  Инвентарь игрока пуст
-                </div>
-              ) : (
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <th className="pb-4">Предмет</th>
-                      <th className="pb-4">Тип</th>
-                      <th className="pb-4">Статус</th>
-                      <th className="pb-4">Дата получения</th>
-                      <th className="pb-4 text-right">Действие</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
-                    {playerLogs.inventory.map((item) => {
-                      const isRare = item.is_rare;
-                      const canRefund = item.status === "pending" || item.status === "activated";
-                      
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50/40">
-                          <td className="py-4">
-                            <div className="flex items-center gap-3">
-                              <span className={cn(
-                                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-xl border",
-                                isRare 
-                                  ? "bg-amber-50 border-amber-200 text-amber-500 animate-pulse" 
-                                  : "bg-slate-50 border-slate-200 text-slate-600"
-                              )}>
-                                {item.reward_type === "club_service" ? "⏱️" : "🍔"}
-                              </span>
-                              <div className="space-y-0.5">
-                                <span className={cn(
-                                  "font-black uppercase tracking-tight",
-                                  isRare ? "text-amber-600" : "text-slate-900"
-                                )}>
-                                  {item.name}
-                                </span>
-                                {item.description && (
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                                    {item.description}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-4">
-                            <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-slate-100 border border-slate-200 text-slate-600">
-                              {item.reward_type === "club_service" ? "Услуга" : "Товар из бара"}
-                            </span>
-                          </td>
-                          <td className="py-4">
-                            {item.status === "pending" && (
-                              <span className="px-2.5 py-1 bg-amber-50 border border-amber-100 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
-                                В инвентаре
-                              </span>
-                            )}
-                            {item.status === "activated" && (
-                              <span className="px-2.5 py-1 bg-blue-50 border border-blue-100 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse">
-                                В очереди ({item.queue_status === "pending" ? "Ожидает" : item.queue_status})
-                              </span>
-                            )}
-                            {item.status === "claimed" && (
-                              <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
-                                Выдан
-                              </span>
-                            )}
-                            {item.status === "refunded" && (
-                              <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-wider line-through">
-                                Возврат
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-4 text-slate-400 font-medium">
-                            {new Date(item.created_at).toLocaleString("ru-RU")}
-                          </td>
-                          <td className="py-4 text-right">
-                            {canRefund ? (
-                              <button
-                                onClick={() => handleRefundInventoryItem(item.id)}
-                                className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-[0.98] shadow-sm shadow-rose-500/10"
-                              >
-                                Вернуть средства
-                              </button>
-                            ) : (
-                              <span className="text-[10px] font-bold text-slate-400 uppercase">
-                                Недоступно
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-8">
-              {/* Loyalty Progress Section */}
-              <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-6">
-                <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">
-                  Программа лояльности
-                </h4>
-                {playerLogs.loyalty ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-sm">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Куплено пакетов</p>
-                      <p className="text-slate-800 text-xl font-black mt-1">
-                        {playerLogs.loyalty.accumulated_packages || 0} шт
-                      </p>
-                      {playerLogs.loyalty.last_purchase_date && (
-                        <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">
-                          Последний: {new Date(playerLogs.loyalty.last_purchase_date).toLocaleDateString("ru-RU")}
-                        </p>
-                      )}
-                    </div>
-                    
-                    <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-sm">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Посещения клуба</p>
-                      <p className="text-slate-800 text-xl font-black mt-1">
-                        {playerLogs.loyalty.accumulated_visits || 0} раз
-                      </p>
-                      {playerLogs.loyalty.last_visit_date && (
-                        <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">
-                          Последнее: {new Date(playerLogs.loyalty.last_visit_date).toLocaleDateString("ru-RU")}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-sm">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Серия посещений</p>
-                      <p className="text-amber-600 text-xl font-black mt-1">
-                        🔥 {playerLogs.loyalty.current_streak || 0} дней
-                      </p>
-                      <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">
-                        Серия активна
-                      </p>
-                    </div>
+          {activeLogTab === "inventory" || activeLogTab === "quests" ? (
+            isLoadingLogs ? (
+              <div className="py-24 flex items-center justify-center">
+                <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
+              </div>
+            ) : activeLogTab === "inventory" ? (
+              <div className="overflow-x-auto">
+                {playerLogs.inventory.length === 0 ? (
+                  <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
+                    Инвентарь игрока пуст
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider py-4">
-                    Данные о лояльности отсутствуют (игрок еще не совершал визитов или покупок)
-                  </p>
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <th className="pb-4">Предмет</th>
+                        <th className="pb-4">Тип</th>
+                        <th className="pb-4">Статус</th>
+                        <th className="pb-4">Дата получения</th>
+                        <th className="pb-4 text-right">Действие</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
+                      {playerLogs.inventory.map((item) => {
+                        const isRare = item.is_rare;
+                        const canRefund = item.status === "pending" || item.status === "activated";
+                        
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50/40">
+                            <td className="py-4">
+                              <div className="flex items-center gap-3">
+                                <span className={cn(
+                                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-xl border",
+                                  isRare 
+                                    ? "bg-amber-50 border-amber-200 text-amber-500 animate-pulse" 
+                                    : "bg-slate-50 border-slate-200 text-slate-600"
+                                )}>
+                                  {item.reward_type === "club_service" ? "⏱️" : "🍔"}
+                                </span>
+                                <div className="space-y-0.5">
+                                  <span className={cn(
+                                    "font-black uppercase tracking-tight",
+                                    isRare ? "text-amber-600" : "text-slate-900"
+                                  )}>
+                                    {item.name}
+                                  </span>
+                                  {item.description && (
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                      {item.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-4">
+                              <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-slate-100 border border-slate-200 text-slate-600">
+                                {item.reward_type === "club_service" ? "Услуга" : "Товар из бара"}
+                              </span>
+                            </td>
+                            <td className="py-4">
+                              {item.status === "pending" && (
+                                <span className="px-2.5 py-1 bg-amber-50 border border-amber-100 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                  В инвентаре
+                                </span>
+                              )}
+                              {item.status === "activated" && (
+                                <span className="px-2.5 py-1 bg-blue-50 border border-blue-100 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse">
+                                  В очереди ({item.queue_status === "pending" ? "Ожидает" : item.queue_status})
+                                </span>
+                              )}
+                              {item.status === "claimed" && (
+                                <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                  Выдан
+                                </span>
+                              )}
+                              {item.status === "refunded" && (
+                                <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-wider line-through">
+                                  Возврат
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4 text-slate-400 font-medium">
+                              {new Date(item.created_at).toLocaleString("ru-RU")}
+                            </td>
+                            <td className="py-4 text-right">
+                              {canRefund ? (
+                                <button
+                                  onClick={() => handleRefundInventoryItem(item.id)}
+                                  className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all active:scale-[0.98] shadow-sm shadow-rose-500/10"
+                                >
+                                  Вернуть средства
+                                </button>
+                              ) : (
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                  Недоступно
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 )}
               </div>
+            ) : (
+              <div className="space-y-8">
+                {/* Loyalty Progress Section */}
+                <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-6">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">
+                    Программа лояльности
+                  </h4>
+                  {playerLogs.loyalty ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-sm">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Куплено пакетов</p>
+                        <p className="text-slate-800 text-xl font-black mt-1">
+                          {playerLogs.loyalty.accumulated_packages || 0} шт
+                        </p>
+                        {playerLogs.loyalty.last_purchase_date && (
+                          <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">
+                            Последний: {new Date(playerLogs.loyalty.last_purchase_date).toLocaleDateString("ru-RU")}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-sm">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Посещения клуба</p>
+                        <p className="text-slate-800 text-xl font-black mt-1">
+                          {playerLogs.loyalty.accumulated_visits || 0} раз
+                        </p>
+                        {playerLogs.loyalty.last_visit_date && (
+                          <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">
+                            Последнее: {new Date(playerLogs.loyalty.last_visit_date).toLocaleDateString("ru-RU")}
+                          </p>
+                        )}
+                      </div>
 
-              {/* Active and Past Quests Section */}
-              <div className="space-y-4">
-                <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">
-                  История и прогресс квестов
-                </h4>
-                {playerLogs.quests.length === 0 ? (
-                  <div className="text-center py-16 bg-slate-50/30 border border-slate-100 rounded-2xl text-slate-400 text-sm font-bold uppercase tracking-wider">
-                    Квесты не назначались
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
+                      <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-sm">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Серия посещений</p>
+                        <p className="text-amber-600 text-xl font-black mt-1">
+                          🔥 {playerLogs.loyalty.current_streak || 0} дней
+                        </p>
+                        <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase">
+                          Серия active
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider py-4">
+                      Данные о лояльности отсутствуют (игрок еще не совершал визитов или покупок)
+                    </p>
+                  )}
+                </div>
+
+                {/* Active and Past Quests Section */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">
+                    История и прогресс квестов
+                  </h4>
+                  {playerLogs.quests.length === 0 ? (
+                    <div className="text-center py-16 bg-slate-50/30 border border-slate-100 rounded-2xl text-slate-400 text-sm font-bold uppercase tracking-wider">
+                      Квесты не назначались
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            <th className="pb-4">Квест</th>
+                            <th className="pb-4">Прогресс</th>
+                            <th className="pb-4">Награды</th>
+                            <th className="pb-4">Статус</th>
+                            <th className="pb-4 text-right">Назначен / Выполнен</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
+                          {playerLogs.quests.map((quest) => {
+                            const isCompleted = quest.status === "completed";
+                            const isExpired = quest.status === "expired" || (quest.expires_at && new Date(quest.expires_at) < new Date() && quest.status === "active");
+                            const rewards = [];
+                            if (quest.reward_xp) rewards.push(`${quest.reward_xp} XP`);
+                            if (quest.reward_tickets) rewards.push(`🎟️ ${quest.reward_tickets}`);
+                            if (quest.reward_bonus_balance) rewards.push(`${quest.reward_bonus_balance} ₽`);
+
+                            return (
+                              <tr key={quest.id} className="hover:bg-slate-50/40">
+                                <td className="py-4">
+                                  <div className="space-y-0.5">
+                                    <span className="font-extrabold uppercase text-slate-900 tracking-tight">
+                                      {quest.quest_title}
+                                    </span>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter max-w-[250px] truncate">
+                                      {quest.quest_description}
+                                    </p>
+                                  </div>
+                                </td>
+                                <td className="py-4">
+                                  <div className="space-y-1">
+                                    <div className="flex justify-between text-[10px] text-slate-400 font-extrabold">
+                                      <span>{quest.current_progress || 0} / {quest.target_value}</span>
+                                      <span>{Math.round(((quest.current_progress || 0) / quest.target_value) * 100)}%</span>
+                                    </div>
+                                    <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                      <div 
+                                        className={cn(
+                                          "h-full rounded-full transition-all duration-500",
+                                          isCompleted ? "bg-emerald-500" : isExpired ? "bg-slate-300" : "bg-indigo-500"
+                                        )}
+                                        style={{ width: `${Math.min(100, ((quest.current_progress || 0) / quest.target_value) * 100)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-4 text-slate-900 font-extrabold">
+                                  {rewards.join(" | ") || "Нет награды"}
+                                </td>
+                                <td className="py-4">
+                                  {quest.status === "active" && !isExpired && (
+                                    <span className="px-2.5 py-1 bg-blue-50 border border-blue-100 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse">
+                                      Активен
+                                    </span>
+                                  )}
+                                  {isCompleted && (
+                                    <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                      Выполнен
+                                    </span>
+                                  )}
+                                  {isExpired && (
+                                    <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                      Истек
+                                    </span>
+                                  )}
+                                  {quest.status === "pending_verification" && (
+                                    <span className="px-2.5 py-1 bg-amber-50 border border-amber-100 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse">
+                                      Проверка ({quest.seat_number ? `ПК ${quest.seat_number}` : "ПК не указан"})
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-4 text-right text-slate-400 font-medium">
+                                  <div>{new Date(quest.assigned_at).toLocaleDateString("ru-RU")}</div>
+                                  {quest.completed_at && (
+                                    <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                                      Вып: {new Date(quest.completed_at).toLocaleDateString("ru-RU")}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="relative">
+              {isLogsLoading && (
+                <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                </div>
+              )}
+              
+              {activeLogTab === "games_tickets" && renderGameLogsTable(paginatedLogs, "Записи об играх за билеты отсутствуют")}
+              {activeLogTab === "games_bets" && renderGameLogsTable(paginatedLogs, "Записи об играх-ставках отсутствуют")}
+              {activeLogTab === "transactions" && renderGameLogsTable(paginatedLogs, "Записи о транзакциях отсутствуют")}
+              
+              {activeLogTab === "cases" && (
+                <div className="overflow-x-auto">
+                  {paginatedLogs.length === 0 ? (
+                    <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
+                      Записи о кейсах отсутствуют
+                    </div>
+                  ) : (
                     <table className="w-full text-left">
                       <thead>
                         <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          <th className="pb-4">Квест</th>
-                          <th className="pb-4">Прогресс</th>
-                          <th className="pb-4">Награды</th>
-                          <th className="pb-4">Статус</th>
-                          <th className="pb-4 text-right">Назначен / Выполнен</th>
+                          <th className="pb-4">Кейс</th>
+                          <th className="pb-4">Выпавший приз</th>
+                          <th className="pb-4">Тип</th>
+                          <th className="pb-4">Дата и время</th>
+                          <th className="pb-4 text-right">Изменение баланса</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
-                        {playerLogs.quests.map((quest) => {
-                          const isCompleted = quest.status === "completed";
-                          const isExpired = quest.status === "expired" || (quest.expires_at && new Date(quest.expires_at) < new Date() && quest.status === "active");
-                          const rewards = [];
-                          if (quest.reward_xp) rewards.push(`${quest.reward_xp} XP`);
-                          if (quest.reward_tickets) rewards.push(`🎟️ ${quest.reward_tickets}`);
-                          if (quest.reward_bonus_balance) rewards.push(`${quest.reward_bonus_balance} ₽`);
-
+                        {paginatedLogs.map((log) => {
+                          const details = getLogDetails(log);
+                          const isRefund = log.game_type === "CASE_REFUND";
+                          const caseName = log.result_data?.case_name || "Кейс";
+                          const wonItem = log.result_data?.won_item_name || log.result_data?.item_name || "-";
+                          
                           return (
-                            <tr key={quest.id} className="hover:bg-slate-50/40">
+                            <tr key={log.id} className="hover:bg-slate-50/40">
                               <td className="py-4">
-                                <div className="space-y-0.5">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-lg w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/50">
+                                    📦
+                                  </span>
                                   <span className="font-extrabold uppercase text-slate-900 tracking-tight">
-                                    {quest.quest_title}
+                                    {caseName}
                                   </span>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter max-w-[250px] truncate">
-                                    {quest.quest_description}
-                                  </p>
                                 </div>
                               </td>
                               <td className="py-4">
-                                <div className="space-y-1">
-                                  <div className="flex justify-between text-[10px] text-slate-400 font-extrabold">
-                                    <span>{quest.current_progress || 0} / {quest.target_value}</span>
-                                    <span>{Math.round(((quest.current_progress || 0) / quest.target_value) * 100)}%</span>
-                                  </div>
-                                  <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                    <div 
-                                      className={cn(
-                                        "h-full rounded-full transition-all duration-500",
-                                        isCompleted ? "bg-emerald-500" : isExpired ? "bg-slate-300" : "bg-indigo-500"
-                                      )}
-                                      style={{ width: `${Math.min(100, ((quest.current_progress || 0) / quest.target_value) * 100)}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="py-4 text-slate-900 font-extrabold">
-                                {rewards.join(" | ") || "Нет награды"}
+                                <span className="text-slate-700 font-extrabold">
+                                  {wonItem}
+                                </span>
                               </td>
                               <td className="py-4">
-                                {quest.status === "active" && !isExpired && (
-                                  <span className="px-2.5 py-1 bg-blue-50 border border-blue-100 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse">
-                                    Активен
-                                  </span>
-                                )}
-                                {isCompleted && (
-                                  <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
-                                    Выполнен
-                                  </span>
-                                )}
-                                {isExpired && (
-                                  <span className="px-2.5 py-1 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-wider">
-                                    Истек
-                                  </span>
-                                )}
-                                {quest.status === "pending_verification" && (
-                                  <span className="px-2.5 py-1 bg-amber-50 border border-amber-100 text-amber-600 rounded-lg text-[9px] font-black uppercase tracking-wider animate-pulse">
-                                    Проверка ({quest.seat_number ? `ПК ${quest.seat_number}` : "ПК не указан"})
-                                  </span>
-                                )}
+                                <span className={cn(
+                                  "px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border",
+                                  isRefund 
+                                    ? "bg-slate-50 border-slate-200 text-slate-500" 
+                                    : "bg-indigo-50 border-indigo-100 text-indigo-600"
+                                )}>
+                                  {isRefund ? "Возврат" : "Открытие"}
+                                </span>
                               </td>
-                              <td className="py-4 text-right text-slate-400 font-medium">
-                                <div>{new Date(quest.assigned_at).toLocaleDateString("ru-RU")}</div>
-                                {quest.completed_at && (
-                                  <div className="text-[10px] text-emerald-600 font-bold mt-0.5">
-                                    Вып: {new Date(quest.completed_at).toLocaleDateString("ru-RU")}
-                                  </div>
-                                )}
+                              <td className="py-4 text-slate-400 font-medium">
+                                {new Date(log.created_at).toLocaleString("ru-RU")}
+                              </td>
+                              <td className={cn("py-4 text-right text-sm", details.sumColor)}>
+                                {details.sumText || "0 ₽"}
                               </td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
+
+              {activeLogTab === "tickets" && (
+                <div className="overflow-x-auto">
+                  {paginatedLogs.length === 0 ? (
+                    <div className="text-center py-16 text-slate-400 text-sm font-bold uppercase tracking-wider">
+                      Записи о выдаче билетов отсутствуют
+                    </div>
+                  ) : (
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          <th className="pb-4">Активность</th>
+                          <th className="pb-4">Источник</th>
+                          <th className="pb-4">Дата и время</th>
+                          <th className="pb-4 text-right">Количество билетов</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 text-xs font-bold text-slate-700">
+                        {paginatedLogs.map((log) => (
+                          <tr key={log.id} className="hover:bg-slate-50/40">
+                            <td className="py-4">
+                              <div className="flex items-center gap-3">
+                                <span className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-500 shrink-0 border border-amber-100"><Ticket className="w-4 h-4" /></span>
+                                <div className="space-y-0.5">
+                                  <span className="font-extrabold uppercase text-slate-900 tracking-tight">Выдача билета</span>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                                    {getTicketReason(log)}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-4">
+                              <span className="px-2.5 py-1 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                                {log.source}
+                              </span>
+                            </td>
+                            <td className="py-4 text-slate-400 font-medium">
+                              {new Date(log.created_at).toLocaleString("ru-RU")}
+                            </td>
+                            <td className="py-4 text-right text-slate-900 font-black text-sm">
+                              +{log.batch_count || 1} шт
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+              
+              {renderLogPagination()}
             </div>
           )}
         </div>
@@ -1661,7 +1804,7 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                   localPlayers.map((player) => (
                     <tr 
                       key={player.id} 
-                      onClick={() => setSelectedPlayer(player)}
+                      onClick={() => selectPlayer(player)}
                       className="hover:bg-slate-50/50 cursor-pointer transition-colors group"
                     >
                       <td className="px-8 py-5">
@@ -1740,7 +1883,7 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                             hasPremium={player.bp_is_premium}
                           />
                           <button
-                            onClick={() => setSelectedPlayer(player)}
+                            onClick={() => selectPlayer(player)}
                             title="Посмотреть профиль и логи"
                             className="p-2 hover:bg-slate-100 text-slate-500 rounded-xl transition-colors"
                           >

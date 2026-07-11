@@ -30,9 +30,13 @@ export async function POST(request: Request) {
       events = [],
     } = body;
 
-    // Ignore training matches
-    if (map && typeof map === "string" && map.toLowerCase().includes("training")) {
-      return NextResponse.json({ success: true, ignored: true, message: "Training matches are ignored" });
+    // Ignore training/practice matches
+    if (map && typeof map === "string") {
+      const lowerMap = map.toLowerCase();
+      const isTraining = ["training", "aim_", "botz", "reflex", "practice", "workshop", "custom", "tutorial", "test", "csstats"].some(kw => lowerMap.includes(kw));
+      if (isTraining) {
+        return NextResponse.json({ success: true, ignored: true, message: "Training/practice matches are ignored" });
+      }
     }
 
     await client.query(

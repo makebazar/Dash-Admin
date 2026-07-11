@@ -44,28 +44,33 @@ interface Prize {
 export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
   if (!settings) return null;
 
+  const defaultTariffs = {
+    cs2_kill: 0.60,
+    cs2_hs: 0.40,
+    cs2_knife: 4.40,
+    cs2_zeus: 2.40,
+    cs2_assist: 0.20,
+    cs2_mvp: 1.00,
+    cs2_win: 10.00,
+    dota_kill: 0.80,
+    dota_assist: 0.40,
+    dota_lasthit_10: 0.10,
+    dota_denies_5: 0.10,
+    dota_networth_1000: 0.10,
+    dota_win: 10.00,
+    pubg_kill: 2.00,
+    pubg_win: 15.00,
+    pubg_top10: 6.00,
+  };
+
   // Initialize state from settings or default values
   const fragConfig = settings.frag || {
     is_active: false,
-    tariffs: {
-      cs2_kill: 0.50,
-      cs2_hs: 0.50,
-      cs2_knife: 4.50,
-      cs2_zeus: 2.50,
-      cs2_assist: 0.25,
-      cs2_mvp: 1.00,
-      cs2_win: 10.00,
-      dota_kill: 0.50,
-      dota_assist: 0.25,
-      dota_lasthit_10: 0.05,
-      dota_denies_5: 0.05,
-      dota_networth_1000: 0.10,
-      dota_win: 10.00,
-    },
+    tariffs: defaultTariffs,
   };
 
   const [isActive, setIsActive] = useState<boolean>(fragConfig.is_active);
-  const [tariffs, setTariffs] = useState<any>({ ...fragConfig.tariffs });
+  const [tariffs, setTariffs] = useState<any>({ ...defaultTariffs, ...fragConfig.tariffs });
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Sub-tab selection: "settings" | "stats" | "tournaments"
@@ -578,6 +583,50 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                           value={tariffs[item.key] ?? 0}
                           onChange={(e) => handleTariffChange(item.key, e.target.value)}
                           className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 font-bold text-sm outline-none focus:border-red-500 focus:bg-white transition-all pr-10"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-xs">
+                          {item.suffix}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* PUBG Tariffs Card */}
+            <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-500/20">
+                    <Gamepad2 className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-black uppercase italic">
+                      Тарифы <span className="text-yellow-500">PUBG</span>
+                    </h4>
+                    <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-widest">
+                      Награда за внутриигровые действия
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {[
+                    { key: "pubg_kill", label: "Убийство (Kill)", suffix: "₽" },
+                    { key: "pubg_win", label: "Победа (Top 1 Win)", suffix: "₽" },
+                    { key: "pubg_top10", label: "Попадание в Топ-10 (Top 10)", suffix: "₽" },
+                  ].map((item) => (
+                    <div key={item.key} className="space-y-1.5">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                        {item.label}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={tariffs[item.key] ?? 0}
+                          onChange={(e) => handleTariffChange(item.key, e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3 font-bold text-sm outline-none focus:border-yellow-500 focus:bg-white transition-all pr-10"
                         />
                         <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-xs">
                           {item.suffix}

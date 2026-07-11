@@ -46,6 +46,30 @@ export function calculateTournamentPoints(matches: any[]) {
         matchPoints += 3.0;
         losses++;
       }
+    } else if (m.game === "PUBG") {
+      // PUBG Formula
+      matchPoints += (m.kills || 0) * 2.0;
+
+      let isWin = false;
+      let isTop10 = false;
+      events.forEach(evt => {
+        if (!evt) return;
+        const lower = evt.toLowerCase();
+        if (lower.includes("победа") || lower.includes("топ-1") || lower.includes("🏆")) isWin = true;
+        if (lower.includes("топ-10") || lower.includes("🎖️")) isTop10 = true;
+      });
+
+      if (isWin) {
+        matchPoints += 20.0;
+        wins++;
+      } else {
+        if (isTop10) {
+          matchPoints += 10.0;
+        } else {
+          matchPoints += 2.0;
+        }
+        losses++;
+      }
     } else {
       // Dota 2 Formula
       matchPoints += (m.kills || 0) * 1.5;

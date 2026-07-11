@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   Trophy,
@@ -49,6 +49,10 @@ import { FragTab } from "@/app/clubs/[clubId]/promo/_components/FragTab";
 
 export default function PromotionsPage() {
   const { clubId } = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+
   const [activeTab, setActiveTab] = useState<
     | "queue"
     | "players"
@@ -65,7 +69,24 @@ export default function PromotionsPage() {
     | "referrals"
     | "cases"
     | "frag"
-  >("queue");
+  >((tabParam as any) || "queue");
+
+  // Sync activeTab if search param changes externally
+  useEffect(() => {
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam as any);
+    }
+  }, [tabParam, activeTab]);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId as any);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", tabId);
+    if (tabId !== "players") {
+      params.delete("playerId");
+    }
+    router.replace(`?${params.toString()}`);
+  };
 
   const [settings, setSettings] = useState<any>(null);
   const [prizes, setPrizes] = useState<Prize[]>([]);
@@ -309,7 +330,7 @@ export default function PromotionsPage() {
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => handleTabChange(tab.id)}
                 className={cn(
                   "flex items-center gap-2.5 px-5 py-2.5 rounded-2xl transition-all duration-300 font-black uppercase italic text-xs tracking-wider",
                   activeTab === tab.id
@@ -333,7 +354,7 @@ export default function PromotionsPage() {
             />
           )}
 
-          {activeTab === "history" && <HistoryTab logs={logs} />}
+          {activeTab === "history" && <HistoryTab logs={logs} clubId={clubId as string} />}
 
           {activeTab === "players" && (
             <PlayersTab
