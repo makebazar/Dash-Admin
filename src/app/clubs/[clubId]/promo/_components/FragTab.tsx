@@ -917,7 +917,7 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                                     <div className="flex items-center gap-2">
                                       <span className={cn(
                                         "px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider",
-                                        isCs2 ? "bg-orange-50 text-orange-600" : "bg-red-50 text-red-600"
+                                        isCs2 ? "bg-orange-50 text-orange-600" : m.game === "PUBG" ? "bg-yellow-50 text-yellow-600" : "bg-red-50 text-red-600"
                                       )}>
                                         {m.game}
                                       </span>
@@ -962,6 +962,8 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                                         <div>
                                           {isCs2 ? (
                                             <>Хедшоты: <span className="text-slate-900">{m.headshots}</span></>
+                                          ) : m.game === "PUBG" ? (
+                                            <>Результат: <span className="text-slate-900">{m.score}</span></>
                                           ) : (
                                             <>Крипы: <span className="text-slate-900">{m.last_hits}</span></>
                                           )}

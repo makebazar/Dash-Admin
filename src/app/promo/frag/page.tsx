@@ -749,6 +749,11 @@ export default function FragPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-black uppercase text-white">{match.game}</span>
                           <span className="text-[10px] text-gray-500 truncate max-w-[120px]">{match.map}</span>
+                          {match.score && (
+                            <span className="text-[9px] bg-white/5 border border-white/10 text-gray-400 px-1.5 py-0.5 rounded font-black">
+                              {match.score}
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-gray-500 mt-0.5">
                           K/D/A: <strong className="text-gray-300">{match.kills} / {match.deaths} / {match.assists}</strong>
