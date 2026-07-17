@@ -125,11 +125,11 @@ export async function GET(request: Request) {
         } else if (gameType === "cases") {
           countWhere += ` AND h.game_type IN ('CASE_OPEN', 'CASE_REFUND')`;
         } else if (gameType === "transactions") {
-          countWhere += ` AND h.game_type IN ('TOPUP', 'SERVICE_AWARD', 'BAR_BONUS_PURCHASE', 'WITHDRAW', 'QUEST_REWARD')`;
+          countWhere += ` AND h.game_type IN ('TOPUP', 'SERVICE_AWARD', 'BAR_BONUS_PURCHASE', 'WITHDRAW', 'QUEST_REWARD', 'frag')`;
         } else if (gameType === "other_games") {
           countWhere += ` AND h.game_type NOT IN ('TOPUP', 'WITHDRAW', 'SERVICE_AWARD', 'BAR_BONUS_PURCHASE')`;
         } else if (gameType === "rewards") {
-          countWhere += ` AND h.game_type IN ('TOPUP', 'SERVICE_AWARD', 'QUEST_REWARD')`;
+          countWhere += ` AND h.game_type IN ('TOPUP', 'SERVICE_AWARD', 'QUEST_REWARD', 'frag')`;
         } else {
           countWhere += ` AND h.game_type = $${countParams.length + 1}`;
           countParams.push(gameType);
@@ -190,6 +190,7 @@ export async function GET(request: Request) {
               WHEN h.game_type = 'QUEST_REWARD' THEN 'Награда за квест'
               WHEN h.game_type = 'CASE_OPEN' THEN 'Кейс: ' || COALESCE(h.result_data->>'case_name', 'Без названия') || ' (Выпал: ' || COALESCE(h.result_data->>'won_item_name', '?') || ')'
               WHEN h.game_type = 'CASE_REFUND' THEN 'Возврат за кэйс: ' || COALESCE(h.result_data->>'case_name', 'Без названия')
+              WHEN h.game_type = 'frag' THEN 'Зачисление за матч ' || COALESCE(h.result_data->>'game', '') || ' (' || COALESCE(h.result_data->>'score', '') || ')'
               ELSE 'Проигрыш'
             END
           ) as prize_name,
@@ -205,6 +206,7 @@ export async function GET(request: Request) {
               WHEN h.game_type = 'QUEST_REWARD' THEN 'quest'
               WHEN h.game_type = 'CASE_OPEN' THEN 'case'
               WHEN h.game_type = 'CASE_REFUND' THEN 'refund'
+              WHEN h.game_type = 'frag' THEN 'virtual'
               ELSE 'other'
             END
           ) as prize_type,
@@ -282,6 +284,7 @@ export async function GET(request: Request) {
             WHEN h.game_type = 'QUEST_REWARD' THEN 'Награда за квест'
             WHEN h.game_type = 'CASE_OPEN' THEN 'Кейс: ' || COALESCE(h.result_data->>'case_name', 'Без названия') || ' (Выпал: ' || COALESCE(h.result_data->>'won_item_name', '?') || ')'
             WHEN h.game_type = 'CASE_REFUND' THEN 'Возврат за кэйс: ' || COALESCE(h.result_data->>'case_name', 'Без названия')
+            WHEN h.game_type = 'frag' THEN 'Зачисление за матч ' || COALESCE(h.result_data->>'game', '') || ' (' || COALESCE(h.result_data->>'score', '') || ')'
             ELSE 'Проигрыш'
           END
         ) as prize_name,
@@ -298,6 +301,7 @@ export async function GET(request: Request) {
             WHEN h.game_type = 'QUEST_REWARD' THEN 'quest'
             WHEN h.game_type = 'CASE_OPEN' THEN 'case'
             WHEN h.game_type = 'CASE_REFUND' THEN 'refund'
+            WHEN h.game_type = 'frag' THEN 'virtual'
             ELSE 'other'
           END
         ) as prize_type,

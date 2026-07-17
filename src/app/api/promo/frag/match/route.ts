@@ -80,6 +80,26 @@ export async function POST(request: Request) {
          WHERE player_id = $2 AND club_id = $3`,
         [earnedBonuses, playerId, activeClubId]
       );
+
+      // Record in promo_history
+      await client.query(
+        `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+         VALUES ($1, $2, 'frag', $3)`,
+        [
+          playerId,
+          activeClubId,
+          JSON.stringify({
+            action: `frag_${game.toLowerCase()}_match`,
+            amount: earnedBonuses,
+            game: game,
+            map: map,
+            score: score,
+            kills: kills,
+            deaths: deaths,
+            timestamp: new Date().toISOString()
+          })
+        ]
+      );
     }
 
     return NextResponse.json({ success: true });
