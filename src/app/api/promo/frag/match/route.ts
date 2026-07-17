@@ -33,7 +33,12 @@ export async function POST(request: Request) {
     // Ignore training/practice matches
     if (map && typeof map === "string") {
       const lowerMap = map.toLowerCase();
-      const isTraining = ["training", "aim_", "botz", "reflex", "practice", "workshop", "custom", "tutorial", "test", "csstats"].some(kw => lowerMap.includes(kw));
+      const isTraining = [
+        "training", "aim_", "botz", "reflex", "practice", "workshop",
+        "custom", "tutorial", "test", "csstats", "cybershoke", "am_",
+        "awp_", "duels_", "arena", "bhop", "surf", "retake",
+        "deathmatch", "dm_", "lobby", "hs_"
+      ].some(kw => lowerMap.includes(kw));
       if (isTraining) {
         return NextResponse.json({ success: true, ignored: true, message: "Training/practice matches are ignored" });
       }

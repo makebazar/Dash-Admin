@@ -23,7 +23,7 @@ export async function GET(request: Request) {
         COUNT(CASE WHEN m.game = 'Dota2' OR m.game = 'Dota 2' THEN 1 END)::int as dota_matches,
         COALESCE(SUM(m.earned), 0)::numeric as total_earned
        FROM promo_frag_matches m
-       WHERE m.club_id = $1 AND m.map !~* 'training|aim_|botz|reflex|practice|workshop|custom|tutorial|test|csstats'`,
+       WHERE m.club_id = $1 AND m.map !~* 'training|aim_|botz|reflex|practice|workshop|custom|tutorial|test|csstats|cybershoke|am_|awp_|duels_|arena|bhop|surf|retake|deathmatch|dm_|lobby|hs_'`,
       [clubId]
     );
     const summary = summaryRes.rows[0] || {
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         jsonb_agg(m.events) as all_events
        FROM promo_frag_matches m
        JOIN promo_players p ON m.player_id = p.id
-       WHERE m.club_id = $1 AND m.map !~* 'training|aim_|botz|reflex|practice|workshop|custom|tutorial|test|csstats'
+       WHERE m.club_id = $1 AND m.map !~* 'training|aim_|botz|reflex|practice|workshop|custom|tutorial|test|csstats|cybershoke|am_|awp_|duels_|arena|bhop|surf|retake|deathmatch|dm_|lobby|hs_'
        GROUP BY p.id, p.full_name, p.phone_number, m.game
        ORDER BY total_earned DESC`,
       [clubId]
