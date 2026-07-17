@@ -212,6 +212,19 @@ export default function RevenueTrendChart({
                 Object.keys(item.metrics).forEach(k => keys.add(k))
             }
         })
+
+        const EXCLUDED_KEYS = new Set([
+            'actual_cash',
+            'cash_diff',
+            'expenses',
+            'expenses_cash',
+            'bonuses',
+            'receipts_count',
+            'shift_comment',
+            'comment',
+            'non_revenue'
+        ])
+
         return Array.from(keys).map(key => {
             const meta = metricMeta[key]
             const label = meta?.label || key
@@ -219,7 +232,18 @@ export default function RevenueTrendChart({
             let suffix = ''
             if (category === 'EXPENSE') suffix = ' (расход)'
             return { key, label: label + suffix, rawLabel: label, category }
-        }).sort((a, b) => a.rawLabel.localeCompare(b.rawLabel))
+        })
+        .filter(item => {
+            if (item.category === 'EXPENSE') return false
+            if (EXCLUDED_KEYS.has(item.key.toLowerCase())) return false
+            const keyLower = item.key.toLowerCase()
+            if (keyLower.includes('comment')) return false
+            if (keyLower.includes('diff')) return false
+            if (keyLower.includes('actual')) return false
+            if (keyLower.includes('expense')) return false
+            return true
+        })
+        .sort((a, b) => a.rawLabel.localeCompare(b.rawLabel))
     }, [currentData, previousData, metricMeta])
 
     // Helper to extract active revenue depending on metric variable selection

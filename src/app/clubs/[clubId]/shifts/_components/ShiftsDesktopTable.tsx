@@ -231,6 +231,15 @@ export function ShiftsDesktopTable({
         </Badge>
       );
     }
+    const hasDiscrepancy = shift.report_data?.has_discrepancies === true;
+    if (hasDiscrepancy) {
+      return (
+        <Badge className="bg-rose-500/10 text-rose-500 border-rose-500/20" title="В кассе обнаружены расхождения!">
+          <AlertTriangle className="mr-1 h-3.5 w-3.5" />
+          Закрыта
+        </Badge>
+      );
+    }
     return (
       <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">
         Закрыта

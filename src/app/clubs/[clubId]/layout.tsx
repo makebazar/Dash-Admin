@@ -5,7 +5,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { hasColumn } from "@/lib/db-compat"
 import { resolveSubscriptionState } from "@/lib/subscriptions"
-import { getEmployeeRoleAccess } from "@/lib/employee-role-access"
+import { getClubApiAccess } from "@/lib/club-api-access"
 
 export default async function ClubLayout({
     children,
@@ -15,7 +15,8 @@ export default async function ClubLayout({
     params: Promise<{ clubId: string }>
 }) {
     const { clubId } = await params
-    const userId = (await cookies()).get('session_user_id')?.value
+    const rawUserId = (await cookies()).get('session_user_id')?.value
+    const userId = rawUserId ? (rawUserId.includes(".") ? rawUserId.split(".")[0] : rawUserId) : null
     if (!userId) {
         redirect('/login')
     }
@@ -48,8 +49,8 @@ export default async function ClubLayout({
         redirect('/dashboard')
     }
 
-    const roleAccess = await getEmployeeRoleAccess(clubId)
-    if (roleAccess.settings.employee_only) {
+    const apiAccess = await getClubApiAccess(clubId)
+    if (!apiAccess.canAccessManagement) {
         redirect(`/employee/clubs/${clubId}`)
     }
 

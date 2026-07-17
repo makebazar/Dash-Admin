@@ -19,6 +19,11 @@ import { AttentionSection } from "./_components/AttentionSection";
 import RevenueTrendChart from "./RevenueTrendChart";
 
 import type { RevenuePoint } from "./_types";
+import { query } from "@/db";
+import { normalizeInventorySettings } from "@/lib/inventory-settings";
+
+
+
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +40,12 @@ export default async function ClubDashboardPage({
   const userId = (await cookies()).get("session_user_id")?.value;
 
   if (!userId) redirect("/login");
+
+  const clubDataRes = await query(
+    `SELECT inventory_settings FROM clubs WHERE id = $1`,
+    [clubId]
+  );
+  const clubData = clubDataRes.rows[0] || {};
 
   const access = await getDashboardAccess(clubId);
   const canViewShifts = access.permissions.view_shifts;
@@ -127,7 +138,9 @@ export default async function ClubDashboardPage({
     <PageShell maxWidth="5xl">
       <ClubPageHeader clubName={access.clubName} />
 
-      <div className="flex flex-col gap-12">
+      <div className="flex flex-col gap-12 mt-4">
+
+
         {/* 1. Revenue */}
         <div>
           <RevenueTrendChart

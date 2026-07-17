@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UseChecklistsReturn } from "../_hooks/useChecklists";
+import { ImageViewer } from "@/components/ui/image-viewer";
 
 interface ChecklistsTabProps extends UseChecklistsReturn {
   clubId: string;
@@ -743,21 +744,11 @@ export function ChecklistsTab({
       </Dialog>
 
       {/* Photo preview overlay */}
-      {photoPreviewUrl && (
-        <div
-          className="fixed inset-0 bg-black/90 z-60 flex items-center justify-center p-4"
-          onClick={() => setPhotoPreviewUrl(null)}
-        >
-          <img
-            src={photoPreviewUrl}
-            alt="Фото крупно"
-            className="max-w-full max-h-full object-contain rounded"
-          />
-          <button className="absolute top-4 right-4 text-white hover:text-gray-300">
-            <XCircle className="h-8 w-8" />
-          </button>
-        </div>
-      )}
+      <ImageViewer
+        isOpen={!!photoPreviewUrl}
+        onClose={() => setPhotoPreviewUrl(null)}
+        src={photoPreviewUrl || ""}
+      />
     </div>
   );
 }

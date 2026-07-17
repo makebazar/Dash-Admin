@@ -7,6 +7,7 @@ import { assertUserCanAccessClub, assertUserCanUseWarehouses, getInventoryAccess
 import { checkReplenishmentNeeds } from "./replenishment";
 import { getActionErrorMessage } from "./receipts";
 import { getClubInventorySettingsInternal } from "./inventories";
+import { notifyDashLockProductsUpdated } from "@/lib/notify-dashlock";
 
 export async function getSalarySaleCandidatesInternal(client: any, clubId: string) {
   const inventorySettings = await getClubInventorySettingsInternal(
@@ -1214,6 +1215,7 @@ export async function adjustWarehouseStock(
     client.release();
   }
   revalidatePath(`/clubs/${clubId}/inventory`);
+  notifyDashLockProductsUpdated(Number(clubId));
 }
 
 export async function writeOffProduct(
@@ -1330,4 +1332,5 @@ export async function writeOffProduct(
     client.release();
   }
   revalidatePath(`/clubs/${clubId}/inventory`);
+  notifyDashLockProductsUpdated(Number(clubId));
 }

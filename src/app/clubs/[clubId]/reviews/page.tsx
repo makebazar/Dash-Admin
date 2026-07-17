@@ -154,10 +154,10 @@ export default function ChecklistsPage({
 
         {/* Image viewer for equipment task photos */}
         <ImageViewer
-          open={equipment.viewerOpen}
-          onOpenChange={equipment.setViewerOpen}
+          isOpen={equipment.viewerOpen}
+          onClose={() => equipment.setViewerOpen(false)}
           src={equipment.viewerImage}
-          photos={equipment.currentTaskPhotos}
+          images={equipment.currentTaskPhotos}
           onNext={equipment.handleNextImage}
           onPrev={equipment.handlePrevImage}
         />

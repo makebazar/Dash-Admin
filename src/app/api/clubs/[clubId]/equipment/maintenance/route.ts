@@ -140,6 +140,7 @@ export async function GET(
                 ${effectiveTaskAssigneeSql} as assigned_user_id,
                 e.name as equipment_name,
                 e.type as equipment_type,
+                e.parent_equipment_id as parent_equipment_id,
                                e.last_cleaned_at as last_cleaned_at,
                 et.name_ru as equipment_type_name,
                 et.icon as equipment_icon,
@@ -180,7 +181,6 @@ export async function GET(
             LEFT JOIN club_employees ce_equip ON ce_equip.user_id = e.assigned_user_id AND ce_equip.club_id = e.club_id
             WHERE e.club_id = $1
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
-              AND e.parent_equipment_id IS NULL
         `;
     const queryParams: any[] = [clubId];
     let paramIndex = 2;

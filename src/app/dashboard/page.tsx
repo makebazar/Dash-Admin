@@ -735,7 +735,10 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {planOptions.map((plan) => {
                     const isSelected = selectedPlan === plan.code;
-                    const isCurrentPlanActive = isSelected && (clubSubscription?.subscription_status === "active" || clubSubscription?.subscription_status === "trialing");
+                    const subscriptionExpired = clubSubscription?.subscription_ends_at
+                      ? new Date(clubSubscription.subscription_ends_at) < new Date()
+                      : false;
+                    const isCurrentPlanActive = isSelected && !subscriptionExpired && (clubSubscription?.subscription_status === "active" || clubSubscription?.subscription_status === "trialing");
                     return (
                       <div
                         key={plan.id}

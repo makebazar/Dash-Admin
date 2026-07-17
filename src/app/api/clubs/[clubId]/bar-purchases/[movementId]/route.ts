@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { query, getClient } from "@/db";
 import { requireModuleAccess } from "@/lib/club-api-access";
+import { notifyDashLockProductsUpdated } from "@/lib/notify-dashlock";
+
 
 export async function DELETE(
   request: Request,
@@ -92,6 +94,9 @@ export async function DELETE(
     ]);
 
     await client.query("COMMIT");
+
+    // Notify DashLock — fire-and-forget so bar panel updates in real-time
+    notifyDashLockProductsUpdated(Number(clubId));
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

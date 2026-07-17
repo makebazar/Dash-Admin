@@ -22,6 +22,9 @@ export type RawInventorySettings = {
   allow_cost_price_sale?: boolean;
   price_tag_settings?: any;
   block_desktop_handover?: boolean;
+  dashlock_integration_enabled?: boolean;
+  dashlock_url?: string;
+  api_key?: string;
 };
 
 export type InventorySettings = Omit<
@@ -43,6 +46,7 @@ export type InventorySettings = Omit<
   inventory_timing: "END_SHIFT";
   shift_accountability_mode: "DISABLED" | "WAREHOUSE";
   block_desktop_handover: boolean;
+  dashlock_integration_enabled: boolean;
 };
 
 export function normalizeInventorySettings(
@@ -171,6 +175,9 @@ export function normalizeInventorySettings(
     inventory_timing: "END_SHIFT",
     shift_accountability_mode: shiftAccountabilityMode,
     block_desktop_handover: source.block_desktop_handover ?? true,
+    dashlock_integration_enabled: source.dashlock_integration_enabled ?? false,
+    dashlock_url: source.dashlock_url,
+    api_key: source.api_key,
   };
 }
 

@@ -258,53 +258,117 @@ export function ShiftDetailDialog({
                       <CardContent className="p-0">
                         <Table>
                           <TableBody>
-                            {shift?.report_data &&
-                              Object.entries(shift.report_data).map(([key, value]) => {
-                                const label = shiftDetails?.metric_labels?.[key] || key;
-                                if (key.startsWith("_")) return null;
+                            {shiftDetails?.metric_labels &&
+                              Object.keys(shiftDetails.metric_labels)
+                                .sort((a, b) => {
+                                  const KEY_ORDER = [
+                                    "cash_income",
+                                    "card_income",
+                                    "sbp",
+                                    "qr",
+                                    "Bar",
+                                    "expenses",
+                                    "expenses_cash",
+                                    "receipts_count",
+                                    "bonuses"
+                                  ];
+                                  const getOrderIndex = (k: string) => {
+                                    const idx = KEY_ORDER.indexOf(k);
+                                    return idx === -1 ? 999 : idx;
+                                  };
+                                  return getOrderIndex(a) - getOrderIndex(b);
+                                })
+                                .map((key) => {
+                                  const excludedKeys = new Set([
+                                    "cash", "card", "cash_diff", "actual_cash", "expected_cash", "total_revenue"
+                                  ]);
+                                  if (key.startsWith("_") || key === "has_discrepancies" || key === "discrepancy_details" || excludedKeys.has(key)) return null;
 
-                                const renderValue = () => {
-                                  if (Array.isArray(value)) {
-                                    const total = value.reduce(
-                                      (sum, item: any) => sum + (Number(item.amount) || 0),
-                                      0,
-                                    );
-                                    if (total === 0 && value.length === 0) return "-";
-                                    return (
-                                      <div className="flex flex-col items-end gap-1">
-                                        <span className="font-bold">
-                                          {total.toLocaleString()} ₽
-                                        </span>
-                                        {value.map((item: any, i: number) => (
-                                          <span
-                                            key={i}
-                                            className="text-[10px] text-muted-foreground leading-none"
-                                          >
-                                            {item.amount}₽: {item.comment}
+                                  const hasExpensesCash = shiftDetails?.metric_labels?.["expenses_cash"] !== undefined;
+                                  if (key === "expenses" && hasExpensesCash) return null;
+
+                                  const label = shiftDetails.metric_labels[key];
+                                  let value = shift.report_data?.[key] !== undefined ? shift.report_data[key] : 0;
+                                  
+                                  if (key === "expenses_cash") {
+                                    value = shift.report_data?.expenses || shift.report_data?.expenses_cash || 0;
+                                  }
+
+                                  // Маппинг расхождений с CRM-полей (cash, card) на поля DashAdmin (cash_income, card_income)
+                                  const discrepancy = 
+                                    shift.report_data?.discrepancy_details?.[key] || 
+                                    (key === "cash_income" ? shift.report_data?.discrepancy_details?.["cash"] : undefined) ||
+                                    (key === "card_income" ? shift.report_data?.discrepancy_details?.["card"] : undefined);
+                                  const hasFieldDiscrepancy = typeof discrepancy === "number" && discrepancy !== 0;
+
+                                  const formatVal = (val: any) => {
+                                    if (key === "receipts_count") return `${Number(val).toLocaleString("ru-RU")} шт`;
+                                    const num = Number(val);
+                                    return isNaN(num) ? String(val) : `${num.toLocaleString("ru-RU")} ₽`;
+                                  };
+
+                                  const renderValue = () => {
+                                    if (Array.isArray(value)) {
+                                      const total = value.reduce(
+                                        (sum, item: any) => sum + (Number(item.amount) || 0),
+                                        0,
+                                      );
+                                      if (total === 0 && value.length === 0) return "-";
+                                      return (
+                                        <div className="flex flex-col items-end gap-1">
+                                          <span className="font-bold">
+                                            {total.toLocaleString()} ₽
                                           </span>
-                                        ))}
-                                      </div>
-                                    );
-                                  }
-                                  if (typeof value === "object" && value !== null) {
-                                    return JSON.stringify(value);
-                                  }
-                                  return String(value);
-                                };
+                                          {value.map((item: any, i: number) => (
+                                            <span
+                                              key={i}
+                                              className="text-[10px] text-muted-foreground leading-none"
+                                            >
+                                              {item.amount}₽: {item.comment}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      );
+                                    }
+                                    return formatVal(value);
+                                  };
 
-                                return (
-                                  <TableRow key={key} className="hover:bg-muted/30">
-                                    <TableCell className="font-medium text-muted-foreground w-[40%]">
-                                      {label}
-                                    </TableCell>
-                                    <TableCell className="text-right font-mono font-medium">
-                                      {renderValue()}
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            {(!shift?.report_data ||
-                              Object.keys(shift.report_data).length === 0) && (
+                                  return (
+                                    <TableRow
+                                      key={key}
+                                      className={cn(
+                                        "transition-colors",
+                                        hasFieldDiscrepancy
+                                          ? "bg-rose-50/30 hover:bg-rose-50/50"
+                                          : "hover:bg-muted/30",
+                                      )}
+                                    >
+                                      <TableCell className="font-medium text-muted-foreground w-[40%]">
+                                        {label}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        <div className="flex flex-col items-end gap-1">
+                                          {hasFieldDiscrepancy ? (
+                                            <>
+                                              <span className="font-bold text-rose-600 font-mono">
+                                                {formatVal(value)} (Факт)
+                                              </span>
+                                              <span className="text-[10px] text-rose-500 font-semibold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 font-sans leading-none">
+                                                по системе: {formatVal(Number(value) - discrepancy)} · расхождение: {discrepancy > 0 ? "+" : ""}{formatVal(discrepancy)}
+                                              </span>
+                                            </>
+                                          ) : (
+                                            <span className="font-bold text-slate-900 font-mono">
+                                              {renderValue()}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                            {(!shiftDetails?.metric_labels ||
+                              Object.keys(shiftDetails.metric_labels).length === 0) && (
                               <TableRow>
                                 <TableCell
                                   colSpan={2}

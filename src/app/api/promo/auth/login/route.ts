@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import bcrypt from "bcrypt";
 import { normalizePhone } from "@/lib/phone-utils";
 import crypto from "crypto";
-import { signSessionValue } from "@/lib/session";
+
 
 export async function POST(request: Request) {
   let client;
@@ -265,7 +265,7 @@ export async function POST(request: Request) {
 
     // Set cookies
     const cookieStore = await cookies();
-    cookieStore.set("promo_player_id", signSessionValue(String(playerId)), {
+    cookieStore.set("promo_player_id", String(playerId), {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

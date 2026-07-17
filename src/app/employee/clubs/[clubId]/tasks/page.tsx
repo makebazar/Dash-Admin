@@ -67,6 +67,7 @@ interface MaintenanceTask {
     rejected_by_name?: string;
   };
   cleaning_time_minutes?: number | null;
+  parent_equipment_id?: string | null;
 }
 
 const normalizeDateKey = (value?: string | null) => {
@@ -120,6 +121,7 @@ function EmployeeTasksContent() {
     adjusted_efficiency: number;
   } | null>(null);
   const [filterMode, setFilterMode] = useState<"current" | "all">("current");
+  const [activeCategory, setActiveCategory] = useState<"equipment" | "components">("equipment");
 
   // Mobile Terminal State
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
@@ -749,11 +751,31 @@ function EmployeeTasksContent() {
     createSession(idsToStart);
   };
 
+  const hasComponentTasks = useMemo(() => {
+    return tasks.some((t) => !!t.parent_equipment_id) || freeTasks.some((t) => !!t.parent_equipment_id);
+  }, [tasks, freeTasks]);
+
+  useEffect(() => {
+    if (!hasComponentTasks && activeCategory !== "equipment") {
+      setActiveCategory("equipment");
+    }
+  }, [hasComponentTasks, activeCategory]);
+
+  const filteredFreeTasksCount = useMemo(() => {
+    return freeTasks.filter((t) => {
+      if (activeCategory === "equipment") return !t.parent_equipment_id;
+      return !!t.parent_equipment_id;
+    }).length;
+  }, [freeTasks, activeCategory]);
+
   const groupedTasks = useMemo(() => {
     const groups: Record<string, MaintenanceTask[]> = {};
     const todayStr = formatDateKeyInTimezone(new Date(), clubTimezone);
 
     tasks.forEach((task) => {
+      if (activeCategory === "equipment" && task.parent_equipment_id) return;
+      if (activeCategory === "components" && !task.parent_equipment_id) return;
+
       if (filterMode === "current") {
         const isOverdue = task.status === "PENDING" && task.due_date < todayStr;
         const isTodayTask =
@@ -773,12 +795,15 @@ function EmployeeTasksContent() {
       if (b === "Склад") return 1;
       return a.localeCompare(b);
     });
-  }, [tasks, filterMode, clubTimezone]);
+  }, [tasks, filterMode, clubTimezone, activeCategory]);
 
   const groupedFreeTasks = useMemo(() => {
     const groups: Record<string, MaintenanceTask[]> = {};
 
     freeTasks.forEach((task) => {
+      if (activeCategory === "equipment" && task.parent_equipment_id) return;
+      if (activeCategory === "components" && !task.parent_equipment_id) return;
+
       const location = task.workstation_name || "Склад";
       if (!groups[location]) groups[location] = [];
       groups[location].push(task);
@@ -789,7 +814,7 @@ function EmployeeTasksContent() {
       if (b === "Склад") return 1;
       return a.localeCompare(b);
     });
-  }, [freeTasks]);
+  }, [freeTasks, activeCategory]);
 
   const renderTaskCard = (
     task: MaintenanceTask,
@@ -1162,6 +1187,37 @@ function EmployeeTasksContent() {
         </div>
       </div>
 
+      {hasComponentTasks && (
+        <div className="flex items-center gap-1 bg-accent p-1 rounded-lg border border-border w-fit">
+          <Button
+            size="sm"
+            variant={activeCategory === "equipment" ? "default" : "ghost"}
+            className={cn(
+              "h-8 px-4 text-xs font-semibold rounded-md",
+              activeCategory === "equipment"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => setActiveCategory("equipment")}
+          >
+            Оборудование
+          </Button>
+          <Button
+            size="sm"
+            variant={activeCategory === "components" ? "default" : "ghost"}
+            className={cn(
+              "h-8 px-4 text-xs font-semibold rounded-md",
+              activeCategory === "components"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => setActiveCategory("components")}
+          >
+            Комплектующие
+          </Button>
+        </div>
+      )}
+
       {apiStats && (
         <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
           <div className="p-4 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 bg-accent/10">
@@ -1410,7 +1466,7 @@ function EmployeeTasksContent() {
                     variant="outline"
                     className="text-muted-foreground border-border"
                   >
-                    {freeTasks.length} доступно
+                    {filteredFreeTasksCount} доступно
                   </Badge>
                 </div>
                 <div className="grid gap-10">

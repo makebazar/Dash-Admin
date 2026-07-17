@@ -27,4 +27,7 @@ export interface ShiftDetails {
   product_sales?: any[];
   inventory_discrepancies?: any[];
   metric_labels?: Record<string, string>;
+  deposits?: any[];
+  bonuses?: any[];
+  expenses_list?: { id: string; amount: number; description: string; created_at: string }[];
 }

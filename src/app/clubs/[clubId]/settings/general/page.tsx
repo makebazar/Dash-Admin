@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Save, Globe, Building, MapPin, Sun, Moon, Plus, Trash2 } from "lucide-react"
+import { Loader2, Save, Globe, Building, MapPin, Sun, Moon, Plus, Trash2, Link2 } from "lucide-react"
 import { PageShell } from "@/components/layout/PageShell"
 
 // Common Russian timezones
@@ -49,6 +49,17 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
     const [nightStartHour, setNightStartHour] = useState(20)
     const [gracePeriod, setGracePeriod] = useState(5)
     const [thresholds, setThresholds] = useState<{ minutes: number; penalty: number }[]>([])
+    const [dashlockIntegrationEnabled, setDashlockIntegrationEnabled] = useState(false)
+    const [dashlockApiKey, setDashlockApiKey] = useState('')
+
+    const generateApiKey = () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = 'da_';
+        for (let i = 0; i < 32; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        setDashlockApiKey(result);
+    }
 
     useEffect(() => {
         params.then(p => {
@@ -71,6 +82,9 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                 const latSettings = data.club.lateness_settings || {}
                 setGracePeriod(latSettings.grace_period ?? 5)
                 setThresholds(latSettings.thresholds || [])
+                const invSettings = data.club.inventory_settings || {}
+                setDashlockIntegrationEnabled(invSettings.dashlock_integration_enabled ?? false)
+                setDashlockApiKey(invSettings.api_key || '')
             }
         } catch (error) {
             console.error('Error:', error)
@@ -94,6 +108,11 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                     lateness_settings: {
                         grace_period: gracePeriod,
                         thresholds: thresholds
+                    },
+                    inventory_settings: {
+                        ...(settings as any)?.inventory_settings,
+                        dashlock_integration_enabled: dashlockIntegrationEnabled,
+                        api_key: dashlockApiKey
                     }
                 })
             })
@@ -366,6 +385,7 @@ export default function GeneralSettingsPage({ params }: { params: Promise<{ club
                         </div>
                     </div>
                 </div>
+
 
                 {/* Save Button */}
                 <div className="pt-4">

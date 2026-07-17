@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { query, getClient } from '@/db';
+import { notifyDashLockProductsUpdated } from '@/lib/notify-dashlock';
 
 export async function POST(request: Request) {
     try {
@@ -42,6 +43,9 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'items array is required' }, { status: 400 });
         }
 
+        const inventorySettings = normalizeInventorySettings(club.inventory_settings || {});
+        const cashboxWarehouseIds = inventorySettings.cashbox_warehouse_ids || [];
+
         // Connect to database to run transaction
         const client = await getClient();
         try {
@@ -49,36 +53,52 @@ export async function POST(request: Request) {
 
             // 1. Ensure at least one warehouse exists for the club
             let warehouseId: number;
-            const whRes = await client.query(
-                `SELECT id FROM warehouses WHERE club_id = $1 ORDER BY id LIMIT 1`,
-                [targetClubId]
-            );
-
-            if (whRes.rows && whRes.rows.length > 0) {
-                warehouseId = whRes.rows[0].id;
+            if (cashboxWarehouseIds.length > 0) {
+                warehouseId = cashboxWarehouseIds[0];
             } else {
-                const newWh = await client.query(
-                    `INSERT INTO warehouses (club_id, name, type) 
-                     VALUES ($1, 'Основной склад', 'GENERAL') 
-                     RETURNING id`,
+                const whRes = await client.query(
+                    `SELECT id FROM warehouses WHERE club_id = $1 ORDER BY id LIMIT 1`,
                     [targetClubId]
                 );
-                warehouseId = newWh.rows[0].id;
+
+                if (whRes.rows && whRes.rows.length > 0) {
+                    warehouseId = whRes.rows[0].id;
+                } else {
+                    const newWh = await client.query(
+                        `INSERT INTO warehouses (club_id, name, type) 
+                         VALUES ($1, 'Основной склад', 'GENERAL') 
+                         RETURNING id`,
+                        [targetClubId]
+                    );
+                    warehouseId = newWh.rows[0].id;
+                }
             }
 
             // 2. Sync each product
             for (const item of items) {
-                const { name, barcode, stock, cost_price, selling_price } = item;
+                const { id, name, barcode, stock, cost_price, selling_price } = item;
 
-                // Look for existing product (by name or barcode array or legacy barcode column)
-                const productRes = await client.query(
-                    `SELECT id FROM warehouse_products 
-                     WHERE club_id = $1 
-                       AND (name = $2 OR barcodes @> ARRAY[$3]::text[] OR (barcode IS NOT NULL AND barcode = $3))
-                       AND deleted_at IS NULL
-                     LIMIT 1`,
-                    [targetClubId, name, barcode || '']
-                );
+                // Look for existing product
+                let productRes;
+                if (id) {
+                    productRes = await client.query(
+                        `SELECT id FROM warehouse_products 
+                         WHERE club_id = $1 AND id = $2 AND deleted_at IS NULL
+                         LIMIT 1`,
+                        [targetClubId, id]
+                    );
+                }
+
+                if (!productRes || productRes.rowCount === 0) {
+                    productRes = await client.query(
+                        `SELECT id FROM warehouse_products 
+                         WHERE club_id = $1 
+                           AND (name = $2 OR ($3 <> '' AND (barcodes @> ARRAY[$3]::text[] OR (barcode IS NOT NULL AND barcode = $3))))
+                           AND deleted_at IS NULL
+                         LIMIT 1`,
+                        [targetClubId, name, barcode || '']
+                    );
+                }
 
                 let productId: number;
 
@@ -128,6 +148,10 @@ export async function POST(request: Request) {
             }
 
             await client.query('COMMIT');
+
+            // Notify DashLock to pull correct stocks instantly in background
+            notifyDashLockProductsUpdated(Number(targetClubId));
+
             return NextResponse.json({
                 success: true,
                 message: `Inventory snapshot synced successfully. Processed ${items.length} items.`

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Search,
   Filter,
@@ -12,7 +12,9 @@ import {
   Clock,
   XCircle,
   Settings2,
-  ExternalLink,
+  Wrench,
+  X,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -36,6 +38,15 @@ interface Subscription {
   is_in_grace_period: boolean;
 }
 
+interface EditState {
+  sub: Subscription;
+  plan: string;
+  status: string;
+  startsAt: string;
+  endsAt: string;
+  saving: boolean;
+}
+
 export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
@@ -43,6 +54,8 @@ export default function SubscriptionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [editState, setEditState] = useState<EditState | null>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     fetchSubscriptions();
@@ -61,6 +74,80 @@ export default function SubscriptionsPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const openEdit = (sub: Subscription) => {
+    const fmt = (d: string | null) =>
+      d ? new Date(d).toISOString().slice(0, 16) : "";
+    setEditState({
+      sub,
+      plan: sub.subscription_plan,
+      status: sub.subscription_status,
+      startsAt: fmt(sub.subscription_started_at),
+      endsAt: fmt(sub.subscription_ends_at),
+      saving: false,
+    });
+    dialogRef.current?.showModal();
+  };
+
+  const closeEdit = () => {
+    dialogRef.current?.close();
+    setEditState(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editState) return;
+    setEditState((s) => s && { ...s, saving: true });
+    try {
+      const res = await fetch("/api/dashadmin-x/subscriptions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetClubId: editState.sub.club_id,
+          plan: editState.plan,
+          status: editState.status,
+          startsAt: editState.startsAt || undefined,
+          endsAt: editState.endsAt || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      closeEdit();
+      fetchSubscriptions();
+    } catch (err) {
+      alert("Ошибка сохранения: " + String(err));
+      setEditState((s) => s && { ...s, saving: false });
+    }
+  };
+
+  // Prefill dates from last paid order for this club
+  const repairFromOrder = () => {
+    if (!editState) return;
+    const clubOrders = orders
+      .filter(
+        (o) => o.club_id === editState.sub.club_id && o.status === "paid"
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.paid_at || b.created_at).getTime() -
+          new Date(a.paid_at || a.created_at).getTime()
+      );
+    const last = clubOrders[0];
+    if (!last) { alert("Нет оплаченных заказов для этого клуба"); return; }
+
+    const paidAt = new Date(last.paid_at || last.created_at);
+    const endsAt = new Date(paidAt);
+    if (last.period_unit === "year") endsAt.setFullYear(endsAt.getFullYear() + Number(last.period_value || 1));
+    else if (last.period_unit === "day") endsAt.setDate(endsAt.getDate() + Number(last.period_value || 1));
+    else endsAt.setMonth(endsAt.getMonth() + Number(last.period_value || 1));
+
+    const fmt = (d: Date) => d.toISOString().slice(0, 16);
+    setEditState((s) => s && ({
+      ...s,
+      plan: last.plan_code || s.plan,
+      status: "active",
+      startsAt: fmt(paidAt),
+      endsAt: fmt(endsAt),
+    }));
   };
 
   const filteredSubscriptions = subscriptions.filter((sub) => {
@@ -359,7 +446,11 @@ export default function SubscriptionsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all">
+                        <button
+                          onClick={() => openEdit(sub)}
+                          title="Исправить подписку"
+                          className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all"
+                        >
                           <MoreHorizontal className="h-5 w-5" />
                         </button>
                       </td>
@@ -511,6 +602,113 @@ export default function SubscriptionsPage() {
           )}
         </div>
       </div>
+
+      {/* Edit/Fix subscription modal */}
+      <dialog
+        ref={dialogRef}
+        className="rounded-2xl shadow-2xl border border-slate-200 p-0 backdrop:bg-black/40 w-full max-w-md"
+        onCancel={closeEdit}
+      >
+        {editState && (
+          <div className="flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Wrench className="h-4 w-4 text-blue-600" />
+                <h2 className="text-base font-semibold text-slate-900">
+                  Исправить подписку
+                </h2>
+              </div>
+              <button
+                onClick={closeEdit}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-all"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Club info */}
+            <div className="px-6 pt-4 pb-2">
+              <p className="text-sm font-medium text-slate-900">{editState.sub.club_name}</p>
+              <p className="text-xs text-slate-500">ID: {editState.sub.club_id} · {editState.sub.full_name} · {editState.sub.phone_number}</p>
+            </div>
+
+            {/* Form */}
+            <div className="px-6 pb-4 flex flex-col gap-3">
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Тариф</label>
+                  <input
+                    type="text"
+                    value={editState.plan}
+                    onChange={(e) => setEditState((s) => s && { ...s, plan: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="first, starter, …"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Статус</label>
+                  <select
+                    value={editState.status}
+                    onChange={(e) => setEditState((s) => s && { ...s, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="active">active</option>
+                    <option value="trialing">trialing</option>
+                    <option value="expired">expired</option>
+                    <option value="canceled">canceled</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Начало подписки</label>
+                <input
+                  type="datetime-local"
+                  value={editState.startsAt}
+                  onChange={(e) => setEditState((s) => s && { ...s, startsAt: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Конец подписки</label>
+                <input
+                  type="datetime-local"
+                  value={editState.endsAt}
+                  onChange={(e) => setEditState((s) => s && { ...s, endsAt: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Repair shortcut */}
+              <button
+                onClick={repairFromOrder}
+                className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 font-medium py-1 transition-colors"
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                Заполнить из последнего оплаченного заказа
+              </button>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
+              <button
+                onClick={closeEdit}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={editState.saving}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all disabled:opacity-60"
+              >
+                {editState.saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Сохранить
+              </button>
+            </div>
+          </div>
+        )}
+      </dialog>
     </div>
   );
 }

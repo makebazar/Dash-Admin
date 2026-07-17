@@ -16,6 +16,7 @@ export default function EmployeePosPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isBlockedByAcceptance, setIsBlockedByAcceptance] = useState(false);
   const [isCashboxEnabled, setIsCashboxEnabled] = useState(true);
+  const [isDashlockEnabled, setIsDashlockEnabled] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -36,8 +37,10 @@ export default function EmployeePosPage() {
         const inventorySettings = normalizeInventorySettings(
           currentClub?.inventory_settings,
         );
+        setIsDashlockEnabled(Boolean(inventorySettings.dashlock_integration_enabled));
         setIsCashboxEnabled(
           Boolean(
+            !inventorySettings.dashlock_integration_enabled &&
             inventorySettings.stock_enabled &&
             inventorySettings.cashbox_enabled &&
             (inventorySettings.cashbox_warehouse_ids || []).length > 0,
@@ -71,6 +74,21 @@ export default function EmployeePosPage() {
         <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
           <p className="text-sm font-medium">Загрузка кассы...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isDashlockEnabled) {
+    return (
+      <div className="min-h-dvh bg-background text-foreground flex items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
+          <div className="text-lg font-bold text-foreground">
+            Касса перенесена в DashLock
+          </div>
+          <div className="text-sm text-muted-foreground">
+            В настройках этого клуба включена интеграция с DashLock. Все продажи товаров теперь совершаются кассиром непосредственно в локальном приложении DashLock.
+          </div>
         </div>
       </div>
     );

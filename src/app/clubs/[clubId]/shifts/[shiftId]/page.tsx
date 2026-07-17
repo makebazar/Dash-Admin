@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUpDown,
+  ChevronDown,
   ChevronRight,
   Clock,
   DollarSign,
@@ -330,6 +331,7 @@ export default function ShiftDetailsPage() {
   const [expandedInventories, setExpandedInventories] = useState<
     Record<string, boolean>
   >({});
+  const [isExpensesExpanded, setIsExpensesExpanded] = useState(false);
 
   const [editCashIncome, setEditCashIncome] = useState("");
   const [editCardIncome, setEditCardIncome] = useState("");
@@ -1530,29 +1532,158 @@ export default function ShiftDetailsPage() {
                     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                       <Table>
                         <TableBody>
-                          {shift.report_data &&
-                            Object.entries(shift.report_data).map(
-                              ([key, value]) => {
-                                if (key.startsWith("_")) return null;
-                                const label =
-                                  details?.metric_labels?.[key] || key;
+                          {details?.metric_labels &&
+                            Object.keys(details.metric_labels)
+                              .sort((a, b) => {
+                                const KEY_ORDER = [
+                                  "cash_income",
+                                  "card_income",
+                                  "sbp",
+                                  "qr",
+                                  "Bar",
+                                  "expenses",
+                                  "expenses_cash",
+                                  "receipts_count",
+                                  "bonuses"
+                                ];
+                                const getOrderIndex = (k: string) => {
+                                  const idx = KEY_ORDER.indexOf(k);
+                                  return idx === -1 ? 999 : idx;
+                                };
+                                return getOrderIndex(a) - getOrderIndex(b);
+                               })
+                              .map((key) => {
+                                const excludedKeys = new Set([
+                                  "cash", "card", "cash_diff", "actual_cash", "expected_cash", "total_revenue"
+                                ]);
+                                if (key.startsWith("_") || key === "has_discrepancies" || key === "discrepancy_details" || excludedKeys.has(key)) return null;
+
+                                const hasExpensesCash = details?.metric_labels?.["expenses_cash"] !== undefined;
+                                if (key === "expenses" && hasExpensesCash) return null;
+
+                                const label = details.metric_labels[key];
+                                let value = shift.report_data?.[key] !== undefined ? shift.report_data[key] : 0;
+                                if (key === "expenses_cash") {
+                                  value = shift.report_data?.expenses || shift.report_data?.expenses_cash || 0;
+                                }
+
+                                // Special expandable row for expenses
+                                const isExpensesKey =
+                                  (key === "expenses_cash") ||
+                                  (key === "expenses" && !hasExpensesCash);
+                                const expensesList =
+                                  details?.expenses_list ?? [];
+                                const hasExpenseDetails =
+                                  isExpensesKey &&
+                                  expensesList.length > 0;
+
+                                // Маппинг расхождений с CRM-полей (cash, card) на поля DashAdmin (cash_income, card_income)
+                                const discrepancy = 
+                                  shift.report_data?.discrepancy_details?.[key] || 
+                                  (key === "cash_income" ? shift.report_data?.discrepancy_details?.["cash"] : undefined) ||
+                                  (key === "card_income" ? shift.report_data?.discrepancy_details?.["card"] : undefined);
+                                const hasFieldDiscrepancy = typeof discrepancy === "number" && discrepancy !== 0;
+
+                                const formatVal = (val: any) => {
+                                  if (key === "receipts_count") return `${Number(val).toLocaleString("ru-RU")} шт`;
+                                  const num = Number(val);
+                                  return isNaN(num) ? String(val) : `${num.toLocaleString("ru-RU")} ₽`;
+                                };
+
                                 return (
-                                  <TableRow
-                                    key={key}
-                                    className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
-                                  >
-                                    <TableCell className="font-medium text-slate-500 w-[40%] py-4">
-                                      {label}
-                                    </TableCell>
-                                    <TableCell className="text-right font-bold text-slate-900 tabular-nums py-4">
-                                      {renderMetricValue(value)}
-                                    </TableCell>
-                                  </TableRow>
+                                  <React.Fragment key={key}>
+                                    <TableRow
+                                      className={cn(
+                                        "transition-colors border-b border-slate-100 last:border-0",
+                                        hasExpenseDetails
+                                          ? "cursor-pointer hover:bg-rose-50/50 select-none"
+                                          : hasFieldDiscrepancy
+                                          ? "bg-rose-50/30 hover:bg-rose-50/50"
+                                          : "hover:bg-slate-50",
+                                      )}
+                                      onClick={
+                                        hasExpenseDetails
+                                          ? () =>
+                                              setIsExpensesExpanded(
+                                                (p) => !p,
+                                              )
+                                          : undefined
+                                      }
+                                    >
+                                      <TableCell className="font-medium text-slate-500 w-[40%] py-4">
+                                        <div className="flex items-center gap-2">
+                                          {hasExpenseDetails && (
+                                            <span className="text-rose-400">
+                                              {isExpensesExpanded ? (
+                                                <ChevronDown className="h-4 w-4" />
+                                              ) : (
+                                                <ChevronRight className="h-4 w-4" />
+                                              )}
+                                            </span>
+                                          )}
+                                          {label}
+                                          {hasExpenseDetails && (
+                                            <span className="text-xs text-rose-400 font-normal">
+                                              ({expensesList.length})
+                                            </span>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-right py-4">
+                                        <div className="flex flex-col items-end gap-1">
+                                          {hasFieldDiscrepancy ? (
+                                            <>
+                                              <span className="font-bold text-rose-600 tabular-nums">
+                                                {formatVal(value)} (Факт)
+                                              </span>
+                                              <span className="text-[10px] text-rose-500 font-semibold bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100 leading-none">
+                                                по системе: {formatVal(Number(value) - discrepancy)} · расхождение: {discrepancy > 0 ? "+" : ""}{formatVal(discrepancy)}
+                                              </span>
+                                            </>
+                                          ) : (
+                                            <span className="font-bold text-slate-900 tabular-nums">
+                                              {formatVal(value)}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                    {hasExpenseDetails &&
+                                      isExpensesExpanded &&
+                                      expensesList.map((exp) => (
+                                        <TableRow
+                                          key={exp.id}
+                                          className="bg-rose-50/30 border-b border-rose-100/50 last:border-0"
+                                        >
+                                          <TableCell className="py-2.5 pl-10 text-sm text-slate-500">
+                                            <div className="flex flex-col gap-0.5">
+                                              {exp.description ? (
+                                                <span className="text-slate-700 font-medium">
+                                                  {exp.description}
+                                                </span>
+                                              ) : (
+                                                <span className="italic text-slate-400">
+                                                  Без комментария
+                                                </span>
+                                              )}
+                                              <span className="text-xs text-slate-400">
+                                                {format(
+                                                  new Date(exp.created_at),
+                                                  "HH:mm",
+                                                )}
+                                              </span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-right py-2.5 text-sm font-semibold text-rose-600 tabular-nums">
+                                            −{Number(exp.amount).toLocaleString("ru-RU")} ₽
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                  </React.Fragment>
                                 );
-                              },
-                            )}
-                          {(!shift.report_data ||
-                            Object.keys(shift.report_data).length === 0) && (
+                              })}
+                          {(!details?.metric_labels ||
+                            Object.keys(details.metric_labels).length === 0) && (
                             <TableRow>
                               <TableCell
                                 colSpan={2}

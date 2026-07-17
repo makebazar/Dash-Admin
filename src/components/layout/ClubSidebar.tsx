@@ -25,6 +25,10 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Gift,
+  User,
+  Lock,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +69,7 @@ export function ClubSidebarContent({
   const [graceDaysLeft, setGraceDaysLeft] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
+
 
   useEffect(() => {
     const fetchMyPermissions = async () => {
@@ -143,6 +148,7 @@ export function ClubSidebarContent({
       ),
       visible: !isExpiredForOwnerUi && hasModuleAccess("employees"),
     },
+
     {
       href: `/clubs/${clubId}/assignments`,
       label: "Поручения",
@@ -429,6 +435,8 @@ export function ClubSidebarContent({
                     {!isCollapsed && link.label}
                   </Link>
                 ))}
+
+
             </nav>
 
             {settingsLinks.some((l) => l.visible) && (

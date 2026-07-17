@@ -416,7 +416,7 @@ export async function GET(
         const handoverSource = handoverSourceRes.rows[0] || null
 
         // Fetch related data in parallel
-        const [checklistsRes, transactionsRes, inventoryRes, maintenanceRes, metricsRes, productSalesRes, inventoryDiscrepanciesRes, shiftZoneDiscrepancies, shiftZoneResolutionsRes] = await Promise.all([
+        const [checklistsRes, transactionsRes, inventoryRes, maintenanceRes, metricsRes, productSalesRes, inventoryDiscrepanciesRes, shiftZoneDiscrepancies, shiftZoneResolutionsRes, depositsRes, bonusesRes, shiftExpensesRes] = await Promise.all([
             // 1. Checklists (by shift_id OR (employee_id + time range))
             query(
                 `SELECT e.*, t.name as template_name, u.full_name as evaluator_name
@@ -512,6 +512,18 @@ export async function GET(
                  WHERE r.club_id = $1
                    AND r.shift_id = $2`,
                 [clubId, shiftId]
+            ),
+            query(
+                `SELECT * FROM shift_player_deposits WHERE shift_id = $1 ORDER BY created_at DESC`,
+                [shiftId]
+            ),
+            query(
+                `SELECT * FROM shift_player_bonuses WHERE shift_id = $1 ORDER BY created_at DESC`,
+                [shiftId]
+            ),
+            query(
+                `SELECT id, amount, description, created_at FROM shift_expenses WHERE shift_id = $1 ORDER BY created_at DESC`,
+                [shiftId]
             )
         ]);
 
@@ -590,7 +602,10 @@ export async function GET(
             inventory_discrepancies: inventoryDiscrepanciesRes.rows,
             shift_zone_discrepancies: enrichedShiftZoneDiscrepancies,
             metric_labels: metricLabels,
-            handover_source: handoverSource
+            handover_source: handoverSource,
+            deposits: depositsRes.rows,
+            bonuses: bonusesRes.rows,
+            expenses_list: shiftExpensesRes.rows
         });
 
     } catch (error: any) {

@@ -272,6 +272,7 @@ export default function EmployeeClubPage({
   const isStockEnabled =
     normalizedInventorySettings.stock_enabled && canUseInventoryActions;
   const isCashboxEnabled =
+    !normalizedInventorySettings.dashlock_integration_enabled &&
     normalizedInventorySettings.cashbox_enabled &&
     (normalizedInventorySettings.cashbox_warehouse_ids || []).length > 0 &&
     canUseInventoryActions;
