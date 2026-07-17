@@ -20,7 +20,7 @@ export async function GET(request: Request) {
 
     // 1. Fetch active and completed tournaments
     const tournamentsRes = await query(
-      `SELECT id, club_id, title, game, start_date, end_date, min_matches, prizes, status, description
+      `SELECT id, club_id, title, game, start_date, end_date, min_matches, prizes, status, description, description as rules
        FROM promo_tournaments
        WHERE club_id = $1
        ORDER BY start_date DESC`,
