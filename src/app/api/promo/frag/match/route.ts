@@ -59,6 +59,24 @@ export async function POST(request: Request) {
       ]
     );
 
+    // Ensure player has a balance record for this club
+    await client.query(
+      `INSERT INTO promo_player_balances (player_id, club_id, total_xp, bonus_balance)
+       VALUES ($1, $2, 0, 0)
+       ON CONFLICT DO NOTHING`,
+      [playerId, activeClubId]
+    );
+
+    // Credit match earnings to player's balance
+    if (earnedBonuses > 0) {
+      await client.query(
+        `UPDATE promo_player_balances
+         SET bonus_balance = COALESCE(bonus_balance, 0) + $1
+         WHERE player_id = $2 AND club_id = $3`,
+        [earnedBonuses, playerId, activeClubId]
+      );
+    }
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Frag Match Save Error:", error);
