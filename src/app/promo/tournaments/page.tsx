@@ -1333,7 +1333,7 @@ export default function TournamentsPortal() {
                   <BookOpen className="w-4 h-4" />
                   Правила турнира
                 </div>
-                <div className="text-sm text-gray-300 bg-black/40 p-6 rounded-3xl border border-white/5 max-h-60 overflow-y-auto leading-relaxed font-medium">
+                <div className="text-sm text-gray-300 bg-black/40 p-6 rounded-3xl border border-white/5 max-h-60 overflow-y-auto leading-relaxed font-medium whitespace-pre-wrap">
                   {activeTournament.rules || "Правила не указаны."}
                 </div>
               </div>
