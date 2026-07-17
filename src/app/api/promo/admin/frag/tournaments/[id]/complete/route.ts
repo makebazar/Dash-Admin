@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { cookies } from "next/headers";
-import { calculateTournamentPoints } from "../leaderboard/route";
+import { calculateTournamentPoints } from "@/lib/promo-frag-utils";
 
 export const dynamic = "force-dynamic";
 
