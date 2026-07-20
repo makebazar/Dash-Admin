@@ -4,17 +4,31 @@ import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
+function sanitizeCookieValue(val?: string): string | null {
+  if (!val) return null;
+  let clean = decodeURIComponent(val).trim().replace(/^s:/, '').replace(/^"|"$/g, '');
+  if (clean.includes('.')) {
+    clean = clean.split('.')[0];
+  }
+  return clean || null;
+}
+
 // POST /api/promo/frag/match — Save a completed frag match from the local agent
 export async function POST(request: Request) {
-  const client = await getClient();
+  let client;
   try {
     const cookieStore = await cookies();
-    const playerId = cookieStore.get("promo_player_id")?.value;
-    const activeClubId = cookieStore.get("promo_active_club_id")?.value;
+    const rawPlayerId = cookieStore.get("promo_player_id")?.value;
+    const rawActiveClubId = cookieStore.get("promo_active_club_id")?.value;
+
+    const playerId = sanitizeCookieValue(rawPlayerId);
+    const activeClubId = sanitizeCookieValue(rawActiveClubId);
 
     if (!playerId || !activeClubId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    client = await getClient();
 
     const body = await request.json();
     const {
@@ -107,6 +121,8 @@ export async function POST(request: Request) {
     console.error("Frag Match Save Error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
