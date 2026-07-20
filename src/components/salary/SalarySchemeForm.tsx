@@ -143,6 +143,7 @@ export interface Formula {
     day_rate?: number;
     night_rate?: number;
     full_shift_hours?: number;
+    overtime_grace_hours?: number;
     payout_timing?: "SHIFT" | "MONTH";
     rate_tiers?: {
       metric_key?: string;
@@ -2806,6 +2807,32 @@ export default function SalarySchemeForm({
                                 <p className="text-xs text-muted-foreground leading-snug">
                                   Если отработано меньше — оплата снизится
                                   пропорционально.
+                                </p>
+                                <div className="flex items-center gap-3 mt-3">
+                                  <span className="text-sm font-medium">
+                                    Льготный период переработки:
+                                  </span>
+                                  <div className="relative w-20">
+                                    <NumericInput
+                                      value={Number(
+                                        formula.base.overtime_grace_hours ?? 0,
+                                      )}
+                                      onValueChange={(v) =>
+                                        updateBaseAmount(
+                                          "overtime_grace_hours",
+                                          Math.max(0, v),
+                                        )
+                                      }
+                                      emptyValue={0}
+                                      className="h-11 rounded-xl border-slate-200 text-center font-medium pr-6"
+                                    />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                                      ч
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-muted-foreground leading-snug">
+                                  Часов сверх нормы без доплаты. 0 — переработка считается с первой минуты.
                                 </p>
                               </div>
                             )}

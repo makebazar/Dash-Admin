@@ -7,6 +7,7 @@ interface SalaryScheme {
     amount?: number;
     percent?: number;
     full_shift_hours?: number;
+    overtime_grace_hours?: number;
     payout_timing?: "SHIFT" | "MONTH";
     rate_tiers?: {
       metric_key?: string;
@@ -120,10 +121,10 @@ export async function calculateSalary(
     const graceHoursRaw =
       (scheme.base as any)?.overtime_grace_hours ??
       (scheme as any).overtime_grace_hours ??
-      2;
+      0;
     const graceHours = Number.isFinite(Number(graceHoursRaw))
       ? Number(graceHoursRaw)
-      : 2;
+      : 0;
 
     if (hours <= 0) {
       baseAmount = 0;
