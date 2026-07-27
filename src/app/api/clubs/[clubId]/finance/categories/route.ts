@@ -28,7 +28,7 @@ export async function GET(
                 COUNT(ft.id) as transaction_count,
                 COALESCE(SUM(ft.amount), 0) as total_amount
             FROM finance_categories fc
-            LEFT JOIN finance_transactions ft ON ft.category_id = fc.id AND ft.status = 'completed'
+            LEFT JOIN finance_transactions ft ON ft.category_id = fc.id AND ft.club_id = $1 AND ft.status = 'completed'
             WHERE (fc.club_id = $1 OR fc.club_id IS NULL)
                 AND fc.is_active = true
         `;

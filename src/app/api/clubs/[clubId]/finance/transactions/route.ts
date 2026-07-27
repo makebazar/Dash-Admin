@@ -18,7 +18,7 @@ export async function GET(
     const startDate = searchParams.get("start_date");
     const endDate = searchParams.get("end_date");
     const search = searchParams.get("search");
-    const limit = parseInt(searchParams.get("limit") || "100");
+    const limit = parseInt(searchParams.get("limit") || "1000");
     const offset = parseInt(searchParams.get("offset") || "0");
 
     let queryStr = `
@@ -30,7 +30,7 @@ export async function GET(
                 fa.name as account_name,
                 u.full_name as created_by_name
             FROM finance_transactions ft
-            JOIN finance_categories fc ON ft.category_id = fc.id
+            LEFT JOIN finance_categories fc ON ft.category_id = fc.id
             LEFT JOIN finance_accounts fa ON ft.account_id = fa.id
             LEFT JOIN users u ON ft.created_by = u.id
             WHERE ft.club_id = $1
@@ -57,13 +57,13 @@ export async function GET(
       values.push(status);
     }
 
-    if (startDate) {
+    if (startDate && startDate !== "all" && startDate !== "all_time") {
       paramCount++;
       queryStr += ` AND ft.transaction_date >= $${paramCount}`;
       values.push(startDate);
     }
 
-    if (endDate) {
+    if (endDate && startDate !== "all" && startDate !== "all_time") {
       paramCount++;
       queryStr += ` AND ft.transaction_date <= $${paramCount}`;
       values.push(endDate);
@@ -84,8 +84,8 @@ export async function GET(
     // Get totals
     let totalsQuery = `
             SELECT
-                SUM(CASE WHEN type = 'income' AND status = 'completed' THEN amount ELSE 0 END) as total_income,
-                SUM(CASE WHEN type = 'expense' AND status = 'completed' THEN amount ELSE 0 END) as total_expense,
+                SUM(CASE WHEN type = 'income' AND status = 'completed' AND (is_transfer = false OR is_transfer IS NULL) THEN amount ELSE 0 END) as total_income,
+                SUM(CASE WHEN type = 'expense' AND status = 'completed' AND (is_transfer = false OR is_transfer IS NULL) THEN amount ELSE 0 END) as total_expense,
                 COUNT(*) as total_count
             FROM finance_transactions
             WHERE club_id = $1
@@ -112,13 +112,13 @@ export async function GET(
       totalsValues.push(status);
     }
 
-    if (startDate) {
+    if (startDate && startDate !== "all" && startDate !== "all_time") {
       totalsParamCount++;
       totalsQuery += ` AND transaction_date >= $${totalsParamCount}`;
       totalsValues.push(startDate);
     }
 
-    if (endDate) {
+    if (endDate && startDate !== "all" && startDate !== "all_time") {
       totalsParamCount++;
       totalsQuery += ` AND transaction_date <= $${totalsParamCount}`;
       totalsValues.push(endDate);
@@ -172,7 +172,8 @@ export async function POST(
 ) {
   try {
     const { clubId } = await params;
-    const userId = await requireModuleAccess(clubId, "finance", "edit");
+    const accessResult = await requireModuleAccess(clubId, "finance", "edit");
+    const currentUserId = typeof accessResult === 'string' ? accessResult : (accessResult?.userId || null);
     const body = await request.json();
 
     const {
@@ -186,52 +187,35 @@ export async function POST(
       notes,
       attachment_url,
       account_id,
+      is_transfer = false,
+      transfer_pair_id
     } = body;
 
-    // Validation
-    if (!category_id || !amount || !type || !transaction_date) {
-      return NextResponse.json(
-        {
-          error: "category_id, amount, type, and transaction_date are required",
-        },
-        { status: 400 },
+    let finalCategoryId = category_id ? parseInt(category_id) : null;
+    if (!finalCategoryId || isNaN(finalCategoryId)) {
+      const defaultCatRes = await query(
+        `SELECT id FROM finance_categories WHERE type = $1 AND is_active = true LIMIT 1`,
+        [type === "income" ? "income" : "expense"]
       );
+      finalCategoryId = defaultCatRes.rows[0]?.id || (type === "income" ? 2 : 10);
     }
 
-    if (!["income", "expense"].includes(type)) {
+    if (!amount || !type || !transaction_date) {
       return NextResponse.json(
-        { error: "Type must be income or expense" },
+        { error: "amount, type, and transaction_date are required" },
         { status: 400 },
       );
-    }
-
-    if (parseFloat(amount) <= 0) {
-      return NextResponse.json(
-        { error: "Amount must be positive" },
-        { status: 400 },
-      );
-    }
-
-    // Verify category exists and belongs to club
-    const categoryCheck = await query(
-      `SELECT id FROM finance_categories
-             WHERE id = $1 AND (club_id = $2 OR club_id IS NULL) AND is_active = true`,
-      [category_id, clubId],
-    );
-
-    if (categoryCheck.rows.length === 0) {
-      return NextResponse.json({ error: "Invalid category" }, { status: 400 });
     }
 
     const result = await query(
       `INSERT INTO finance_transactions
                 (club_id, category_id, amount, type, payment_method, status,
-                 transaction_date, description, notes, attachment_url, created_by, account_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 transaction_date, description, notes, attachment_url, created_by, account_id, is_transfer, transfer_pair_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
              RETURNING *`,
       [
         clubId,
-        category_id,
+        finalCategoryId,
         amount,
         type,
         payment_method,
@@ -240,12 +224,13 @@ export async function POST(
         description,
         notes,
         attachment_url,
-        userId,
+        currentUserId,
         account_id,
+        is_transfer,
+        transfer_pair_id
       ],
     );
 
-    // Fetch full transaction details
     const fullTransaction = await query(
       `SELECT
                 ft.*,
@@ -253,131 +238,19 @@ export async function POST(
                 fc.icon as category_icon,
                 fc.color as category_color
             FROM finance_transactions ft
-            JOIN finance_categories fc ON ft.category_id = fc.id
+            LEFT JOIN finance_categories fc ON ft.category_id = fc.id
             WHERE ft.id = $1`,
       [result.rows[0].id],
     );
 
     return NextResponse.json(
-      {
-        transaction: fullTransaction.rows[0],
-      },
+      { transaction: fullTransaction.rows[0] },
       { status: 201 },
     );
   } catch (error) {
-    const status = (error as { status?: number })?.status;
-    if (status) {
-      return NextResponse.json(
-        { error: status === 401 ? "Unauthorized" : "Forbidden" },
-        { status },
-      );
-    }
     console.error("Error creating transaction:", error);
     return NextResponse.json(
       { error: "Failed to create transaction" },
-      { status: 500 },
-    );
-  }
-}
-
-// PUT /api/clubs/[clubId]/finance/transactions
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ clubId: string }> },
-) {
-  try {
-    const { clubId } = await params;
-    await requireModuleAccess(clubId, "finance", "edit");
-    const body = await request.json();
-
-    const {
-      id,
-      category_id,
-      amount,
-      payment_method,
-      status,
-      transaction_date,
-      description,
-      notes,
-      attachment_url,
-      account_id,
-    } = body;
-
-    if (!id) {
-      return NextResponse.json(
-        { error: "Transaction ID is required" },
-        { status: 400 },
-      );
-    }
-
-    // Check if transaction belongs to club
-    const checkResult = await query(
-      `SELECT id FROM finance_transactions WHERE id = $1 AND club_id = $2`,
-      [id, clubId],
-    );
-
-    if (checkResult.rows.length === 0) {
-      return NextResponse.json(
-        { error: "Transaction not found" },
-        { status: 404 },
-      );
-    }
-
-    const result = await query(
-      `UPDATE finance_transactions
-             SET category_id = COALESCE($1, category_id),
-                 amount = COALESCE($2, amount),
-                 payment_method = COALESCE($3, payment_method),
-                 status = COALESCE($4, status),
-                 transaction_date = COALESCE($5, transaction_date),
-                 description = COALESCE($6, description),
-                 notes = COALESCE($7, notes),
-                 attachment_url = COALESCE($8, attachment_url),
-                 account_id = COALESCE($9, account_id)
-             WHERE id = $10 AND club_id = $11
-             RETURNING *`,
-      [
-        category_id,
-        amount,
-        payment_method,
-        status,
-        transaction_date,
-        description,
-        notes,
-        attachment_url,
-        account_id,
-        id,
-        clubId,
-      ],
-    );
-
-    // Fetch full transaction details
-    const fullTransaction = await query(
-      `SELECT
-                ft.*,
-                fc.name as category_name,
-                fc.icon as category_icon,
-                fc.color as category_color
-            FROM finance_transactions ft
-            JOIN finance_categories fc ON ft.category_id = fc.id
-            WHERE ft.id = $1`,
-      [id],
-    );
-
-    return NextResponse.json({
-      transaction: fullTransaction.rows[0],
-    });
-  } catch (error) {
-    const status = (error as { status?: number })?.status;
-    if (status) {
-      return NextResponse.json(
-        { error: status === 401 ? "Unauthorized" : "Forbidden" },
-        { status },
-      );
-    }
-    console.error("Error updating transaction:", error);
-    return NextResponse.json(
-      { error: "Failed to update transaction" },
       { status: 500 },
     );
   }
@@ -392,42 +265,24 @@ export async function DELETE(
     const { clubId } = await params;
     await requireModuleAccess(clubId, "finance", "edit");
     const { searchParams } = new URL(request.url);
-    const transactionId = searchParams.get("id");
+    const id = searchParams.get("id");
 
-    if (!transactionId) {
-      return NextResponse.json(
-        { error: "Transaction ID is required" },
-        { status: 400 },
-      );
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
-    const result = await query(
-      `DELETE FROM finance_transactions
-             WHERE id = $1 AND club_id = $2
-             RETURNING id`,
-      [transactionId, clubId],
+    const txIdNum = parseInt(id);
+    const clubIdNum = parseInt(clubId);
+
+    // Delete transaction and paired transfer if applicable
+    await query(
+      `DELETE FROM finance_transactions WHERE (id = $1 OR transfer_pair_id = $1) AND club_id = $2`,
+      [txIdNum, clubIdNum]
     );
-
-    if (result.rows.length === 0) {
-      return NextResponse.json(
-        { error: "Transaction not found" },
-        { status: 404 },
-      );
-    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    const status = (error as { status?: number })?.status;
-    if (status) {
-      return NextResponse.json(
-        { error: status === 401 ? "Unauthorized" : "Forbidden" },
-        { status },
-      );
-    }
     console.error("Error deleting transaction:", error);
-    return NextResponse.json(
-      { error: "Failed to delete transaction" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Failed to delete transaction" }, { status: 500 });
   }
 }

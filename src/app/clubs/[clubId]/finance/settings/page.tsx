@@ -101,6 +101,13 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
 
+    // Tax settings state
+    const [taxRegime, setTaxRegime] = useState("patent_usn6")
+    const [customTaxRate, setCustomTaxRate] = useState<number>(6)
+    const [patentCost, setPatentCost] = useState<number>(12500)
+    const [limitExceeded, setLimitExceeded] = useState<boolean>(false)
+    const [usnCategories, setUsnCategories] = useState<number[]>([])
+
     // New account form
     const [showNewAccountForm, setShowNewAccountForm] = useState(false)
     const [newAccount, setNewAccount] = useState({
@@ -194,10 +201,51 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                 setRecurringPayments(recData.recurring_payments || [])
             }
 
+            // 5. Get tax settings
+            const taxRes = await fetch(`/api/clubs/${id}/finance/settings`)
+            if (taxRes.ok) {
+                const taxData = await taxRes.json()
+                if (taxData.settings) {
+                    setTaxRegime(taxData.settings.tax_regime || "patent_usn6")
+                    setCustomTaxRate(taxData.settings.custom_tax_rate || 6)
+                    setPatentCost(taxData.settings.patent_cost || 12500)
+                    setLimitExceeded(Boolean(taxData.settings.limit_exceeded))
+                    setUsnCategories(taxData.settings.usn_categories || [])
+                }
+            }
+
         } catch (error) {
             console.error('Error fetching data:', error)
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const handleSaveTaxSettings = async () => {
+        setIsSaving(true)
+        try {
+            const res = await fetch(`/api/clubs/${clubId}/finance/settings`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    tax_regime: taxRegime,
+                    custom_tax_rate: customTaxRate,
+                    patent_cost: patentCost,
+                    limit_exceeded: limitExceeded,
+                    usn_categories: usnCategories
+                })
+            })
+
+            if (res.ok) {
+                alert("✅ Налоговые настройки сохранены!")
+            } else {
+                alert("❌ Ошибка сохранения налоговых настроек")
+            }
+        } catch (e) {
+            console.error("Failed to save tax settings:", e)
+            alert("❌ Ошибка при сохранении")
+        } finally {
+            setIsSaving(false)
         }
     }
 
@@ -478,31 +526,16 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
             </div>
 
             <Tabs defaultValue="categories" className="w-full">
-                <TabsList className="w-full md:w-auto bg-slate-100/50 border border-slate-200 p-1.5 rounded-2xl mb-8 shadow-sm flex overflow-x-auto">
-                    <TabsTrigger value="categories" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Категории</TabsTrigger>
-                    <TabsTrigger value="recurring" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Постоянные</TabsTrigger>
-                    <TabsTrigger value="accounts" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Счета</TabsTrigger>
-                    <TabsTrigger value="mapping" className="rounded-xl px-6 py-2.5 font-medium text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all">Маппинг</TabsTrigger>
+                <TabsList className="inline-flex h-auto items-center justify-start rounded-xl bg-slate-100/80 p-1 text-slate-500 border border-slate-200/60 mb-8 overflow-x-auto">
+                    <TabsTrigger value="categories" className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs transition-all">Категории</TabsTrigger>
+                    <TabsTrigger value="recurring" className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs transition-all">Постоянные</TabsTrigger>
+                    <TabsTrigger value="accounts" className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs transition-all">Счета</TabsTrigger>
+                    <TabsTrigger value="taxes" className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs transition-all">Налоги</TabsTrigger>
+                    <TabsTrigger value="mapping" className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-600 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs transition-all">Маппинг</TabsTrigger>
                 </TabsList>
 
                 {/* Categories Tab Redesign */}
                 <TabsContent value="categories" className="space-y-8 focus-visible:outline-none">
-                    <div className="bg-emerald-600 rounded-3xl p-6 text-white relative overflow-hidden shadow-xl shadow-emerald-100">
-                        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
-                        <div className="flex items-center gap-6 relative z-10">
-                            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-2xl shadow-inner">
-                                📂
-                            </div>
-                            <div className="flex-1 space-y-1">
-                                <h3 className="text-lg font-black tracking-tight">Как работают категории?</h3>
-                                <p className="text-emerald-50 text-xs font-medium leading-relaxed max-w-2xl">
-                                    Категории помогают вам понимать, на что тратятся деньги. Привязка к <strong>типу деятельности</strong> 
-                                    автоматически распределяет транзакции в отчет ДДС (Операционный, Инвестиционный или Финансовый).
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                         <div className="space-y-1">
                             <h3 className="text-lg font-black text-slate-900">Справочник категорий</h3>
@@ -719,22 +752,6 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
 
                 {/* Recurring Payments Tab Redesign */}
                 <TabsContent value="recurring" className="space-y-8 focus-visible:outline-none">
-                    <div className="bg-amber-500 rounded-3xl p-6 text-white relative overflow-hidden shadow-xl shadow-amber-100">
-                        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
-                        <div className="flex items-center gap-6 relative z-10">
-                            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-2xl shadow-inner">
-                                🔄
-                            </div>
-                            <div className="flex-1 space-y-1">
-                                <h3 className="text-lg font-black tracking-tight">Зачем нужны автоплатежи?</h3>
-                                <p className="text-amber-50 text-xs font-medium leading-relaxed max-w-2xl">
-                                    Настройте один раз аренду, интернет или коммуналку. В начале каждого месяца они появятся в блоке 
-                                    <strong> «Счета к оплате» </strong> на дашборде, чтобы вы ничего не забыли.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                         <div className="space-y-1">
                             <h3 className="text-lg font-black text-slate-900">Регулярные обязательства</h3>
@@ -934,22 +951,6 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
 
                 {/* Accounts Tab Redesign */}
                 <TabsContent value="accounts" className="space-y-8 focus-visible:outline-none">
-                    <div className="bg-slate-900 rounded-3xl p-6 text-white relative overflow-hidden shadow-xl shadow-slate-200">
-                        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/5 rounded-full blur-3xl" />
-                        <div className="flex items-center gap-6 relative z-10">
-                            <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center text-2xl shadow-inner">
-                                💳
-                            </div>
-                            <div className="flex-1 space-y-1">
-                                <h3 className="text-lg font-black tracking-tight">Ваши счета и кошельки</h3>
-                                <p className="text-slate-400 text-xs font-medium leading-relaxed max-w-2xl">
-                                    Добавьте сюда все места, где хранятся деньги клуба: кассу, расчетный счет, терминал. 
-                                    Используйте иконку ⚖️ для <strong>корректировки баланса</strong> до реальных сумм.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                         <div className="space-y-1">
                             <h3 className="text-lg font-black text-slate-900">Счета и кошельки</h3>
@@ -1102,24 +1103,94 @@ export default function FinanceSettingsPage({ params }: { params: Promise<{ club
                     </div>
                 </TabsContent>
 
-                {/* Mapping Tab Redesign */}
-                <TabsContent value="mapping" className="space-y-8 focus-visible:outline-none">
-                    <div className="bg-primary rounded-3xl p-6 text-white relative overflow-hidden shadow-xl shadow-primary/20">
-                        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
-                        <div className="flex items-center gap-6 relative z-10">
-                            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-2xl shadow-inner">
-                                🔗
-                            </div>
-                            <div className="flex-1 space-y-1">
-                                <h3 className="text-lg font-black tracking-tight">Как автоматизировать учет выручки?</h3>
-                                <p className="text-primary-foreground/80 text-xs font-medium leading-relaxed max-w-2xl">
-                                    Привяжите показатели из ежедневных отчетов смен к вашим финансовым счетам. 
-                                    Теперь при подтверждении смены деньги будут <strong>автоматически</strong> зачисляться на нужные счета.
-                                </p>
+                {/* Taxes Tab */}
+                <TabsContent value="taxes" className="space-y-6 focus-visible:outline-none">
+                    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-6">
+                        <div>
+                            <h3 className="text-lg font-black text-slate-900">Настройки системы налогообложения</h3>
+                            <p className="text-xs font-medium text-slate-500 mt-1">
+                                Налоговый режим и параметры исчисления налогов используются для расчета ЧИСТОЙ ПРИБЫЛИ в отчетах P&L
+                            </p>
+                        </div>
+
+                        <div className="space-y-3">
+                            <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Налоговый режим ИП / Организации</Label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {[
+                                    { id: "usn6", title: "УСН Доходы (6%)", desc: "Фиксированный % от всей выручки" },
+                                    { id: "usn15", title: "УСН Доходы-Расходы (15%)", desc: "% от чистой прибыли" },
+                                    { id: "patent_usn6", title: "Патент + УСН 6%", desc: "Патент на ПК + УСН 6% на бар" },
+                                    { id: "patent_usn15", title: "Патент + УСН 15%", desc: "Патент на ПК + УСН 15% на бар" },
+                                ].map((r) => (
+                                    <div
+                                        key={r.id}
+                                        onClick={() => setTaxRegime(r.id)}
+                                        className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                                            taxRegime === r.id
+                                                ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                                                : "border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-900"
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-bold text-sm">{r.title}</span>
+                                        </div>
+                                        <p className={`text-xs mt-1 ${taxRegime === r.id ? "text-slate-300" : "text-slate-500"}`}>{r.desc}</p>
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                    </div>
 
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                            {taxRegime.startsWith('patent') && (
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-slate-700">Стоимость патента в месяц (₽)</Label>
+                                    <Input
+                                        type="number"
+                                        value={patentCost}
+                                        onChange={e => setPatentCost(Number(e.target.value))}
+                                        className="rounded-xl h-11 font-bold border-slate-200"
+                                    />
+                                </div>
+                            )}
+
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold text-slate-700">Ставка УСН (%)</Label>
+                                <Input
+                                    type="number"
+                                    value={customTaxRate}
+                                    onChange={e => setCustomTaxRate(Number(e.target.value))}
+                                    className="rounded-xl h-11 font-bold border-slate-200"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-3 pt-2">
+                            <input
+                                type="checkbox"
+                                id="limit_exceeded_settings"
+                                checked={limitExceeded}
+                                onChange={e => setLimitExceeded(e.target.checked)}
+                                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                            />
+                            <label htmlFor="limit_exceeded_settings" className="text-xs text-slate-700 font-medium cursor-pointer">
+                                Превышен лимит доходов УСН 60 млн ₽ (дополнительно начислять НДС 5%)
+                            </label>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100 flex justify-end">
+                            <Button
+                                onClick={handleSaveTaxSettings}
+                                disabled={isSaving}
+                                className="rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs h-11 px-8 font-bold shadow-md"
+                            >
+                                {isSaving ? "Сохранение..." : "Сохранить налоговые настройки"}
+                            </Button>
+                        </div>
+                    </div>
+                </TabsContent>
+
+                {/* Mapping Tab Redesign */}
+                <TabsContent value="mapping" className="space-y-8 focus-visible:outline-none">
                     <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-1">
                         <h3 className="text-lg font-black text-slate-900">Маппинг операций</h3>
                         <p className="text-xs font-medium text-slate-500">Привяжите поля из отчетов смен к конкретным финансовым счетам для автоматического учета</p>
