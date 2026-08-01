@@ -3,9 +3,9 @@
 import { useState, useEffect, useTransition } from "react"
 import { getAbcAnalysisData, manualTriggerReplenishment } from "../actions"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { RefreshCw, TrendingUp, AlertTriangle, CheckCircle2, Info, Package, DollarSign, PieChart } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Product } from "../actions"
@@ -70,147 +70,89 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-5">
             <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-black text-foreground uppercase tracking-tight">
-                        Аналитика
-                    </h2>
-                    <p className="text-sm text-muted-foreground">Складские показатели и ABC-анализ продаж за 30 дней</p>
-                </div>
+                <h2 className="text-xl font-bold text-slate-900">Аналитика</h2>
                 <Button 
                     onClick={handleRecalculate} 
                     disabled={isPending}
                     variant="outline"
-                    className="gap-2"
+                    size="sm"
+                    className="gap-2 text-sm"
                 >
-                    <RefreshCw className={cn("h-4 w-4", isPending && "animate-spin")} />
-                    Обновить данные
+                    <RefreshCw className={cn("h-3.5 w-3.5", isPending && "animate-spin")} />
+                    Обновить
                 </Button>
             </div>
 
             {/* Inventory Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-blue-50 rounded-lg">
-                            <Package className="h-4 w-4 text-blue-600" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Card className="shadow-none border-border/80">
+                    <CardContent className="p-4">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Товаров в наличии</p>
+                        <div className="flex items-baseline gap-1.5">
+                            <span className="text-2xl font-bold text-slate-900">{stats.totalProducts}</span>
+                            <span className="text-xs text-slate-400">позиций</span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground/70 uppercase font-bold tracking-wider">Товаров в наличии</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-foreground">{stats.totalProducts}</span>
-                        <span className="text-xs text-muted-foreground font-medium">позиций</span>
-                    </div>
-                </div>
-
-                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-muted rounded-lg">
-                            <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    </CardContent>
+                </Card>
+                <Card className="shadow-none border-border/80">
+                    <CardContent className="p-4">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Сумма в закупе</p>
+                        <p className="text-2xl font-bold text-slate-900">{Math.round(stats.stockCost).toLocaleString('ru-RU')} ₽</p>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-none border-border/80">
+                    <CardContent className="p-4">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Сумма в продаже</p>
+                        <p className="text-2xl font-bold text-slate-900">{Math.round(stats.stockValue).toLocaleString('ru-RU')} ₽</p>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-none border-border/80">
+                    <CardContent className="p-4">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Потенц. прибыль</p>
+                        <div className="flex items-baseline gap-1.5">
+                            <span className="text-2xl font-bold text-slate-900">{Math.round(potentialProfit).toLocaleString('ru-RU')} ₽</span>
+                            <span className="text-xs text-slate-400">{stockMargin.toFixed(1)}%</span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground/70 uppercase font-bold tracking-wider">Сумма в закупе</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-foreground">{Math.round(stats.stockCost).toLocaleString('ru-RU')} ₽</span>
-                    </div>
-                </div>
-
-                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-green-50 rounded-lg">
-                            <TrendingUp className="h-4 w-4 text-green-600" />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground/70 uppercase font-bold tracking-wider">Сумма в продаже</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-foreground">{Math.round(stats.stockValue).toLocaleString('ru-RU')} ₽</span>
-                    </div>
-                </div>
-
-                <div className="bg-card p-4 rounded-2xl border border-border shadow-sm bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-card rounded-lg shadow-sm">
-                            <PieChart className="h-4 w-4 text-indigo-600" />
-                        </div>
-                        <span className="text-[10px] text-indigo-400 uppercase font-bold tracking-wider">Потенц. прибыль</span>
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-indigo-900">{Math.round(potentialProfit).toLocaleString('ru-RU')} ₽</span>
-                        <span className="text-xs text-indigo-600 font-bold">({stockMargin.toFixed(1)}%)</span>
-                    </div>
-                </div>
+                    </CardContent>
+                </Card>
             </div>
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-card p-4 md:p-6 rounded-2xl border border-border shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 left-0 w-1.5 h-full bg-green-500" />
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="p-2 bg-green-50 rounded-lg">
-                            <TrendingUp className="h-5 w-5 text-green-600" />
-                        </div>
-                        <Badge className="bg-green-500 text-primary-foreground font-black">Группа A</Badge>
-                    </div>
-                    <h3 className="text-2xl md:text-3xl font-black text-foreground">{stats.A.length}</h3>
-                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1 uppercase font-bold tracking-wider">Товаров-локомотивов</p>
-                    <div className="mt-4 flex items-center gap-2">
-                        <div className="h-1.5 flex-1 bg-accent rounded-full overflow-hidden">
-                            <div className="h-full bg-green-500" style={{ width: '80%' }} />
-                        </div>
-                        <span className="text-[10px] md:text-xs font-black text-green-600">~80% выручки</span>
-                    </div>
-                </div>
-
-                <div className="bg-card p-4 md:p-6 rounded-2xl border border-border shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500" />
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="p-2 bg-amber-50 rounded-lg">
-                            <Info className="h-5 w-5 text-amber-600" />
-                        </div>
-                        <Badge className="bg-amber-500 text-primary-foreground font-black">Группа B</Badge>
-                    </div>
-                    <h3 className="text-2xl md:text-3xl font-black text-foreground">{stats.B.length}</h3>
-                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1 uppercase font-bold tracking-wider">Стабильные товары</p>
-                    <div className="mt-4 flex items-center gap-2">
-                        <div className="h-1.5 flex-1 bg-accent rounded-full overflow-hidden">
-                            <div className="h-full bg-amber-500" style={{ width: '15%' }} />
-                        </div>
-                        <span className="text-[10px] md:text-xs font-black text-amber-600">~15% выручки</span>
-                    </div>
-                </div>
-
-                <div className="bg-card p-4 md:p-6 rounded-2xl border border-border shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-1.5 h-full bg-slate-400" />
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="p-2 bg-muted rounded-lg">
-                            <AlertTriangle className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                        <Badge className="bg-slate-400 text-primary-foreground font-black">Группа C</Badge>
-                    </div>
-                    <h3 className="text-2xl md:text-3xl font-black text-foreground">{stats.C.length}</h3>
-                    <p className="text-[10px] md:text-xs text-muted-foreground mt-1 uppercase font-bold tracking-wider">Малоценные товары</p>
-                    <div className="mt-4 flex items-center gap-2">
-                        <div className="h-1.5 flex-1 bg-accent rounded-full overflow-hidden">
-                            <div className="h-full bg-slate-400" style={{ width: '5%' }} />
-                        </div>
-                        <span className="text-[10px] md:text-xs font-black text-muted-foreground">~5% выручки</span>
-                    </div>
-                </div>
+            {/* ABC Group Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Card className="shadow-none border-border/80">
+                    <CardContent className="p-4">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-green-500 mb-1">Группа A</p>
+                        <p className="text-3xl font-bold text-slate-900">{stats.A.length}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Товаров-локомотивов · ~80% выручки</p>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-none border-border/80">
+                    <CardContent className="p-4">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-500 mb-1">Группа B</p>
+                        <p className="text-3xl font-bold text-slate-900">{stats.B.length}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Стабильные товары · ~15% выручки</p>
+                    </CardContent>
+                </Card>
+                <Card className="shadow-none border-border/80">
+                    <CardContent className="p-4">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Группа C</p>
+                        <p className="text-3xl font-bold text-slate-900">{stats.C.length}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Малоценные товары · ~5% выручки</p>
+                    </CardContent>
+                </Card>
             </div>
 
             {/* Detailed Table */}
             <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-border/50 bg-muted/50 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
-                    <h4 className="font-bold text-foreground flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4 text-blue-600" />
-                        Детализация по товарам
-                    </h4>
+                <div className="px-4 py-3 border-b border-border/50 bg-slate-50 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Детализация по товарам</h4>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                        <span className="text-[10px] text-muted-foreground/70 uppercase font-bold tracking-widest">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider">
                             Выручка: {stats.totalRevenue.toLocaleString('ru-RU')} ₽
                         </span>
-                        <span className="text-[10px] text-green-600 uppercase font-bold tracking-widest">
+                        <span className="text-[10px] text-green-600 uppercase font-semibold tracking-wider">
                             Прибыль: {stats.totalProfit.toLocaleString('ru-RU')} ₽ ({avgMargin.toFixed(1)}%)
                         </span>
                     </div>
@@ -322,10 +264,10 @@ export function AbcAnalysisTab({ clubId, products }: AbcAnalysisTabProps) {
                                     <TableCell className="text-right font-medium text-muted-foreground">
                                         {Number(item.total_sold).toLocaleString('ru-RU')} шт.
                                     </TableCell>
-                                    <TableCell className="text-right font-black text-foreground">
+                                    <TableCell className="text-right font-medium text-slate-500">
                                         {Number(item.total_revenue).toLocaleString('ru-RU')} ₽
                                     </TableCell>
-                                    <TableCell className="text-right font-bold text-green-600">
+                                    <TableCell className="text-right font-medium text-green-600">
                                         {Number(item.total_profit).toLocaleString('ru-RU')} ₽
                                     </TableCell>
                                     <TableCell className="text-right">

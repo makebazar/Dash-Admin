@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Pencil, Trash2, FolderTree } from "lucide-react"
+import { Plus, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -85,8 +85,7 @@ export function CategoriesTab({ categories, currentUserId }: CategoriesTabProps)
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center bg-card p-4 rounded-lg border shadow-sm">
-                <h3 className="font-medium flex items-center gap-2">
-                    <FolderTree className="h-4 w-4" />
+                <h3 className="font-semibold text-slate-900 text-sm">
                     Категории товаров
                 </h3>
                 <Button onClick={openCreate}>

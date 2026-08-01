@@ -376,7 +376,7 @@ export default function HandoverTerminalPage() {
       (item) =>
         item.product_name.toLowerCase().includes(q) ||
         item.barcode?.includes(q) ||
-        item.barcodes?.some((bc) => bc.includes(q)),
+        item.barcodes?.some((bc: string) => bc.includes(q)),
     );
   }, [items, searchQuery]);
 
@@ -1092,6 +1092,11 @@ export default function HandoverTerminalPage() {
                                   ).toLocaleString()}{" "}
                                   ₽
                                 </span>
+                                {(item.sold_in_shift_qty || 0) > 0 && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                                    Продано: {item.sold_in_shift_qty} шт.
+                                  </span>
+                                )}
                               </div>
                             </div>
 

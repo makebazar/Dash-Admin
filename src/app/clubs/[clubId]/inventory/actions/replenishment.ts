@@ -272,7 +272,7 @@ export async function completeTask(
       );
 
       const matchedRule =
-        rules.rows.find((rule) => {
+        rules.rows.find((rule: any) => {
           const targetMatches = targetWarehouseName
             ? String(rule.target_warehouse_name || "").trim() ===
               targetWarehouseName
@@ -583,19 +583,19 @@ export async function generateProcurementList(
     );
 
     const procurementCandidates = products.rows
-      .map((product) => ({
+      .map((product: any) => ({
         product,
         candidate: getProcurementCandidate(product, mode),
       }))
       .filter(
-        (entry): entry is { product: any; candidate: ProcurementCandidate } =>
+        (entry: any): entry is { product: any; candidate: ProcurementCandidate } =>
           Boolean(entry.candidate),
       )
-      .sort((a, b) => {
-        const priorityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
+      .sort((a: any, b: any) => {
+        const priorityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2 };
         const priorityDiff =
-          priorityOrder[a.candidate.priority] -
-          priorityOrder[b.candidate.priority];
+          (priorityOrder[a.candidate.priority] ?? 3) -
+          (priorityOrder[b.candidate.priority] ?? 3);
         if (priorityDiff !== 0) return priorityDiff;
 
         const abcOrder = { A: 0, B: 1, C: 2 };

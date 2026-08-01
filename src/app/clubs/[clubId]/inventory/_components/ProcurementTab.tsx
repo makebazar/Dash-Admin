@@ -54,16 +54,12 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card p-4 sm:p-6 rounded-2xl border shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600" />
-                <div className="pl-2">
-                    <h3 className="text-xl font-black text-foreground">Списки закупок</h3>
-                    <p className="text-sm text-muted-foreground mt-1 max-w-md">Автоматическое планирование заказов на основе ABC-анализа и прогнозов остатка.</p>
-                </div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <h3 className="text-xl font-bold text-slate-900">Списки закупок</h3>
                 <Button 
                     onClick={() => router.push(`/clubs/${clubId}/inventory/procurement/new`)}
                     disabled={isPending} 
-                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 shadow-md transition-all active:scale-95"
+                    className="w-full sm:w-auto"
                 >
                     <Calculator className="mr-2 h-4 w-4" />
                     Сформировать заказ
@@ -85,10 +81,7 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                     <TableBody>
                         {lists.map(list => (
                             <TableRow key={list.id} className="cursor-pointer group hover:bg-muted/50 transition-colors" onClick={() => openDetails(list)}>
-                                <TableCell className="font-bold text-foreground flex items-center">
-                                    <div className="p-2 bg-accent rounded-lg mr-3 group-hover:bg-card transition-colors">
-                                        <FileText className="h-4 w-4 text-muted-foreground" />
-                                    </div>
+                                <TableCell className="font-medium text-slate-900">
                                     {list.name}
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">
@@ -140,17 +133,12 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                         onClick={() => openDetails(list)}
                     >
                         <div className="flex justify-between items-start mb-3">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                                    <FileText className="h-5 w-5" />
-                                </div>
-                                <div className="flex flex-col">
-                                    <h4 className="font-black text-foreground text-base leading-tight">{list.name}</h4>
-                                    <span className="text-[10px] text-muted-foreground/70 font-bold uppercase tracking-widest mt-0.5">
+                            <div className="flex flex-col">
+                                    <h4 className="font-semibold text-slate-900 text-sm leading-tight">{list.name}</h4>
+                                    <span className="text-[10px] text-slate-400 mt-0.5">
                                         {format(new Date(list.created_at), 'dd MMM yyyy', { locale: ru })}
                                     </span>
                                 </div>
-                            </div>
                             <Button 
                                 variant="ghost" 
                                 size="icon" 
@@ -161,14 +149,9 @@ export function ProcurementTab({ lists, products, currentUserId }: ProcurementTa
                             </Button>
                         </div>
                         
-                        <div className="flex justify-between items-center pt-3 border-t border-slate-50">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
-                                <Clock className="h-3.5 w-3.5" />
-                                <span>{list.creator_name?.split(' ')[0]}</span>
-                            </div>
-                            <Badge variant="secondary" className="bg-accent text-muted-foreground font-black border-none text-[10px]">
-                                {list.items_count} ПОЗ.
-                            </Badge>
+                        <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                            <span className="text-xs text-slate-400">{list.creator_name?.split(' ')[0]}</span>
+                            <span className="text-[10px] text-slate-400 font-semibold">{list.items_count} поз.</span>
                         </div>
                     </div>
                 ))}

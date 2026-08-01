@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useEffect, useMemo } from "react"
-import { Plus, User, ClipboardCheck, ArrowRight, Loader2, Trash2, Warehouse as WarehouseIcon, Clock3, Boxes, CheckCircle2, Sparkles } from "lucide-react"
+import { Plus, ClipboardCheck, ArrowRight, Loader2, Trash2, Clock3, Boxes, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -156,36 +156,26 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
             label: "Всего инвентаризаций",
             value: inventoryStats.total,
             hint: inventoryStats.total === 0 ? "Пока нет истории" : "Вся история по клубу",
-            icon: ClipboardCheck,
-            tone: "text-foreground bg-muted border-border"
         },
         {
             label: "Сейчас в работе",
             value: inventoryStats.open,
             hint: openInventory ? `Открыта #${openInventory.id}` : "Можно запускать новую",
-            icon: Clock3,
-            tone: "text-amber-700 bg-amber-50 border-amber-200"
         },
         {
             label: "Завершено",
             value: inventoryStats.closed,
             hint: inventoryStats.closed > 0 ? "Есть результаты для анализа" : "Закрытых ещё нет",
-            icon: CheckCircle2,
-            tone: "text-green-700 bg-green-50 border-green-200"
         },
         {
             label: "Отменено",
             value: inventoryStats.canceled,
             hint: inventoryStats.canceled > 0 ? "История отмен сохранена" : "Отмен пока не было",
-            icon: Sparkles,
-            tone: "text-foreground bg-muted border-border"
         },
         {
             label: "Складов доступно",
             value: availableWarehouses.length,
             hint: isOwner ? "Все склады клуба" : "С учётом ограничений роли",
-            icon: Boxes,
-            tone: "text-blue-700 bg-blue-50 border-blue-200"
         }
     ]
 
@@ -200,52 +190,32 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
 
     return (
         <div className="space-y-5">
-            <div className="rounded-2xl border bg-linear-to-br from-white via-slate-50 to-slate-100 p-4 md:p-6 shadow-sm">
+            <div className="rounded-2xl border bg-white p-4 md:p-6 shadow-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="space-y-2">
-                        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                            <Sparkles className="h-3.5 w-3.5 text-blue-500" />
-                            Инвентаризация
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-foreground md:text-2xl">Проведение и история подсчётов</h3>
-                            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                                Здесь удобно запускать новую инвентаризацию, быстро возвращаться к активной и смотреть результаты прошлых сверок.
-                            </p>
-                        </div>
-                    </div>
+                    <h3 className="text-xl font-bold text-slate-900">Инвентаризации</h3>
 
                     {openInventory ? (
-                        <Button onClick={() => setActiveInventoryId(openInventory.id)} className="h-11 rounded-xl bg-amber-600 px-4 font-bold hover:bg-amber-700">
-                            <ClipboardCheck className="mr-2 h-4 w-4" />
+                        <Button onClick={() => setActiveInventoryId(openInventory.id)} className="h-10 rounded-xl bg-amber-600 px-4 font-semibold hover:bg-amber-700">
                             {openInventory.created_by === currentUserId ? `Продолжить #${openInventory.id}` : `Открыть активную #${openInventory.id}`}
                         </Button>
                     ) : (
-                        <Button onClick={() => setIsDialogOpen(true)} className="h-11 rounded-xl px-4 font-bold">
+                        <Button onClick={() => setIsDialogOpen(true)} className="h-10 rounded-xl px-4 font-semibold">
                             <Plus className="mr-2 h-4 w-4" />
                             Начать новую инвентаризацию
                         </Button>
                     )}
                 </div>
 
-                <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                    {inventoryCards.map(card => {
-                        const Icon = card.icon
-                        return (
-                            <Card key={card.label} className="border-border/80 shadow-none">
-                                <CardContent className="flex items-start justify-between p-4">
-                                    <div className="space-y-1">
-                                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{card.label}</p>
-                                        <p className="text-2xl font-black text-foreground">{card.value}</p>
-                                        <p className="text-xs text-muted-foreground">{card.hint}</p>
-                                    </div>
-                                    <div className={cn("rounded-xl border p-2.5", card.tone)}>
-                                        <Icon className="h-4 w-4" />
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        )
-                    })}
+                <div className="mt-5 grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+                    {inventoryCards.map(card => (
+                        <Card key={card.label} className="border-border/80 shadow-none">
+                            <CardContent className="p-4">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{card.label}</p>
+                                <p className="text-2xl font-bold text-slate-900">{card.value}</p>
+                                <p className="text-xs text-slate-400 mt-0.5">{card.hint}</p>
+                            </CardContent>
+                        </Card>
+                    ))}
                 </div>
 
                 {openInventory && (
@@ -306,10 +276,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <WarehouseIcon className="h-3 w-3 text-muted-foreground" />
-                                            <span className="text-sm font-medium">{inv.warehouse_name || "Не указан"}</span>
-                                        </div>
+                                        <span className="text-sm text-slate-700">{inv.warehouse_name || "Не указан"}</span>
                                     </TableCell>
                                     <TableCell>
                                         {inv.status === 'OPEN' ? (
@@ -321,10 +288,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                         )}
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <User className="h-3 w-3 text-muted-foreground" />
-                                            <span className="text-sm">{inv.created_by_name || "Неизвестно"}</span>
-                                        </div>
+                                        <span className="text-sm text-slate-700">{inv.created_by_name || "Неизвестно"}</span>
                                     </TableCell>
                                     <TableCell>
                                         {inv.target_metric_key ? (
@@ -397,10 +361,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                                         <span className="font-bold text-foreground">{new Date(inv.started_at).toLocaleDateString('ru-RU')}</span>
                                         <span className="text-[10px] text-muted-foreground/70 font-bold uppercase">{new Date(inv.started_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
-                                        <WarehouseIcon className="h-3 w-3 shrink-0" />
-                                        <span>{inv.warehouse_name || "Не указан"}</span>
-                                    </div>
+                                    <div className="text-xs text-slate-400">{inv.warehouse_name || "Не указан"}</div>
                                 </div>
                                 {inv.status === 'OPEN' ? (
                                     <Badge variant="outline" className="border-amber-200 text-amber-700 bg-amber-50 text-[10px] h-5 px-1.5 font-bold">В процессе</Badge>
@@ -412,8 +373,7 @@ export function InventoryTab({ inventories, categories, warehouses, currentUserI
                             </div>
 
                             <div className="flex items-center gap-2 mb-4">
-                                <User className="h-3 w-3 text-muted-foreground/70 shrink-0" />
-                                <span className="text-xs text-muted-foreground font-medium">{inv.created_by_name || "Неизвестно"}</span>
+                                <span className="text-xs text-slate-400">{inv.created_by_name || "Неизвестно"}</span>
                                 {inv.target_metric_key && (
                                     <>
                                         <span className="text-slate-200 mx-1">|</span>

@@ -16,6 +16,8 @@ export type RawInventorySettings = {
   sales_capture_mode?: "INVENTORY" | "SHIFT" | null;
   inventory_timing?: "END_SHIFT" | "START_SHIFT" | null;
   shift_accountability_mode?: "DISABLED" | "WAREHOUSE" | null;
+  handover_scope_mode?: "ALL_ITEMS" | "SOLD_ITEMS_ONLY" | "RANDOM_SAMPLE" | "SOLD_PLUS_RANDOM" | null;
+  handover_random_sample_size?: number | null;
   allow_salary_deduction?: boolean;
   employee_discount_percent?: number;
   employee_discount_overrides?: Record<string, number>;
@@ -25,11 +27,12 @@ export type RawInventorySettings = {
   dashlock_integration_enabled?: boolean;
   dashlock_url?: string;
   api_key?: string;
+  transfer_blocked_routes?: { from_id: number; to_id: number }[];
 };
 
 export type InventorySettings = Omit<
   RawInventorySettings,
-  "sales_capture_mode" | "inventory_timing" | "shift_accountability_mode"
+  "sales_capture_mode" | "inventory_timing" | "shift_accountability_mode" | "handover_scope_mode"
 > & {
   supplies_enabled: boolean;
   stock_enabled: boolean;
@@ -42,11 +45,14 @@ export type InventorySettings = Omit<
   cashbox_warehouse_ids: number[];
   handover_warehouse_id: number | null;
   handover_warehouse_ids: number[];
+  handover_scope_mode: "ALL_ITEMS" | "SOLD_ITEMS_ONLY" | "RANDOM_SAMPLE" | "SOLD_PLUS_RANDOM";
+  handover_random_sample_size: number;
   sales_capture_mode: "SHIFT";
   inventory_timing: "END_SHIFT";
   shift_accountability_mode: "DISABLED" | "WAREHOUSE";
   block_desktop_handover: boolean;
   dashlock_integration_enabled: boolean;
+  transfer_blocked_routes: { from_id: number; to_id: number }[];
 };
 
 export function normalizeInventorySettings(
@@ -150,6 +156,28 @@ export function normalizeInventorySettings(
     handoverWarehouseIdsEffective.length === 1
       ? handoverWarehouseIdsEffective[0]
       : null;
+  const validScopeModes = ["ALL_ITEMS", "SOLD_ITEMS_ONLY", "RANDOM_SAMPLE", "SOLD_PLUS_RANDOM"];
+  const handoverScopeMode = validScopeModes.includes(String(source.handover_scope_mode))
+    ? (source.handover_scope_mode as "ALL_ITEMS" | "SOLD_ITEMS_ONLY" | "RANDOM_SAMPLE" | "SOLD_PLUS_RANDOM")
+    : "ALL_ITEMS";
+  const rawSampleSize = Number(source.handover_random_sample_size ?? 10);
+  const handoverRandomSampleSize = Number.isFinite(rawSampleSize)
+    ? Math.min(50, Math.max(1, Math.trunc(rawSampleSize)))
+    : 10;
+
+  const rawBlockedRoutes = Array.isArray(source.transfer_blocked_routes) ? source.transfer_blocked_routes : [];
+  const transferBlockedRoutes: { from_id: number; to_id: number }[] = [];
+  for (const item of rawBlockedRoutes) {
+    if (item && typeof item === "object") {
+      const fromId = Number((item as any).from_id);
+      const toId = Number((item as any).to_id);
+      if (Number.isInteger(fromId) && fromId > 0 && Number.isInteger(toId) && toId > 0 && fromId !== toId) {
+        if (!transferBlockedRoutes.some(r => r.from_id === fromId && r.to_id === toId)) {
+          transferBlockedRoutes.push({ from_id: fromId, to_id: toId });
+        }
+      }
+    }
+  }
 
   return {
     ...source,
@@ -171,6 +199,8 @@ export function normalizeInventorySettings(
         ? handoverWarehouseIdsEffective
         : [],
     handover_warehouse_id: handoverWarehouseIdEffective,
+    handover_scope_mode: handoverScopeMode,
+    handover_random_sample_size: handoverRandomSampleSize,
     sales_capture_mode: "SHIFT",
     inventory_timing: "END_SHIFT",
     shift_accountability_mode: shiftAccountabilityMode,
@@ -178,6 +208,7 @@ export function normalizeInventorySettings(
     dashlock_integration_enabled: source.dashlock_integration_enabled ?? false,
     dashlock_url: source.dashlock_url,
     api_key: source.api_key,
+    transfer_blocked_routes: transferBlockedRoutes,
   };
 }
 

@@ -311,10 +311,19 @@ export async function createTransfer(
       clubId,
       items.map((i) => i.product_id),
     );
-    await assertUserCanUseWarehouses(client, clubId, userId, [
+    const accessScope = await assertUserCanUseWarehouses(client, clubId, userId, [
       source_warehouse_id,
       target_warehouse_id,
     ]);
+
+    if (!accessScope.canManageInventory) {
+      const isBlocked = (inventorySettings.transfer_blocked_routes || []).some(
+        (r) => Number(r.from_id) === Number(source_warehouse_id) && Number(r.to_id) === Number(target_warehouse_id)
+      );
+      if (isBlocked) {
+        throw new Error("Перемещение по данному маршруту запрещено для сотрудников");
+      }
+    }
 
     if (source_warehouse_id === target_warehouse_id) {
       throw new Error("Склады отправления и назначения должны быть разными");
@@ -1272,7 +1281,7 @@ export async function writeOffProduct(
 
     // Check total availability
     const totalAvailable = stocks.rows.reduce(
-      (sum, row) => sum + row.quantity,
+      (sum: number, row: any) => sum + row.quantity,
       0,
     );
     if (totalAvailable < amount) {

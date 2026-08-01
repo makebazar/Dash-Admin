@@ -282,12 +282,12 @@ export function ShiftDetailDialog({
                                   const excludedKeys = new Set([
                                     "cash", "card", "cash_diff", "actual_cash", "expected_cash", "total_revenue"
                                   ]);
-                                  if (key.startsWith("_") || key === "has_discrepancies" || key === "discrepancy_details" || excludedKeys.has(key)) return null;
+                                  if (!shift || key.startsWith("_") || key === "has_discrepancies" || key === "discrepancy_details" || excludedKeys.has(key)) return null;
 
                                   const hasExpensesCash = shiftDetails?.metric_labels?.["expenses_cash"] !== undefined;
                                   if (key === "expenses" && hasExpensesCash) return null;
 
-                                  const label = shiftDetails.metric_labels[key];
+                                  const label = shiftDetails?.metric_labels?.[key];
                                   let value = shift.report_data?.[key] !== undefined ? shift.report_data[key] : 0;
                                   
                                   if (key === "expenses_cash") {

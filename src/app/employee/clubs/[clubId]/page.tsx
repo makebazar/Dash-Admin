@@ -1951,6 +1951,7 @@ export default function EmployeeClubPage({
           clubId={clubId}
           userId={currentUserId}
           activeShiftId={activeShift?.id?.toString()}
+          inventorySettings={normalizedInventorySettings}
         />
 
         <EmployeeRequestWizard

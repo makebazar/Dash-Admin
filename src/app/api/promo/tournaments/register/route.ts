@@ -137,7 +137,7 @@ export async function POST(request: Request) {
       );
       if (existingMembersCheck.rows.length > 0) {
         await client.query("ROLLBACK");
-        const names = existingMembersCheck.rows.map(r => r.full_name).join(", ");
+        const names = existingMembersCheck.rows.map((r: any) => r.full_name).join(", ");
         return NextResponse.json(
           { error: `Регистрация невозможна: игрок(и) уже зарегистрирован(ы) на этот турнир: ${names}` },
           { status: 400 }

@@ -77,6 +77,15 @@ export async function createSupplier(
   return res.rows[0].id;
 }
 
+export async function deleteSupplier(clubId: string, supplierId: number) {
+  await requireClubAccess(clubId);
+  await query(
+    `UPDATE warehouse_suppliers SET is_active = false WHERE id = $1 AND club_id = $2`,
+    [supplierId, clubId],
+  );
+  revalidatePath(`/clubs/${clubId}/inventory`);
+}
+
 // --- SUPPLIES ---
 
 export async function getSuppliersForSelect(clubId: string) {

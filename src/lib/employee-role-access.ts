@@ -78,7 +78,7 @@ export async function getEmployeeRoleAccess(
   let userId = userIdOverride;
   if (!userId) {
     const signedCookie = (await cookies()).get("session_user_id")?.value;
-    userId = signedCookie ? verifySessionValue(signedCookie) : undefined;
+    userId = signedCookie ? (verifySessionValue(signedCookie) || undefined) : undefined;
   }
 
   if (!userId) {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition, useMemo, useEffect } from "react"
-import { Plus, Search, Calendar, User, Package, Trash2, RefreshCw, Eye, Edit, ChevronRight } from "lucide-react"
+import { Plus, ChevronRight, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -35,11 +35,8 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
 
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-center bg-card p-4 rounded-lg border shadow-sm">
-                <div className="flex flex-col">
-                    <h3 className="font-bold text-foreground">Поставки</h3>
-                    <p className="text-xs text-muted-foreground">Учет прихода товаров и контроль закупочных цен</p>
-                </div>
+            <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <h3 className="text-xl font-bold text-slate-900">Поставки</h3>
                 <Button onClick={() => router.push(`/clubs/${clubId}/inventory/supplies/new`)} className="bg-blue-600 hover:bg-blue-700">
                     <Plus className="mr-2 h-4 w-4" />
                     Оформить поставку
@@ -76,10 +73,8 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex flex-col">
-                                        <span className="text-sm font-semibold text-foreground">{supply.supplier_name}</span>
-                                        <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1">
-                                            <User className="h-2.5 w-2.5" /> {supply.created_by_name || "Неизвестно"}
-                                        </span>
+                                        <span className="text-sm font-medium text-slate-700">{supply.supplier_name}</span>
+                                        <span className="text-[10px] text-slate-400">{supply.created_by_name || "Неизвестно"}</span>
                                     </div>
                                 </TableCell>
                                 <TableCell>
@@ -112,15 +107,15 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                 ) : supplies.map(supply => (
                     <div 
                         key={supply.id} 
-                        className="bg-card rounded-xl border p-4 shadow-sm active:bg-muted transition-colors cursor-pointer"
+                        className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm active:bg-slate-50 transition-colors cursor-pointer"
                         onClick={() => router.push(`/clubs/${clubId}/inventory/supplies/${supply.id}`)}
                     >
                         <div className="flex justify-between items-start mb-3">
                             <div className="flex flex-col">
-                                <span className="text-[10px] text-muted-foreground/70 uppercase font-black tracking-widest mb-0.5">
+                                <span className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider mb-0.5">
                                     {new Date(supply.created_at).toLocaleDateString('ru-RU')} в {new Date(supply.created_at).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}
                                 </span>
-                                <h4 className="font-black text-foreground text-base leading-tight">{supply.supplier_name}</h4>
+                                <h4 className="font-semibold text-slate-900 text-sm leading-tight">{supply.supplier_name}</h4>
                             </div>
                             {supply.status === 'DRAFT' ? (
                                 <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[9px] uppercase font-black">Черновик</Badge>
@@ -130,19 +125,13 @@ export function SuppliesTab({ supplies, products, warehouses, suppliers, current
                         </div>
                         
                         <div className="flex justify-between items-end pt-3 border-t border-border/50">
-                            <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                    <User className="h-3.5 w-3.5" />
-                                    <span>{supply.created_by_name || "Неизвестно"}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                    <Package className="h-3.5 w-3.5" />
-                                    <span>{supply.items_count} поз.</span>
-                                </div>
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-xs text-slate-400">{supply.created_by_name || "Неизвестно"}</span>
+                                <span className="text-xs text-slate-400">{supply.items_count} поз.</span>
                             </div>
                             <div className="text-right">
-                                <p className="text-[10px] text-muted-foreground/70 uppercase font-black tracking-widest mb-0.5">Сумма</p>
-                                <p className="text-xl font-black text-blue-600">{Number(supply.total_cost).toLocaleString('ru-RU')} ₽</p>
+                                <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider mb-0.5">Сумма</p>
+                                <p className="text-lg font-bold text-slate-900">{Number(supply.total_cost).toLocaleString('ru-RU')} ₽</p>
                             </div>
                         </div>
                     </div>

@@ -112,6 +112,8 @@ export type ShiftZoneSnapshotDraftItem = {
   saved_counted_quantity: number | null;
   system_quantity: number;
   selling_price: number;
+  sold_in_shift_qty?: number;
+  was_sold_in_shift?: boolean;
 };
 
 export type ShiftZoneDiscrepancyRow = {
@@ -176,6 +178,8 @@ export type ShiftZoneOverviewShift = {
   unresolved_discrepancy_count: number;
   status: "COMPLETE" | "OPEN_ONLY" | "CLOSE_ONLY" | "PARTIAL";
   last_snapshot_at: string | null;
+  accepted_from_employee_name?: string | null;
+  handed_over_to_employee_name?: string | null;
 };
 
 export type ShiftZoneOverviewZone = {

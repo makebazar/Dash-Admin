@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Pencil, Trash2, Warehouse as WarehouseIcon } from "lucide-react"
+import { Plus, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { createWarehouse, updateWarehouse, deleteWarehouse, Warehouse } from "../actions"
 import { useParams } from "next/navigation"
 import { useUiDialogs } from "./useUiDialogs"
@@ -96,8 +95,7 @@ export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseIds, 
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center bg-card p-4 rounded-lg border shadow-sm">
-                <h3 className="font-medium flex items-center gap-2">
-                    <WarehouseIcon className="h-4 w-4" />
+                <h3 className="font-semibold text-slate-900 text-sm">
                     Складские помещения
                 </h3>
                 <Button onClick={openCreate}>
@@ -109,15 +107,10 @@ export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseIds, 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {warehouses.map(wh => (
                     <div key={wh.id} className="bg-card border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow group">
-                        <div className="flex justify-between items-center mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
-                                    <WarehouseIcon className="h-5 w-5" />
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold text-lg">{wh.name}</h4>
-                                    {wh.is_default && <Badge variant="secondary" className="text-[10px] py-0 px-1 bg-blue-100 text-blue-700 border-none">Основной</Badge>}
-                                </div>
+                        <div className="flex justify-between items-start mb-2">
+                            <div>
+                                <h4 className="font-bold text-slate-900 text-base">{wh.name}</h4>
+                                {wh.is_default && <span className="text-xs font-semibold text-blue-600 mt-0.5 block">Основной</span>}
                             </div>
                             <div className="flex gap-1">
                                 <Button aria-label={`Редактировать склад ${wh.name}`} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/70 hover:text-foreground hover:bg-muted" onClick={() => openEdit(wh)}>
@@ -132,16 +125,16 @@ export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseIds, 
                         </div>
                         
                         {((cashboxWarehouseIds || []).includes(Number(wh.id)) || (handoverWarehouseIds || []).includes(Number(wh.id))) && (
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap items-center gap-3 pt-1">
                                 {(cashboxWarehouseIds || []).includes(Number(wh.id)) && (
-                                    <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                                    <span className="text-xs font-semibold text-emerald-600">
                                         Для кассы
-                                    </Badge>
+                                    </span>
                                 )}
                                 {(handoverWarehouseIds || []).includes(Number(wh.id)) && (
-                                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                                    <span className="text-xs font-semibold text-amber-600">
                                         Для сверок
-                                    </Badge>
+                                    </span>
                                 )}
                             </div>
                         )}
@@ -150,7 +143,6 @@ export function WarehousesTab({ warehouses, currentUserId, cashboxWarehouseIds, 
                 
                 {warehouses.length === 0 && (
                     <div className="col-span-full py-12 text-center text-muted-foreground bg-muted rounded-xl border border-dashed">
-                        <WarehouseIcon className="h-12 w-12 mx-auto mb-3 opacity-20" />
                         <p>Складов пока нет. Создайте первый склад.</p>
                     </div>
                 )}

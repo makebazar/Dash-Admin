@@ -131,11 +131,13 @@ export async function resolveEffectiveEmployeeWarehouseIds(
   return defaultWarehouseId > 0 ? [defaultWarehouseId] : [];
 }
 
-export async function getInventoryAccessScope(
+import { cache } from "react";
+
+export const getInventoryAccessScope = cache(async (
   client: any,
   clubId: string,
   userId: string,
-): Promise<InventoryAccessScope> {
+): Promise<InventoryAccessScope> => {
   const clubRes = await client.query(
     `SELECT owner_id, inventory_settings
          FROM clubs
@@ -145,9 +147,6 @@ export async function getInventoryAccessScope(
   );
   if (clubRes.rowCount === 0) throw new Error("Клуб не найден");
 
-  // Assuming getClubApiAccess uses its own DB query internally, but it uses next/headers cookies.
-  // However, this is a Server Action and `getClubApiAccess` relies on cookies() from next/headers.
-  // If it's a Server Action, cookies() works fine. Let's use it.
   const access = await getClubApiAccess(clubId);
 
   const isFullAccess = access.isFullAccess;
@@ -171,7 +170,7 @@ export async function getInventoryAccessScope(
       normalizedSettings,
     ),
   };
-}
+});
 
 export async function assertUserCanUseWarehouses(
   client: any,

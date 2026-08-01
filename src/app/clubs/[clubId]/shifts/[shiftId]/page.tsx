@@ -1561,7 +1561,7 @@ export default function ShiftDetailsPage() {
                                 const hasExpensesCash = details?.metric_labels?.["expenses_cash"] !== undefined;
                                 if (key === "expenses" && hasExpensesCash) return null;
 
-                                const label = details.metric_labels[key];
+                                const label = details?.metric_labels?.[key];
                                 let value = shift.report_data?.[key] !== undefined ? shift.report_data[key] : 0;
                                 if (key === "expenses_cash") {
                                   value = shift.report_data?.expenses || shift.report_data?.expenses_cash || 0;
@@ -1572,7 +1572,7 @@ export default function ShiftDetailsPage() {
                                   (key === "expenses_cash") ||
                                   (key === "expenses" && !hasExpensesCash);
                                 const expensesList =
-                                  details?.expenses_list ?? [];
+                                  (details as any)?.expenses_list ?? [];
                                 const hasExpenseDetails =
                                   isExpensesKey &&
                                   expensesList.length > 0;
@@ -1650,7 +1650,7 @@ export default function ShiftDetailsPage() {
                                     </TableRow>
                                     {hasExpenseDetails &&
                                       isExpensesExpanded &&
-                                      expensesList.map((exp) => (
+                                      expensesList.map((exp: any) => (
                                         <TableRow
                                           key={exp.id}
                                           className="bg-rose-50/30 border-b border-rose-100/50 last:border-0"

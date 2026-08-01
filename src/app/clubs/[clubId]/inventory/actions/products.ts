@@ -84,44 +84,63 @@ export async function getProducts(
 
     const res = await client.query(
       `
-            SELECT p.*, c.name as category_name,
-            (SELECT SUM(quantity) FROM warehouse_stock ws WHERE product_id = p.id${stockFilter}) as total_stock,
-            (
-                SELECT json_agg(json_build_object(
-                    'warehouse_id', ws.warehouse_id,
-                    'warehouse_name', w.name,
-                    'quantity', ws.quantity,
-                    'is_default', w.is_default
-                ))
+            WITH ProductStocks AS (
+                SELECT
+                    ws.product_id,
+                    SUM(ws.quantity) as total_stock,
+                    json_agg(json_build_object(
+                        'warehouse_id', ws.warehouse_id,
+                        'warehouse_name', w.name,
+                        'quantity', ws.quantity,
+                        'is_default', w.is_default
+                    )) as stocks
                 FROM warehouse_stock ws
                 JOIN warehouses w ON ws.warehouse_id = w.id
-                WHERE ws.product_id = p.id${stockFilter}
-            ) as stocks,
-            (
-                SELECT json_agg(json_build_object(
-                    'cost_price', s.cost_price,
-                    'created_at', s.created_at,
-                    'supplier_name', s.supplier_name,
-                    'supply_id', s.id
-                ))
-                FROM (
-                    SELECT si.cost_price, sup.created_at, sup.supplier_name, sup.id
-                    FROM warehouse_supply_items si
-                    JOIN warehouse_supplies sup ON si.supply_id = sup.id
-                    WHERE si.product_id = p.id AND sup.status = 'COMPLETED'
-                    ORDER BY sup.created_at DESC
-                    LIMIT 5
-                ) s
-            ) as price_history
+                WHERE w.club_id = $1${stockFilter}
+                GROUP BY ws.product_id
+            ),
+            RecentSupplyItems AS (
+                SELECT
+                    si.product_id,
+                    si.cost_price,
+                    sup.created_at,
+                    sup.supplier_name,
+                    sup.id as supply_id,
+                    ROW_NUMBER() OVER (PARTITION BY si.product_id ORDER BY sup.created_at DESC) as rn
+                FROM warehouse_supply_items si
+                JOIN warehouse_supplies sup ON si.supply_id = sup.id
+                WHERE sup.club_id = $1 AND sup.status = 'COMPLETED'
+            ),
+            PriceHistories AS (
+                SELECT
+                    product_id,
+                    json_agg(json_build_object(
+                        'cost_price', cost_price,
+                        'created_at', created_at,
+                        'supplier_name', supplier_name,
+                        'supply_id', supply_id
+                    ) ORDER BY created_at DESC) as price_history
+                FROM RecentSupplyItems
+                WHERE rn <= 5
+                GROUP BY product_id
+            )
+            SELECT
+                p.*,
+                c.name as category_name,
+                COALESCE(ps.total_stock, 0) as total_stock,
+                COALESCE(ps.stocks, '[]'::json) as stocks,
+                COALESCE(ph.price_history, '[]'::json) as price_history
             FROM warehouse_products p
             LEFT JOIN warehouse_categories c ON p.category_id = c.id
+            LEFT JOIN ProductStocks ps ON ps.product_id = p.id
+            LEFT JOIN PriceHistories ph ON ph.product_id = p.id
             WHERE p.club_id = $1${archiveCondition}
             ORDER BY CASE WHEN p.abc_category IS NULL THEN 4 WHEN p.abc_category = 'A' THEN 1 WHEN p.abc_category = 'B' THEN 2 ELSE 3 END, p.name
         `,
       stockParams,
     );
 
-    return res.rows.map((row) => ({
+    return res.rows.map((row: any) => ({
       ...row,
       current_stock: Number(row.total_stock) || 0,
       units_per_box: row.units_per_box || 1, // Ensure this is mapped

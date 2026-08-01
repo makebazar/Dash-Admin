@@ -845,18 +845,17 @@ export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
 
     const recentShiftRows = await client.query(
       `
-            SELECT DISTINCT ON (ss.shift_id)
-                ss.shift_id,
+            SELECT
+                s.id as shift_id,
                 s.check_in,
                 s.check_out,
                 u.full_name as employee_name
-            FROM shift_zone_snapshots ss
-            JOIN shifts s ON s.id = ss.shift_id
+            FROM shifts s
             LEFT JOIN users u ON u.id = s.user_id
-            WHERE ss.club_id = $1
+            WHERE s.club_id = $1
               AND s.check_in >= $2
               AND s.check_in < $3
-            ORDER BY ss.shift_id, s.check_in DESC
+            ORDER BY s.check_in DESC
             `,
       [clubId, startDate.toISOString(), endDate.toISOString()],
     );
@@ -896,8 +895,9 @@ export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
       } satisfies ShiftZoneOverview;
     }
 
-    const snapshotsRes = await client.query(
-      `
+    const [snapshotsRes, acceptedFromRes, handedOverToRes] = await Promise.all([
+      client.query(
+        `
             SELECT
                 ss.shift_id,
                 ss.warehouse_id,
@@ -908,13 +908,58 @@ export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
               AND ss.shift_id = ANY($2::uuid[])
             ORDER BY ss.created_at DESC
             `,
-      [clubId, shiftIds],
-    );
+        [clubId, shiftIds],
+      ),
+      client.query(
+        `
+        SELECT DISTINCT ON (ss.shift_id)
+          ss.shift_id,
+          u.full_name as accepted_from_employee_name
+        FROM shift_zone_snapshots ss
+        JOIN shifts s_from ON s_from.id = ss.accepted_from_shift_id
+        LEFT JOIN users u ON u.id = s_from.user_id
+        WHERE ss.club_id = $1
+          AND ss.shift_id = ANY($2::uuid[])
+          AND ss.accepted_from_shift_id IS NOT NULL
+        ORDER BY ss.shift_id, ss.created_at ASC
+        `,
+        [clubId, shiftIds],
+      ),
+      client.query(
+        `
+        SELECT DISTINCT ON (ss.accepted_from_shift_id)
+          ss.accepted_from_shift_id as shift_id,
+          u.full_name as handed_over_to_employee_name
+        FROM shift_zone_snapshots ss
+        JOIN shifts s ON s.id = ss.shift_id
+        LEFT JOIN users u ON u.id = s.user_id
+        WHERE ss.club_id = $1
+          AND ss.accepted_from_shift_id = ANY($2::uuid[])
+        ORDER BY ss.accepted_from_shift_id, s.check_in DESC
+        `,
+        [clubId, shiftIds],
+      ),
+    ]);
+
+    const acceptedFromMap = new Map<string, string>();
+    for (const r of acceptedFromRes.rows) {
+      if (r.accepted_from_employee_name) {
+        acceptedFromMap.set(String(r.shift_id), r.accepted_from_employee_name);
+      }
+    }
+
+    const handedOverToMap = new Map<string, string>();
+    for (const r of handedOverToRes.rows) {
+      if (r.handed_over_to_employee_name) {
+        handedOverToMap.set(String(r.shift_id), r.handed_over_to_employee_name);
+      }
+    }
 
     const shiftMap = new Map<string, ShiftZoneOverviewShift>();
     for (const row of sortedRecentShifts) {
-      shiftMap.set(String(row.shift_id), {
-        shift_id: String(row.shift_id),
+      const sId = String(row.shift_id);
+      shiftMap.set(sId, {
+        shift_id: sId,
         employee_name: row.employee_name || "Неизвестно",
         check_in: row.check_in,
         check_out: row.check_out,
@@ -926,6 +971,8 @@ export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
         unresolved_discrepancy_count: 0,
         status: "PARTIAL",
         last_snapshot_at: null,
+        accepted_from_employee_name: acceptedFromMap.get(sId) || null,
+        handed_over_to_employee_name: handedOverToMap.get(sId) || null,
       });
     }
 
@@ -1027,6 +1074,13 @@ export async function getShiftZoneOverview(clubId: string, monthStr?: string) {
         shiftEntry.status = "CLOSE_ONLY";
       } else {
         shiftEntry.status = "PARTIAL";
+      }
+
+      if (shiftEntry.open_zones_count === 0 && shiftEntry.close_zones_count === 0) {
+        shiftEntry.discrepancy_items_count = 0;
+        shiftEntry.discrepancy_total_abs = 0;
+        shiftEntry.unresolved_discrepancy_count = 0;
+        continue;
       }
 
       const discrepancyRows = await getShiftZoneDiscrepancyReportInternal(

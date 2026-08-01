@@ -26,6 +26,7 @@ interface EmployeeTransferWizardProps {
     clubId: string
     userId: string
     activeShiftId?: string
+    inventorySettings?: any
 }
 
 interface TransferItem {
@@ -35,7 +36,7 @@ interface TransferItem {
     available_stock: number
 }
 
-export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, activeShiftId }: EmployeeTransferWizardProps) {
+export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, activeShiftId, inventorySettings }: EmployeeTransferWizardProps) {
     const { showMessage, Dialogs } = useUiDialogs()
     const [step, setStep] = useState(1) // 1: Warehouses, 2: Items, 3: Confirm
     const [items, setItems] = useState<TransferItem[]>([])
@@ -81,14 +82,21 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
             getWarehouses(clubId).then(whs => {
                 setWarehouses(whs)
                 const def = whs.find(w => w.is_default) || whs[0]
-                if (def) setSourceWarehouseId(def.id.toString())
-                
-                // Pick another one as default target if possible
-                const target = whs.find(w => w.id.toString() !== def?.id.toString()) || whs[0]
-                if (target) setTargetWarehouseId(target.id.toString())
+                if (def) {
+                    const srcId = def.id.toString()
+                    setSourceWarehouseId(srcId)
+                    const target = whs.find(w => {
+                        if (w.id.toString() === srcId) return false
+                        const isBlocked = (inventorySettings?.transfer_blocked_routes || []).some(
+                            (r: any) => Number(r.from_id) === Number(srcId) && Number(r.to_id) === Number(w.id)
+                        )
+                        return !isBlocked
+                    }) || whs[0]
+                    if (target) setTargetWarehouseId(target.id.toString())
+                }
             })
         }
-    }, [isOpen, clubId])
+    }, [isOpen, clubId, inventorySettings])
 
     const handleAddProduct = () => {
         const product = allProducts.find(p => p.id === Number(selectedProductId))
@@ -238,10 +246,17 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                                     sourceWarehouseId === wh.id.toString() && "border-purple-500 bg-purple-500/10 text-purple-400"
                                                 )}
                                                 onClick={() => {
-                                                    setSourceWarehouseId(wh.id.toString())
-                                                    if (targetWarehouseId === wh.id.toString()) {
-                                                        const other = warehouses.find(w => w.id !== wh.id)
-                                                        if (other) setTargetWarehouseId(other.id.toString())
+                                                    const newSrcId = wh.id.toString()
+                                                    setSourceWarehouseId(newSrcId)
+                                                    const validTargets = warehouses.filter(w => {
+                                                        if (w.id.toString() === newSrcId) return false
+                                                        const isBlocked = (inventorySettings?.transfer_blocked_routes || []).some(
+                                                            (r: any) => Number(r.from_id) === Number(newSrcId) && Number(r.to_id) === Number(w.id)
+                                                        )
+                                                        return !isBlocked
+                                                    })
+                                                    if (!validTargets.some(w => w.id.toString() === targetWarehouseId)) {
+                                                        setTargetWarehouseId(validTargets[0]?.id.toString() || "")
                                                     }
                                                 }}
                                             >
@@ -266,15 +281,19 @@ export function EmployeeTransferWizard({ isOpen, onClose, clubId, userId, active
                                         Склад назначения (Куда)
                                     </Label>
                                     <div className="grid grid-cols-2 gap-2">
-                                        {warehouses.map(wh => (
+                                        {warehouses.filter(wh => {
+                                            if (sourceWarehouseId && wh.id.toString() === sourceWarehouseId) return false
+                                            const isBlocked = (inventorySettings?.transfer_blocked_routes || []).some(
+                                                (r: any) => Number(r.from_id) === Number(sourceWarehouseId) && Number(r.to_id) === Number(wh.id)
+                                            )
+                                            return !isBlocked
+                                        }).map(wh => (
                                             <Button
                                                 key={wh.id}
                                                 variant="outline"
-                                                disabled={sourceWarehouseId === wh.id.toString()}
                                                 className={cn(
                                                     "h-12 border-slate-800 bg-primary/50 hover:bg-primary/90 text-[10px] justify-start px-3",
-                                                    targetWarehouseId === wh.id.toString() && "border-emerald-500 bg-emerald-500/10 text-emerald-400",
-                                                    sourceWarehouseId === wh.id.toString() && "opacity-50 grayscale"
+                                                    targetWarehouseId === wh.id.toString() && "border-emerald-500 bg-emerald-500/10 text-emerald-400"
                                                 )}
                                                 onClick={() => setTargetWarehouseId(wh.id.toString())}
                                             >

@@ -269,7 +269,7 @@ export function SalesTab({
       },
     };
 
-    sales.forEach((sale) => {
+    (sales ?? []).forEach((sale) => {
       const shiftId = sale.shift_id_raw;
       const amount = Math.abs(sale.change_amount);
       const isSalaryDeduction =

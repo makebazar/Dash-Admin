@@ -360,7 +360,7 @@ export async function getInventories(clubId: string) {
             `,
       params,
     );
-    return res.rows.map((row) => ({
+    return res.rows.map((row: any) => ({
       ...row,
       created_by: row.created_by?.toString(),
     })) as Inventory[];
@@ -1342,7 +1342,7 @@ export async function closeInventory(
 
     // 4. Update Cache for all involved products
     const allProductIds = [
-      ...itemsRes.rows.map((i) => i.product_id),
+      ...itemsRes.rows.map((i: any) => i.product_id),
       ...effectiveUnaccountedSales.map((s) => s.product_id),
     ];
 

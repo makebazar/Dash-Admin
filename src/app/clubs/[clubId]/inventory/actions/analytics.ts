@@ -52,7 +52,7 @@ export async function calculateAnalytics(clubId: string) {
       [clubId],
     );
 
-    const revenueData = await client.query(
+    await client.query(
       `
             WITH ProductRevenue AS (
                 SELECT
@@ -84,34 +84,21 @@ export async function calculateAnalytics(clubId: string) {
                 SELECT
                     product_id,
                     total_revenue,
-                    SUM(total_revenue) OVER (ORDER BY total_revenue DESC) as running_total,
-                    (SELECT grand_total FROM TotalStats) as grand_total
-                FROM ProductRevenue
+                    CASE
+                        WHEN grand_total = 0 THEN 'C'
+                        WHEN (SUM(total_revenue) OVER (ORDER BY total_revenue DESC) - total_revenue) < grand_total * 0.8 THEN 'A'
+                        WHEN (SUM(total_revenue) OVER (ORDER BY total_revenue DESC) - total_revenue) < grand_total * 0.95 THEN 'B'
+                        ELSE 'C'
+                    END as new_abc_category
+                FROM ProductRevenue, TotalStats
             )
-            SELECT
-                product_id,
-                total_revenue,
-                CASE
-                    WHEN grand_total = 0 THEN 'C'
-                    WHEN (running_total - total_revenue) < grand_total * 0.8 THEN 'A'
-                    WHEN (running_total - total_revenue) < grand_total * 0.95 THEN 'B'
-                    ELSE 'C'
-                END as new_abc_category
-            FROM RankedProducts
+            UPDATE warehouse_products wp
+            SET abc_category = rp.new_abc_category
+            FROM RankedProducts rp
+            WHERE wp.id = rp.product_id
         `,
       [clubId],
     );
-
-    for (const row of revenueData.rows) {
-      await client.query(
-        `
-                UPDATE warehouse_products
-                SET abc_category = $1
-                WHERE id = $2
-            `,
-        [row.new_abc_category, row.product_id],
-      );
-    }
 
     await client.query("COMMIT");
   } catch (e) {

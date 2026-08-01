@@ -1,18 +1,15 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { ArrowLeft, Package, Plus, Check, ChevronsUpDown, RefreshCw, Trash2 } from "lucide-react"
+import { ArrowLeft, Package, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { PageShell } from "@/components/layout/PageShell"
 import { useRouter } from "next/navigation"
 import { createSupply, type Product, type Warehouse } from "../../actions"
-import { cn } from "@/lib/utils"
 import Link from "next/link"
 
 interface NewSupplyClientProps {
@@ -28,8 +25,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
     const [isPending, startTransition] = useTransition()
 
     // Form State
-    const [supplierName, setSupplierName] = useState("")
-    const [isSupplierOpen, setIsSupplierOpen] = useState(false)
+    const [supplierId, setSupplierId] = useState("")
     const [notes, setNotes] = useState("")
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
     const [items, setItems] = useState<{ productId: number, quantity: number, cost: number }[]>([])
@@ -77,11 +73,12 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
     }
 
     const handleSubmit = async () => {
-        if (!supplierName || items.length === 0) return
+        const selectedSupplier = suppliers.find(s => s.id.toString() === supplierId)
+        if (!selectedSupplier || items.length === 0) return
         
         startTransition(async () => {
             await createSupply(clubId, currentUserId, {
-                supplier_name: supplierName,
+                supplier_name: selectedSupplier.name,
                 notes,
                 warehouse_id: selectedWarehouseId ? Number(selectedWarehouseId) : undefined,
                 status: supplyStatus,
@@ -118,61 +115,28 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                 <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div className="space-y-2">
                         <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Поставщик</Label>
-                        <Popover open={isSupplierOpen} onOpenChange={setIsSupplierOpen}>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={isSupplierOpen}
-                                    className="w-full justify-between h-12 bg-slate-50 hover:bg-slate-100 border-slate-200"
-                                >
-                                    {supplierName
-                                        ? supplierName
-                                        : "Выберите или введите..."}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-75 p-0">
-                                <Command>
-                                    <CommandInput placeholder="Поиск поставщика..." onValueChange={(val) => setSupplierName(val)} />
-                                    <CommandList>
-                                        <CommandEmpty>
-                                            <div className="p-2 text-sm text-muted-foreground">
-                                                Нет совпадений. Нажмите Enter или выберите, чтобы создать "{supplierName}".
-                                                <Button variant="ghost" size="sm" className="w-full mt-2" onClick={() => setIsSupplierOpen(false)}>
-                                                    Использовать "{supplierName}"
-                                                </Button>
-                                            </div>
-                                        </CommandEmpty>
-                                        <CommandGroup heading="Существующие">
-                                            {suppliers.map((sup) => (
-                                                <CommandItem
-                                                    key={sup.id}
-                                                    value={sup.name}
-                                                    onSelect={(currentValue) => {
-                                                        setSupplierName(currentValue)
-                                                        setIsSupplierOpen(false)
-                                                    }}
-                                                >
-                                                    <Check
-                                                        className={cn(
-                                                            "mr-2 h-4 w-4",
-                                                            supplierName === sup.name ? "opacity-100" : "opacity-0"
-                                                        )}
-                                                    />
-                                                    {sup.name}
-                                                </CommandItem>
-                                            ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
+                        {suppliers.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400">
+                                Нет поставщиков.{" "}
+                                <a href={`/clubs/${clubId}/inventory?tab=suppliers`} className="text-blue-600 underline">Добавить в настройках</a>
+                            </div>
+                        ) : (
+                            <Select value={supplierId} onValueChange={setSupplierId}>
+                                <SelectTrigger className="h-10 bg-slate-50 hover:bg-slate-100 border-slate-200">
+                                    <SelectValue placeholder="Выберите поставщика..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {suppliers.map(sup => (
+                                        <SelectItem key={sup.id} value={sup.id.toString()}>{sup.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
                     </div>
                     <div className="space-y-2">
                         <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Склад приема</Label>
                         <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
-                            <SelectTrigger className="h-12 bg-slate-50 hover:bg-slate-100 border-slate-200">
+                            <SelectTrigger className="h-10 bg-slate-50 hover:bg-slate-100 border-slate-200">
                                 <SelectValue placeholder="По умолчанию (Основной)" />
                             </SelectTrigger>
                             <SelectContent>
@@ -187,7 +151,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                     <div className="space-y-2">
                         <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Статус</Label>
                         <Select value={supplyStatus} onValueChange={(v: any) => setSupplyStatus(v)}>
-                            <SelectTrigger className="h-12 bg-slate-50 hover:bg-slate-100 border-slate-200">
+                            <SelectTrigger className="h-10 bg-slate-50 hover:bg-slate-100 border-slate-200">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -202,21 +166,19 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                             placeholder="Номер накладной и т.д." 
                             value={notes}
                             onChange={e => setNotes(e.target.value)}
-                            className="h-12 bg-slate-50 border-slate-200"
+                            className="h-10 bg-slate-50 border-slate-200"
                         />
                     </div>
                 </div>
 
                 <div className="border-t border-slate-200 p-4 sm:p-6 bg-slate-50/50">
-                    <h4 className="font-bold text-base flex items-center gap-2 text-slate-900 mb-6">
-                        <Package className="h-5 w-5 text-slate-400" /> Добавление товаров
-                    </h4>
+                    <h4 className="font-bold text-base text-slate-900 mb-6">Добавление товаров</h4>
                     
                     <div className="flex flex-col sm:flex-row gap-4 items-end mb-6">
                         <div className="w-full sm:flex-1 space-y-2">
                             <Label className="text-[10px] uppercase font-bold text-slate-500">Товар</Label>
                             <Select value={selectedProductId} onValueChange={handleProductSelect}>
-                                <SelectTrigger className="bg-white h-11 border-slate-200">
+                                <SelectTrigger className="bg-white h-10 border-slate-200">
                                     <SelectValue placeholder="Выберите товар" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -233,7 +195,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                                 <Label className="text-[10px] uppercase font-bold text-slate-500">Кол-во</Label>
                                 <Input 
                                     type="number" 
-                                    className="bg-white h-11 border-slate-200" 
+                                    className="bg-white h-10 border-slate-200" 
                                     value={qty}
                                     onChange={e => setQty(e.target.value)}
                                 />
@@ -242,7 +204,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                                 <Label className="text-[10px] uppercase font-bold text-slate-500">Цена за ед.</Label>
                                 <Input 
                                     type="number" 
-                                    className="bg-white h-11 border-slate-200" 
+                                    className="bg-white h-10 border-slate-200" 
                                     placeholder="Закупка"
                                     value={cost}
                                     onChange={e => setCost(e.target.value)}
@@ -251,9 +213,9 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                             <Button 
                                 onClick={handleAddItem} 
                                 disabled={!selectedProductId || !qty || !cost} 
-                                className="h-11 w-11 p-0 bg-blue-600 hover:bg-blue-700 shrink-0 rounded-xl"
+                                className="h-10 w-10 p-0 bg-blue-600 hover:bg-blue-700 shrink-0 rounded-xl"
                             >
-                                <Plus className="h-5 w-5" />
+                                <Plus className="h-4 w-4" />
                             </Button>
                         </div>
                     </div>
@@ -373,7 +335,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
             {/* Desktop Actions */}
             <div className="hidden md:flex justify-end gap-3">
                 <Button variant="outline" onClick={() => router.push(`/clubs/${clubId}/inventory?tab=supplies`)} className="h-12 px-6 border-slate-200">Отмена</Button>
-                <Button onClick={handleSubmit} disabled={isPending || items.length === 0 || !supplierName} className="h-12 px-8 bg-blue-600 hover:bg-blue-700 text-base font-medium">
+                <Button onClick={handleSubmit} disabled={isPending || items.length === 0 || !supplierId} className="h-12 px-8 bg-blue-600 hover:bg-blue-700 text-base font-medium">
                     {isPending ? <RefreshCw className="mr-2 h-5 w-5 animate-spin" /> : <Package className="mr-2 h-5 w-5" />}
                     {supplyStatus === 'DRAFT' ? 'Сохранить черновик' : 'Оформить приход'}
                 </Button>
@@ -384,7 +346,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                 <Button variant="outline" className="flex-1 bg-slate-50 border-slate-200" onClick={() => router.push(`/clubs/${clubId}/inventory?tab=supplies`)}>
                     Отмена
                 </Button>
-                <Button onClick={handleSubmit} disabled={isPending || items.length === 0 || !supplierName} className="flex-2 bg-blue-600 hover:bg-blue-700">
+                <Button onClick={handleSubmit} disabled={isPending || items.length === 0 || !supplierId} className="flex-2 bg-blue-600 hover:bg-blue-700">
                     {isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Package className="mr-2 h-4 w-4" />}
                     {supplyStatus === 'DRAFT' ? 'Черновик' : 'Оформить'}
                 </Button>

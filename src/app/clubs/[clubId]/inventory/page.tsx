@@ -34,46 +34,21 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         return <div className="p-8 text-red-500">Доступ к управлению складом закрыт для вашей роли.</div>
     }
 
-    let products: any[] = []
-    let categories: any[] = []
-    let supplies: any[] = []
-    let inventories: any[] = []
-    let warehouses: any[] = []
-    let tasks: any[] = []
-    let procurementLists: any[] = []
-    let suppliers: any[] = []
     let clubSettings: any = null
-    let sales: any = null
-    let shifts: any[] = []
-    let shiftZoneOverview: any = null
-
     try {
-        [products, categories, supplies, inventories, warehouses, tasks, procurementLists, suppliers, clubSettings, sales, shifts, shiftZoneOverview] = await Promise.all([
-            getProducts(clubId, { includeArchived: true }),
-            getCategories(clubId),
-            getSupplies(clubId),
-            getInventories(clubId),
-            getWarehouses(clubId),
-            getClubTasks(clubId),
-            getProcurementLists(clubId),
-            getSuppliersForSelect(clubId),
-            getClubSettings(clubId),
-            getSalesAnalytics(clubId, 10000, displayMonth),
-            getActiveShiftsForClub(clubId),
-            getShiftZoneOverview(clubId, displayMonth)
-        ])
+        clubSettings = await getClubSettings(clubId)
     } catch (error: any) {
-        const message = error?.message || "Не удалось загрузить данные склада"
+        const message = error?.message || "Не удалось загрузить настройки склада"
         return <InventoryErrorState clubId={clubId} message={message} />
     }
 
     const hasAdminPrivileges = access.isFullAccess
-    const inventorySettings = normalizeInventorySettings(clubSettings.inventory_settings)
+    const inventorySettings = normalizeInventorySettings(clubSettings?.inventory_settings)
     const isSuppliesEnabled = inventorySettings.supplies_enabled
     const isStockEnabled = inventorySettings.stock_enabled
     const isCashboxEnabled = inventorySettings.cashbox_enabled && (inventorySettings.cashbox_warehouse_ids || []).length > 0
     const isShiftAccountabilityEnabled = inventorySettings.shift_accountability_mode === "WAREHOUSE"
-    const settingsSubTabs = ["general", "categories", "warehouses", "pricetags"]
+    const settingsSubTabs = ["general", "categories", "warehouses", "pricetags", "suppliers"]
     const availableTabs = [
         "stock",
         ...(isCashboxEnabled ? ["sales"] : []),
@@ -87,20 +62,70 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         "settings",
     ]
     const requestedTab = tab || "stock"
-    const activeTab = availableTabs.includes(requestedTab) || settingsSubTabs.includes(requestedTab)
-        ? requestedTab
+    const isSettingsSubTab = settingsSubTabs.includes(requestedTab)
+    const activeTab = availableTabs.includes(requestedTab) || isSettingsSubTab
+        ? (isSettingsSubTab ? "settings" : requestedTab)
         : "stock"
+
+    let products: any[] = []
+    let categories: any[] = []
+    let supplies: any[] = []
+    let inventories: any[] = []
+    let warehouses: any[] = []
+    let tasks: any[] = []
+    let procurementLists: any[] = []
+    let suppliers: any[] = []
+    let sales: any = null
+    let shifts: any[] = []
+    let shiftZoneOverview: any = null
+
+    try {
+        const fetchProducts = ["stock", "sales", "transfers", "supplies", "procurement", "abc-analysis", "settings"].includes(activeTab)
+        const fetchCategories = ["stock", "inventory", "settings"].includes(activeTab)
+        const fetchWarehouses = ["stock", "sales", "transfers", "supplies", "inventory", "settings"].includes(activeTab)
+        const fetchSales = activeTab === "sales"
+        const fetchTasks = true
+        const fetchSupplies = activeTab === "supplies"
+        const fetchProcurement = activeTab === "procurement"
+        const fetchZones = activeTab === "zones"
+        const fetchInventory = activeTab === "inventory"
+
+        const results = await Promise.all([
+            fetchProducts ? getProducts(clubId, { includeArchived: true }) : Promise.resolve([]),
+            fetchCategories ? getCategories(clubId) : Promise.resolve([]),
+            fetchWarehouses ? getWarehouses(clubId) : Promise.resolve([]),
+            fetchTasks ? getClubTasks(clubId) : Promise.resolve([]),
+            fetchSupplies ? getSupplies(clubId) : Promise.resolve([]),
+            fetchSupplies ? getSuppliersForSelect(clubId) : Promise.resolve([]),
+            fetchInventory ? getInventories(clubId) : Promise.resolve([]),
+            fetchProcurement ? getProcurementLists(clubId) : Promise.resolve([]),
+            fetchSales ? getSalesAnalytics(clubId, 500, displayMonth) : Promise.resolve(null),
+            fetchSales ? getActiveShiftsForClub(clubId) : Promise.resolve([]),
+            fetchZones ? getShiftZoneOverview(clubId, displayMonth) : Promise.resolve(null)
+        ])
+
+        products = results[0]
+        categories = results[1]
+        warehouses = results[2]
+        tasks = results[3]
+        supplies = results[4]
+        suppliers = results[5]
+        inventories = results[6]
+        procurementLists = results[7]
+        sales = results[8]
+        shifts = results[9]
+        shiftZoneOverview = results[10]
+    } catch (error: any) {
+        const message = error?.message || "Не удалось загрузить данные склада"
+        return <InventoryErrorState clubId={clubId} message={message} />
+    }
 
     return (
         <PageShell maxWidth="7xl">
-            {/* Minimalist Header */}
-            <div className="mb-8 md:mb-12">
-                <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+            <div className="mb-6">
+                <h1 className="text-3xl font-black tracking-tight text-slate-900">
                     Инвентарь клуба
                 </h1>
-                <p className="text-base text-slate-500 mt-3 max-w-2xl">
-                    Управление запасами, поставками, перемещениями и контроль товарных остатков.
-                </p>
             </div>
             
             <InventoryTabsWrapper activeTab={activeTab}>
@@ -214,7 +239,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
 
                 {isStockEnabled && (
                     <TabsContent value="transfers" className="mt-0">
-                        <TransfersTab warehouses={warehouses} products={products} currentUserId={userId} />
+                        <TransfersTab warehouses={warehouses} products={products} currentUserId={userId} isFullAccess={hasAdminPrivileges} inventorySettings={clubSettings.inventory_settings} />
                     </TabsContent>
                 )}
                 

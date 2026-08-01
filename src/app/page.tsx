@@ -9,5 +9,5 @@ export default async function Page() {
     "SELECT * FROM subscription_plans WHERE is_active = true AND is_public = true ORDER BY display_order ASC;",
   );
 
-  return <LandingClient plans={result.rows} />;
+  return <LandingClient plans={result?.rows || []} />;
 }

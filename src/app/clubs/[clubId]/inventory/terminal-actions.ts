@@ -144,10 +144,40 @@ export async function getShiftZoneSnapshotDraftTerminal(
       if (warehouses.length === 0)
         return { ok: true as const, data: [] as ShiftZoneSnapshotDraftItem[] };
 
+      const settingsRes = await client.query(
+        `SELECT inventory_settings FROM clubs WHERE id = $1 LIMIT 1`,
+        [clubId],
+      );
+      const inventorySettings = normalizeInventorySettings(
+        settingsRes.rows[0]?.inventory_settings,
+      );
+      const scopeMode = inventorySettings.handover_scope_mode || "ALL_ITEMS";
+      const sampleSize = inventorySettings.handover_random_sample_size || 10;
+
       const shiftWindowEnd = shift.check_out || new Date().toISOString();
       const result: ShiftZoneSnapshotDraftItem[] = [];
 
       for (const warehouse of warehouses) {
+        // 1. Calculate sales for this warehouse during shift
+        const salesRes = await client.query(
+          `
+          SELECT m.product_id, COALESCE(SUM(ABS(m.change_amount)), 0) as sold_qty
+          FROM warehouse_stock_movements m
+          WHERE m.club_id = $1
+            AND m.warehouse_id = $2
+            AND m.created_at >= $3
+            AND m.created_at <= $4
+            AND m.type = 'SALE'
+          GROUP BY m.product_id
+          `,
+          [clubId, warehouse.id, shift.check_in, shiftWindowEnd],
+        );
+
+        const salesMap = new Map<number, number>();
+        for (const s of salesRes.rows) {
+          salesMap.set(Number(s.product_id), Number(s.sold_qty || 0));
+        }
+
         const rows = await client.query(
           `
                 WITH relevant_products AS (
@@ -210,13 +240,54 @@ export async function getShiftZoneSnapshotDraftTerminal(
           ],
         );
 
-        for (const row of rows.rows) {
+        let allRows = rows.rows;
+
+        // Selective filtering according to scopeMode
+        if (scopeMode === "SOLD_ITEMS_ONLY") {
+          allRows = allRows.filter((r: any) => {
+            const pid = Number(r.product_id);
+            const soldQty = salesMap.get(pid) || 0;
+            const hasSavedCount = r.saved_counted_quantity !== null && r.saved_counted_quantity !== undefined;
+            return soldQty > 0 || hasSavedCount;
+          });
+        } else if (scopeMode === "RANDOM_SAMPLE") {
+          const savedRows = allRows.filter((r: any) => r.saved_counted_quantity !== null && r.saved_counted_quantity !== undefined);
+          const unsavedRows = allRows.filter((r: any) => r.saved_counted_quantity === null || r.saved_counted_quantity === undefined);
+          // Deterministic seed based on shiftId + warehouse.id
+          const shuffled = [...unsavedRows].sort((a: any, b: any) => {
+            const hashA = (Number(a.product_id) * 31 + warehouse.id) % 997;
+            const hashB = (Number(b.product_id) * 31 + warehouse.id) % 997;
+            return hashA - hashB;
+          });
+          const sampled = shuffled.slice(0, sampleSize);
+          const resultSet = new Set([...savedRows, ...sampled]);
+          allRows = Array.from(resultSet);
+        } else if (scopeMode === "SOLD_PLUS_RANDOM") {
+          const soldRows = allRows.filter((r: any) => {
+            const pid = Number(r.product_id);
+            const soldQty = salesMap.get(pid) || 0;
+            const hasSavedCount = r.saved_counted_quantity !== null && r.saved_counted_quantity !== undefined;
+            return soldQty > 0 || hasSavedCount;
+          });
+          const remainingRows = allRows.filter((r: any) => !soldRows.includes(r));
+          const shuffled = [...remainingRows].sort((a: any, b: any) => {
+            const hashA = (Number(a.product_id) * 37 + warehouse.id) % 997;
+            const hashB = (Number(b.product_id) * 37 + warehouse.id) % 997;
+            return hashA - hashB;
+          });
+          const sampled = shuffled.slice(0, sampleSize);
+          allRows = [...soldRows, ...sampled];
+        }
+
+        for (const row of allRows) {
+          const pid = Number(row.product_id);
+          const soldQty = salesMap.get(pid) || 0;
           result.push({
             warehouse_id: warehouse.id,
             warehouse_name: warehouse.name,
             shift_zone_key: warehouse.shift_zone_key!,
             shift_zone_label: getShiftZoneLabel(warehouse.shift_zone_key!),
-            product_id: Number(row.product_id),
+            product_id: pid,
             product_name: row.product_name,
             category_name: row.category_name,
             barcode: row.barcode,
@@ -233,6 +304,8 @@ export async function getShiftZoneSnapshotDraftTerminal(
                 : Number(row.saved_counted_quantity || 0),
             system_quantity: Number(row.system_quantity || 0),
             selling_price: Number(row.selling_price || 0),
+            sold_in_shift_qty: soldQty,
+            was_sold_in_shift: soldQty > 0,
           });
         }
       }

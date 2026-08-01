@@ -63,9 +63,6 @@ export function NewProcurementClient({ clubId, currentUserId }: NewProcurementCl
                         procurementMode === "optimized" ? "border-blue-500 bg-blue-50/50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50"
                     )}
                 >
-                    {procurementMode === "optimized" && (
-                        <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500" />
-                    )}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="pr-4">
                             <p className="font-bold text-slate-900 text-lg">Жёстко оптимизированная</p>
@@ -87,9 +84,6 @@ export function NewProcurementClient({ clubId, currentUserId }: NewProcurementCl
                         procurementMode === "full" ? "border-blue-500 bg-blue-50/50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50"
                     )}
                 >
-                    {procurementMode === "full" && (
-                        <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500" />
-                    )}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="pr-4">
                             <p className="font-bold text-slate-900 text-lg">Полное пополнение</p>

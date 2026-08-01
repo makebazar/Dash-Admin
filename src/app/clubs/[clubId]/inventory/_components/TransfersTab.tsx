@@ -31,9 +31,11 @@ interface TransfersTabProps {
     warehouses: Warehouse[]
     products: any[]
     currentUserId: string
+    isFullAccess?: boolean
+    inventorySettings?: any
 }
 
-export function TransfersTab({ warehouses, products, currentUserId }: TransfersTabProps) {
+export function TransfersTab({ warehouses, products, currentUserId, isFullAccess = true, inventorySettings }: TransfersTabProps) {
     const params = useParams()
     const clubId = params.clubId as string
     
@@ -191,34 +193,22 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
     return (
         <div className="space-y-6">
             {/* Actions Area */}
-            <div className="flex items-center justify-between bg-card p-4 sm:p-6 rounded-2xl border shadow-sm gap-4">
-                <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                    <div className="h-10 w-10 sm:h-12 sm:w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
-                        <ArrowRightLeft className="h-5 w-5 sm:h-6 sm:w-6" />
-                    </div>
-                    <div className="min-w-0">
-                        <h3 className="text-sm sm:text-lg font-bold truncate">Перемещения</h3>
-                        <p className="text-[10px] sm:text-sm text-muted-foreground text-muted-foreground truncate">Между складами клуба</p>
-                    </div>
-                </div>
+            <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4">
+                <h3 className="text-xl font-bold text-slate-900">Перемещения</h3>
                 <Button 
                     onClick={() => setIsDialogOpen(true)} 
-                    className="bg-blue-600 hover:bg-blue-700 h-10 sm:h-12 rounded-xl shrink-0 px-3 sm:px-6"
+                    className="bg-blue-600 hover:bg-blue-700 h-10 rounded-xl shrink-0 px-4"
                 >
-                    <Plus className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Новое перемещение</span>
-                    <span className="inline sm:hidden text-xs ml-1">Новое</span>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Новое перемещение
                 </Button>
             </div>
 
-            <div className="bg-card border rounded-2xl shadow-sm p-4 space-y-4">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                    <Filter className="h-4 w-4" />
-                    <span className="text-sm font-bold uppercase tracking-wider">Фильтры журнала</span>
+            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Фильтры</span>
                     {filteredMovements.length !== movements.length && (
-                        <Badge variant="secondary" className="ml-auto bg-accent text-foreground">
-                            Найдено: {filteredMovements.length}
-                        </Badge>
+                        <span className="ml-auto text-xs text-slate-400">Найдено: {filteredMovements.length}</span>
                     )}
                 </div>
 
@@ -460,10 +450,19 @@ export function TransfersTab({ warehouses, products, currentUserId }: TransfersT
                                         <SelectValue placeholder="Склад" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {warehouses.map(w => (
-                                            <SelectItem key={w.id} value={w.id.toString()}>{w.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
+                                        {warehouses.filter(w => {
+                                             if (formData.source_warehouse_id && w.id.toString() === formData.source_warehouse_id) return false
+                                             if (!isFullAccess && formData.source_warehouse_id) {
+                                                 const isBlocked = (inventorySettings?.transfer_blocked_routes || []).some(
+                                                     (r: any) => Number(r.from_id) === Number(formData.source_warehouse_id) && Number(r.to_id) === Number(w.id)
+                                                 )
+                                                 if (isBlocked) return false
+                                             }
+                                             return true
+                                         }).map(w => (
+                                             <SelectItem key={w.id} value={w.id.toString()}>{w.name}</SelectItem>
+                                         ))}
+                                     </SelectContent>
                                 </Select>
                             </div>
                         </div>

@@ -59,51 +59,57 @@ const pool =
   global.db_pool ||
   new Pool({
     ...buildPoolConfig(process.env.DATABASE_URL || ""),
-    max: 20,
+    max: 50,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 60000, // Увеличил до 60 секунд
+    connectionTimeoutMillis: 10000,
   });
 
 // Patch pool.query to automatically sanitize signed session cookies globally and retry on connection drops/timeouts
-const originalPoolQuery = pool.query;
-pool.query = function (this: any, text: any, params?: any[], callback?: any) {
-  let newParams = params;
-  if (Array.isArray(params)) {
-    newParams = sanitizeParams(params);
-  }
-  let newText = text;
-  if (typeof text === 'object' && text !== null && Array.isArray(text.values)) {
-    newText = { ...text, values: sanitizeParams(text.values) };
-  }
-  
-  if (typeof callback === 'function') {
-    return (originalPoolQuery as any).call(this, newText, newParams, callback);
-  }
-
-  const executeWithRetry = async (attempts = 3) => {
-    for (let i = 0; i < i + 1; i++) { // infinite loop with break, controlled by i
-      if (i >= attempts) break;
-      try {
-        return await (originalPoolQuery as any).call(this, newText, newParams);
-      } catch (err: any) {
-        const isConnectionError = 
-          err.message.includes('terminated') || 
-          err.message.includes('timeout') || 
-          err.message.includes('Connection') ||
-          err.message.includes('idleTimeoutMillis');
-          
-        if (isConnectionError && i < attempts - 1) {
-          console.warn(`[DB Pool Query] Attempt ${i + 1}/${attempts} failed: ${err.message}. Retrying in 1s...`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          continue;
-        }
-        throw err;
-      }
+if (!(pool as any).__isPatched) {
+  (pool as any).__isPatched = true;
+  const originalPoolQuery = pool.query.bind(pool);
+  pool.query = function (this: any, text: any, params?: any[], callback?: any) {
+    let newParams = params;
+    if (Array.isArray(params)) {
+      newParams = sanitizeParams(params);
     }
-  };
-  
-  return executeWithRetry();
-} as any;
+    let newText = text;
+    if (typeof text === 'object' && text !== null && Array.isArray(text.values)) {
+      newText = { ...text, values: sanitizeParams(text.values) };
+    }
+    
+    if (typeof callback === 'function') {
+      return newParams !== undefined
+        ? originalPoolQuery(newText, newParams, callback)
+        : originalPoolQuery(newText, callback);
+    }
+
+    const executeWithRetry = async (attempts = 3) => {
+      for (let i = 0; i < attempts; i++) {
+        try {
+          return newParams !== undefined
+            ? await originalPoolQuery(newText, newParams)
+            : await originalPoolQuery(newText);
+        } catch (err: any) {
+          const isConnectionError = 
+            err.message?.includes('terminated') || 
+            err.message?.includes('timeout') || 
+            err.message?.includes('Connection') ||
+            err.message?.includes('idleTimeoutMillis');
+            
+          if (isConnectionError && i < attempts - 1) {
+            console.warn(`[DB Pool Query] Attempt ${i + 1}/${attempts} failed: ${err.message}. Retrying in 1s...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+          throw err;
+        }
+      }
+    };
+    
+    return executeWithRetry();
+  } as any;
+}
 
 if (process.env.NODE_ENV !== "production") {
   global.db_pool = pool;
@@ -120,9 +126,9 @@ export const getClient = async () => {
       break;
     } catch (err: any) {
       const isConnectionError = 
-        err.message.includes('timeout') || 
-        err.message.includes('Connection') || 
-        err.message.includes('terminated');
+        err.message?.includes('timeout') || 
+        err.message?.includes('Connection') || 
+        err.message?.includes('terminated');
       if (isConnectionError && i < 2) {
         console.warn(`[DB Pool Connect] Attempt ${i + 1}/3 failed: ${err.message}. Retrying in 1s...`);
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -132,43 +138,49 @@ export const getClient = async () => {
     }
   }
 
-  const originalQuery = client.query;
-  client.query = function (this: any, text: any, params?: any[], callback?: any) {
-    let newParams = params;
-    if (Array.isArray(params)) {
-      newParams = sanitizeParams(params);
-    }
-    let newText = text;
-    if (typeof text === 'object' && text !== null && Array.isArray(text.values)) {
-      newText = { ...text, values: sanitizeParams(text.values) };
-    }
-
-    if (typeof callback === 'function') {
-      return (originalQuery as any).call(this, newText, newParams, callback);
-    }
-
-    const executeWithRetry = async (attempts = 3) => {
-      for (let j = 0; j < j + 1; j++) { // infinite loop with break, controlled by j
-        if (j >= attempts) break;
-        try {
-          return await (originalQuery as any).call(this, newText, newParams);
-        } catch (err: any) {
-          const isConnectionError = 
-            err.message.includes('terminated') || 
-            err.message.includes('timeout') || 
-            err.message.includes('Connection');
-          if (isConnectionError && j < attempts - 1) {
-            console.warn(`[DB Client Query] Attempt ${j + 1}/${attempts} failed: ${err.message}. Retrying in 1s...`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            continue;
-          }
-          throw err;
-        }
+  if (!client.__isPatched) {
+    client.__isPatched = true;
+    const originalQuery = client.query.bind(client);
+    client.query = function (this: any, text: any, params?: any[], callback?: any) {
+      let newParams = params;
+      if (Array.isArray(params)) {
+        newParams = sanitizeParams(params);
       }
-    };
+      let newText = text;
+      if (typeof text === 'object' && text !== null && Array.isArray(text.values)) {
+        newText = { ...text, values: sanitizeParams(text.values) };
+      }
 
-    return executeWithRetry();
-  } as any;
+      if (typeof callback === 'function') {
+        return newParams !== undefined
+          ? originalQuery(newText, newParams, callback)
+          : originalQuery(newText, callback);
+      }
+
+      const executeWithRetry = async (attempts = 3) => {
+        for (let j = 0; j < attempts; j++) {
+          try {
+            return newParams !== undefined
+              ? await originalQuery(newText, newParams)
+              : await originalQuery(newText);
+          } catch (err: any) {
+            const isConnectionError = 
+              err.message?.includes('terminated') || 
+              err.message?.includes('timeout') || 
+              err.message?.includes('Connection');
+            if (isConnectionError && j < attempts - 1) {
+              console.warn(`[DB Client Query] Attempt ${j + 1}/${attempts} failed: ${err.message}. Retrying in 1s...`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              continue;
+            }
+            throw err;
+          }
+        }
+      };
+
+      return executeWithRetry();
+    } as any;
+  }
 
   return client;
 };

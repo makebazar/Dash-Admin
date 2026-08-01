@@ -109,8 +109,40 @@ export function ShiftsList({
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [availableMonthOffsets, setAvailableMonthOffsets] = useState<{ offset: number; label: string }[]>([]);
 
   useEffect(() => {
+    if (!clubId) return;
+
+    fetch(`/api/clubs/${clubId}/shifts/months`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.months) && data.months.length > 0) {
+          const now = new Date();
+          const currentYear = now.getFullYear();
+          const currentMonth0 = now.getMonth();
+
+          const offsets = data.months.map((mStr: string) => {
+            const [yStr, mStrNum] = mStr.split("-");
+            const y = parseInt(yStr);
+            const m = parseInt(mStrNum);
+            const offset = (y - currentYear) * 12 + (m - 1 - currentMonth0);
+
+            const target = new Date(y, m - 1, 1);
+            const label = target.toLocaleString("ru-RU", {
+              month: "long",
+              year: "numeric",
+            });
+            return { offset, label };
+          });
+
+          setAvailableMonthOffsets(offsets);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch available shift months:", err);
+      });
+
     fetch(`/api/clubs/${clubId}/shifts/column-settings`)
       .then((res) => res.json())
       .then((data) => {
@@ -383,21 +415,28 @@ export function ShiftsList({
               </Button>
             </PopoverTrigger>
             <PopoverContent
-              className="w-50 p-2 rounded-xl border-slate-200 shadow-lg"
+              className="w-50 p-2 rounded-xl border-slate-200 shadow-lg max-h-80 overflow-y-auto"
               align="start"
             >
               <div className="grid gap-1">
-                {[0, -1, -2, -3].map((offset) => {
-                  const now = new Date();
-                  const target = new Date(
-                    now.getFullYear(),
-                    now.getMonth() + offset,
-                    1,
-                  );
-                  const label = target.toLocaleString("ru-RU", {
-                    month: "long",
-                    year: "numeric",
-                  });
+                {(availableMonthOffsets.length > 0
+                  ? availableMonthOffsets
+                  : Array.from({ length: 4 }, (_, i) => -i).map((offset) => {
+                      const now = new Date();
+                      const target = new Date(
+                        now.getFullYear(),
+                        now.getMonth() + offset,
+                        1,
+                      );
+                      return {
+                        offset,
+                        label: target.toLocaleString("ru-RU", {
+                          month: "long",
+                          year: "numeric",
+                        }),
+                      };
+                    })
+                ).map(({ offset, label }) => {
                   return (
                     <Button
                       key={offset}

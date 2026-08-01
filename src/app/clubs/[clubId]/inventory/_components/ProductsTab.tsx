@@ -497,6 +497,9 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                     onChange={toggleSelectAll}
                                 />
                             </TableHead>
+                            <TableHead className="w-10 text-center">
+                                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">ABC</span>
+                            </TableHead>
                             <TableHead className="cursor-pointer hover:bg-slate-100 select-none transition-colors" onClick={() => toggleSort("name")}>
                                 <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
                                     Название
@@ -554,23 +557,22 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                             onChange={() => toggleSelection(product.id)}
                                         />
                                     </TableCell>
+                                    {/* ABC column */}
+                                    <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                                        {product.abc_category ? (
+                                            <span className={cn(
+                                                "text-[10px] font-bold",
+                                                product.abc_category === 'A' ? "text-green-600" :
+                                                product.abc_category === 'B' ? "text-amber-500" :
+                                                "text-slate-400"
+                                            )}>
+                                                {product.abc_category}
+                                            </span>
+                                        ) : <span className="text-slate-300">—</span>}
+                                    </TableCell>
                                     <TableCell className="font-medium">
                                         <div className="flex flex-col">
-                                            <div className="flex items-center gap-2">
-                                                <span>{product.name}</span>
-                                                {product.abc_category && (
-                                                    <Badge 
-                                                        className={cn(
-                                                            "h-4 px-1 text-[9px] font-black uppercase",
-                                                            product.abc_category === 'A' ? "bg-green-500 hover:bg-green-600" :
-                                                            product.abc_category === 'B' ? "bg-amber-500 hover:bg-amber-600" :
-                                                            "bg-slate-400 hover:bg-slate-500"
-                                                        )}
-                                                    >
-                                                        {product.abc_category}
-                                                    </Badge>
-                                                )}
-                                            </div>
+                                            <span>{product.name}</span>
                                             {(product.barcode || (product.barcodes && product.barcodes.length > 0)) && (
                                                 <div className="flex flex-wrap gap-1 mt-1">
                                                     {product.barcode && (
@@ -590,9 +592,7 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        {product.category_name ? (
-                                            <Badge variant="secondary" className="bg-slate-100 text-slate-700 hover:bg-slate-200 border-none font-normal">{product.category_name}</Badge>
-                                        ) : <span className="text-slate-400 text-sm">—</span>}
+                                        <span className="text-sm text-slate-600">{product.category_name || <span className="text-slate-300">—</span>}</span>
                                     </TableCell>
                                     <TableCell className="text-right whitespace-nowrap text-slate-600">{product.cost_price} ₽</TableCell>
                                     <TableCell className="text-right font-bold whitespace-nowrap text-slate-900">{product.selling_price} ₽</TableCell>

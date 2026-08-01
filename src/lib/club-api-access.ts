@@ -1,6 +1,7 @@
 import { query } from "@/db";
 import { cookies } from "next/headers";
 import { verifySessionValue } from "@/lib/session";
+import { cache } from "react";
 
 type AccessError = Error & { status?: number };
 
@@ -106,7 +107,8 @@ export async function getApiAccess(): Promise<{ userId: string }> {
   return { userId };
 }
 
-export async function getClubApiAccess(clubId: string): Promise<ClubApiAccess> {
+export const getClubApiAccess = cache(
+  async (clubId: string): Promise<ClubApiAccess> => {
   const { userId } = await getApiAccess();
 
   console.log(
@@ -266,7 +268,7 @@ export async function getClubApiAccess(clubId: string): Promise<ClubApiAccess> {
     ...accessData,
     canAccessManagement: canAccessManagement(accessData, clubId),
   };
-}
+});
 
 /**
  * Checks if the user has a specific access level for a module.

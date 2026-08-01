@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query, getClient } from '@/db';
 import { notifyDashLockProductsUpdated } from '@/lib/notify-dashlock';
+import { normalizeInventorySettings } from '@/lib/inventory-settings';
 
 export async function POST(request: Request) {
     try {
