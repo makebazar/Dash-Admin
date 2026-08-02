@@ -31,7 +31,9 @@ export function TasksTab({ tasks, currentUserId }: TasksTabProps) {
         })
     }
 
-    if (tasks.length === 0) {
+    const safeTasks = Array.isArray(tasks) ? tasks : []
+
+    if (safeTasks.length === 0) {
         return (
             <div className="py-14 text-center text-sm text-slate-400 italic">
                 Активных задач нет.
@@ -42,7 +44,7 @@ export function TasksTab({ tasks, currentUserId }: TasksTabProps) {
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {tasks.map(task => (
+                {safeTasks.map(task => (
                     <div key={task.id} className="bg-card border rounded-lg p-4 shadow-sm flex flex-col justify-between">
                         <div>
                             <div className="flex justify-between items-start mb-2">

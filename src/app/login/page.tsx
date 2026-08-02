@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Zap, Loader2, ArrowRight } from "lucide-react"
+import { Zap, Loader2, ArrowRight, Eye, EyeOff } from "lucide-react"
 import { PhoneInput } from "@/components/ui/phone-input"
 import { validatePhone } from "@/lib/phone-utils"
 
@@ -17,6 +15,8 @@ type MeResponse = {
     user?: {
         is_super_admin?: boolean
         legal_acceptance_required?: boolean
+        requires_email_setup?: boolean
+        email?: string
     }
     ownedClubs?: Array<any>
     employeeClubs?: Array<any>
@@ -24,29 +24,27 @@ type MeResponse = {
 
 export default function LoginPage() {
     const router = useRouter()
-    const [step, setStep] = useState<'phone' | 'otp' | 'password-setup' | 'password' | 'name' | 'reset-otp' | 'reset-password'>('phone')
+    const [step, setStep] = useState<'login' | 'reset-phone' | 'reset-confirm' | 'email-bind' | 'email-bind-otp'>('login')
     const [phone, setPhone] = useState('')
-    const [code, setCode] = useState('')
     const [password, setPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
-    const [confirmPassword, setConfirmPassword] = useState('')
-    const [fullName, setFullName] = useState('')
+    const [email, setEmail] = useState('')
+    const [maskedEmail, setMaskedEmail] = useState('')
+    const [code, setCode] = useState('')
+
+    const [showPassword, setShowPassword] = useState(false)
+    const [showNewPassword, setShowNewPassword] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [debugCode, setDebugCode] = useState<string | null>(null)
-    const [requiresPassword, setRequiresPassword] = useState(false)
-    const [isNewUser, setIsNewUser] = useState(false)
     const [isCheckingSession, setIsCheckingSession] = useState(true)
-    const [hasAcceptedLegal, setHasAcceptedLegal] = useState(false)
-
-    const resetTransientFields = useCallback(() => {
-        setCode('')
-        setPassword('')
-        setNewPassword('')
-        setConfirmPassword('')
-        setDebugCode(null)
-    }, [])
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
     const routeFromMe = useCallback((data: MeResponse) => {
+        if (data.user && data.user.requires_email_setup) {
+            setStep('email-bind')
+            return
+        }
+
         const ownedClubs = Array.isArray(data.ownedClubs) ? data.ownedClubs : []
         const employeeClubs = Array.isArray(data.employeeClubs) ? data.employeeClubs : []
 
@@ -76,6 +74,13 @@ export default function LoginPage() {
                 if (!res.ok) return
                 const data = (await res.json()) as MeResponse
                 if (cancelled) return
+
+                if (data.user && data.user.requires_email_setup) {
+                    setStep('email-bind')
+                    setIsCheckingSession(false)
+                    return
+                }
+
                 routeFromMe(data)
             } catch {
                 // ignore
@@ -91,77 +96,21 @@ export default function LoginPage() {
         }
     }, [routeFromMe])
 
-    const handleSendOtp = async (e: React.FormEvent) => {
+    // Main Login via Phone + Password
+    const handlePhonePasswordLogin = async (e: React.FormEvent) => {
         e.preventDefault()
+        setErrorMessage(null)
 
         if (!validatePhone(phone)) {
-            alert('Введите номер телефона в формате +7 и 10 цифр номера')
+            setErrorMessage('Введите номер телефона полностью')
             return
         }
 
-        setIsLoading(true)
-        try {
-            const res = await fetch('/api/auth/otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber: phone }),
-            })
-            const data = await res.json()
-
-            if (data.success) {
-                setRequiresPassword(data.requiresPassword || false)
-                setIsNewUser(!data.userExists)
-                const hasPassword = data.userExists && !data.requiresPassword
-
-                if (hasPassword) {
-                    setStep('password')
-                } else {
-                    setStep('otp')
-                }
-                setDebugCode(data.debugCode)
-            } else {
-                alert(data.error || 'Не удалось отправить код')
-            }
-        } catch (err) {
-            console.error(err)
-            alert('Ошибка отправки кода')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const handleStartPasswordReset = async () => {
-        if (!validatePhone(phone)) {
-            alert('Введите номер телефона в формате +7 и 10 цифр номера')
+        if (!password) {
+            setErrorMessage('Введите ваш пароль')
             return
         }
 
-        setIsLoading(true)
-        try {
-            const res = await fetch('/api/auth/password-reset/request', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber: phone }),
-            })
-            const data = await res.json()
-
-            if (data.success) {
-                resetTransientFields()
-                setStep('reset-otp')
-                setDebugCode(data.debugCode || null)
-            } else {
-                alert(data.error || 'Не удалось отправить код для сброса')
-            }
-        } catch (err) {
-            console.error(err)
-            alert('Ошибка отправки кода для сброса')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const handlePasswordLogin = async (e: React.FormEvent) => {
-        e.preventDefault()
         setIsLoading(true)
         try {
             const res = await fetch('/api/auth/verify', {
@@ -174,11 +123,159 @@ export default function LoginPage() {
             if (data.success) {
                 await redirectBasedOnRole()
             } else {
-                alert(data.error || 'Ошибка входа')
+                setErrorMessage(data.error || 'Неверный номер телефона или пароль')
             }
         } catch (err) {
             console.error(err)
-            alert('Ошибка входа')
+            setErrorMessage('Ошибка входа')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    // Step 1 of Password Reset: Find Email by Phone & Request OTP Code
+    const handleRequestResetByPhone = async (e?: React.FormEvent, customPhone?: string) => {
+        if (e) e.preventDefault()
+        setErrorMessage(null)
+
+        const targetPhone = customPhone || phone
+        if (!validatePhone(targetPhone)) {
+            setErrorMessage('Введите ваш номер телефона полностью')
+            setStep('reset-phone')
+            return
+        }
+
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/auth/request-password-reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber: targetPhone }),
+            })
+            const data = await res.json()
+
+            if (res.ok && data.success) {
+                setEmail(data.email)
+                setMaskedEmail(data.maskedEmail)
+                setStep('reset-confirm')
+                setDebugCode(data.debugCode || null)
+            } else {
+                setErrorMessage(data.error || 'Не удалось запросить сброс пароля')
+                setStep('reset-phone')
+            }
+        } catch (err) {
+            console.error(err)
+            setErrorMessage('Ошибка подключения к серверу')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    // Step 2 of Password Reset: Submit OTP Code & New Password
+    const handleConfirmPasswordReset = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setErrorMessage(null)
+
+        if (code.length < 6) {
+            setErrorMessage('Введите 6-значный код полностью')
+            return
+        }
+
+        if (!newPassword || newPassword.length < 4) {
+            setErrorMessage('Новый пароль должен содержать не менее 4 символов')
+            return
+        }
+
+        if (/[а-яА-ЯёЁ]/.test(newPassword)) {
+            setErrorMessage('Пароль не должен содержать русские буквы (кириллицу). Используйте только латиницу.')
+            return
+        }
+
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email,
+                    code,
+                    newPassword
+                }),
+            })
+            const data = await res.json()
+
+            if (res.ok && data.success) {
+                await redirectBasedOnRole()
+            } else {
+                setErrorMessage(data.error || 'Ошибка сброса пароля')
+            }
+        } catch (err) {
+            console.error(err)
+            setErrorMessage('Ошибка сервера')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    // Email Bind process for existing accounts
+    const handleSendBindOtp = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setErrorMessage(null)
+
+        const trimmed = email.trim().toLowerCase()
+        if (!trimmed || !trimmed.includes('@')) {
+            setErrorMessage('Введите ваш рабочий Email')
+            return
+        }
+
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/auth/otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: trimmed, bindOnly: true }),
+            })
+            const data = await res.json()
+
+            if (data.success) {
+                setStep('email-bind-otp')
+                setDebugCode(data.debugCode || null)
+            } else {
+                setErrorMessage(data.error || 'Не удалось отправить код')
+            }
+        } catch (err) {
+            console.error(err)
+            setErrorMessage('Ошибка сервера')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleConfirmEmailBind = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setErrorMessage(null)
+
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/auth/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: email.trim().toLowerCase(),
+                    code,
+                    bindToCurrentSession: true
+                }),
+            })
+            const data = await res.json()
+
+            if (data.success) {
+                await redirectBasedOnRole()
+            } else {
+                setErrorMessage(data.error || 'Ошибка подтверждения Email')
+            }
+        } catch (err) {
+            console.error(err)
+            setErrorMessage('Ошибка сервера')
         } finally {
             setIsLoading(false)
         }
@@ -189,6 +286,11 @@ export default function LoginPage() {
             const res = await fetch('/api/auth/me')
             const data = (await res.json()) as MeResponse
 
+            if (data.user && data.user.requires_email_setup) {
+                setStep('email-bind')
+                return
+            }
+
             if (res.ok) routeFromMe(data)
             else router.push('/dashboard')
         } catch (error) {
@@ -197,212 +299,8 @@ export default function LoginPage() {
         }
     }
 
-    const handleVerifyOtp = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setIsLoading(true)
-        try {
-            const res = await fetch('/api/auth/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber: phone, code }),
-            })
-            const data = await res.json()
-
-            if (data.success) {
-                if (data.requiresPasswordSetup) {
-                    setIsNewUser(false)
-                    setStep('password-setup')
-                } else if (data.isNewUser) {
-                    setIsNewUser(true)
-                    setStep('name')
-                } else {
-                    await redirectBasedOnRole()
-                }
-            } else {
-                alert(data.error || 'Неверный код')
-            }
-        } catch (err) {
-            console.error(err)
-            alert('Ошибка проверки кода')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const handleVerifyResetOtp = async (e: React.FormEvent) => {
-        e.preventDefault()
-
-        if (code.length < 4) {
-            alert('Введите код полностью')
-            return
-        }
-
-        setStep('reset-password')
-    }
-
-    const handleSaveName = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setIsLoading(true)
-        try {
-            const res = await fetch('/api/profile', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ full_name: fullName }),
-            })
-
-            if (res.ok) {
-                setStep('password-setup')
-            } else {
-                alert('Ошибка сохранения имени')
-            }
-        } catch (err) {
-            console.error(err)
-            alert('Ошибка сохранения')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const handleSetPassword = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setIsLoading(true)
-        try {
-            if (isNewUser && !hasAcceptedLegal) {
-                alert('Нужно принять пользовательское соглашение и политику конфиденциальности')
-                setIsLoading(false)
-                return
-            }
-
-            if (newPassword !== confirmPassword) {
-                alert('Пароли не совпадают')
-                setIsLoading(false)
-                return
-            }
-
-            if (newPassword.length < 6) {
-                alert('Пароль должен быть не менее 6 символов')
-                setIsLoading(false)
-                return
-            }
-
-            const res = await fetch('/api/auth/set-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    password: newPassword, 
-                    confirm_password: confirmPassword 
-                }),
-            })
-
-            const data = await res.json()
-
-            if (data.success) {
-                if (isNewUser) {
-                    const legalRes = await fetch('/api/legal-consent', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ accepted: true, source: 'registration' }),
-                    })
-
-                    const legalData = await legalRes.json()
-                    if (!legalRes.ok) {
-                        alert(legalData.error || 'Не удалось сохранить согласие')
-                        setIsLoading(false)
-                        return
-                    }
-                }
-                await redirectBasedOnRole()
-            } else {
-                alert(data.error || 'Ошибка установки пароля')
-            }
-        } catch (err) {
-            console.error(err)
-            alert('Ошибка установки пароля')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const handleResetPassword = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setIsLoading(true)
-        try {
-            if (newPassword !== confirmPassword) {
-                alert('Пароли не совпадают')
-                setIsLoading(false)
-                return
-            }
-
-            if (newPassword.length < 6) {
-                alert('Пароль должен быть не менее 6 символов')
-                setIsLoading(false)
-                return
-            }
-
-            const res = await fetch('/api/auth/password-reset/confirm', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    phoneNumber: phone,
-                    code,
-                    password: newPassword,
-                    confirm_password: confirmPassword,
-                }),
-            })
-
-            const data = await res.json()
-
-            if (data.success) {
-                alert('Пароль успешно изменён. Теперь войдите с новым паролем.')
-                resetTransientFields()
-                setStep('password')
-            } else {
-                alert(data.error || 'Ошибка сброса пароля')
-            }
-        } catch (err) {
-            console.error(err)
-            alert('Ошибка сброса пароля')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    // Map steps to clear headings and descriptions
-    const stepContent = {
-        'phone': {
-            title: 'Вход в систему',
-            description: 'Введите номер телефона для авторизации'
-        },
-        'otp': {
-            title: 'Код подтверждения',
-            description: `Отправили код на номер ${phone}`
-        },
-        'reset-otp': {
-            title: 'Сброс пароля',
-            description: `Отправили код для сброса на ${phone}`
-        },
-        'reset-password': {
-            title: 'Новый пароль',
-            description: 'Введите новый пароль и подтвердите его'
-        },
-        'password-setup': {
-            title: isNewUser ? 'Придумайте пароль' : 'Установите пароль',
-            description: 'Пароль нужен для быстрого входа в будущем'
-        },
-        'password': {
-            title: 'Вход по паролю',
-            description: `Введите пароль для ${phone}`
-        },
-        'name': {
-            title: 'Как к вам обращаться?',
-            description: 'Введите ваше имя и фамилию'
-        }
-    }
-
-    const currentContent = stepContent[step]
-
     return (
-        <div className="min-h-screen bg-black text-white flex flex-col md:flex-row font-sans selection:bg-purple-500/30">
+        <div className="min-h-screen bg-black text-white flex flex-col md:flex-row font-sans selection:bg-blue-500/30">
             {/* Visual Anchor (Left Side) */}
             <div className="hidden md:flex md:w-1/2 relative flex-col justify-between p-12 overflow-hidden border-r border-white/10">
                 <div className="absolute inset-0 z-0">
@@ -446,11 +344,6 @@ export default function LoginPage() {
                             exit={{ opacity: 0, y: -10 }}
                             transition={{ duration: 0.3 }}
                         >
-                            <div className="mb-10">
-                                <h1 className="text-3xl font-bold tracking-tight mb-3">{currentContent.title}</h1>
-                                <p className="text-gray-400 text-lg leading-snug">{currentContent.description}</p>
-                            </div>
-
                             {isCheckingSession ? (
                                 <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-4">
                                     <Loader2 className="h-6 w-6 animate-spin text-white" />
@@ -458,64 +351,205 @@ export default function LoginPage() {
                                 </div>
                             ) : (
                                 <div className="space-y-6">
-                                    {step === 'phone' && (
-                                        <form onSubmit={handleSendOtp} className="space-y-6" noValidate>
-                                            <div className="space-y-3">
-                                                <Label htmlFor="phone" className="text-sm font-medium text-gray-300">Номер телефона</Label>
-                                                <PhoneInput
-                                                    id="phone"
-                                                    placeholder="Введите номер"
-                                                    value={phone}
-                                                    onChange={setPhone}
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
-                                                    aria-label="Номер телефона"
+                                    {/* MAIN LOGIN FORM (PHONE + PASSWORD) */}
+                                    {step === 'login' && (
+                                        <>
+                                            <div className="mb-6">
+                                                <h1 className="text-3xl font-bold tracking-tight mb-3">Вход в систему</h1>
+                                                <p className="text-gray-400 text-sm leading-snug">
+                                                    Введите номер телефона и пароль для входа в ваш аккаунт
+                                                </p>
+                                            </div>
+
+                                            <form onSubmit={handlePhonePasswordLogin} className="space-y-4" noValidate>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="phone" className="text-sm font-medium text-gray-200">
+                                                        Номер телефона
+                                                    </Label>
+                                                    <PhoneInput
+                                                        id="phone"
+                                                        placeholder="Введите номер"
+                                                        value={phone}
+                                                        onChange={setPhone}
+                                                        className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-blue-500/50 h-12 text-base rounded-xl transition-all"
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <Label htmlFor="password" className="text-sm font-medium text-gray-200">
+                                                            Пароль
+                                                        </Label>
+                                                        <button
+                                                            type="button"
+                                                            className="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-4"
+                                                            onClick={() => handleRequestResetByPhone()}
+                                                        >
+                                                            Забыли пароль?
+                                                        </button>
+                                                    </div>
+                                                    <div className="relative">
+                                                        <Input
+                                                            id="password"
+                                                            type={showPassword ? "text" : "password"}
+                                                            placeholder="••••••••"
+                                                            value={password}
+                                                            onChange={(e) => setPassword(e.target.value)}
+                                                            className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-blue-500/50 h-12 text-base rounded-xl pr-10 transition-all"
+                                                            required
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowPassword(!showPassword)}
+                                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                                                        >
+                                                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {errorMessage && (
+                                                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                                                        {errorMessage}
+                                                    </div>
+                                                )}
+
+                                                <Button
+                                                    type="submit"
+                                                    className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all flex items-center justify-center gap-2 mt-4"
+                                                    disabled={isLoading}
+                                                >
+                                                    {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+                                                    <span>Войти в систему</span>
+                                                    <ArrowRight className="w-5 h-5" />
+                                                </Button>
+                                            </form>
+                                        </>
+                                    )}
+
+                                    {/* RESET STEP 1: ENTER PHONE NUMBER */}
+                                    {step === 'reset-phone' && (
+                                        <>
+                                            <div className="mb-6">
+                                                <h1 className="text-3xl font-bold tracking-tight mb-3">Сброс пароля</h1>
+                                                <p className="text-gray-400 text-sm leading-snug">
+                                                    Введите ваш номер телефона для отправки кода сброса на ваш Email
+                                                </p>
+                                            </div>
+
+                                            <form onSubmit={(e) => handleRequestResetByPhone(e)} className="space-y-4" noValidate>
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="reset-phone-input" className="text-sm font-medium text-gray-200">
+                                                        Номер телефона
+                                                    </Label>
+                                                    <PhoneInput
+                                                        id="reset-phone-input"
+                                                        placeholder="Введите номер"
+                                                        value={phone}
+                                                        onChange={setPhone}
+                                                        className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-blue-500/50 h-12 text-base rounded-xl transition-all"
+                                                    />
+                                                </div>
+
+                                                {errorMessage && (
+                                                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                                                        {errorMessage}
+                                                    </div>
+                                                )}
+
+                                                <Button
+                                                    type="submit"
+                                                    className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all flex items-center justify-center gap-2 mt-2"
+                                                    disabled={isLoading}
+                                                >
+                                                    {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+                                                    <span>Отправить код на Email</span>
+                                                    <ArrowRight className="w-5 h-5" />
+                                                </Button>
+
+                                                <div className="pt-2 text-center">
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs text-gray-400 hover:text-white transition-colors"
+                                                        onClick={() => {
+                                                            setErrorMessage(null)
+                                                            setStep('login')
+                                                        }}
+                                                    >
+                                                        Вернуться ко входу
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </>
+                                    )}
+
+                                    {/* RESET STEP 2: ENTER OTP CODE & NEW PASSWORD */}
+                                    {step === 'reset-confirm' && (
+                                        <form onSubmit={handleConfirmPasswordReset} className="space-y-4">
+                                            <div className="mb-4">
+                                                <h1 className="text-3xl font-bold tracking-tight mb-2">Новый пароль</h1>
+                                                <p className="text-gray-400 text-sm leading-relaxed">
+                                                    Код восстановления отправлен на почту <span className="text-white font-semibold font-mono">{maskedEmail}</span>. Введите код и задайте новый пароль.
+                                                </p>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="reset-code" className="text-sm font-medium text-gray-200">Код из письма</Label>
+                                                <Input
+                                                    id="reset-code"
+                                                    placeholder="000000"
+                                                    value={code}
+                                                    onChange={(e) => setCode(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-blue-500/50 h-14 text-2xl tracking-[0.4em] text-center rounded-xl font-mono transition-all"
+                                                    maxLength={6}
+                                                    required
+                                                    autoFocus
                                                 />
                                             </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="new-password" className="text-sm font-medium text-gray-200">Придумайте новый пароль</Label>
+                                                <div className="relative">
+                                                    <Input
+                                                        id="new-password"
+                                                        type={showNewPassword ? "text" : "password"}
+                                                        placeholder="••••••••"
+                                                        value={newPassword}
+                                                        onChange={(e) => setNewPassword(e.target.value)}
+                                                        className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-blue-500/50 h-12 text-base rounded-xl pr-10 transition-all"
+                                                        required
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowNewPassword(!showNewPassword)}
+                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                                                    >
+                                                        {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {errorMessage && (
+                                                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                                                    {errorMessage}
+                                                </div>
+                                            )}
 
                                             <Button
                                                 type="submit"
-                                                className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all"
+                                                className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all flex items-center justify-center gap-2 mt-2"
                                                 disabled={isLoading}
                                             >
-                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-                                                Продолжить <ArrowRight className="ml-2 w-5 h-5" />
-                                            </Button>
-                                        </form>
-                                    )}
-
-                                    {step === 'password' && (
-                                        <form onSubmit={handlePasswordLogin} className="space-y-6">
-                                            <div className="space-y-3">
-                                                <Label htmlFor="password" className="text-sm font-medium text-gray-300">Пароль</Label>
-                                                <Input
-                                                    id="password"
-                                                    type="password"
-                                                    placeholder="Введите пароль"
-                                                    value={password}
-                                                    onChange={(e) => setPassword(e.target.value)}
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
-                                                    required
-                                                />
-                                            </div>
-                                            
-                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
-                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-                                                Войти
+                                                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+                                                <span>Сохранить новый пароль и войти</span>
+                                                <ArrowRight className="w-5 h-5" />
                                             </Button>
 
-                                            <div className="flex flex-col gap-2 pt-2">
+                                            <div className="pt-2 text-center">
                                                 <button
                                                     type="button"
-                                                    className="text-sm text-gray-500 hover:text-white transition-colors text-left"
-                                                    onClick={handleStartPasswordReset}
-                                                    disabled={isLoading}
-                                                >
-                                                    Забыли пароль?
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="text-sm text-gray-500 hover:text-white transition-colors text-left"
-                                                    onClick={() => setStep('phone')}
+                                                    className="text-xs text-gray-400 hover:text-white transition-colors"
+                                                    onClick={() => setStep('reset-phone')}
                                                 >
                                                     Изменить номер телефона
                                                 </button>
@@ -523,224 +557,113 @@ export default function LoginPage() {
                                         </form>
                                     )}
 
-                                    {step === 'otp' && (
-                                        <form onSubmit={handleVerifyOtp} className="space-y-6">
-                                            {debugCode && (
-                                                <div className="p-4 bg-white/5 border border-white/10 rounded-xl text-gray-300 text-sm font-mono">
-                                                    Код для теста: <span className="text-white font-bold tracking-widest ml-2">{debugCode}</span>
-                                                </div>
-                                            )}
-                                            {requiresPassword && (
-                                                <div className="p-4 bg-white/5 border border-white/10 rounded-xl text-gray-400 text-sm">
-                                                    Далее потребуется установить пароль
-                                                </div>
-                                            )}
-                                            
-                                            <div className="space-y-3">
-                                                <Label htmlFor="code" className="text-sm font-medium text-gray-300">Код из СМС</Label>
+                                    {/* STEP: EMAIL BINDING FOR OLD PHONE-ONLY ACCOUNTS */}
+                                    {step === 'email-bind' && (
+                                        <form onSubmit={handleSendBindOtp} className="space-y-4">
+                                            <div className="mb-4">
+                                                <h1 className="text-3xl font-bold tracking-tight mb-2">Привязка Email</h1>
+                                                <p className="text-gray-400 text-sm leading-snug">
+                                                    Для безопасности вашего аккаунта укажите и подтвердите ваш рабочий Email адрес.
+                                                </p>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="bind-email" className="text-sm font-medium text-gray-200">
+                                                    Ваш Email адрес
+                                                </Label>
                                                 <Input
-                                                    id="code"
-                                                    placeholder="0000"
+                                                    id="bind-email"
+                                                    type="email"
+                                                    placeholder="name@company.com"
+                                                    value={email}
+                                                    onChange={(e) => setEmail(e.target.value)}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-blue-500/50 h-12 text-base rounded-xl transition-all"
+                                                    required
+                                                    autoFocus
+                                                />
+                                            </div>
+
+                                            {errorMessage && (
+                                                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                                                    {errorMessage}
+                                                </div>
+                                            )}
+
+                                            <Button
+                                                type="submit"
+                                                className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all flex items-center justify-center gap-2"
+                                                disabled={isLoading}
+                                            >
+                                                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+                                                <span>Получить код на Email</span>
+                                                <ArrowRight className="w-5 h-5" />
+                                            </Button>
+                                        </form>
+                                    )}
+
+                                    {/* STEP: EMAIL BIND OTP VERIFICATION */}
+                                    {step === 'email-bind-otp' && (
+                                        <form onSubmit={handleConfirmEmailBind} className="space-y-4">
+                                            <div className="mb-4">
+                                                <h1 className="text-3xl font-bold tracking-tight mb-2">Подтверждение Email</h1>
+                                                <p className="text-gray-400 text-sm">
+                                                    Мы отправили код на <span className="text-white font-medium">{email}</span>
+                                                </p>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Input
+                                                    id="bind-code"
+                                                    placeholder="000000"
                                                     value={code}
                                                     onChange={(e) => setCode(e.target.value)}
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-14 text-2xl tracking-[0.5em] text-center rounded-xl font-mono transition-all"
-                                                    maxLength={4}
+                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-blue-500/50 h-14 text-2xl tracking-[0.4em] text-center rounded-xl font-mono transition-all"
+                                                    maxLength={6}
                                                     required
+                                                    autoFocus
                                                 />
                                             </div>
 
-                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
-                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-                                                Подтвердить <ArrowRight className="ml-2 w-5 h-5" />
-                                            </Button>
-
-                                            <div className="pt-2">
-                                                <button
-                                                    type="button"
-                                                    className="text-sm text-gray-500 hover:text-white transition-colors"
-                                                    onClick={() => setStep('phone')}
-                                                >
-                                                    Изменить номер
-                                                </button>
-                                            </div>
-                                        </form>
-                                    )}
-
-                                    {step === 'reset-otp' && (
-                                        <form onSubmit={handleVerifyResetOtp} className="space-y-6">
-                                            {debugCode && (
-                                                <div className="p-4 bg-white/5 border border-white/10 rounded-xl text-gray-300 text-sm font-mono">
-                                                    Код для теста: <span className="text-white font-bold tracking-widest ml-2">{debugCode}</span>
-                                                </div>
-                                            )}
-                                            
-                                            <div className="space-y-3">
-                                                <Label htmlFor="reset-code" className="text-sm font-medium text-gray-300">Код из СМС</Label>
-                                                <Input
-                                                    id="reset-code"
-                                                    placeholder="0000"
-                                                    value={code}
-                                                    onChange={(e) => setCode(e.target.value)}
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-14 text-2xl tracking-[0.5em] text-center rounded-xl font-mono transition-all"
-                                                    maxLength={4}
-                                                    required
-                                                />
-                                            </div>
-
-                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
-                                                Продолжить <ArrowRight className="ml-2 w-5 h-5" />
-                                            </Button>
-
-                                            <div className="pt-2">
-                                                <button
-                                                    type="button"
-                                                    className="text-sm text-gray-500 hover:text-white transition-colors"
-                                                    onClick={() => {
-                                                        resetTransientFields()
-                                                        setStep('password')
-                                                    }}
-                                                >
-                                                    Отменить сброс
-                                                </button>
-                                            </div>
-                                        </form>
-                                    )}
-
-                                    {step === 'reset-password' && (
-                                        <form onSubmit={handleResetPassword} className="space-y-6">
-                                            <div className="space-y-3">
-                                                <Label htmlFor="reset-new-password" className="text-sm font-medium text-gray-300">Новый пароль</Label>
-                                                <Input
-                                                    id="reset-new-password"
-                                                    type="password"
-                                                    placeholder="Минимум 6 символов"
-                                                    value={newPassword}
-                                                    onChange={(e) => setNewPassword(e.target.value)}
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
-                                                    required
-                                                />
-                                            </div>
-
-                                            <div className="space-y-3">
-                                                <Label htmlFor="reset-confirm-password" className="text-sm font-medium text-gray-300">Повторите пароль</Label>
-                                                <Input
-                                                    id="reset-confirm-password"
-                                                    type="password"
-                                                    placeholder="Ещё раз"
-                                                    value={confirmPassword}
-                                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
-                                                    required
-                                                />
-                                            </div>
-
-                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
-                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-                                                Сохранить пароль <ArrowRight className="ml-2 w-5 h-5" />
-                                            </Button>
-
-                                            <div className="pt-2">
-                                                <button
-                                                    type="button"
-                                                    className="text-sm text-gray-500 hover:text-white transition-colors"
-                                                    onClick={() => setStep('reset-otp')}
-                                                >
-                                                    Назад к коду
-                                                </button>
-                                            </div>
-                                        </form>
-                                    )}
-
-                                    {step === 'password-setup' && (
-                                        <form onSubmit={handleSetPassword} className="space-y-6">
-                                            <div className="space-y-3">
-                                                <Label htmlFor="newPassword" className="text-sm font-medium text-gray-300">Пароль</Label>
-                                                <Input
-                                                    id="newPassword"
-                                                    type="password"
-                                                    placeholder="Минимум 6 символов"
-                                                    value={newPassword}
-                                                    onChange={(e) => setNewPassword(e.target.value)}
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
-                                                    required
-                                                />
-                                            </div>
-
-                                            <div className="space-y-3">
-                                                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-300">Повторите пароль</Label>
-                                                <Input
-                                                    id="confirmPassword"
-                                                    type="password"
-                                                    placeholder="Ещё раз"
-                                                    value={confirmPassword}
-                                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
-                                                    required
-                                                />
-                                            </div>
-
-                                            {isNewUser && (
-                                                <div className="rounded-xl border border-white/10 bg-white/5 p-4 mt-2">
-                                                    <div className="flex items-start gap-3">
-                                                        <Checkbox
-                                                            id="legal-consent"
-                                                            checked={hasAcceptedLegal}
-                                                            onCheckedChange={(checked) => setHasAcceptedLegal(checked === true)}
-                                                            className="mt-1 border-white/20 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
-                                                        />
-                                                        <Label htmlFor="legal-consent" className="text-sm leading-relaxed text-gray-400">
-                                                            Я принимаю{" "}
-                                                            <Link href="/terms" className="text-gray-200 hover:text-white underline underline-offset-4 decoration-white/20 hover:decoration-white/50 transition-all">
-                                                                Пользовательское соглашение
-                                                            </Link>
-                                                            {" "}и{" "}
-                                                            <Link href="/privacy" className="text-gray-200 hover:text-white underline underline-offset-4 decoration-white/20 hover:decoration-white/50 transition-all">
-                                                                Политику конфиденциальности
-                                                            </Link>
-                                                        </Label>
-                                                    </div>
+                                            {errorMessage && (
+                                                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                                                    {errorMessage}
                                                 </div>
                                             )}
 
-                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
-                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-                                                Установить пароль <ArrowRight className="ml-2 w-5 h-5" />
+                                            <Button
+                                                type="submit"
+                                                className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all flex items-center justify-center gap-2"
+                                                disabled={isLoading}
+                                            >
+                                                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+                                                <span>Подтвердить и продолжить</span>
+                                                <ArrowRight className="w-5 h-5" />
                                             </Button>
-                                        </form>
-                                    )}
 
-                                    {step === 'name' && (
-                                        <form onSubmit={handleSaveName} className="space-y-6">
-                                            <div className="space-y-3">
-                                                <Label htmlFor="fullName" className="text-sm font-medium text-gray-300">Имя и фамилия</Label>
-                                                <Input
-                                                    id="fullName"
-                                                    placeholder="Например, Иван Иванов"
-                                                    value={fullName}
-                                                    onChange={(e) => setFullName(e.target.value)}
-                                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-600 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:border-white/30 h-12 text-lg rounded-xl transition-all"
-                                                    required
-                                                />
+                                            <div className="pt-2 text-center">
+                                                <button
+                                                    type="button"
+                                                    className="text-xs text-gray-400 hover:text-white transition-colors"
+                                                    onClick={() => setStep('email-bind')}
+                                                >
+                                                    Изменить Email
+                                                </button>
                                             </div>
-
-                                            <Button type="submit" className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all" disabled={isLoading}>
-                                                {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-                                                Продолжить <ArrowRight className="ml-2 w-5 h-5" />
-                                            </Button>
                                         </form>
                                     )}
                                 </div>
                             )}
                         </motion.div>
                     </AnimatePresence>
-                </div>
 
-                {/* Footer text */}
-                <div className="absolute bottom-6 left-0 right-0 text-center text-xs text-gray-600 px-6">
-                    Авторизуясь, вы соглашаетесь с нашими{" "}
-                    <Link href="/terms" className="text-gray-500 hover:text-white transition-colors">правилами</Link>
-                    {" "}и{" "}
-                    <Link href="/privacy" className="text-gray-500 hover:text-white transition-colors">политикой конфиденциальности</Link>.
+                    {/* Footer Links */}
+                    <div className="mt-16 text-center text-xs text-gray-500 space-y-2">
+                        <div className="flex justify-center gap-4">
+                            <Link href="/terms" className="hover:text-gray-400 transition-colors">Условия использования</Link>
+                            <span>•</span>
+                            <Link href="/privacy" className="hover:text-gray-400 transition-colors">Политика конфиденциальности</Link>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

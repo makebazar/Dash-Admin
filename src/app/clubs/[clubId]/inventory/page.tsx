@@ -104,16 +104,16 @@ export default async function InventoryPage({ params, searchParams }: { params: 
             fetchZones ? getShiftZoneOverview(clubId, displayMonth) : Promise.resolve(null)
         ])
 
-        products = results[0]
-        categories = results[1]
-        warehouses = results[2]
-        tasks = results[3]
-        supplies = results[4]
-        suppliers = results[5]
-        inventories = results[6]
-        procurementLists = results[7]
+        products = Array.isArray(results[0]) ? results[0] : []
+        categories = Array.isArray(results[1]) ? results[1] : []
+        warehouses = Array.isArray(results[2]) ? results[2] : []
+        tasks = Array.isArray(results[3]) ? results[3] : []
+        supplies = Array.isArray(results[4]) ? results[4] : []
+        suppliers = Array.isArray(results[5]) ? results[5] : []
+        inventories = Array.isArray(results[6]) ? results[6] : []
+        procurementLists = Array.isArray(results[7]) ? results[7] : []
         sales = results[8]
-        shifts = results[9]
+        shifts = Array.isArray(results[9]) ? results[9] : []
         shiftZoneOverview = results[10]
     } catch (error: any) {
         const message = error?.message || "Не удалось загрузить данные склада"
@@ -149,7 +149,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                             value="tasks" 
                             className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                         >
-                            Задачи {tasks.length > 0 && <span className="ml-2 bg-slate-100 text-slate-900 px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">{tasks.length}</span>}
+                            Задачи {(tasks?.length || 0) > 0 && <span className="ml-2 bg-slate-100 text-slate-900 px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">{tasks.length}</span>}
                         </TabsTrigger>
                         {isStockEnabled && (
                             <TabsTrigger 

@@ -32,11 +32,14 @@ export async function GET() {
       "users",
       "legal_acceptance_version",
     );
+    const hasEmail = await hasColumn("users", "email");
     const userResult = await query(
       `SELECT
                 id,
                 full_name,
                 phone_number,
+                ${hasEmail ? "email" : "NULL::varchar as email"},
+                ${hasEmail ? "email_verified" : "FALSE as email_verified"},
                 is_super_admin,
                 is_staff,
                 subscription_plan,
@@ -238,6 +241,9 @@ export async function GET() {
         id: user.id,
         full_name: user.full_name,
         phone_number: user.phone_number,
+        email: user.email,
+        email_verified: Boolean(user.email_verified),
+        requires_email_setup: !user.email || !user.email_verified,
         is_super_admin: resolvedSuperAdmin,
         is_staff: Boolean(user.is_staff),
         subscription_plan: subscription.plan,

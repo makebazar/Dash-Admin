@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Loader2, ShieldCheck, Zap } from "lucide-react"
@@ -110,67 +110,101 @@ export default function LegalConsentPage() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
-            <div className="w-full max-w-lg">
-                <div className="mb-8 flex items-center justify-center gap-2">
-                    <div className="w-10 h-10 bg-linear-to-tr from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
-                        <Zap className="text-white w-6 h-6 fill-current" />
-                    </div>
-                    <span className="font-bold text-2xl tracking-tight">DashAdmin</span>
+        <div className="min-h-screen bg-black text-white flex flex-col md:flex-row font-sans selection:bg-blue-500/30">
+            {/* Visual Anchor (Left Side) - Same as /login */}
+            <div className="hidden md:flex md:w-1/2 relative flex-col justify-between p-12 overflow-hidden border-r border-white/10">
+                <div className="absolute inset-0 z-0">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 2, ease: "easeOut" }}
+                        className="absolute -top-1/4 -left-1/4 w-[80vw] h-[80vw] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"
+                    />
                 </div>
 
-                <Card className="bg-gray-900/50 border-white/10 backdrop-blur-md">
-                    <CardHeader>
-                        <CardTitle className="text-2xl text-white">Подтвердите согласие</CardTitle>
-                        <CardDescription className="text-gray-400">
-                            {fullName ? `${fullName}, ` : ''}нужно принять актуальные юридические документы, чтобы продолжить работу
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {isChecking ? (
-                            <div className="flex items-center justify-center py-10 text-gray-400">
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Проверяем статус…
+                <Link href="/" className="relative z-10 flex items-center gap-2 group w-fit">
+                    <Zap className="text-white w-6 h-6 fill-current group-hover:text-blue-400 transition-colors" />
+                    <span className="font-bold text-2xl tracking-tight">DashAdmin</span>
+                </Link>
+
+                <div className="relative z-10">
+                    <h2 className="text-5xl font-bold tracking-tight mb-6 leading-tight">
+                        Подтверждение<br />юридических<br />условий.
+                    </h2>
+                    <p className="text-xl text-gray-400 max-w-md leading-relaxed">
+                        Пользовательское соглашение и политика конфиденциальности DashAdmin.
+                    </p>
+                </div>
+            </div>
+
+            {/* Form Container (Right Side) */}
+            <div className="flex-1 flex flex-col justify-center items-center p-6 md:p-12 relative z-10 bg-black">
+                <div className="w-full max-w-sm">
+                    {/* Mobile Header */}
+                    <div className="md:hidden flex items-center gap-2 mb-12">
+                        <Zap className="text-white w-6 h-6 fill-current" />
+                        <span className="font-bold text-xl tracking-tight">DashAdmin</span>
+                    </div>
+
+                    <div className="mb-6">
+                        <h1 className="text-3xl font-bold tracking-tight mb-3">Подтвердите согласие</h1>
+                        <p className="text-gray-400 text-sm leading-snug">
+                            {fullName ? `${fullName}, ` : ''}для продолжения работы примите актуальные юридические документы
+                        </p>
+                    </div>
+
+                    {isChecking ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-3">
+                            <Loader2 className="h-6 w-6 animate-spin text-white" />
+                            <span className="text-sm font-medium">Проверка статуса...</span>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleAccept} className="space-y-6">
+                            <div className="flex items-start gap-3 p-4 bg-white/5 border border-white/10 rounded-2xl">
+                                <Checkbox
+                                    id="consent-checkbox"
+                                    checked={hasAccepted}
+                                    onCheckedChange={(checked) => setHasAccepted(checked === true)}
+                                    className="mt-1 border-white/30 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
+                                />
+                                <Label htmlFor="consent-checkbox" className="text-sm leading-relaxed text-gray-300">
+                                    Я принимаю{" "}
+                                    <Link href="/terms" target="_blank" className="text-white underline underline-offset-4 hover:text-gray-300">
+                                        Пользовательское соглашение
+                                    </Link>
+                                    {" "}и{" "}
+                                    <Link href="/privacy" target="_blank" className="text-white underline underline-offset-4 hover:text-gray-300">
+                                        Политику конфиденциальности
+                                    </Link>
+                                </Label>
                             </div>
-                        ) : (
-                            <form onSubmit={handleAccept} className="space-y-5">
-                                <div className="rounded-xl border border-white/10 bg-black/30 p-4 text-sm text-gray-400">
-                                    После подтверждения в профиле будет зафиксирована текущая версия соглашения и политики.
-                                </div>
 
-                                <div className="rounded-lg border border-white/10 bg-black/30 p-4">
-                                    <div className="flex items-start gap-3">
-                                        <Checkbox
-                                            id="consent-checkbox"
-                                            checked={hasAccepted}
-                                            onCheckedChange={(checked) => setHasAccepted(checked === true)}
-                                            className="mt-0.5 border-white/20 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black"
-                                        />
-                                        <Label htmlFor="consent-checkbox" className="text-sm leading-6 text-gray-300">
-                                            Я принимаю{" "}
-                                            <Link href="/terms" className="text-white transition-colors hover:text-gray-300">
-                                                Пользовательское соглашение
-                                            </Link>
-                                            {" "}и{" "}
-                                            <Link href="/privacy" className="text-white transition-colors hover:text-gray-300">
-                                                Политику конфиденциальности
-                                            </Link>
-                                        </Label>
-                                    </div>
-                                </div>
+                            <Button
+                                type="submit"
+                                className="w-full bg-white text-black hover:bg-gray-200 h-12 rounded-full font-medium text-base transition-all flex items-center justify-center gap-2"
+                                disabled={isSubmitting || !hasAccepted}
+                            >
+                                {isSubmitting ? (
+                                    <Loader2 className="h-5 w-5 animate-spin" />
+                                ) : (
+                                    <>
+                                        <ShieldCheck className="w-5 h-5" />
+                                        <span>Принять и продолжить</span>
+                                    </>
+                                )}
+                            </Button>
+                        </form>
+                    )}
 
-                                <Button
-                                    type="submit"
-                                    className="w-full bg-white text-black hover:bg-gray-200"
-                                    disabled={isSubmitting || !hasAccepted}
-                                >
-                                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                                    Принять и продолжить
-                                </Button>
-                            </form>
-                        )}
-                    </CardContent>
-                </Card>
+                    {/* Footer Links */}
+                    <div className="mt-16 text-center text-xs text-gray-500 space-y-2">
+                        <div className="flex justify-center gap-4">
+                            <Link href="/terms" className="hover:text-gray-400 transition-colors">Условия использования</Link>
+                            <span>•</span>
+                            <Link href="/privacy" className="hover:text-gray-400 transition-colors">Политика конфиденциальности</Link>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     )

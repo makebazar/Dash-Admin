@@ -56,6 +56,7 @@ import {
 import { formatLocalDate } from "@/lib/utils";
 
 import { PageShell } from "@/components/layout/PageShell";
+import { ClubInvitationsManager } from "./_components/ClubInvitationsManager";
 
 interface Employee {
   id: string;
@@ -511,6 +512,9 @@ export default function EmployeesPage({
             </div>
           </div>
         </div>
+
+        {/* Invitation Links Manager */}
+        {clubId && <ClubInvitationsManager clubId={clubId} />}
 
         {/* Filters and List */}
         <div className="space-y-6">

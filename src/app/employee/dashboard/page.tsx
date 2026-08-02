@@ -41,6 +41,10 @@ export default function EmployeeDashboard() {
             const data = await res.json()
 
             if (res.ok) {
+                if (data.user?.requires_email_setup) {
+                    router.push('/login?bind=1')
+                    return
+                }
                 setClubs(data.employeeClubs || [])
                 setFullName(data.user?.full_name || "")
             } else {

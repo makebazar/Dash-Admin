@@ -37,7 +37,9 @@ ON CONFLICT (name) DO NOTHING;
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     full_name VARCHAR(255) NOT NULL,
-    phone_number VARCHAR(50) NOT NULL UNIQUE,
+    phone_number VARCHAR(50) UNIQUE,
+    email VARCHAR(255) UNIQUE,
+    email_verified BOOLEAN DEFAULT FALSE,
     role_id INTEGER REFERENCES roles(id),
     is_active BOOLEAN DEFAULT TRUE,
     password_hash VARCHAR(255),
@@ -49,6 +51,11 @@ CREATE TABLE IF NOT EXISTS users (
     is_super_admin BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Ensure migration alterations for users table if it already exists
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ALTER COLUMN phone_number DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS subscription_plans (
     id SERIAL PRIMARY KEY,
@@ -114,11 +121,48 @@ CREATE INDEX IF NOT EXISTS idx_employees_club ON club_employees(club_id);
 -- VERIFICATION CODES (Auth)
 CREATE TABLE IF NOT EXISTS verification_codes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    phone_number VARCHAR(50) NOT NULL,
+    phone_number VARCHAR(50),
+    email VARCHAR(255),
     code VARCHAR(10) NOT NULL,
-    expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '5 minutes',
+    expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '10 minutes',
     created_at TIMESTAMP DEFAULT NOW()
 );
+ALTER TABLE verification_codes ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+ALTER TABLE verification_codes ALTER COLUMN phone_number DROP NOT NULL;
+
+-- REGISTRATION APPLICATIONS
+CREATE TABLE IF NOT EXISTS registration_applications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    full_name VARCHAR(255) NOT NULL,
+    phone_number VARCHAR(50),
+    email VARCHAR(255) NOT NULL,
+    club_name VARCHAR(255),
+    city VARCHAR(255),
+    comment TEXT,
+    status VARCHAR(30) DEFAULT 'pending',
+    reviewed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_reg_apps_status ON registration_applications(status);
+
+-- CLUB INVITATIONS
+CREATE TABLE IF NOT EXISTS club_invitations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    role VARCHAR(100) NOT NULL,
+    role_id INTEGER REFERENCES roles(id),
+    token VARCHAR(100) NOT NULL UNIQUE,
+    invitation_type VARCHAR(30) NOT NULL DEFAULT 'multi',
+    max_uses INTEGER DEFAULT 1,
+    uses_count INTEGER DEFAULT 0,
+    email VARCHAR(255),
+    expires_at TIMESTAMP,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+ALTER TABLE club_invitations ADD COLUMN IF NOT EXISTS role_id INTEGER REFERENCES roles(id);
+CREATE INDEX IF NOT EXISTS idx_club_invitations_token ON club_invitations(token);
+CREATE INDEX IF NOT EXISTS idx_club_invitations_club ON club_invitations(club_id);
 
 -- ============================================
 -- SHIFT MANAGEMENT

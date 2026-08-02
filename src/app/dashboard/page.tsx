@@ -153,8 +153,18 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchClubs();
-    fetchUserData();
-  }, []);
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user?.requires_email_setup) {
+          router.push("/login?bind=1");
+        } else if (data?.user) {
+          setUserData(data.user);
+          setFullName(data.user.full_name || "");
+        }
+      })
+      .catch((err) => console.error("Auth check error:", err));
+  }, [router]);
 
   useEffect(() => {
     if (selectedClubId) {
