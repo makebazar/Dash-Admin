@@ -942,64 +942,82 @@ export async function PATCH(
 
         if (body.check_in !== undefined) {
             const clubRes = await query(
-                `SELECT timezone, day_start_hour, night_start_hour, lateness_settings FROM clubs WHERE id = $1`,
+                `SELECT timezone, day_start_hour, night_start_hour, lateness_settings FROM clubs WHERE id = $1::integer`,
                 [clubId]
             );
             const clubInfo = clubRes.rows[0] || {};
             const clubTimezone = clubInfo.timezone || "Europe/Moscow";
-            const dayStartHour = clubInfo.day_start_hour ?? 8;
-            const nightStartHour = clubInfo.night_start_hour ?? 20;
+            const dayStartHour = Number(clubInfo.day_start_hour ?? 8);
+            const nightStartHour = Number(clubInfo.night_start_hour ?? 20);
             const latenessSettings = clubInfo.lateness_settings || {};
 
             const checkInDate = new Date(body.check_in);
-            const checkInDateStr = new Intl.DateTimeFormat("en-CA", {
-                timeZone: clubTimezone,
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit"
-            }).format(checkInDate);
+            if (!isNaN(checkInDate.getTime())) {
+                let checkInDateStr: string;
+                try {
+                    checkInDateStr = new Intl.DateTimeFormat("en-CA", {
+                        timeZone: clubTimezone,
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit"
+                    }).format(checkInDate);
+                } catch {
+                    checkInDateStr = new Intl.DateTimeFormat("en-CA", {
+                        timeZone: "Europe/Moscow",
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit"
+                    }).format(checkInDate);
+                }
 
-            const scheduleRes = await query(
-                `SELECT 
-                   ws.shift_type,
-                   (ws.date + (CASE WHEN ws.shift_type = 'DAY' THEN $1 ELSE $2 END * INTERVAL '1 hour')) AT TIME ZONE $3 AS planned_start
-                 FROM work_schedules ws
-                 WHERE ws.club_id = $4 AND ws.user_id = $5 AND ws.date = $6::date
-                 LIMIT 1`,
-                [dayStartHour, nightStartHour, clubTimezone, clubId, targetUserId, checkInDateStr]
-            );
+                const scheduleRes = await query(
+                    `SELECT 
+                       ws.shift_type,
+                       (ws.date + make_interval(hours => CASE WHEN ws.shift_type = 'DAY' THEN $1::integer ELSE $2::integer END)) AT TIME ZONE $3 AS planned_start
+                     FROM work_schedules ws
+                     WHERE ws.club_id = $4::integer AND ws.user_id = $5::uuid AND ws.date = $6::date
+                     LIMIT 1`,
+                    [dayStartHour, nightStartHour, clubTimezone, clubId, targetUserId, checkInDateStr]
+                );
 
-            if (scheduleRes.rows.length > 0) {
-                const row = scheduleRes.rows[0];
-                const plannedStart = new Date(row.planned_start);
-                const diffMs = checkInDate.getTime() - plannedStart.getTime();
-                const diffMinutes = Math.floor(diffMs / 60000);
+                if (scheduleRes.rows.length > 0) {
+                    const row = scheduleRes.rows[0];
+                    const plannedStart = new Date(row.planned_start);
+                    if (!isNaN(plannedStart.getTime())) {
+                        const diffMs = checkInDate.getTime() - plannedStart.getTime();
+                        const diffMinutes = Math.floor(diffMs / 60000);
 
-                const gracePeriod = latenessSettings.grace_period ?? 5;
+                        const gracePeriod = latenessSettings.grace_period ?? 5;
 
-                if (diffMinutes > gracePeriod) {
-                    latenessMinutes = diffMinutes;
-                    latenessStatus = 'PENDING';
-                    
-                    let defaultPenalty = 0;
-                    const thresholds = latenessSettings.thresholds || [];
-                    if (Array.isArray(thresholds) && thresholds.length > 0) {
-                        const sorted = [...thresholds].sort((a, b) => b.minutes - a.minutes);
-                        const matchedThreshold = sorted.find(t => diffMinutes >= t.minutes);
-                        if (matchedThreshold) {
-                            defaultPenalty = parseFloat(matchedThreshold.penalty) || 0;
+                        if (diffMinutes > gracePeriod) {
+                            latenessMinutes = diffMinutes;
+                            latenessStatus = 'PENDING';
+                            
+                            let defaultPenalty = 0;
+                            const thresholds = latenessSettings.thresholds || [];
+                            if (Array.isArray(thresholds) && thresholds.length > 0) {
+                                const sorted = [...thresholds].sort((a, b) => b.minutes - a.minutes);
+                                const matchedThreshold = sorted.find(t => diffMinutes >= t.minutes);
+                                if (matchedThreshold) {
+                                    defaultPenalty = parseFloat(matchedThreshold.penalty) || 0;
+                                }
+                            }
+                            latenessPenalty = defaultPenalty;
+                        } else {
+                            latenessMinutes = 0;
+                            latenessStatus = 'NONE';
+                            latenessPenalty = 0;
                         }
+                    } else {
+                        latenessMinutes = 0;
+                        latenessStatus = 'NONE';
+                        latenessPenalty = 0;
                     }
-                    latenessPenalty = defaultPenalty;
                 } else {
                     latenessMinutes = 0;
                     latenessStatus = 'NONE';
                     latenessPenalty = 0;
                 }
-            } else {
-                latenessMinutes = 0;
-                latenessStatus = 'NONE';
-                latenessPenalty = 0;
             }
         }
 

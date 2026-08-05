@@ -116,14 +116,22 @@ export function EditShiftDialog({
   const convertToClubTimezone = useCallback(
     (datetimeLocal: string) => {
       if (!datetimeLocal) return undefined;
-      const localDate = new Date(datetimeLocal);
-      const inClubTZString = localDate.toLocaleString("en-US", {
-        timeZone: clubTimezone,
-      });
-      const inClubTZ = new Date(inClubTZString);
-      const offset = inClubTZ.getTime() - localDate.getTime();
-      const correctUTC = new Date(localDate.getTime() - offset);
-      return correctUTC.toISOString();
+      try {
+        const localDate = new Date(datetimeLocal);
+        if (isNaN(localDate.getTime())) return undefined;
+        const tz = clubTimezone || "Europe/Moscow";
+        const inClubTZString = localDate.toLocaleString("en-US", {
+          timeZone: tz,
+        });
+        const inClubTZ = new Date(inClubTZString);
+        const offset = inClubTZ.getTime() - localDate.getTime();
+        const correctUTC = new Date(localDate.getTime() - offset);
+        return correctUTC.toISOString();
+      } catch (err) {
+        console.error("Error converting timezone:", err);
+        const d = new Date(datetimeLocal);
+        return isNaN(d.getTime()) ? undefined : d.toISOString();
+      }
     },
     [clubTimezone],
   );
