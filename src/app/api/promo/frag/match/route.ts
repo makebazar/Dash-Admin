@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { cookies } from "next/headers";
+import { isOfficialCompetitiveMap } from "@/lib/promo-frag-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -44,18 +45,19 @@ export async function POST(request: Request) {
       events = [],
     } = body;
 
-    // Ignore training/practice matches
-    if (map && typeof map === "string") {
-      const lowerMap = map.toLowerCase();
-      const isTraining = [
-        "training", "aim_", "botz", "reflex", "practice", "workshop",
-        "custom", "tutorial", "test", "csstats", "cybershoke", "am_",
-        "awp_", "duels_", "arena", "bhop", "surf", "retake",
-        "deathmatch", "dm_", "lobby", "hs_"
-      ].some(kw => lowerMap.includes(kw));
-      if (isTraining) {
-        return NextResponse.json({ success: true, ignored: true, message: "Training/practice matches are ignored" });
+    // CS2 whitelist & practice/bot match validation
+    if (game === "CS2") {
+      if (!isOfficialCompetitiveMap(map)) {
+        return NextResponse.json({ success: true, ignored: true, message: "Map is not in official competitive pool" });
       }
+    }
+
+    // Ignore bot sessions (0:0 score with >30 kills without victory event)
+    const hasWinEvent = Array.isArray(events) && events.some((evt: any) => typeof evt === "string" && (evt.toLowerCase().includes("победа") || evt.includes("🏆")));
+    const isBotSession = (score === "0:0" || !score) && !hasWinEvent && kills > 30;
+
+    if (isBotSession) {
+      return NextResponse.json({ success: true, ignored: true, message: "Bot/practice session ignored" });
     }
 
     await client.query(

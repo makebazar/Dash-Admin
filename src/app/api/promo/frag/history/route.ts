@@ -33,7 +33,7 @@ export async function GET() {
     const result = await client.query(
       `SELECT id, game, map, score, kills, deaths, assists, headshots, last_hits, earned, events, played_at
        FROM promo_frag_matches
-       WHERE player_id = $1 AND club_id = $2 AND map !~* 'training|aim_|botz|reflex|practice|workshop|custom|tutorial|test|csstats|cybershoke|am_|awp_|duels_|arena|bhop|surf|retake|deathmatch|dm_|lobby|hs_'
+       WHERE player_id = $1 AND club_id = $2 AND (game != 'CS2' OR map ~* '^(de_mirage|de_dust2|de_inferno|de_nuke|de_anubis|de_ancient|de_vertigo|de_overpass|de_train|de_cache|cs_office|cs_italy)$')
        ORDER BY played_at DESC
        LIMIT 30`,
       [playerId, activeClubId]

@@ -1,8 +1,51 @@
-// Shared helper functions for Frag Statistics and Tournaments
+export const OFFICIAL_CS2_COMPETITIVE_MAPS = [
+  "de_mirage",
+  "de_dust2",
+  "de_inferno",
+  "de_nuke",
+  "de_anubis",
+  "de_ancient",
+  "de_vertigo",
+  "de_overpass",
+  "de_train",
+  "de_cache",
+  "cs_office",
+  "cs_italy"
+];
+
+export function isOfficialCompetitiveMap(mapName: string): boolean {
+  if (!mapName || typeof mapName !== "string") return false;
+  const cleanMap = mapName.trim().toLowerCase();
+  return OFFICIAL_CS2_COMPETITIVE_MAPS.includes(cleanMap);
+}
+
+export function isValidTournamentMatch(m: any): boolean {
+  if (!m) return false;
+  
+  // Whitelist check for CS2 maps (Premier, Matchmaking, Faceit)
+  if (m.game === "CS2" || !m.game) {
+    if (!isOfficialCompetitiveMap(m.map)) {
+      return false;
+    }
+  }
+
+  // Exclude 0:0 score matches that have abnormal kills (>30) or no victory event (bot / local practice sessions)
+  const events: string[] = typeof m.events === 'string' ? JSON.parse(m.events) : (m.events || []);
+  const hasWinEvent = events.some(evt => typeof evt === 'string' && (evt.toLowerCase().includes("победа") || evt.includes("🏆")));
+  
+  if ((m.score === "0:0" || !m.score) && !hasWinEvent && (m.kills || 0) > 30) {
+    return false;
+  }
+
+  return true;
+}
 
 export function calculateTournamentPoints(matches: any[], maxBestMatches: number = 15) {
+  // Filter out invalid/practice/bot matches
+  const validMatches = matches.filter(isValidTournamentMatch);
+
   // First, calculate points for each individual match
-  const matchPointsList = matches.map(m => {
+  const matchPointsList = validMatches.map(m => {
     const isCs2 = m.game === "CS2";
     const events: string[] = typeof m.events === "string" ? JSON.parse(m.events) : (m.events || []);
     
@@ -90,14 +133,14 @@ export function calculateTournamentPoints(matches: any[], maxBestMatches: number
   const bestPoints = sortedPoints.slice(0, maxBestMatches);
   const totalPoints = bestPoints.reduce((sum, pts) => sum + pts, 0);
 
-  // General totals from ALL matches
+  // General totals from ALL valid matches
   let wins = 0;
   let losses = 0;
   let totalKills = 0;
   let totalDeaths = 0;
   let totalAssists = 0;
 
-  matches.forEach(m => {
+  validMatches.forEach(m => {
     totalKills += m.kills || 0;
     totalDeaths += m.deaths || 0;
     totalAssists += m.assists || 0;
@@ -118,7 +161,7 @@ export function calculateTournamentPoints(matches: any[], maxBestMatches: number
     points: Math.round(totalPoints * 10) / 10,
     wins,
     losses,
-    matchesCount: matches.length,
+    matchesCount: validMatches.length,
     totalKills,
     totalDeaths,
     totalAssists

@@ -15,7 +15,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const playerId = parseInt(playerIdStr);
+    const playerId = playerIdStr;
     const clubId = parseInt(clubIdStr);
 
     // 1. Fetch active and completed tournaments
@@ -45,6 +45,8 @@ export async function GET(request: Request) {
           m.player_id,
           p.full_name,
           m.game,
+          m.map,
+          m.score,
           m.kills,
           m.deaths,
           m.assists,
@@ -52,11 +54,11 @@ export async function GET(request: Request) {
           m.last_hits,
           m.events,
           m.played_at
-         FROM promo_frag_matches m
+         FROM promo_frag_matches m`
          JOIN promo_players p ON m.player_id = p.id
          WHERE m.club_id = $1 
            AND m.played_at BETWEEN $2 AND $3
-           AND m.map !~* 'training|aim_|botz|reflex|practice|workshop|custom|tutorial|test|csstats|cybershoke|am_|awp_|duels_|arena|bhop|surf|retake|deathmatch|dm_|lobby|hs_'
+           AND (m.game != 'CS2' OR m.map ~* '^(de_mirage|de_dust2|de_inferno|de_nuke|de_anubis|de_ancient|de_vertigo|de_overpass|de_train|de_cache|cs_office|cs_italy)$')
            ${gameFilter}`,
         queryParams
       );
