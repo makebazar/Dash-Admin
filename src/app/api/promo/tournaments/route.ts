@@ -54,8 +54,8 @@ export async function GET(request: Request) {
           m.last_hits,
           m.events,
           m.played_at
-         FROM promo_frag_matches m`
-         JOIN promo_players p ON m.player_id = p.id
+          FROM promo_frag_matches m
+          JOIN promo_players p ON m.player_id = p.id
          WHERE m.club_id = $1 
            AND m.played_at BETWEEN $2 AND $3
            AND (m.game != 'CS2' OR m.map ~* '^(de_mirage|de_dust2|de_inferno|de_nuke|de_anubis|de_ancient|de_vertigo|de_overpass|de_train|de_cache|cs_office|cs_italy)$')

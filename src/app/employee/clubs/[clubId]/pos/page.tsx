@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { SSEProvider } from "@/hooks/use-pos-web-socket";
 import { EmployeeSalesWizard } from "../_components/EmployeeSalesWizard";
@@ -9,6 +9,7 @@ import { normalizeInventorySettings } from "@/lib/inventory-settings";
 
 export default function EmployeePosPage() {
   const { clubId } = useParams<{ clubId: string }>();
+  const router = useRouter();
   const [userId, setUserId] = useState<string>("");
   const [activeShiftId, setActiveShiftId] = useState<string | undefined>(
     undefined,
@@ -17,6 +18,12 @@ export default function EmployeePosPage() {
   const [isBlockedByAcceptance, setIsBlockedByAcceptance] = useState(false);
   const [isCashboxEnabled, setIsCashboxEnabled] = useState(true);
   const [isDashlockEnabled, setIsDashlockEnabled] = useState(false);
+
+  useEffect(() => {
+    if (clubId) {
+      router.replace(`/clubs/${clubId}/inventory?tab=sales`);
+    }
+  }, [clubId, router]);
 
   useEffect(() => {
     const load = async () => {
@@ -47,6 +54,11 @@ export default function EmployeePosPage() {
           ),
         );
 
+        // Если включена интеграция со SmartShell, запускаем фоновую синхронизацию смен
+        if (inventorySettings.smartshell_integration_enabled) {
+          fetch(`/api/clubs/${clubId}/shifts/smartshell-sync`, { cache: "no-store" }).catch(console.error);
+        }
+
         const shiftRes = await fetch(
           `/api/employee/clubs/${clubId}/active-shift`,
           { cache: "no-store" },
@@ -65,7 +77,32 @@ export default function EmployeePosPage() {
       }
     };
 
-    if (clubId) load().catch(console.error);
+    let eventSource: EventSource | null = null;
+    if (clubId) {
+      load().catch(console.error);
+      try {
+        eventSource = new EventSource(`/api/clubs/${clubId}/shifts/live-stream`);
+        eventSource.onmessage = () => {
+          // При получении обновления перезагружаем статус активной смены
+          fetch(`/api/employee/clubs/${clubId}/active-shift`, { cache: "no-store" })
+            .then(res => res.json())
+            .then(data => {
+              if (data?.shift?.id) {
+                setActiveShiftId(String(data.shift.id));
+              }
+            })
+            .catch(console.error);
+        };
+      } catch (e) {
+        console.warn("SSE EventSource Init Error:", e);
+      }
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
   }, [clubId]);
 
   if (isLoading || !clubId || !userId) {
