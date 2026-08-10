@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { SSEProvider } from "@/hooks/use-pos-web-socket";
 import { EmployeeSalesWizard } from "../_components/EmployeeSalesWizard";
@@ -9,7 +9,6 @@ import { normalizeInventorySettings } from "@/lib/inventory-settings";
 
 export default function EmployeePosPage() {
   const { clubId } = useParams<{ clubId: string }>();
-  const router = useRouter();
   const [userId, setUserId] = useState<string>("");
   const [activeShiftId, setActiveShiftId] = useState<string | undefined>(
     undefined,
@@ -19,11 +18,6 @@ export default function EmployeePosPage() {
   const [isCashboxEnabled, setIsCashboxEnabled] = useState(true);
   const [isDashlockEnabled, setIsDashlockEnabled] = useState(false);
 
-  useEffect(() => {
-    if (clubId) {
-      router.replace(`/clubs/${clubId}/inventory?tab=sales`);
-    }
-  }, [clubId, router]);
 
   useEffect(() => {
     const load = async () => {
