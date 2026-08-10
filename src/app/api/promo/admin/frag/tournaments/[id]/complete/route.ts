@@ -127,27 +127,7 @@ export async function POST(
       if (playerIndex >= 0 && playerIndex < qualifiedLeaderboard.length) {
         const winner = qualifiedLeaderboard[playerIndex];
 
-        // A. Credit balance if reward is positive
-        if (reward > 0) {
-          const balanceUpdateRes = await client.query(
-            `UPDATE promo_player_balances
-             SET bonus_balance = bonus_balance + $1, updated_at = NOW()
-             WHERE player_id = $2 AND club_id = $3
-             RETURNING player_id`,
-            [reward, winner.player_id, clubId]
-          );
-
-          if (balanceUpdateRes.rowCount === 0) {
-            // Create balance if it didn't exist
-            await client.query(
-              `INSERT INTO promo_player_balances (player_id, club_id, bonus_balance)
-               VALUES ($1, $2, $3)`,
-              [winner.player_id, clubId, reward]
-            );
-          }
-        }
-
-        // B. Add history entry containing the balance amount and text details
+        // Record in history for audit & display (manual payout by admin)
         await client.query(
           `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
            VALUES ($1, $2, 'TOURNAMENT', $3)`,
@@ -162,6 +142,7 @@ export async function POST(
               tournament_id: tournament.id,
               tournament_title: tournament.title,
               place: place,
+              manual_payout_required: true,
               timestamp: new Date().toISOString(),
             }),
           ]
