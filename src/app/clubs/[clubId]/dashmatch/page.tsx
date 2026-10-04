@@ -36,6 +36,8 @@ import {
   Sliders,
   ChevronDown,
   ChevronUp,
+  Clock,
+  User,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,9 +80,45 @@ interface MatchRecord {
     practice_mode?: boolean;
     friendly_fire?: boolean;
     bot_test?: boolean;
+    warmup_time?: number;
     team1_players?: Record<string, string>;
     team2_players?: Record<string, string>;
   };
+}
+
+export interface LivePlayer {
+  id?: string;
+  name: string;
+  steamId: string;
+  ping?: string;
+  isBot?: boolean;
+}
+
+export function parseConnectedPlayers(rconText?: string): LivePlayer[] {
+  if (!rconText) return [];
+  const players: LivePlayer[] = [];
+  const lines = rconText.split("\n");
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("#") && !trimmed.includes("name") && !trimmed.includes("ping")) {
+      const match = trimmed.match(/#\s*(\d+)\s+"([^"]+)"(?:\s+\d+\s+(\d+))?/);
+      if (match) {
+        const id = match[1];
+        const name = match[2];
+        const ping = match[3];
+        const isBot = /bot/i.test(trimmed);
+        const steam64Match = trimmed.match(/(7656\d{13})/);
+        const steamId = steam64Match ? steam64Match[1] : (isBot ? `bot_${id}` : `ID_${id}`);
+        players.push({ id, name, steamId, ping, isBot });
+      }
+    } else if (trimmed.includes("[CSS]") && trimmed.includes("(") && trimmed.includes(")")) {
+      const match = trimmed.match(/(?:#\d+:\s*)?([^(]+)\s*\((7656\d{13})\)/);
+      if (match) {
+        players.push({ name: match[1].trim(), steamId: match[2].trim() });
+      }
+    }
+  }
+  return players;
 }
 
 export interface MapOption {
@@ -150,6 +188,7 @@ export default function DashMatchPage() {
   const [matchMode, setMatchMode] = useState<"comp" | "practice" | "bots">("comp");
   const [knifeRound, setKnifeRound] = useState(true);
   const [friendlyFire, setFriendlyFire] = useState(false);
+  const [warmupSeconds, setWarmupSeconds] = useState(60);
   const [enableWhitelist, setEnableWhitelist] = useState(false);
   const [team1PlayersRaw, setTeam1PlayersRaw] = useState("");
   const [team2PlayersRaw, setTeam2PlayersRaw] = useState("");
@@ -272,6 +311,7 @@ export default function DashMatchPage() {
           practice_mode: matchMode === "practice",
           friendly_fire: friendlyFire,
           bot_test: matchMode === "bots",
+          warmup_time: warmupSeconds,
           team1_players: team1Players,
           team2_players: team2Players,
         }),
@@ -652,6 +692,40 @@ export default function DashMatchPage() {
                           Огонь по своим
                         </span>
                       </label>
+                    </div>
+
+                    {/* Warmup Duration Setting */}
+                    <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-700 dark:text-zinc-300 flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-orange-500" />
+                          Длительность разминки:
+                        </span>
+                        <span className="text-[10px] text-orange-600 dark:text-orange-400 font-medium">
+                          {warmupSeconds === 0 ? "Без ограничения (.ready)" : `${warmupSeconds} сек`}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+                        {[
+                          { label: "30 сек", value: 30 },
+                          { label: "60 сек", value: 60 },
+                          { label: "2 мин", value: 120 },
+                          { label: "До ready", value: 0 },
+                        ].map((w) => (
+                          <button
+                            key={w.value}
+                            type="button"
+                            onClick={() => setWarmupSeconds(w.value)}
+                            className={`py-1 px-1.5 rounded-lg border text-center transition-all cursor-pointer text-[11px] font-medium ${
+                              warmupSeconds === w.value
+                                ? "border-orange-500 bg-orange-500 text-white font-bold shadow-xs"
+                                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 hover:border-slate-300"
+                            }`}
+                          >
+                            {w.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="pt-1 border-t border-slate-200 dark:border-zinc-800">
@@ -1107,6 +1181,64 @@ export default function DashMatchPage() {
                                       FF Выкл
                                     </Button>
                                   </div>
+
+                                  {/* Warmup Live Controls */}
+                                  <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-200/60 dark:border-zinc-800/80">
+                                    <span className="text-[10px] text-slate-400 mr-1 flex items-center gap-1">
+                                      <Clock className="w-3 h-3 text-orange-500" />
+                                      Разминка:
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "mp_warmuptime 30; mp_warmup_pausetimer 0; mp_warmup_start")}
+                                      className="h-6 px-2 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-slate-700 dark:text-zinc-300"
+                                      title="Установить таймер разминки на 30 секунд"
+                                    >
+                                      30 сек
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "mp_warmuptime 60; mp_warmup_pausetimer 0; mp_warmup_start")}
+                                      className="h-6 px-2 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-slate-700 dark:text-zinc-300"
+                                      title="Установить таймер разминки на 60 секунд (1 мин)"
+                                    >
+                                      60 сек
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "mp_warmuptime 120; mp_warmup_pausetimer 0; mp_warmup_start")}
+                                      className="h-6 px-2 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-slate-700 dark:text-zinc-300"
+                                      title="Установить таймер разминки на 120 секунд (2 мин)"
+                                    >
+                                      2 мин
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "mp_warmup_pausetimer 1")}
+                                      className="h-6 px-2 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-amber-600 dark:text-amber-400"
+                                      title="Остановить таймер разминки (разминка без ограничения времени)"
+                                    >
+                                      Пауза
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "mp_warmup_end 1")}
+                                      className="h-6 px-2 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-emerald-600 dark:text-emerald-400 font-semibold"
+                                      title="Завершить разминку прямо сейчас"
+                                    >
+                                      Завершить
+                                    </Button>
+                                  </div>
                                 </div>
                               )}
 
@@ -1114,15 +1246,40 @@ export default function DashMatchPage() {
                               {activeControlTab === "restore" && (
                                 <div className="space-y-2.5">
                                   <div className="p-2 rounded bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300">
-                                    MatchZy автоматически сохраняет бэкап в конце каждого раунда. Если у игрока завис ПК, вылетела игра или выключилось питание — восстановите точный раунд без потери счёта и экономики!
+                                    MatchZy автоматически сохраняет бэкап в конце каждого раунда матча. Если у игрока завис ПК, вылетела игра или выключилось питание — восстановите точный раунд без потери счёта и экономики!
                                   </div>
 
-                                  <div className="flex items-center gap-2 flex-wrap">
+                                  {/* Stop / Restore current round */}
+                                  <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700 space-y-1.5">
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
+                                      <div>
+                                        <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                          <RotateCcw className="w-3.5 h-3.5 text-orange-500" />
+                                          <span>Откатить текущий раунд на начало (.stop)</span>
+                                        </div>
+                                        <div className="text-[10px] text-slate-400">
+                                          Мгновенный перезапуск идущего сейчас раунда с возвратом закупленного оружия и денег
+                                        </div>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        disabled={isBusyRcon}
+                                        onClick={() => handleSendRcon(m.id, "css_stop; mp_restartgame 1")}
+                                        className="h-7 px-3 text-xs bg-orange-600 hover:bg-orange-700 text-white font-bold cursor-pointer shadow-xs gap-1"
+                                      >
+                                        <RotateCcw className="w-3 h-3" />
+                                        Откатить текущий раунд
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  {/* Specific round restore */}
+                                  <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-200/60 dark:border-zinc-800/80">
                                     <Button
                                       size="sm"
-                                      disabled={isBusyRcon || completedRounds === 0}
-                                      onClick={() => handleSendRcon(m.id, `css_restore ${prevRound}`)}
-                                      className="h-7 px-3 text-xs bg-orange-600 hover:bg-orange-700 text-white font-bold gap-1.5 cursor-pointer shadow-xs"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, `css_restore ${prevRound}; matchzy_loadbackup matchzy_${m.id}_0_round${String(prevRound).padStart(2, "0")}.json`)}
+                                      className="h-7 px-3 text-xs bg-slate-900 hover:bg-slate-800 text-white font-bold gap-1.5 cursor-pointer shadow-xs"
                                     >
                                       <History className="w-3.5 h-3.5" />
                                       Откатить на раунд #{prevRound} (-1 раунд)
@@ -1155,7 +1312,7 @@ export default function DashMatchPage() {
                                       onClick={() => {
                                         const rnd = restoreRoundInput[m.id]?.trim();
                                         if (rnd) {
-                                          handleSendRcon(m.id, `css_restore ${rnd}`);
+                                          handleSendRcon(m.id, `css_restore ${rnd}; matchzy_loadbackup matchzy_${m.id}_0_round${String(rnd).padStart(2, "0")}.json`);
                                         }
                                       }}
                                       className="h-7 px-3 text-xs bg-slate-900 hover:bg-slate-800 text-white cursor-pointer"
@@ -1172,7 +1329,7 @@ export default function DashMatchPage() {
                                           key={r}
                                           type="button"
                                           disabled={isBusyRcon}
-                                          onClick={() => handleSendRcon(m.id, `css_restore ${r}`)}
+                                          onClick={() => handleSendRcon(m.id, `css_restore ${r}; matchzy_loadbackup matchzy_${m.id}_0_round${String(r).padStart(2, "0")}.json`)}
                                           className="px-2 py-0.5 rounded text-[10px] font-mono bg-white dark:bg-zinc-800 hover:bg-orange-500 hover:text-white text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 transition-colors cursor-pointer"
                                         >
                                           Р#{r}
@@ -1180,123 +1337,286 @@ export default function DashMatchPage() {
                                       ))}
                                     </div>
                                   )}
+
+                                  {/* Chat Command Hint */}
+                                  <div className="p-2 rounded bg-slate-50 dark:bg-zinc-800/40 text-[10px] text-slate-500 dark:text-zinc-400 border border-slate-200/60 dark:border-zinc-700/60">
+                                    💡 Игроки или админ могут также написать в чате игры <code className="font-mono font-bold text-orange-600 dark:text-orange-400">!stop</code> для текущего раунда или <code className="font-mono font-bold text-orange-600 dark:text-orange-400">!restore 2</code> для конкретного раунда.
+                                  </div>
                                 </div>
                               )}
 
                               {/* TAB 3: LIVE PLAYERS & WHITELIST */}
-                              {activeControlTab === "players" && (
-                                <div className="space-y-2.5">
-                                  {/* Add Player Box */}
-                                  <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 space-y-2">
-                                    <div className="text-[11px] font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                                      <UserPlus className="w-3.5 h-3.5 text-emerald-500" />
-                                      Добавить / пересадить игрока во время игры:
-                                    </div>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <Input
-                                        placeholder="SteamID64 (например, 76561198012345678)"
-                                        value={addPlayerSteamId[m.id] || ""}
-                                        onChange={(e) =>
-                                          setAddPlayerSteamId((prev) => ({ ...prev, [m.id]: e.target.value }))
-                                        }
-                                        className="h-7 text-xs font-mono flex-1 min-w-[200px] bg-slate-50 dark:bg-zinc-900"
-                                      />
-                                      <select
-                                        value={addPlayerTeam[m.id] || "team1"}
-                                        onChange={(e) =>
-                                          setAddPlayerTeam((prev) => ({ ...prev, [m.id]: e.target.value as any }))
-                                        }
-                                        className="h-7 text-xs rounded border border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-900 px-2 text-slate-800 dark:text-zinc-200"
-                                      >
-                                        <option value="team1">{m.team1_name} (Команда 1)</option>
-                                        <option value="team2">{m.team2_name} (Команда 2)</option>
-                                        <option value="spec">Наблюдатель (Spec)</option>
-                                      </select>
-                                      <Button
-                                        size="sm"
-                                        disabled={isBusyRcon || !addPlayerSteamId[m.id]}
-                                        onClick={() => {
-                                          const steam = (addPlayerSteamId[m.id] || "").trim();
-                                          const team = addPlayerTeam[m.id] || "team1";
-                                          if (steam) {
-                                            handleSendRcon(m.id, `css_addplayer ${steam} ${team}; css_whitelist_add ${steam}`);
-                                            setAddPlayerSteamId((prev) => ({ ...prev, [m.id]: "" }));
-                                          }
-                                        }}
-                                        className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                                      >
-                                        Добавить
-                                      </Button>
-                                    </div>
-                                  </div>
+                              {activeControlTab === "players" && (() => {
+                                const livePlayers = parseConnectedPlayers(m.rcon_last_response);
+                                const t1 = m.config_data?.team1_players || {};
+                                const t2 = m.config_data?.team2_players || {};
+                                const t1Keys = Object.keys(t1);
+                                const t2Keys = Object.keys(t2);
+                                const hasRoster = t1Keys.length > 0 || t2Keys.length > 0;
 
-                                  {/* Remove Player Box */}
-                                  <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 space-y-2">
-                                    <div className="text-[11px] font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
-                                      <UserMinus className="w-3.5 h-3.5 text-rose-500" />
-                                      Исключить (кикнуть) игрока из матча:
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Input
-                                        placeholder="SteamID64 игрока для кика"
-                                        value={removePlayerSteamId[m.id] || ""}
-                                        onChange={(e) =>
-                                          setRemovePlayerSteamId((prev) => ({ ...prev, [m.id]: e.target.value }))
-                                        }
-                                        className="h-7 text-xs font-mono flex-1 bg-slate-50 dark:bg-zinc-900"
-                                      />
-                                      <Button
-                                        size="sm"
-                                        variant="destructive"
-                                        disabled={isBusyRcon || !removePlayerSteamId[m.id]}
-                                        onClick={() => {
-                                          const steam = (removePlayerSteamId[m.id] || "").trim();
-                                          if (steam) {
-                                            handleSendRcon(m.id, `css_removeplayer ${steam}`);
-                                            setRemovePlayerSteamId((prev) => ({ ...prev, [m.id]: "" }));
-                                          }
-                                        }}
-                                        className="h-7 px-3 text-xs cursor-pointer"
-                                      >
-                                        Кикнуть
-                                      </Button>
-                                    </div>
-                                  </div>
-
-                                  {/* Whitelist Toggle */}
-                                  <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 flex-wrap gap-2">
-                                    <div className="text-[11px]">
-                                      <span className="font-semibold text-slate-800 dark:text-zinc-200">
-                                        Вайтлист сервера:
-                                      </span>
-                                      <p className="text-[10px] text-slate-400">
-                                        Включить проверку SteamID или открыть свободный вход
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
+                                return (
+                                  <div className="space-y-3">
+                                    {/* Top Header with live refresh */}
+                                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 dark:border-zinc-800 gap-2 flex-wrap">
+                                      <div className="text-xs font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                                        <Users className="w-3.5 h-3.5 text-orange-500" />
+                                        <span>Подключенные игроки ({livePlayers.length})</span>
+                                      </div>
                                       <Button
                                         size="sm"
                                         variant="outline"
                                         disabled={isBusyRcon}
-                                        onClick={() => handleSendRcon(m.id, "css_whitelist 1")}
-                                        className="h-7 px-2.5 text-xs text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                                        onClick={() => handleSendRcon(m.id, "status")}
+                                        className="h-6 px-2.5 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-slate-700 dark:text-zinc-300 hover:bg-slate-50"
+                                        title="Запросить актуальный список подключенных игроков с сервера"
                                       >
-                                        <Shield className="w-3 h-3 mr-1" />
-                                        Включить вайтлист
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={isBusyRcon}
-                                        onClick={() => handleSendRcon(m.id, "css_whitelist 0")}
-                                        className="h-7 px-2.5 text-xs text-slate-600 dark:text-zinc-400 cursor-pointer"
-                                      >
-                                        Свободный вход
+                                        <RefreshCw className={`w-3 h-3 ${isBusyRcon ? "animate-spin" : ""}`} />
+                                        Обновить список (status)
                                       </Button>
                                     </div>
+
+                                    {/* Section 1: Live Connected Players */}
+                                    {livePlayers.length > 0 ? (
+                                      <div className="space-y-1.5">
+                                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                                          На сервере прямо сейчас:
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-0.5">
+                                          {livePlayers.map((p, idx) => (
+                                            <div
+                                              key={`${p.steamId}-${idx}`}
+                                              className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-zinc-800/90 border border-slate-200/80 dark:border-zinc-700/60 text-xs gap-2"
+                                            >
+                                              <div className="flex items-center gap-2 truncate">
+                                                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-zinc-700 flex items-center justify-center text-slate-600 dark:text-zinc-300 font-bold text-[10px] shrink-0">
+                                                  {p.isBot ? "🤖" : (p.name[0] || "U").toUpperCase()}
+                                                </div>
+                                                <div className="truncate">
+                                                  <div className="font-semibold text-slate-900 dark:text-white truncate flex items-center gap-1">
+                                                    <span>{p.name}</span>
+                                                    {p.isBot && <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">Бот</Badge>}
+                                                  </div>
+                                                  <div className="text-[10px] font-mono text-slate-400 select-all">{p.steamId}</div>
+                                                </div>
+                                              </div>
+
+                                              <div className="flex items-center gap-1 shrink-0">
+                                                {p.ping && (
+                                                  <span className="text-[10px] font-mono text-slate-400 mr-1">{p.ping} ms</span>
+                                                )}
+                                                {!p.isBot && (
+                                                  <>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      disabled={isBusyRcon}
+                                                      onClick={() => handleSendRcon(m.id, `css_addplayer ${p.steamId} team1`)}
+                                                      className="h-6 px-1.5 text-[10px] text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 cursor-pointer"
+                                                      title={`Пересадить в ${m.team1_name} (CT)`}
+                                                    >
+                                                      В CT
+                                                    </Button>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      disabled={isBusyRcon}
+                                                      onClick={() => handleSendRcon(m.id, `css_addplayer ${p.steamId} team2`)}
+                                                      className="h-6 px-1.5 text-[10px] text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 cursor-pointer"
+                                                      title={`Пересадить в ${m.team2_name} (T)`}
+                                                    >
+                                                      В T
+                                                    </Button>
+                                                  </>
+                                                )}
+                                                <Button
+                                                  size="sm"
+                                                  variant="destructive"
+                                                  disabled={isBusyRcon}
+                                                  onClick={() => {
+                                                    if (confirm(`Кикнуть игрока ${p.name}?`)) {
+                                                      if (p.isBot) {
+                                                        handleSendRcon(m.id, `bot_kick ${p.name}`);
+                                                      } else {
+                                                        handleSendRcon(m.id, `css_removeplayer ${p.steamId}`);
+                                                      }
+                                                    }
+                                                  }}
+                                                  className="h-6 px-2 text-[10px] cursor-pointer"
+                                                  title="Кикнуть с сервера"
+                                                >
+                                                  Кик
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="p-3 rounded-lg bg-slate-50 dark:bg-zinc-800/40 border border-dashed border-slate-200 dark:border-zinc-700 text-center space-y-1">
+                                        <div className="text-xs text-slate-600 dark:text-zinc-400 flex items-center justify-center gap-1.5">
+                                          <Users className="w-4 h-4 text-slate-400" />
+                                          <span>Список активных игроков пуст или ещё не запрошен</span>
+                                        </div>
+                                        <div className="text-[10px] text-slate-400">
+                                          Нажмите кнопку «Обновить список (status)», чтобы запросить игроков с сервера
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Section 2: Configured Match Rosters */}
+                                    <div className="space-y-1.5 pt-1 border-t border-slate-200/60 dark:border-zinc-800/80">
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="font-bold text-slate-700 dark:text-zinc-300">
+                                          Заявленные составы матча:
+                                        </span>
+                                        <span className="text-[10px] text-slate-400">
+                                          {hasRoster ? `В вайтлисте: ${t1Keys.length + t2Keys.length} чел.` : "Свободный вход"}
+                                        </span>
+                                      </div>
+
+                                      {!hasRoster ? (
+                                        <div className="text-[11px] text-slate-500 bg-slate-50 dark:bg-zinc-800/40 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-700">
+                                          Вайтлист не ограничен — к серверу может подключиться любой участник клуба по IP и порту.
+                                        </div>
+                                      ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                          {/* Team 1 Roster */}
+                                          <div className="p-2 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 space-y-1">
+                                            <div className="font-bold text-blue-900 dark:text-blue-200 text-[11px] flex items-center justify-between">
+                                              <span>🔵 {m.team1_name} (CT)</span>
+                                              <Badge variant="outline" className="text-[9px] h-4">{t1Keys.length}</Badge>
+                                            </div>
+                                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                                              {t1Keys.map((steam) => (
+                                                <div key={steam} className="flex items-center justify-between text-[11px] bg-white dark:bg-zinc-800 p-1.5 rounded border border-blue-100 dark:border-blue-900/50 gap-1">
+                                                  <span className="font-medium truncate">{t1[steam]}</span>
+                                                  <div className="flex items-center gap-1 shrink-0">
+                                                    <span className="text-[9px] font-mono text-slate-400 select-all">{steam.slice(-6)}</span>
+                                                    <button
+                                                      type="button"
+                                                      disabled={isBusyRcon}
+                                                      onClick={() => handleSendRcon(m.id, `css_removeplayer ${steam}`)}
+                                                      className="text-rose-500 hover:text-rose-700 text-[10px] px-1 font-bold cursor-pointer"
+                                                      title="Удалить игрока"
+                                                    >
+                                                      ✕
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+
+                                          {/* Team 2 Roster */}
+                                          <div className="p-2 rounded-lg bg-red-50/50 dark:bg-red-950/20 border border-red-200/60 dark:border-red-900/40 space-y-1">
+                                            <div className="font-bold text-red-900 dark:text-red-200 text-[11px] flex items-center justify-between">
+                                              <span>🔴 {m.team2_name} (T)</span>
+                                              <Badge variant="outline" className="text-[9px] h-4">{t2Keys.length}</Badge>
+                                            </div>
+                                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                                              {t2Keys.map((steam) => (
+                                                <div key={steam} className="flex items-center justify-between text-[11px] bg-white dark:bg-zinc-800 p-1.5 rounded border border-red-100 dark:border-red-900/50 gap-1">
+                                                  <span className="font-medium truncate">{t2[steam]}</span>
+                                                  <div className="flex items-center gap-1 shrink-0">
+                                                    <span className="text-[9px] font-mono text-slate-400 select-all">{steam.slice(-6)}</span>
+                                                    <button
+                                                      type="button"
+                                                      disabled={isBusyRcon}
+                                                      onClick={() => handleSendRcon(m.id, `css_removeplayer ${steam}`)}
+                                                      className="text-rose-500 hover:text-rose-700 text-[10px] px-1 font-bold cursor-pointer"
+                                                      title="Удалить игрока"
+                                                    >
+                                                      ✕
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Section 3: Add / Move Player Form */}
+                                    <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 space-y-2">
+                                      <div className="text-[11px] font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                                        <UserPlus className="w-3.5 h-3.5 text-emerald-500" />
+                                        Добавить игрока по SteamID64:
+                                      </div>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <Input
+                                          placeholder="SteamID64 (например, 76561198012345678)"
+                                          value={addPlayerSteamId[m.id] || ""}
+                                          onChange={(e) =>
+                                            setAddPlayerSteamId((prev) => ({ ...prev, [m.id]: e.target.value }))
+                                          }
+                                          className="h-7 text-xs font-mono flex-1 min-w-[200px] bg-slate-50 dark:bg-zinc-900"
+                                        />
+                                        <select
+                                          value={addPlayerTeam[m.id] || "team1"}
+                                          onChange={(e) =>
+                                            setAddPlayerTeam((prev) => ({ ...prev, [m.id]: e.target.value as any }))
+                                          }
+                                          className="h-7 text-xs rounded border border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-900 px-2 text-slate-800 dark:text-zinc-200"
+                                        >
+                                          <option value="team1">{m.team1_name} (CT)</option>
+                                          <option value="team2">{m.team2_name} (T)</option>
+                                          <option value="spec">Наблюдатель (Spec)</option>
+                                        </select>
+                                        <Button
+                                          size="sm"
+                                          disabled={isBusyRcon || !addPlayerSteamId[m.id]}
+                                          onClick={() => {
+                                            const steam = (addPlayerSteamId[m.id] || "").trim();
+                                            const team = addPlayerTeam[m.id] || "team1";
+                                            if (steam) {
+                                              handleSendRcon(m.id, `css_addplayer ${steam} ${team}; css_whitelist_add ${steam}`);
+                                              setAddPlayerSteamId((prev) => ({ ...prev, [m.id]: "" }));
+                                            }
+                                          }}
+                                          className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                                        >
+                                          Добавить
+                                        </Button>
+                                      </div>
+                                    </div>
+
+                                    {/* Section 4: Whitelist Toggle */}
+                                    <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 flex-wrap gap-2">
+                                      <div className="text-[11px]">
+                                        <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                                          Вайтлист сервера:
+                                        </span>
+                                        <p className="text-[10px] text-slate-400">
+                                          Включить проверку SteamID или открыть свободный вход
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={isBusyRcon}
+                                          onClick={() => handleSendRcon(m.id, "css_whitelist 1")}
+                                          className="h-7 px-2.5 text-xs text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                                        >
+                                          <Shield className="w-3 h-3 mr-1" />
+                                          Включить вайтлист
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={isBusyRcon}
+                                          onClick={() => handleSendRcon(m.id, "css_whitelist 0")}
+                                          className="h-7 px-2.5 text-xs text-slate-600 dark:text-zinc-400 cursor-pointer"
+                                        >
+                                          Свободный вход
+                                        </Button>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                );
+                              })()}
 
                               {/* TAB 4: FINISH / TECHNICAL VICTORY */}
                               {activeControlTab === "finish" && (

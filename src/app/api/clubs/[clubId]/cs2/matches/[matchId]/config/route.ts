@@ -22,6 +22,7 @@ export async function GET(
       const knifeRound = cfg.knife_round ?? true;
       const practiceMode = cfg.practice_mode ?? false;
       const friendlyFire = cfg.friendly_fire ?? false;
+      const warmupTime = typeof cfg.warmup_time === "number" ? cfg.warmup_time : 60;
       const team1Players = cfg.team1_players || {};
       const team2Players = cfg.team2_players || {};
       const hasPlayers = Object.keys(team1Players).length > 0 || Object.keys(team2Players).length > 0;
@@ -48,6 +49,8 @@ export async function GET(
         cvars: {
           hostname: `DashMatch: ${qm.team1_name || "Команда 1"} vs ${qm.team2_name || "Команда 2"}`,
           mp_friendlyfire: friendlyFire ? "1" : "0",
+          mp_warmuptime: warmupTime > 0 ? String(warmupTime) : "300",
+          mp_warmup_pausetimer: warmupTime === 0 ? "1" : "0",
           matchzy_remote_log_url: `http://127.0.0.1:8080/events`,
           matchzy_knife_enabled_default: knifeRound && !practiceMode ? "true" : "false",
           matchzy_minimum_ready_required: "1",

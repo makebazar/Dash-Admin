@@ -26,6 +26,7 @@ export async function POST(
     const practiceMode = Boolean(body.practice_mode ?? false);
     const friendlyFire = Boolean(body.friendly_fire ?? false);
     const botTest = Boolean(body.bot_test ?? false);
+    const warmupTime = typeof body.warmup_time === "number" ? body.warmup_time : parseInt(body.warmup_time ?? "60", 10);
     const team1Players = body.team1_players || {};
     const team2Players = body.team2_players || {};
 
@@ -34,6 +35,7 @@ export async function POST(
       practice_mode: practiceMode,
       friendly_fire: friendlyFire,
       bot_test: botTest,
+      warmup_time: isNaN(warmupTime) ? 60 : warmupTime,
       team1_players: team1Players,
       team2_players: team2Players,
     };
