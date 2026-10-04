@@ -93,6 +93,7 @@ export async function POST(
           type: row.command_type,
           match_id: row.match_id,
           map_name: p.map_name || "de_dust2",
+          match_format: p.match_format || "5v5",
           config_url: p.config_url || "",
           auth_token: p.auth_token || "",
           command: p.command || "",

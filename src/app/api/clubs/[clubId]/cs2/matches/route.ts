@@ -77,6 +77,7 @@ export async function POST(
         matchId,
         JSON.stringify({
           map_name: mapName,
+          match_format: matchFormat,
           config_url: configUrl,
           auth_token: `secret_${matchId}`,
         }),
@@ -88,6 +89,7 @@ export async function POST(
       type: "START_MATCH",
       match_id: matchId,
       map_name: mapName,
+      match_format: matchFormat,
       config_url: configUrl,
       auth_token: `secret_${matchId}`,
     });

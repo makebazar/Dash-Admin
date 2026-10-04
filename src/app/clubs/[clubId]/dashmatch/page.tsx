@@ -29,6 +29,13 @@ import {
   ExternalLink,
   Shield,
   Zap,
+  ArrowLeftRight,
+  History,
+  UserPlus,
+  UserMinus,
+  Sliders,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,15 +83,41 @@ interface MatchRecord {
   };
 }
 
-const MAP_OPTIONS = [
-  { id: "de_dust2", name: "Dust II", desc: "Классика соревновательного CS" },
-  { id: "de_mirage", name: "Mirage", desc: "Самая популярная соревновательная карта" },
-  { id: "de_inferno", name: "Inferno", desc: "Тактические бананы и апартаменты" },
-  { id: "de_nuke", name: "Nuke", desc: "Вертикальный геймплей и выходы на улицу" },
-  { id: "de_ancient", name: "Ancient", desc: "Джунгли и древние руины" },
-  { id: "de_anubis", name: "Anubis", desc: "Водные каналы и быстрые стычки" },
-  { id: "de_vertigo", name: "Vertigo", desc: "Небоскреб с двумя этажами" },
-];
+export interface MapOption {
+  id: string;
+  name: string;
+  desc: string;
+  badge: string;
+}
+
+export const MAP_CATALOG: Record<string, MapOption[]> = {
+  "5v5": [
+    { id: "de_mirage", name: "Mirage", desc: "Главный соревновательный выбор, открытые пленты", badge: "Турнирная" },
+    { id: "de_dust2", name: "Dust II", desc: "Золотая классика CS, сбалансированный темп", badge: "Классика" },
+    { id: "de_inferno", name: "Inferno", desc: "Тактический контроль банана и апартаментов", badge: "Турнирная" },
+    { id: "de_nuke", name: "Nuke", desc: "Двухуровневый комплекс, улица и рампа", badge: "Турнирная" },
+    { id: "de_ancient", name: "Ancient", desc: "Древние руины майя и джунгли", badge: "Турнирная" },
+    { id: "de_anubis", name: "Anubis", desc: "Водные каналы, арки и быстрый размен", badge: "Турнирная" },
+    { id: "de_vertigo", name: "Vertigo", desc: "Высотный небоскрёб с двумя этажами", badge: "Турнирная" },
+    { id: "cs_office", name: "Office", desc: "Зимний офис, освобождение заложников", badge: "Заложники" },
+    { id: "cs_italy", name: "Italy", desc: "Итальянские улочки и винный погреб", badge: "Заложники" },
+  ],
+  "2v2": [
+    { id: "de_inferno", name: "Inferno (Плент B)", desc: "Напарники: Банан, церковь и плент B", badge: "Wingman" },
+    { id: "de_nuke", name: "Nuke (Плент B)", desc: "Напарники: Спуск, рампа и плент B", badge: "Wingman" },
+    { id: "de_vertigo", name: "Vertigo (Плент B)", desc: "Напарники: Рампа и открытый плент B", badge: "Wingman" },
+    { id: "de_overpass", name: "Overpass (Плент B)", desc: "Напарники: Монстр, токсик, шорт и B", badge: "Wingman" },
+    { id: "de_dust2", name: "Dust II (Шорт & A)", desc: "Напарники: Зигзаг, лонг и плент A", badge: "Wingman" },
+    { id: "de_anubis", name: "Anubis (Плент B)", desc: "Напарники: Водный канал и плент B", badge: "Wingman" },
+  ],
+  "1v1": [
+    { id: "aim_map", name: "Aim Map", desc: "Классическая симметричная арена для аима", badge: "Aim Arena" },
+    { id: "aim_redline", name: "Aim Redline", desc: "Арена с укрытиями на реакцию и стрейфы", badge: "Aim Arena" },
+    { id: "de_dust2", name: "Dust II (Aim Mid)", desc: "Прямая дуэль через мидл и ворота", badge: "Дуэль" },
+    { id: "de_mirage", name: "Mirage (Aim Mid)", desc: "Снайперская дуэль: окно vs коннектор", badge: "Дуэль" },
+    { id: "de_inferno", name: "Inferno (Banana)", desc: "Стрельба за контроль банана", badge: "Дуэль" },
+  ],
+};
 
 const FORMAT_OPTIONS = [
   { id: "5v5", name: "5x5", desc: "Соревновательный" },
@@ -109,8 +142,8 @@ export default function DashMatchPage() {
   const [copiedCode, setCopiedCode] = useState(false);
 
   // Match creation state
-  const [selectedMap, setSelectedMap] = useState("de_mirage");
   const [selectedFormat, setSelectedFormat] = useState("5v5");
+  const [selectedMap, setSelectedMap] = useState("de_mirage");
   const [matchMode, setMatchMode] = useState<"comp" | "practice" | "bots">("comp");
   const [knifeRound, setKnifeRound] = useState(true);
   const [friendlyFire, setFriendlyFire] = useState(false);
@@ -125,9 +158,24 @@ export default function DashMatchPage() {
   // Connect command copied states
   const [copiedConnectId, setCopiedConnectId] = useState<string | null>(null);
 
+  // In-match control state per match
+  const [matchControlTab, setMatchControlTab] = useState<Record<string, "quick" | "restore" | "players" | "finish" | "console">>({});
+  const [restoreRoundInput, setRestoreRoundInput] = useState<Record<string, string>>({});
+  const [addPlayerSteamId, setAddPlayerSteamId] = useState<Record<string, string>>({});
+  const [addPlayerTeam, setAddPlayerTeam] = useState<Record<string, "team1" | "team2" | "spec">>({});
+  const [removePlayerSteamId, setRemovePlayerSteamId] = useState<Record<string, string>>({});
+
   // RCON state per match
   const [rconInputs, setRconInputs] = useState<Record<string, string>>({});
   const [rconLoading, setRconLoading] = useState<Record<string, boolean>>({});
+
+  const handleFormatSelect = (fmt: string) => {
+    setSelectedFormat(fmt);
+    const mapsForFormat = MAP_CATALOG[fmt] || MAP_CATALOG["5v5"];
+    if (!mapsForFormat.some((m) => m.id === selectedMap)) {
+      setSelectedMap(mapsForFormat[0].id);
+    }
+  };
 
   const fetchStatus = useCallback(async (showIndicator = false) => {
     if (showIndicator) setIsRefreshing(true);
@@ -473,49 +521,62 @@ export default function DashMatchPage() {
                     </div>
                   </div>
 
-                  {/* Map Selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
-                      Карта матча:
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {MAP_OPTIONS.map((m) => (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => setSelectedMap(m.id)}
-                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
-                            selectedMap === m.id
-                              ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/30 text-orange-950 dark:text-orange-100 font-medium"
-                              : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300"
-                          }`}
-                        >
-                          <div className="text-xs font-bold">{m.name}</div>
-                          <div className="text-[10px] text-slate-400 dark:text-zinc-500 truncate">{m.desc}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   {/* Format Selector */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
-                      Формат состава:
+                    <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-between">
+                      <span>Формат состава:</span>
+                      <span className="text-[10px] text-orange-600 dark:text-orange-400 font-medium">
+                        Определяет доступный пул карт
+                      </span>
                     </label>
                     <div className="grid grid-cols-3 gap-2">
                       {FORMAT_OPTIONS.map((f) => (
                         <button
                           key={f.id}
                           type="button"
-                          onClick={() => setSelectedFormat(f.id)}
-                          className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                          onClick={() => handleFormatSelect(f.id)}
+                          className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
                             selectedFormat === f.id
-                              ? "border-orange-500 bg-orange-500 text-white font-bold"
+                              ? "border-orange-500 bg-orange-500 text-white font-bold shadow-xs"
                               : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300 text-xs"
                           }`}
                         >
-                          <div className="text-xs font-bold">{f.id}</div>
-                          <div className="text-[10px] opacity-80">{f.desc}</div>
+                          <div className="text-xs font-bold">{f.name}</div>
+                          <div className="text-[10px] opacity-85 truncate">{f.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Map Selector */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                        Карта ({selectedFormat}):
+                      </label>
+                      <span className="text-[10px] text-slate-400">
+                        {(MAP_CATALOG[selectedFormat] || MAP_CATALOG["5v5"]).length} карт в пуле
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                      {(MAP_CATALOG[selectedFormat] || MAP_CATALOG["5v5"]).map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setSelectedMap(m.id)}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer relative ${
+                            selectedMap === m.id
+                              ? "border-orange-500 bg-orange-50/70 dark:bg-orange-950/40 text-orange-950 dark:text-orange-100 font-medium shadow-xs"
+                              : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-bold truncate">{m.name}</span>
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 shrink-0">
+                              {m.badge}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 dark:text-zinc-500 truncate mt-0.5">{m.desc}</div>
                         </button>
                       ))}
                     </div>
@@ -719,27 +780,40 @@ export default function DashMatchPage() {
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-2">
                             <Badge
-                              className={`text-[11px] font-semibold ${
-                                m.status === "live"
+                              className={`text-[11px] font-semibold flex items-center gap-1 ${
+                                m.game_state === "paused"
+                                  ? "bg-amber-500 text-white animate-pulse"
+                                  : m.status === "live"
                                   ? "bg-emerald-500 text-white"
                                   : m.status === "starting"
                                   ? "bg-amber-500 text-white"
                                   : m.status === "warmup"
                                   ? "bg-blue-500 text-white"
+                                  : m.status === "finished"
+                                  ? "bg-purple-600 text-white"
                                   : m.status === "stopped"
                                   ? "bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300"
                                   : "bg-slate-300 text-slate-800"
                               }`}
                             >
-                              {m.status === "live"
-                                ? "В игре"
-                                : m.status === "starting"
-                                ? "Запуск сервера..."
-                                : m.status === "warmup"
-                                ? "Разминка / Ножевой"
-                                : m.status === "stopped"
-                                ? "Остановлен"
-                                : m.status}
+                              {m.game_state === "paused" ? (
+                                <>
+                                  <Pause className="w-3 h-3 fill-white" />
+                                  Пауза
+                                </>
+                              ) : m.status === "live" ? (
+                                "В игре"
+                              ) : m.status === "starting" ? (
+                                "Запуск сервера..."
+                              ) : m.status === "warmup" ? (
+                                "Разминка / Ножевой"
+                              ) : m.status === "finished" ? (
+                                "Завершен"
+                              ) : m.status === "stopped" ? (
+                                "Остановлен"
+                              ) : (
+                                m.status
+                              )}
                             </Badge>
 
                             <span className="text-sm font-black text-slate-900 dark:text-white">
@@ -814,153 +888,503 @@ export default function DashMatchPage() {
                           </div>
                         </div>
 
-                        {/* Live MatchZy Controls (Quick RCON Buttons) */}
-                        {isLive && (
-                          <div className="p-2.5 rounded-lg bg-slate-100/80 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 space-y-2">
-                            <div className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-between">
-                              <span className="flex items-center gap-1">
-                                <Terminal className="w-3.5 h-3.5 text-orange-500" />
-                                Управление матчем MatchZy (RCON):
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-normal">
-                                Мгновенное выполнение
-                              </span>
-                            </div>
+                        {/* In-Match Live Controls (MatchZy Controller) */}
+                        {isLive && (() => {
+                          const activeControlTab = matchControlTab[m.id] || "quick";
+                          const completedRounds = (m.score1 || 0) + (m.score2 || 0);
+                          const prevRound = Math.max(1, completedRounds);
 
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusyRcon}
-                                onClick={() => handleSendRcon(m.id, "matchzy_start")}
-                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50"
-                                title="Пропустить разминку и ожидание .ready, начать игру"
-                              >
-                                <FastForward className="w-3 h-3 text-emerald-500" />
-                                Начать принудительно
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusyRcon}
-                                onClick={() => handleSendRcon(m.id, "matchzy_forcepause")}
-                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-amber-700 dark:text-amber-400"
-                                title="Поставить админскую паузу"
-                              >
-                                <Pause className="w-3 h-3 text-amber-500" />
-                                Пауза
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusyRcon}
-                                onClick={() => handleSendRcon(m.id, "matchzy_forceunpause")}
-                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
-                                title="Снять паузу"
-                              >
-                                <Play className="w-3 h-3 text-blue-500" />
-                                Снять паузу
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusyRcon}
-                                onClick={() => handleSendRcon(m.id, "matchzy_restart")}
-                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
-                                title="Рестарт матча"
-                              >
-                                <RotateCcw className="w-3 h-3 text-slate-500" />
-                                Рестарт
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusyRcon}
-                                onClick={() => handleSendRcon(m.id, "bot_quota 10; bot_add ct; bot_add t")}
-                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
-                                title="Заполнить сервер ботами для теста"
-                              >
-                                <Bot className="w-3 h-3 text-purple-500" />
-                                +Боты
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusyRcon}
-                                onClick={() => handleSendRcon(m.id, "bot_kick")}
-                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
-                                title="Кикнуть всех ботов"
-                              >
-                                Кикнуть ботов
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusyRcon}
-                                onClick={() => handleSendRcon(m.id, "matchzy_endmatch team1")}
-                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
-                                title="Присудить победу Команде 1"
-                              >
-                                <Trophy className="w-3 h-3 text-amber-500" />
-                                ТП Команда 1
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusyRcon}
-                                onClick={() => handleSendRcon(m.id, "matchzy_endmatch team2")}
-                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
-                                title="Присудить победу Команде 2"
-                              >
-                                <Trophy className="w-3 h-3 text-amber-500" />
-                                ТП Команда 2
-                              </Button>
-                            </div>
-
-                            {/* Custom RCON Input */}
-                            <div className="flex items-center gap-2 pt-1">
-                              <Input
-                                placeholder="Любая команда CS2 RCON: status, mp_restartgame 1, changelevel de_dust2..."
-                                value={rconInputs[m.id] || ""}
-                                onChange={(e) =>
-                                  setRconInputs((prev) => ({ ...prev, [m.id]: e.target.value }))
-                                }
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    handleSendRcon(m.id);
-                                  }
-                                }}
-                                className="h-7 text-xs font-mono bg-white dark:bg-zinc-800"
-                              />
-                              <Button
-                                size="sm"
-                                onClick={() => handleSendRcon(m.id)}
-                                disabled={isBusyRcon || !rconInputs[m.id]}
-                                className="h-7 px-3 text-xs bg-slate-900 hover:bg-slate-800 text-white cursor-pointer shrink-0"
-                              >
-                                {isBusyRcon ? "..." : "Отправить"}
-                              </Button>
-                            </div>
-
-                            {/* Last RCON Response */}
-                            {m.rcon_last_response && (
-                              <div className="mt-2 p-2 rounded bg-slate-950 text-slate-200 font-mono text-[11px] max-h-32 overflow-y-auto whitespace-pre-wrap leading-tight border border-slate-800">
-                                <div className="text-[10px] text-slate-500 mb-0.5">
-                                  Ответ на `{m.rcon_last_command}`:
+                          return (
+                            <div className="p-3 rounded-xl bg-slate-100/90 dark:bg-zinc-900 border border-slate-200/90 dark:border-zinc-800 space-y-3">
+                              {/* Header & Subtabs */}
+                              <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-200/80 dark:border-zinc-800">
+                                <div className="text-xs font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                                  <Sliders className="w-3.5 h-3.5 text-orange-500" />
+                                  <span>Управление матчем MatchZy</span>
                                 </div>
-                                {m.rcon_last_response}
+
+                                <div className="flex items-center gap-1 bg-white/80 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-slate-200/80 dark:border-zinc-700/60 text-[11px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => setMatchControlTab((prev) => ({ ...prev, [m.id]: "quick" }))}
+                                    className={`px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
+                                      activeControlTab === "quick"
+                                        ? "bg-orange-500 text-white shadow-xs"
+                                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                                    }`}
+                                  >
+                                    ⚡ Игра
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMatchControlTab((prev) => ({ ...prev, [m.id]: "restore" }))}
+                                    className={`px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
+                                      activeControlTab === "restore"
+                                        ? "bg-orange-500 text-white shadow-xs"
+                                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                                    }`}
+                                  >
+                                    ⏪ Откат раундов
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMatchControlTab((prev) => ({ ...prev, [m.id]: "players" }))}
+                                    className={`px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
+                                      activeControlTab === "players"
+                                        ? "bg-orange-500 text-white shadow-xs"
+                                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                                    }`}
+                                  >
+                                    👥 Игроки
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMatchControlTab((prev) => ({ ...prev, [m.id]: "finish" }))}
+                                    className={`px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
+                                      activeControlTab === "finish"
+                                        ? "bg-orange-500 text-white shadow-xs"
+                                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                                    }`}
+                                  >
+                                    🏆 Финал
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMatchControlTab((prev) => ({ ...prev, [m.id]: "console" }))}
+                                    className={`px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
+                                      activeControlTab === "console"
+                                        ? "bg-orange-500 text-white shadow-xs"
+                                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                                    }`}
+                                  >
+                                    💻 RCON
+                                  </button>
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        )}
+
+                              {/* TAB 1: QUICK ACTIONS */}
+                              {activeControlTab === "quick" && (
+                                <div className="space-y-2.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {m.game_state === "paused" ? (
+                                      <Button
+                                        size="sm"
+                                        disabled={isBusyRcon}
+                                        onClick={() => handleSendRcon(m.id, "matchzy_forceunpause")}
+                                        className="h-7 px-2.5 text-[11px] gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+                                        title="Снять принудительную паузу"
+                                      >
+                                        <Play className="w-3 h-3 fill-white" />
+                                        Снять паузу
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={isBusyRcon}
+                                        onClick={() => handleSendRcon(m.id, "matchzy_forcepause")}
+                                        className="h-7 px-2.5 text-[11px] gap-1.5 bg-white dark:bg-zinc-800 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 cursor-pointer"
+                                        title="Поставить принудительную админскую паузу"
+                                      >
+                                        <Pause className="w-3 h-3 text-amber-500" />
+                                        Пауза
+                                      </Button>
+                                    )}
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "matchzy_start")}
+                                      className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50"
+                                      title="Пропустить разминку и ожидание .ready, начать матч"
+                                    >
+                                      <FastForward className="w-3 h-3 text-emerald-500" />
+                                      Начать принудительно
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "mp_swapteams 1")}
+                                      className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50"
+                                      title="Поменять команды сторонами (CT ⇄ T)"
+                                    >
+                                      <ArrowLeftRight className="w-3 h-3 text-indigo-500" />
+                                      Сменить стороны
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => {
+                                        if (confirm("Перезапустить матч со счета 0:0?")) {
+                                          handleSendRcon(m.id, "matchzy_restart");
+                                        }
+                                      }}
+                                      className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-rose-700 dark:text-rose-400 hover:bg-rose-50"
+                                      title="Рестарт матча с 0:0"
+                                    >
+                                      <RotateCcw className="w-3 h-3 text-rose-500" />
+                                      Рестарт
+                                    </Button>
+                                  </div>
+
+                                  {/* Secondary Quick Toggles */}
+                                  <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-200/60 dark:border-zinc-800/80">
+                                    <span className="text-[10px] text-slate-400 mr-1">Параметры:</span>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "bot_quota 10; bot_add ct; bot_add t; bot_difficulty 1")}
+                                      className="h-6 px-2 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
+                                      title="Заполнить сервер ботами для теста"
+                                    >
+                                      <Bot className="w-3 h-3 text-purple-500" />
+                                      +Боты
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "bot_kick")}
+                                      className="h-6 px-2 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-slate-600 dark:text-zinc-400"
+                                      title="Кикнуть всех ботов"
+                                    >
+                                      Кикнуть ботов
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "mp_friendlyfire 1")}
+                                      className="h-6 px-2 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-red-600 dark:text-red-400"
+                                      title="Включить огонь по своим"
+                                    >
+                                      <Flame className="w-3 h-3 text-red-500" />
+                                      FF Вкл
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "mp_friendlyfire 0")}
+                                      className="h-6 px-2 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
+                                      title="Отключить огонь по своим"
+                                    >
+                                      FF Выкл
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* TAB 2: ROUND RESTORE */}
+                              {activeControlTab === "restore" && (
+                                <div className="space-y-2.5">
+                                  <div className="p-2 rounded bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300">
+                                    MatchZy автоматически сохраняет бэкап в конце каждого раунда. Если у игрока завис ПК, вылетела игра или выключилось питание — восстановите точный раунд без потери счёта и экономики!
+                                  </div>
+
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Button
+                                      size="sm"
+                                      disabled={isBusyRcon || completedRounds === 0}
+                                      onClick={() => handleSendRcon(m.id, `matchzy_restore ${prevRound}`)}
+                                      className="h-7 px-3 text-xs bg-orange-600 hover:bg-orange-700 text-white font-bold gap-1.5 cursor-pointer shadow-xs"
+                                    >
+                                      <History className="w-3.5 h-3.5" />
+                                      Откатить на раунд #{prevRound} (-1 раунд)
+                                    </Button>
+
+                                    <span className="text-[11px] text-slate-500">
+                                      Сыграно раундов: <strong className="text-slate-800 dark:text-zinc-200">{completedRounds}</strong>
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 dark:border-zinc-800/80 flex-wrap">
+                                    <span className="text-[11px] text-slate-600 dark:text-zinc-400">
+                                      Восстановить раунд по номеру:
+                                    </span>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      max={Math.max(1, completedRounds + 1)}
+                                      placeholder={`1..${Math.max(1, completedRounds)}`}
+                                      value={restoreRoundInput[m.id] || ""}
+                                      onChange={(e) =>
+                                        setRestoreRoundInput((prev) => ({ ...prev, [m.id]: e.target.value }))
+                                      }
+                                      className="w-20 h-7 text-xs font-mono bg-white dark:bg-zinc-800"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon || !restoreRoundInput[m.id]}
+                                      onClick={() => {
+                                        const rnd = restoreRoundInput[m.id]?.trim();
+                                        if (rnd) {
+                                          handleSendRcon(m.id, `matchzy_restore ${rnd}`);
+                                        }
+                                      }}
+                                      className="h-7 px-3 text-xs bg-slate-900 hover:bg-slate-800 text-white cursor-pointer"
+                                    >
+                                      Восстановить
+                                    </Button>
+                                  </div>
+
+                                  {completedRounds > 0 && (
+                                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                      <span className="text-[10px] text-slate-400">Быстрый откат:</span>
+                                      {Array.from({ length: Math.min(completedRounds, 24) }, (_, i) => i + 1).map((r) => (
+                                        <button
+                                          key={r}
+                                          type="button"
+                                          disabled={isBusyRcon}
+                                          onClick={() => handleSendRcon(m.id, `matchzy_restore ${r}`)}
+                                          className="px-2 py-0.5 rounded text-[10px] font-mono bg-white dark:bg-zinc-800 hover:bg-orange-500 hover:text-white text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 transition-colors cursor-pointer"
+                                        >
+                                          Р#{r}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* TAB 3: LIVE PLAYERS & WHITELIST */}
+                              {activeControlTab === "players" && (
+                                <div className="space-y-2.5">
+                                  {/* Add Player Box */}
+                                  <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 space-y-2">
+                                    <div className="text-[11px] font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                                      <UserPlus className="w-3.5 h-3.5 text-emerald-500" />
+                                      Добавить / пересадить игрока во время игры:
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <Input
+                                        placeholder="SteamID64 (например, 76561198012345678)"
+                                        value={addPlayerSteamId[m.id] || ""}
+                                        onChange={(e) =>
+                                          setAddPlayerSteamId((prev) => ({ ...prev, [m.id]: e.target.value }))
+                                        }
+                                        className="h-7 text-xs font-mono flex-1 min-w-[200px] bg-slate-50 dark:bg-zinc-900"
+                                      />
+                                      <select
+                                        value={addPlayerTeam[m.id] || "team1"}
+                                        onChange={(e) =>
+                                          setAddPlayerTeam((prev) => ({ ...prev, [m.id]: e.target.value as any }))
+                                        }
+                                        className="h-7 text-xs rounded border border-slate-300 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-900 px-2 text-slate-800 dark:text-zinc-200"
+                                      >
+                                        <option value="team1">{m.team1_name} (Команда 1)</option>
+                                        <option value="team2">{m.team2_name} (Команда 2)</option>
+                                        <option value="spec">Наблюдатель (Spec)</option>
+                                      </select>
+                                      <Button
+                                        size="sm"
+                                        disabled={isBusyRcon || !addPlayerSteamId[m.id]}
+                                        onClick={() => {
+                                          const steam = (addPlayerSteamId[m.id] || "").trim();
+                                          const team = addPlayerTeam[m.id] || "team1";
+                                          if (steam) {
+                                            handleSendRcon(m.id, `matchzy_addplayer ${steam} ${team}`);
+                                            setAddPlayerSteamId((prev) => ({ ...prev, [m.id]: "" }));
+                                          }
+                                        }}
+                                        className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                                      >
+                                        Добавить
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  {/* Remove Player Box */}
+                                  <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 space-y-2">
+                                    <div className="text-[11px] font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                                      <UserMinus className="w-3.5 h-3.5 text-rose-500" />
+                                      Исключить (кикнуть) игрока из матча:
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        placeholder="SteamID64 игрока для кика"
+                                        value={removePlayerSteamId[m.id] || ""}
+                                        onChange={(e) =>
+                                          setRemovePlayerSteamId((prev) => ({ ...prev, [m.id]: e.target.value }))
+                                        }
+                                        className="h-7 text-xs font-mono flex-1 bg-slate-50 dark:bg-zinc-900"
+                                      />
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        disabled={isBusyRcon || !removePlayerSteamId[m.id]}
+                                        onClick={() => {
+                                          const steam = (removePlayerSteamId[m.id] || "").trim();
+                                          if (steam) {
+                                            handleSendRcon(m.id, `matchzy_removeplayer ${steam}`);
+                                            setRemovePlayerSteamId((prev) => ({ ...prev, [m.id]: "" }));
+                                          }
+                                        }}
+                                        className="h-7 px-3 text-xs cursor-pointer"
+                                      >
+                                        Кикнуть
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  {/* Whitelist Toggle */}
+                                  <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-zinc-800/80 border border-slate-200/80 dark:border-zinc-700/60 flex-wrap gap-2">
+                                    <div className="text-[11px]">
+                                      <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                                        Вайтлист сервера:
+                                      </span>
+                                      <p className="text-[10px] text-slate-400">
+                                        Включить проверку SteamID или открыть свободный вход
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={isBusyRcon}
+                                        onClick={() => handleSendRcon(m.id, "matchzy_whitelist 1")}
+                                        className="h-7 px-2.5 text-xs text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                                      >
+                                        <Shield className="w-3 h-3 mr-1" />
+                                        Включить вайтлист
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={isBusyRcon}
+                                        onClick={() => handleSendRcon(m.id, "matchzy_whitelist 0")}
+                                        className="h-7 px-2.5 text-xs text-slate-600 dark:text-zinc-400 cursor-pointer"
+                                      >
+                                        Свободный вход
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* TAB 4: FINISH / TECHNICAL VICTORY */}
+                              {activeControlTab === "finish" && (
+                                <div className="space-y-2.5">
+                                  <div className="text-[11px] text-slate-500">
+                                    Принудительно присудить победу команде или завершить встречу вничью:
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => {
+                                        if (confirm(`Присудить техническую победу ${m.team1_name}?`)) {
+                                          handleSendRcon(m.id, "matchzy_endmatch team1");
+                                        }
+                                      }}
+                                      className="h-8 text-xs font-semibold gap-1.5 border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 cursor-pointer"
+                                    >
+                                      <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                                      ТП {m.team1_name}
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => {
+                                        if (confirm(`Присудить техническую победу ${m.team2_name}?`)) {
+                                          handleSendRcon(m.id, "matchzy_endmatch team2");
+                                        }
+                                      }}
+                                      className="h-8 text-xs font-semibold gap-1.5 border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 cursor-pointer"
+                                    >
+                                      <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                                      ТП {m.team2_name}
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => {
+                                        if (confirm("Завершить встречу ничьей?")) {
+                                          handleSendRcon(m.id, "matchzy_endmatch draw");
+                                        }
+                                      }}
+                                      className="h-8 text-xs font-semibold gap-1.5 border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 cursor-pointer"
+                                    >
+                                      <Swords className="w-3.5 h-3.5 text-slate-500" />
+                                      Ничья (Draw)
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* TAB 5: RCON CONSOLE */}
+                              {activeControlTab === "console" && (
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[10px] text-slate-400">Шаблоны:</span>
+                                    {["status", "mp_restartgame 1", "matchzy_knife", "mp_warmup_end", "bot_kick"].map((cmd) => (
+                                      <button
+                                        key={cmd}
+                                        type="button"
+                                        disabled={isBusyRcon}
+                                        onClick={() => handleSendRcon(m.id, cmd)}
+                                        className="px-2 py-0.5 rounded text-[10px] font-mono bg-white dark:bg-zinc-800 hover:bg-orange-500 hover:text-white text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 cursor-pointer transition-colors"
+                                      >
+                                        {cmd}
+                                      </button>
+                                    ))}
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      placeholder="Любая команда CS2: status, changelevel de_inferno, mp_roundtime 2..."
+                                      value={rconInputs[m.id] || ""}
+                                      onChange={(e) =>
+                                        setRconInputs((prev) => ({ ...prev, [m.id]: e.target.value }))
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          handleSendRcon(m.id);
+                                        }
+                                      }}
+                                      className="h-7 text-xs font-mono bg-white dark:bg-zinc-800"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleSendRcon(m.id)}
+                                      disabled={isBusyRcon || !rconInputs[m.id]}
+                                      className="h-7 px-3 text-xs bg-slate-900 hover:bg-slate-800 text-white cursor-pointer shrink-0"
+                                    >
+                                      {isBusyRcon ? "..." : "Отправить"}
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Live RCON Output Area (always visible if response exists) */}
+                              {m.rcon_last_response && (
+                                <div className="p-2 rounded bg-slate-950 text-slate-200 font-mono text-[11px] max-h-36 overflow-y-auto whitespace-pre-wrap leading-tight border border-slate-800">
+                                  <div className="text-[10px] text-slate-500 mb-0.5 flex items-center justify-between">
+                                    <span>Ответ на `{m.rcon_last_command}`:</span>
+                                    <span className="text-[9px] text-slate-600">обновлено</span>
+                                  </div>
+                                  {m.rcon_last_response}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800">
                           <div>ID матча: {m.id}</div>
