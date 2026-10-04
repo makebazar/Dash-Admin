@@ -29,7 +29,6 @@ import {
   Lock,
   ChevronDown,
   ChevronUp,
-  Sparkles,
   Swords,
   Gamepad2,
 } from "lucide-react";
@@ -120,16 +119,6 @@ export function ClubSidebarContent({
         />
       ),
       visible: hasModuleAccess("dashboard") || isExpiredForOwnerUi,
-    },
-    {
-      href: `/clubs/${clubId}/ai-manager`,
-      label: "AI-Управляющий",
-      icon: (
-        <Sparkles
-          className={cn("shrink-0 text-blue-500", isCollapsed ? "h-5 w-5" : "h-4 w-4")}
-        />
-      ),
-      visible: !isExpiredForOwnerUi && (hasModuleAccess("dashboard") || isFullAccess),
     },
     {
       href: `/clubs/${clubId}/shifts`,
@@ -247,8 +236,7 @@ export function ClubSidebarContent({
       icon: (
         <Swords className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
       ),
-      visible:
-        !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
+      visible: false, // Временно скрыто
     },
     {
       href: `/clubs/${clubId}/dashmatch`,
