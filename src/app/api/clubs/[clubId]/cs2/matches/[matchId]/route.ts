@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { requireClubFullAccess } from "@/lib/club-api-access";
+import { broadcastSseCommand } from "@/lib/cs2/sse";
 
 export async function DELETE(
   request: Request,
@@ -28,19 +29,11 @@ export async function DELETE(
       [parsedClubId, matchId]
     );
 
-    // Send directly over active WebSocket if connected
-    const wsSet = (global as any).__cs2ClubSockets?.get(parsedClubId);
-    if (wsSet && wsSet.size > 0) {
-      const msg = JSON.stringify({
-        type: "STOP_MATCH",
-        match_id: matchId,
-      });
-      for (const ws of wsSet) {
-        if (ws.readyState === 1) {
-          try { ws.send(msg); } catch (e) {}
-        }
-      }
-    }
+    // Send directly over active SSE connection if connected
+    broadcastSseCommand(parsedClubId, {
+      type: "STOP_MATCH",
+      match_id: matchId,
+    });
 
     return NextResponse.json({
       success: true,

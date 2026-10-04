@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { requireClubFullAccess } from "@/lib/club-api-access";
+import { broadcastSseCommand } from "@/lib/cs2/sse";
 import crypto from "crypto";
 
 export async function POST(
@@ -62,22 +63,14 @@ export async function POST(
       ]
     );
 
-    // 4. Send directly over active WebSocket if connected
-    const wsSet = (global as any).__cs2ClubSockets?.get(parsedClubId);
-    if (wsSet && wsSet.size > 0) {
-      const msg = JSON.stringify({
-        type: "START_MATCH",
-        match_id: matchId,
-        map_name: mapName,
-        config_url: configUrl,
-        auth_token: `secret_${matchId}`,
-      });
-      for (const ws of wsSet) {
-        if (ws.readyState === 1) {
-          try { ws.send(msg); } catch (e) {}
-        }
-      }
-    }
+    // 4. Send directly over active SSE connection if agent is connected
+    broadcastSseCommand(parsedClubId, {
+      type: "START_MATCH",
+      match_id: matchId,
+      map_name: mapName,
+      config_url: configUrl,
+      auth_token: `secret_${matchId}`,
+    });
 
     return NextResponse.json({
       success: true,
