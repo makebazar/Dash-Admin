@@ -11,16 +11,24 @@ import {
   Check,
   Play,
   Square,
+  Pause,
+  FastForward,
+  RotateCcw,
   RefreshCw,
   KeyRound,
   ShieldCheck,
   Users,
-  MapPin,
-  Clock,
   Layers,
-  ArrowRight,
   AlertCircle,
   CheckCircle2,
+  Terminal,
+  Bot,
+  Trophy,
+  Swords,
+  Flame,
+  ExternalLink,
+  Shield,
+  Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,22 +63,33 @@ interface MatchRecord {
   score1: number;
   score2: number;
   created_at: string;
+  rcon_last_command?: string;
+  rcon_last_response?: string;
+  game_state?: string;
+  config_data?: {
+    knife_round?: boolean;
+    practice_mode?: boolean;
+    friendly_fire?: boolean;
+    bot_test?: boolean;
+    team1_players?: Record<string, string>;
+    team2_players?: Record<string, string>;
+  };
 }
 
 const MAP_OPTIONS = [
   { id: "de_dust2", name: "Dust II", desc: "Классика соревновательного CS" },
-  { id: "de_mirage", name: "Mirage", desc: "Самая популярная карта" },
+  { id: "de_mirage", name: "Mirage", desc: "Самая популярная соревновательная карта" },
   { id: "de_inferno", name: "Inferno", desc: "Тактические бананы и апартаменты" },
-  { id: "de_nuke", name: "Nuke", desc: "Вертикальный геймплей" },
+  { id: "de_nuke", name: "Nuke", desc: "Вертикальный геймплей и выходы на улицу" },
   { id: "de_ancient", name: "Ancient", desc: "Джунгли и древние руины" },
   { id: "de_anubis", name: "Anubis", desc: "Водные каналы и быстрые стычки" },
   { id: "de_vertigo", name: "Vertigo", desc: "Небоскреб с двумя этажами" },
 ];
 
 const FORMAT_OPTIONS = [
-  { id: "5v5", name: "5x5 Соревновательный", desc: "Классический турнирный формат" },
-  { id: "2v2", name: "2x2 Напарники", desc: "Динамичные матчи в парах" },
-  { id: "1v1", name: "1x1 Дуэль", desc: "Индивидуальный аим-поединок" },
+  { id: "5v5", name: "5x5", desc: "Соревновательный" },
+  { id: "2v2", name: "2x2", desc: "Напарники (Wingman)" },
+  { id: "1v1", name: "1x1", desc: "Дуэль (Aim)" },
 ];
 
 export default function DashMatchPage() {
@@ -92,6 +111,12 @@ export default function DashMatchPage() {
   // Match creation state
   const [selectedMap, setSelectedMap] = useState("de_mirage");
   const [selectedFormat, setSelectedFormat] = useState("5v5");
+  const [matchMode, setMatchMode] = useState<"comp" | "practice" | "bots">("comp");
+  const [knifeRound, setKnifeRound] = useState(true);
+  const [friendlyFire, setFriendlyFire] = useState(false);
+  const [enableWhitelist, setEnableWhitelist] = useState(false);
+  const [team1PlayersRaw, setTeam1PlayersRaw] = useState("");
+  const [team2PlayersRaw, setTeam2PlayersRaw] = useState("");
   const [team1Name, setTeam1Name] = useState("Команда 1");
   const [team2Name, setTeam2Name] = useState("Команда 2");
   const [isLaunching, setIsLaunching] = useState(false);
@@ -99,6 +124,10 @@ export default function DashMatchPage() {
 
   // Connect command copied states
   const [copiedConnectId, setCopiedConnectId] = useState<string | null>(null);
+
+  // RCON state per match
+  const [rconInputs, setRconInputs] = useState<Record<string, string>>({});
+  const [rconLoading, setRconLoading] = useState<Record<string, boolean>>({});
 
   const fetchStatus = useCallback(async (showIndicator = false) => {
     if (showIndicator) setIsRefreshing(true);
@@ -120,10 +149,10 @@ export default function DashMatchPage() {
   useEffect(() => {
     if (!clubId) return;
     fetchStatus();
-    // Poll every 4 seconds for live match updates
+    // Poll every 3 seconds for live match updates and RCON responses
     const interval = setInterval(() => {
       fetchStatus();
-    }, 4000);
+    }, 3000);
     return () => clearInterval(interval);
   }, [clubId, fetchStatus]);
 
@@ -153,6 +182,23 @@ export default function DashMatchPage() {
     onDone();
   };
 
+  // Helper to parse SteamID list
+  const parsePlayersList = (text: string): Record<string, string> => {
+    const res: Record<string, string> = {};
+    const lines = text.split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const parts = trimmed.split(/[\s,;:]+/);
+      const steamId = parts[0];
+      const name = parts.slice(1).join(" ") || `Player_${steamId.slice(-4)}`;
+      if (steamId.length >= 10) {
+        res[steamId] = name;
+      }
+    }
+    return res;
+  };
+
   // Launch Match
   const handleLaunchMatch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,6 +206,9 @@ export default function DashMatchPage() {
     setLaunchMessage(null);
 
     try {
+      const team1Players = enableWhitelist ? parsePlayersList(team1PlayersRaw) : {};
+      const team2Players = enableWhitelist ? parsePlayersList(team2PlayersRaw) : {};
+
       const res = await fetch(`/api/clubs/${clubId}/cs2/matches`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -168,6 +217,12 @@ export default function DashMatchPage() {
           format: selectedFormat,
           team1_name: team1Name.trim() || "Команда 1",
           team2_name: team2Name.trim() || "Команда 2",
+          knife_round: matchMode === "comp" ? knifeRound : false,
+          practice_mode: matchMode === "practice",
+          friendly_fire: friendlyFire,
+          bot_test: matchMode === "bots",
+          team1_players: team1Players,
+          team2_players: team2Players,
         }),
       });
 
@@ -175,9 +230,17 @@ export default function DashMatchPage() {
       if (res.ok && data.success) {
         setLaunchMessage({
           type: "success",
-          text: `Матч запущен! Команда для подключения: ${data.connect_command}`,
+          text: `Сервер запущен! Команда подключения: ${data.connect_command}`,
         });
-        await fetchStatus();
+
+        // If bots test mode, auto-add bots after 6 seconds
+        if (matchMode === "bots") {
+          setTimeout(() => {
+            handleSendRcon(data.match_id, "bot_quota 10; bot_add ct; bot_add t; bot_difficulty 1");
+          }, 6000);
+        }
+
+        await fetchStatus(true);
       } else {
         setLaunchMessage({
           type: "error",
@@ -196,17 +259,45 @@ export default function DashMatchPage() {
 
   // Stop Match
   const handleStopMatch = async (matchId: string) => {
-    if (!confirm("Остановить игровой сервер для этого матча?")) return;
+    if (!confirm("Остановить игровой сервер CS2 для этого матча?")) return;
 
     try {
       const res = await fetch(`/api/clubs/${clubId}/cs2/matches/${matchId}`, {
         method: "DELETE",
       });
       if (res.ok) {
-        await fetchStatus();
+        await fetchStatus(true);
       }
     } catch (err) {
       console.error("Error stopping match:", err);
+    }
+  };
+
+  // Send RCON Command
+  const handleSendRcon = async (matchId: string, cmdToSend?: string) => {
+    const cmd = (cmdToSend || rconInputs[matchId] || "").trim();
+    if (!cmd) return;
+
+    setRconLoading((prev) => ({ ...prev, [matchId]: true }));
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/cs2/rcon`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ match_id: matchId, command: cmd }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Ошибка отправки RCON");
+      } else {
+        if (!cmdToSend) {
+          setRconInputs((prev) => ({ ...prev, [matchId]: "" }));
+        }
+        await fetchStatus(true);
+      }
+    } catch (e) {
+      alert("Сетевая ошибка при отправке RCON");
+    } finally {
+      setRconLoading((prev) => ({ ...prev, [matchId]: false }));
     }
   };
 
@@ -227,11 +318,11 @@ export default function DashMatchPage() {
                   DashMatch
                 </h1>
                 <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border-orange-200 dark:border-orange-800">
-                  CS2 Local Match Server
+                  CS2 MatchZy Controller
                 </Badge>
               </div>
               <p className="text-sm text-slate-500 dark:text-zinc-400">
-                Автоматическое управление выделенными серверами турниров и локальных матчей в клубе
+                Управление соревновательными серверами, матчами и турнирными слотами CS2 в клубе
               </p>
             </div>
           </div>
@@ -263,7 +354,7 @@ export default function DashMatchPage() {
                     Агент не подключен
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    Запустите dashmatch.exe на ПК клуба
+                    Запустите dashmatch.exe на сервере клуба
                   </div>
                 </div>
               </>
@@ -275,7 +366,7 @@ export default function DashMatchPage() {
             size="sm"
             onClick={() => fetchStatus(true)}
             disabled={isRefreshing}
-            className="h-9 px-3 gap-1.5 text-xs text-slate-600 dark:text-zinc-300"
+            className="h-9 px-3 gap-1.5 text-xs text-slate-600 dark:text-zinc-300 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
             Обновить
@@ -311,7 +402,7 @@ export default function DashMatchPage() {
           }`}
         >
           <Server className="w-4 h-4" />
-          Подключение сервера клуба
+          Связь с сервером клуба
           {!isAgentOnline && (
             <span className="w-2 h-2 rounded-full bg-amber-500"></span>
           )}
@@ -324,17 +415,64 @@ export default function DashMatchPage() {
           {/* Left Column: Create Match Form */}
           <div className="lg:col-span-5 space-y-6">
             <Card className="border-slate-200/80 dark:border-zinc-800 shadow-xs">
-              <CardHeader className="pb-4">
+              <CardHeader className="pb-3">
                 <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
                   <Play className="w-4 h-4 text-orange-500" />
-                  Быстрый запуск матча
+                  Создать и запустить матч
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Запуск изолированного матча CS2 с автоматической загрузкой конфигурации команд и плагина MatchZy
+                  Автоматический запуск сервера CS2 с плагином MatchZy и выбранным сценарием
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleLaunchMatch} className="space-y-4">
+                  {/* Mode Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                      Сценарий игры:
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMatchMode("comp")}
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                          matchMode === "comp"
+                            ? "border-orange-500 bg-orange-500 text-white font-bold shadow-xs"
+                            : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300"
+                        }`}
+                      >
+                        <Trophy className="w-4 h-4" />
+                        <span className="text-xs">Матч 5x5</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMatchMode("bots")}
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                          matchMode === "bots"
+                            ? "border-orange-500 bg-orange-500 text-white font-bold shadow-xs"
+                            : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300"
+                        }`}
+                      >
+                        <Bot className="w-4 h-4" />
+                        <span className="text-xs">Тест с ботами</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMatchMode("practice")}
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                          matchMode === "practice"
+                            ? "border-orange-500 bg-orange-500 text-white font-bold shadow-xs"
+                            : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300"
+                        }`}
+                      >
+                        <Zap className="w-4 h-4" />
+                        <span className="text-xs">Тренировка</span>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Map Selector */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
@@ -346,14 +484,14 @@ export default function DashMatchPage() {
                           key={m.id}
                           type="button"
                           onClick={() => setSelectedMap(m.id)}
-                          className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
                             selectedMap === m.id
                               ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/30 text-orange-950 dark:text-orange-100 font-medium"
                               : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300"
                           }`}
                         >
                           <div className="text-xs font-bold">{m.name}</div>
-                          <div className="text-[10px] text-slate-400 dark:text-zinc-500 line-clamp-1">{m.desc}</div>
+                          <div className="text-[10px] text-slate-400 dark:text-zinc-500 truncate">{m.desc}</div>
                         </button>
                       ))}
                     </div>
@@ -362,7 +500,7 @@ export default function DashMatchPage() {
                   {/* Format Selector */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
-                      Формат игры:
+                      Формат состава:
                     </label>
                     <div className="grid grid-cols-3 gap-2">
                       {FORMAT_OPTIONS.map((f) => (
@@ -376,14 +514,15 @@ export default function DashMatchPage() {
                               : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300 text-xs"
                           }`}
                         >
-                          <div className="text-xs">{f.id}</div>
+                          <div className="text-xs font-bold">{f.id}</div>
+                          <div className="text-[10px] opacity-80">{f.desc}</div>
                         </button>
                       ))}
                     </div>
                   </div>
 
                   {/* Teams */}
-                  <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400">
                         Команда 1 (CT)
@@ -391,8 +530,8 @@ export default function DashMatchPage() {
                       <Input
                         value={team1Name}
                         onChange={(e) => setTeam1Name(e.target.value)}
-                        placeholder="Название Команды 1"
-                        className="h-9 text-xs"
+                        placeholder="Team Spirit Local"
+                        className="h-8 text-xs"
                         required
                       />
                     </div>
@@ -403,10 +542,86 @@ export default function DashMatchPage() {
                       <Input
                         value={team2Name}
                         onChange={(e) => setTeam2Name(e.target.value)}
-                        placeholder="Название Команды 2"
-                        className="h-9 text-xs"
+                        placeholder="Cloud9 Local"
+                        className="h-8 text-xs"
                         required
                       />
+                    </div>
+                  </div>
+
+                  {/* MatchZy Rule Toggles */}
+                  <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800 space-y-2.5">
+                    <div className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 uppercase tracking-wider">
+                      Правила & MatchZy настройки
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={knifeRound && matchMode !== "practice"}
+                          disabled={matchMode === "practice"}
+                          onChange={(e) => setKnifeRound(e.target.checked)}
+                          className="rounded text-orange-600 focus:ring-orange-500 h-3.5 w-3.5"
+                        />
+                        <span className="flex items-center gap-1 text-[11px]">
+                          <Swords className="w-3.5 h-3.5 text-orange-500" />
+                          Ножевой раунд
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={friendlyFire}
+                          onChange={(e) => setFriendlyFire(e.target.checked)}
+                          className="rounded text-orange-600 focus:ring-orange-500 h-3.5 w-3.5"
+                        />
+                        <span className="flex items-center gap-1 text-[11px]">
+                          <Flame className="w-3.5 h-3.5 text-red-500" />
+                          Огонь по своим
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="pt-1 border-t border-slate-200 dark:border-zinc-800">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={enableWhitelist}
+                          onChange={(e) => setEnableWhitelist(e.target.checked)}
+                          className="rounded text-orange-600 focus:ring-orange-500 h-3.5 w-3.5"
+                        />
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-700 dark:text-zinc-300">
+                          <Shield className="w-3.5 h-3.5 text-indigo-500" />
+                          Вайтлист по SteamID64 (строгий вход)
+                        </span>
+                      </label>
+
+                      {enableWhitelist && (
+                        <div className="grid grid-cols-2 gap-2 pt-2 text-[11px]">
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-slate-400">SteamID64 Команды 1:</span>
+                            <textarea
+                              rows={3}
+                              placeholder="76561198012345678 Player1&#10;76561198012345679 Player2"
+                              value={team1PlayersRaw}
+                              onChange={(e) => setTeam1PlayersRaw(e.target.value)}
+                              className="w-full text-[10px] p-1.5 rounded border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-slate-400">SteamID64 Команды 2:</span>
+                            <textarea
+                              rows={3}
+                              placeholder="76561198098765431 Player3&#10;76561198098765432 Player4"
+                              value={team2PlayersRaw}
+                              onChange={(e) => setTeam2PlayersRaw(e.target.value)}
+                              className="w-full text-[10px] p-1.5 rounded border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -459,10 +674,10 @@ export default function DashMatchPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Layers className="w-4 h-4 text-orange-500" />
-                Матчи клуба
+                Матчи клуба ({matches.length})
               </h2>
               <span className="text-xs text-slate-500 dark:text-zinc-400">
-                Всего: {matches.length}
+                Авто-обновление каждые 3 сек
               </span>
             </div>
 
@@ -483,10 +698,12 @@ export default function DashMatchPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {matches.map((m) => {
                   const connectCmd = `connect ${m.server_ip || agent?.lan_ip || "127.0.0.1"}:${m.port || 27015}`;
-                  const isLive = m.status === "live" || m.status === "starting";
+                  const steamConnectUrl = `steam://connect/${m.server_ip || agent?.lan_ip || "127.0.0.1"}:${m.port || 27015}`;
+                  const isLive = m.status === "live" || m.status === "starting" || m.status === "warmup";
+                  const isBusyRcon = Boolean(rconLoading[m.id]);
 
                   return (
                     <Card
@@ -497,8 +714,9 @@ export default function DashMatchPage() {
                           : "border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900"
                       }`}
                     >
-                      <CardContent className="p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-2">
+                      <CardContent className="p-4 space-y-3.5">
+                        {/* Top Match Header */}
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-2">
                             <Badge
                               className={`text-[11px] font-semibold ${
@@ -506,25 +724,38 @@ export default function DashMatchPage() {
                                   ? "bg-emerald-500 text-white"
                                   : m.status === "starting"
                                   ? "bg-amber-500 text-white"
-                                  : "bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300"
+                                  : m.status === "warmup"
+                                  ? "bg-blue-500 text-white"
+                                  : m.status === "stopped"
+                                  ? "bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300"
+                                  : "bg-slate-300 text-slate-800"
                               }`}
                             >
                               {m.status === "live"
                                 ? "В игре"
                                 : m.status === "starting"
                                 ? "Запуск сервера..."
+                                : m.status === "warmup"
+                                ? "Разминка / Ножевой"
                                 : m.status === "stopped"
                                 ? "Остановлен"
                                 : m.status}
                             </Badge>
-                            <span className="text-xs font-bold text-slate-900 dark:text-white">
-                              {m.team1_name} vs {m.team2_name}
+
+                            <span className="text-sm font-black text-slate-900 dark:text-white">
+                              {m.team1_name}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-900 text-emerald-400 font-mono font-bold text-xs">
+                              {m.score1} : {m.score2}
+                            </span>
+                            <span className="text-sm font-black text-slate-900 dark:text-white">
+                              {m.team2_name}
                             </span>
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-[10px] text-slate-500">
-                              {m.map_name} • {m.match_format}
+                            <Badge variant="outline" className="text-[10px] text-slate-600 dark:text-zinc-400 font-mono">
+                              {m.map_name} • {m.match_format} • Port {m.port || 27015}
                             </Badge>
 
                             {isLive && (
@@ -542,40 +773,198 @@ export default function DashMatchPage() {
                         </div>
 
                         {/* Connect Bar for Players */}
-                        <div className="flex items-center justify-between bg-slate-900 text-slate-200 rounded-lg p-2.5 text-xs font-mono">
+                        <div className="flex items-center justify-between bg-slate-900 text-slate-200 rounded-lg p-2.5 text-xs font-mono gap-2 flex-wrap">
                           <div className="flex items-center gap-2 truncate">
-                            <span className="text-slate-400 select-none text-[11px]">Команда для игроков:</span>
+                            <span className="text-slate-400 select-none text-[11px]">Вход:</span>
                             <span className="text-emerald-400 font-semibold truncate">{connectCmd}</span>
                           </div>
 
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              copyToClipboard(connectCmd, () => {
-                                setCopiedConnectId(m.id);
-                                setTimeout(() => setCopiedConnectId(null), 2000);
-                              })
-                            }
-                            className="h-6 px-2 text-[10px] gap-1 shrink-0 bg-slate-800 hover:bg-slate-700 text-white cursor-pointer"
-                          >
-                            {copiedConnectId === m.id ? (
-                              <>
-                                <Check className="w-3 h-3 text-emerald-400" />
-                                Скопировано
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3" />
-                                Копировать
-                              </>
-                            )}
-                          </Button>
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={steamConnectUrl}
+                              className="inline-flex items-center gap-1 h-6 px-2 text-[10px] rounded bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold cursor-pointer transition-all"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Зайти в игру
+                            </a>
+
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                copyToClipboard(connectCmd, () => {
+                                  setCopiedConnectId(m.id);
+                                  setTimeout(() => setCopiedConnectId(null), 2000);
+                                })
+                              }
+                              className="h-6 px-2 text-[10px] gap-1 shrink-0 bg-slate-800 hover:bg-slate-700 text-white cursor-pointer"
+                            >
+                              {copiedConnectId === m.id ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-400" />
+                                  Скопировано
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" />
+                                  Копировать
+                                </>
+                              )}
+                            </Button>
+                          </div>
                         </div>
 
+                        {/* Live MatchZy Controls (Quick RCON Buttons) */}
+                        {isLive && (
+                          <div className="p-2.5 rounded-lg bg-slate-100/80 dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 space-y-2">
+                            <div className="text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center justify-between">
+                              <span className="flex items-center gap-1">
+                                <Terminal className="w-3.5 h-3.5 text-orange-500" />
+                                Управление матчем MatchZy (RCON):
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                Мгновенное выполнение
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusyRcon}
+                                onClick={() => handleSendRcon(m.id, "matchzy_start")}
+                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50"
+                                title="Пропустить разминку и ожидание .ready, начать игру"
+                              >
+                                <FastForward className="w-3 h-3 text-emerald-500" />
+                                Начать принудительно
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusyRcon}
+                                onClick={() => handleSendRcon(m.id, "matchzy_forcepause")}
+                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-amber-700 dark:text-amber-400"
+                                title="Поставить админскую паузу"
+                              >
+                                <Pause className="w-3 h-3 text-amber-500" />
+                                Пауза
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusyRcon}
+                                onClick={() => handleSendRcon(m.id, "matchzy_forceunpause")}
+                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
+                                title="Снять паузу"
+                              >
+                                <Play className="w-3 h-3 text-blue-500" />
+                                Снять паузу
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusyRcon}
+                                onClick={() => handleSendRcon(m.id, "matchzy_restart")}
+                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
+                                title="Рестарт матча"
+                              >
+                                <RotateCcw className="w-3 h-3 text-slate-500" />
+                                Рестарт
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusyRcon}
+                                onClick={() => handleSendRcon(m.id, "bot_quota 10; bot_add ct; bot_add t")}
+                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
+                                title="Заполнить сервер ботами для теста"
+                              >
+                                <Bot className="w-3 h-3 text-purple-500" />
+                                +Боты
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusyRcon}
+                                onClick={() => handleSendRcon(m.id, "bot_kick")}
+                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
+                                title="Кикнуть всех ботов"
+                              >
+                                Кикнуть ботов
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusyRcon}
+                                onClick={() => handleSendRcon(m.id, "matchzy_endmatch team1")}
+                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
+                                title="Присудить победу Команде 1"
+                              >
+                                <Trophy className="w-3 h-3 text-amber-500" />
+                                ТП Команда 1
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusyRcon}
+                                onClick={() => handleSendRcon(m.id, "matchzy_endmatch team2")}
+                                className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer"
+                                title="Присудить победу Команде 2"
+                              >
+                                <Trophy className="w-3 h-3 text-amber-500" />
+                                ТП Команда 2
+                              </Button>
+                            </div>
+
+                            {/* Custom RCON Input */}
+                            <div className="flex items-center gap-2 pt-1">
+                              <Input
+                                placeholder="Любая команда CS2 RCON: status, mp_restartgame 1, changelevel de_dust2..."
+                                value={rconInputs[m.id] || ""}
+                                onChange={(e) =>
+                                  setRconInputs((prev) => ({ ...prev, [m.id]: e.target.value }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleSendRcon(m.id);
+                                  }
+                                }}
+                                className="h-7 text-xs font-mono bg-white dark:bg-zinc-800"
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => handleSendRcon(m.id)}
+                                disabled={isBusyRcon || !rconInputs[m.id]}
+                                className="h-7 px-3 text-xs bg-slate-900 hover:bg-slate-800 text-white cursor-pointer shrink-0"
+                              >
+                                {isBusyRcon ? "..." : "Отправить"}
+                              </Button>
+                            </div>
+
+                            {/* Last RCON Response */}
+                            {m.rcon_last_response && (
+                              <div className="mt-2 p-2 rounded bg-slate-950 text-slate-200 font-mono text-[11px] max-h-32 overflow-y-auto whitespace-pre-wrap leading-tight border border-slate-800">
+                                <div className="text-[10px] text-slate-500 mb-0.5">
+                                  Ответ на `{m.rcon_last_command}`:
+                                </div>
+                                {m.rcon_last_response}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800">
-                          <div>ID: {m.id}</div>
-                          <div>Порт сервера: {m.port || 27015}</div>
+                          <div>ID матча: {m.id}</div>
+                          <div>Порт: {m.port || 27015}</div>
                           <div>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
                         </div>
                       </CardContent>

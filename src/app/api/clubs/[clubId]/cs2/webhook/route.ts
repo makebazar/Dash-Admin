@@ -18,6 +18,45 @@ export async function POST(
 
     console.log(`[CS2 Webhook] Club ${parsedClubId} received event: ${event} for match ${matchId}`);
 
+    // Update club_cs2_matches live state
+    if (matchId) {
+      if (event === "series_start") {
+        await client.query(
+          `UPDATE club_cs2_matches SET status = 'warmup', game_state = 'warmup', updated_at = NOW() WHERE id = $1`,
+          [matchId]
+        ).catch(() => {});
+      } else if (event === "going_live") {
+        await client.query(
+          `UPDATE club_cs2_matches SET status = 'live', game_state = 'live', updated_at = NOW() WHERE id = $1`,
+          [matchId]
+        ).catch(() => {});
+      } else if (event === "round_end") {
+        const team1Score = payload.team1?.score ?? payload.team1_score ?? 0;
+        const team2Score = payload.team2?.score ?? payload.team2_score ?? 0;
+        await client.query(
+          `UPDATE club_cs2_matches SET score1 = $1, score2 = $2, status = 'live', game_state = 'live', updated_at = NOW() WHERE id = $3`,
+          [team1Score, team2Score, matchId]
+        ).catch(() => {});
+      } else if (event === "game_paused") {
+        await client.query(
+          `UPDATE club_cs2_matches SET game_state = 'paused', updated_at = NOW() WHERE id = $1`,
+          [matchId]
+        ).catch(() => {});
+      } else if (event === "game_unpaused") {
+        await client.query(
+          `UPDATE club_cs2_matches SET game_state = 'live', updated_at = NOW() WHERE id = $1`,
+          [matchId]
+        ).catch(() => {});
+      } else if (event === "map_result") {
+        const team1Score = payload.team1?.score ?? 0;
+        const team2Score = payload.team2?.score ?? 0;
+        await client.query(
+          `UPDATE club_cs2_matches SET score1 = $1, score2 = $2, status = 'finished', game_state = 'finished', updated_at = NOW() WHERE id = $3`,
+          [team1Score, team2Score, matchId]
+        ).catch(() => {});
+      }
+    }
+
     // If map ended, calculate results and ELO
     if (event === "map_result" && matchId) {
       await client.query("BEGIN");

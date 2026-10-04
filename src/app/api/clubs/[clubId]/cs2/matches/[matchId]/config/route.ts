@@ -18,26 +18,38 @@ export async function GET(
 
     if (quickRes.rowCount && quickRes.rowCount > 0) {
       const qm = quickRes.rows[0];
+      const cfg = qm.config_data || {};
+      const knifeRound = cfg.knife_round ?? true;
+      const practiceMode = cfg.practice_mode ?? false;
+      const friendlyFire = cfg.friendly_fire ?? false;
+      const team1Players = cfg.team1_players || {};
+      const team2Players = cfg.team2_players || {};
+      const hasPlayers = Object.keys(team1Players).length > 0 || Object.keys(team2Players).length > 0;
+
       const matchZyConfig = {
         matchid: matchId,
         num_maps: 1,
         maplist: [qm.map_name || "de_dust2"],
-        map_sides: ["knife"],
+        map_sides: knifeRound && !practiceMode ? ["knife"] : ["team1_ct"],
         clinch_series: true,
         players_per_team: qm.match_format === "1v1" ? 1 : qm.match_format === "2v2" ? 2 : 5,
         skip_veto: true,
         team1: {
           name: qm.team1_name || "Команда 1",
-          players: {},
+          players: team1Players,
         },
         team2: {
           name: qm.team2_name || "Команда 2",
-          players: {},
+          players: team2Players,
         },
         cvars: {
           hostname: `DashMatch: ${qm.team1_name || "Команда 1"} vs ${qm.team2_name || "Команда 2"}`,
-          mp_friendlyfire: "0",
+          mp_friendlyfire: friendlyFire ? "1" : "0",
           matchzy_remote_log_url: `http://127.0.0.1:8080/events`,
+          matchzy_knife_enabled_default: knifeRound && !practiceMode ? "true" : "false",
+          matchzy_allow_force_ready: "true",
+          matchzy_whitelist_enabled_default: hasPlayers ? "true" : "false",
+          matchzy_autostart_mode: practiceMode ? "2" : "1",
         },
       };
       return NextResponse.json(matchZyConfig);

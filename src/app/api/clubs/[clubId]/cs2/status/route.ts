@@ -77,7 +77,12 @@ export async function GET(
 
     // 2. Fetch matches (last 20)
     const matchesRes = await query(
-      `SELECT id, map_name, match_format, team1_name, team2_name, status, port, server_ip, score1, score2, created_at
+      `SELECT id, map_name, match_format, team1_name, team2_name, status, port, server_ip,
+              score1, score2, created_at,
+              COALESCE(rcon_last_command, '') as rcon_last_command,
+              COALESCE(rcon_last_response, '') as rcon_last_response,
+              COALESCE(game_state, '') as game_state,
+              COALESCE(config_data, '{}'::jsonb) as config_data
        FROM club_cs2_matches
        WHERE club_id = $1
        ORDER BY created_at DESC

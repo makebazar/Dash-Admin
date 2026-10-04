@@ -22,6 +22,21 @@ export async function POST(
     const matchFormat = (body.format || "5v5").trim();
     const team1Name = (body.team1_name || "Команда 1").trim();
     const team2Name = (body.team2_name || "Команда 2").trim();
+    const knifeRound = Boolean(body.knife_round ?? true);
+    const practiceMode = Boolean(body.practice_mode ?? false);
+    const friendlyFire = Boolean(body.friendly_fire ?? false);
+    const botTest = Boolean(body.bot_test ?? false);
+    const team1Players = body.team1_players || {};
+    const team2Players = body.team2_players || {};
+
+    const configData = {
+      knife_round: knifeRound,
+      practice_mode: practiceMode,
+      friendly_fire: friendlyFire,
+      bot_test: botTest,
+      team1_players: team1Players,
+      team2_players: team2Players,
+    };
 
     // 1. Check agent state to get IP and free port
     const agentRes = await query(
@@ -39,11 +54,16 @@ export async function POST(
     // Generate unique short match ID
     const matchId = `dm-${Date.now().toString(36)}-${crypto.randomBytes(3).toString("hex")}`;
 
+    // Ensure config_data column exists
+    await query(`
+      ALTER TABLE club_cs2_matches ADD COLUMN IF NOT EXISTS config_data JSONB DEFAULT '{}'::jsonb;
+    `).catch(() => {});
+
     // 2. Insert match record
     await query(
-      `INSERT INTO club_cs2_matches (id, club_id, map_name, match_format, team1_name, team2_name, status, port, server_ip)
-       VALUES ($1, $2, $3, $4, $5, $6, 'starting', $7, $8)`,
-      [matchId, parsedClubId, mapName, matchFormat, team1Name, team2Name, basePort, serverIp]
+      `INSERT INTO club_cs2_matches (id, club_id, map_name, match_format, team1_name, team2_name, status, port, server_ip, config_data)
+       VALUES ($1, $2, $3, $4, $5, $6, 'starting', $7, $8, $9::jsonb)`,
+      [matchId, parsedClubId, mapName, matchFormat, team1Name, team2Name, basePort, serverIp, JSON.stringify(configData)]
     );
 
     // 3. Enqueue START_MATCH command for the agent
