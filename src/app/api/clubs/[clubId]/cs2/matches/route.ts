@@ -62,6 +62,23 @@ export async function POST(
       ]
     );
 
+    // 4. Send directly over active WebSocket if connected
+    const wsSet = (global as any).__cs2ClubSockets?.get(parsedClubId);
+    if (wsSet && wsSet.size > 0) {
+      const msg = JSON.stringify({
+        type: "START_MATCH",
+        match_id: matchId,
+        map_name: mapName,
+        config_url: configUrl,
+        auth_token: `secret_${matchId}`,
+      });
+      for (const ws of wsSet) {
+        if (ws.readyState === 1) {
+          try { ws.send(msg); } catch (e) {}
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       match_id: matchId,

@@ -28,6 +28,20 @@ export async function DELETE(
       [parsedClubId, matchId]
     );
 
+    // Send directly over active WebSocket if connected
+    const wsSet = (global as any).__cs2ClubSockets?.get(parsedClubId);
+    if (wsSet && wsSet.size > 0) {
+      const msg = JSON.stringify({
+        type: "STOP_MATCH",
+        match_id: matchId,
+      });
+      for (const ws of wsSet) {
+        if (ws.readyState === 1) {
+          try { ws.send(msg); } catch (e) {}
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: "Команда остановки матча отправлена на сервер!",
