@@ -29,6 +29,9 @@ import {
   Lock,
   ChevronDown,
   ChevronUp,
+  Sparkles,
+  Swords,
+  Gamepad2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -117,6 +120,16 @@ export function ClubSidebarContent({
         />
       ),
       visible: hasModuleAccess("dashboard") || isExpiredForOwnerUi,
+    },
+    {
+      href: `/clubs/${clubId}/ai-manager`,
+      label: "AI-Управляющий",
+      icon: (
+        <Sparkles
+          className={cn("shrink-0 text-blue-500", isCollapsed ? "h-5 w-5" : "h-4 w-4")}
+        />
+      ),
+      visible: !isExpiredForOwnerUi && (hasModuleAccess("dashboard") || isFullAccess),
     },
     {
       href: `/clubs/${clubId}/shifts`,
@@ -224,6 +237,24 @@ export function ClubSidebarContent({
       label: "Акции",
       icon: (
         <Gift className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
+      ),
+      visible:
+        !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
+    },
+    {
+      href: `/clubs/${clubId}/dashfrag`,
+      label: "DashFrag",
+      icon: (
+        <Swords className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
+      ),
+      visible:
+        !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
+    },
+    {
+      href: `/clubs/${clubId}/dashmatch`,
+      label: "DashMatch",
+      icon: (
+        <Gamepad2 className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
       ),
       visible:
         !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),

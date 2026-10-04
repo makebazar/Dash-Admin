@@ -1,0 +1,762 @@
+"use client";
+
+import React, { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
+import {
+  Gamepad2,
+  Server,
+  Wifi,
+  WifiOff,
+  Copy,
+  Check,
+  Play,
+  Square,
+  RefreshCw,
+  KeyRound,
+  ShieldCheck,
+  Users,
+  MapPin,
+  Clock,
+  Layers,
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+
+interface AgentStatus {
+  is_online: boolean;
+  lan_ip: string;
+  base_port: number;
+  max_instances: number;
+  instances: Array<{
+    id: string;
+    match_id: string;
+    port: number;
+    map: string;
+    state: string;
+    pid: number;
+  }>;
+  last_heartbeat: string | null;
+}
+
+interface MatchRecord {
+  id: string;
+  map_name: string;
+  match_format: string;
+  team1_name: string;
+  team2_name: string;
+  status: string;
+  port: number;
+  server_ip: string;
+  score1: number;
+  score2: number;
+  created_at: string;
+}
+
+const MAP_OPTIONS = [
+  { id: "de_dust2", name: "Dust II", desc: "Классика соревновательного CS" },
+  { id: "de_mirage", name: "Mirage", desc: "Самая популярная карта" },
+  { id: "de_inferno", name: "Inferno", desc: "Тактические бананы и апартаменты" },
+  { id: "de_nuke", name: "Nuke", desc: "Вертикальный геймплей" },
+  { id: "de_ancient", name: "Ancient", desc: "Джунгли и древние руины" },
+  { id: "de_anubis", name: "Anubis", desc: "Водные каналы и быстрые стычки" },
+  { id: "de_vertigo", name: "Vertigo", desc: "Небоскреб с двумя этажами" },
+];
+
+const FORMAT_OPTIONS = [
+  { id: "5v5", name: "5x5 Соревновательный", desc: "Классический турнирный формат" },
+  { id: "2v2", name: "2x2 Напарники", desc: "Динамичные матчи в парах" },
+  { id: "1v1", name: "1x1 Дуэль", desc: "Индивидуальный аим-поединок" },
+];
+
+export default function DashMatchPage() {
+  const { clubId } = useParams();
+  const [activeTab, setActiveTab] = useState<"matches" | "connection">("matches");
+
+  // Agent & Matches data
+  const [agent, setAgent] = useState<AgentStatus | null>(null);
+  const [matches, setMatches] = useState<MatchRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Pairing code state
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [pairCodeExpires, setPairCodeExpires] = useState<string | null>(null);
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Match creation state
+  const [selectedMap, setSelectedMap] = useState("de_mirage");
+  const [selectedFormat, setSelectedFormat] = useState("5v5");
+  const [team1Name, setTeam1Name] = useState("Команда 1");
+  const [team2Name, setTeam2Name] = useState("Команда 2");
+  const [isLaunching, setIsLaunching] = useState(false);
+  const [launchMessage, setLaunchMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Connect command copied states
+  const [copiedConnectId, setCopiedConnectId] = useState<string | null>(null);
+
+  const fetchStatus = useCallback(async (showIndicator = false) => {
+    if (showIndicator) setIsRefreshing(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/cs2/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setAgent(data.agent || null);
+        setMatches(data.matches || []);
+      }
+    } catch (err) {
+      console.error("Error fetching CS2 status:", err);
+    } finally {
+      setIsLoading(false);
+      if (showIndicator) setIsRefreshing(false);
+    }
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!clubId) return;
+    fetchStatus();
+    // Poll every 4 seconds for live match updates
+    const interval = setInterval(() => {
+      fetchStatus();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [clubId, fetchStatus]);
+
+  // Generate 6-digit code
+  const handleGeneratePairCode = async () => {
+    setIsGeneratingCode(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/cs2/pair-code`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok && data.code) {
+        setPairCode(data.code);
+        setPairCodeExpires(data.expires_at);
+      } else {
+        alert(data.error || "Не удалось сгенерировать код");
+      }
+    } catch (err) {
+      alert("Ошибка запроса при генерации кода");
+    } finally {
+      setIsGeneratingCode(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, onDone: () => void) => {
+    navigator.clipboard.writeText(text);
+    onDone();
+  };
+
+  // Launch Match
+  const handleLaunchMatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLaunching(true);
+    setLaunchMessage(null);
+
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/cs2/matches`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          map_name: selectedMap,
+          format: selectedFormat,
+          team1_name: team1Name.trim() || "Команда 1",
+          team2_name: team2Name.trim() || "Команда 2",
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setLaunchMessage({
+          type: "success",
+          text: `Матч запущен! Команда для подключения: ${data.connect_command}`,
+        });
+        await fetchStatus();
+      } else {
+        setLaunchMessage({
+          type: "error",
+          text: data.error || "Не удалось отправить команду на запуск сервера",
+        });
+      }
+    } catch (err) {
+      setLaunchMessage({
+        type: "error",
+        text: "Сетевая ошибка при запуске матча",
+      });
+    } finally {
+      setIsLaunching(false);
+    }
+  };
+
+  // Stop Match
+  const handleStopMatch = async (matchId: string) => {
+    if (!confirm("Остановить игровой сервер для этого матча?")) return;
+
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/cs2/matches/${matchId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await fetchStatus();
+      }
+    } catch (err) {
+      console.error("Error stopping match:", err);
+    }
+  };
+
+  const isAgentOnline = agent?.is_online ?? false;
+
+  return (
+    <div className="min-h-screen bg-slate-50/60 dark:bg-zinc-950 p-4 md:p-8 space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/10 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 flex items-center justify-center">
+              <Gamepad2 className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                  DashMatch
+                </h1>
+                <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 border-orange-200 dark:border-orange-800">
+                  CS2 Local Match Server
+                </Badge>
+              </div>
+              <p className="text-sm text-slate-500 dark:text-zinc-400">
+                Автоматическое управление выделенными серверами турниров и локальных матчей в клубе
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Server Agent Status Pill */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800 shadow-xs">
+            {isAgentOnline ? (
+              <>
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                <div className="text-xs">
+                  <div className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    Сервер в сети (LAN: {agent?.lan_ip || "127.0.0.1"})
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Активно серверов: {agent?.instances?.length || 0} / {agent?.max_instances || 4}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4 text-amber-500" />
+                <div className="text-xs">
+                  <div className="font-semibold text-amber-600 dark:text-amber-400">
+                    Агент не подключен
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Запустите dashmatch.exe на ПК клуба
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchStatus(true)}
+            disabled={isRefreshing}
+            className="h-9 px-3 gap-1.5 text-xs text-slate-600 dark:text-zinc-300"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+            Обновить
+          </Button>
+        </div>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-slate-200 dark:border-zinc-800 gap-2">
+        <button
+          onClick={() => setActiveTab("matches")}
+          className={`flex items-center gap-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-all cursor-pointer ${
+            activeTab === "matches"
+              ? "border-orange-500 text-orange-600 dark:text-orange-400 font-semibold"
+              : "border-transparent text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          <Play className="w-4 h-4" />
+          Создание & Управление матчами
+          {matches.length > 0 && (
+            <Badge variant="secondary" className="ml-1 text-[11px] h-5 px-1.5">
+              {matches.length}
+            </Badge>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab("connection")}
+          className={`flex items-center gap-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-all cursor-pointer ${
+            activeTab === "connection"
+              ? "border-orange-500 text-orange-600 dark:text-orange-400 font-semibold"
+              : "border-transparent text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          <Server className="w-4 h-4" />
+          Подключение сервера клуба
+          {!isAgentOnline && (
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+          )}
+        </button>
+      </div>
+
+      {/* TAB 1: MATCHES MANAGEMENT */}
+      {activeTab === "matches" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column: Create Match Form */}
+          <div className="lg:col-span-5 space-y-6">
+            <Card className="border-slate-200/80 dark:border-zinc-800 shadow-xs">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                  <Play className="w-4 h-4 text-orange-500" />
+                  Быстрый запуск матча
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Запуск изолированного матча CS2 с автоматической загрузкой конфигурации команд и плагина MatchZy
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleLaunchMatch} className="space-y-4">
+                  {/* Map Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                      Карта матча:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {MAP_OPTIONS.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setSelectedMap(m.id)}
+                          className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                            selectedMap === m.id
+                              ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/30 text-orange-950 dark:text-orange-100 font-medium"
+                              : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="text-xs font-bold">{m.name}</div>
+                          <div className="text-[10px] text-slate-400 dark:text-zinc-500 line-clamp-1">{m.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Format Selector */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                      Формат игры:
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {FORMAT_OPTIONS.map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setSelectedFormat(f.id)}
+                          className={`p-2 rounded-lg border text-center transition-all cursor-pointer ${
+                            selectedFormat === f.id
+                              ? "border-orange-500 bg-orange-500 text-white font-bold"
+                              : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300 text-xs"
+                          }`}
+                        >
+                          <div className="text-xs">{f.id}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Teams */}
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400">
+                        Команда 1 (CT)
+                      </label>
+                      <Input
+                        value={team1Name}
+                        onChange={(e) => setTeam1Name(e.target.value)}
+                        placeholder="Название Команды 1"
+                        className="h-9 text-xs"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-600 dark:text-zinc-400">
+                        Команда 2 (T)
+                      </label>
+                      <Input
+                        value={team2Name}
+                        onChange={(e) => setTeam2Name(e.target.value)}
+                        placeholder="Название Команды 2"
+                        className="h-9 text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Notification banner */}
+                  {launchMessage && (
+                    <div
+                      className={`p-3 rounded-lg text-xs flex items-start gap-2 ${
+                        launchMessage.type === "success"
+                          ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                          : "bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                      }`}
+                    >
+                      {launchMessage.type === "success" ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                      )}
+                      <span>{launchMessage.text}</span>
+                    </div>
+                  )}
+
+                  {!isAgentOnline && (
+                    <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>
+                        Агент на ПК клуба сейчас не в сети. Команда будет выполнена, как только агент подключится.
+                      </span>
+                    </div>
+                  )}
+
+                  <Button
+                    type="submit"
+                    disabled={isLaunching}
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs h-10 gap-2 cursor-pointer transition-all shadow-xs"
+                  >
+                    {isLaunching ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Play className="w-4 h-4 fill-white" />
+                    )}
+                    {isLaunching ? "Запуск сервера..." : "Создать и запустить матч"}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column: Active & Recent Matches */}
+          <div className="lg:col-span-7 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Layers className="w-4 h-4 text-orange-500" />
+                Матчи клуба
+              </h2>
+              <span className="text-xs text-slate-500 dark:text-zinc-400">
+                Всего: {matches.length}
+              </span>
+            </div>
+
+            {matches.length === 0 ? (
+              <Card className="border-dashed border-2 border-slate-200 dark:border-zinc-800 text-center py-12">
+                <CardContent className="space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-zinc-900 text-slate-400 mx-auto flex items-center justify-center">
+                    <Gamepad2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">
+                      Матчей пока нет
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+                      Создайте первый матч через форму слева, чтобы запустить выделенный сервер CS2
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {matches.map((m) => {
+                  const connectCmd = `connect ${m.server_ip || agent?.lan_ip || "127.0.0.1"}:${m.port || 27015}`;
+                  const isLive = m.status === "live" || m.status === "starting";
+
+                  return (
+                    <Card
+                      key={m.id}
+                      className={`border transition-all ${
+                        isLive
+                          ? "border-emerald-300 dark:border-emerald-800/60 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-xs"
+                          : "border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+                      }`}
+                    >
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              className={`text-[11px] font-semibold ${
+                                m.status === "live"
+                                  ? "bg-emerald-500 text-white"
+                                  : m.status === "starting"
+                                  ? "bg-amber-500 text-white"
+                                  : "bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300"
+                              }`}
+                            >
+                              {m.status === "live"
+                                ? "В игре"
+                                : m.status === "starting"
+                                ? "Запуск сервера..."
+                                : m.status === "stopped"
+                                ? "Остановлен"
+                                : m.status}
+                            </Badge>
+                            <span className="text-xs font-bold text-slate-900 dark:text-white">
+                              {m.team1_name} vs {m.team2_name}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] text-slate-500">
+                              {m.map_name} • {m.match_format}
+                            </Badge>
+
+                            {isLive && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleStopMatch(m.id)}
+                                className="h-7 px-2 text-[11px] gap-1 cursor-pointer"
+                              >
+                                <Square className="w-3 h-3 fill-white" />
+                                Стоп
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Connect Bar for Players */}
+                        <div className="flex items-center justify-between bg-slate-900 text-slate-200 rounded-lg p-2.5 text-xs font-mono">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-slate-400 select-none text-[11px]">Команда для игроков:</span>
+                            <span className="text-emerald-400 font-semibold truncate">{connectCmd}</span>
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              copyToClipboard(connectCmd, () => {
+                                setCopiedConnectId(m.id);
+                                setTimeout(() => setCopiedConnectId(null), 2000);
+                              })
+                            }
+                            className="h-6 px-2 text-[10px] gap-1 shrink-0 bg-slate-800 hover:bg-slate-700 text-white cursor-pointer"
+                          >
+                            {copiedConnectId === m.id ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-400" />
+                                Скопировано
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                Копировать
+                              </>
+                            )}
+                          </Button>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-zinc-500 pt-1 border-t border-slate-100 dark:border-zinc-800">
+                          <div>ID: {m.id}</div>
+                          <div>Порт сервера: {m.port || 27015}</div>
+                          <div>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: SERVER CONNECTION & 6-DIGIT CODE */}
+      {activeTab === "connection" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Card: 6-Digit Pairing Code */}
+          <Card className="border-slate-200/80 dark:border-zinc-800 shadow-xs">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                <KeyRound className="w-4 h-4 text-orange-500" />
+                Привязка сервера клуба к DashAdmin
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Сгенерируйте временный 6-значный код и введите его в консоли DashMatch на серверном ПК
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pairCode ? (
+                <div className="p-6 rounded-2xl bg-orange-500/5 dark:bg-orange-500/10 border border-orange-500/20 text-center space-y-3">
+                  <div className="text-xs text-orange-600 dark:text-orange-400 font-semibold uppercase tracking-wider">
+                    Код привязки (действителен 30 мин):
+                  </div>
+                  <div className="text-4xl md:text-5xl font-black font-mono tracking-widest text-slate-900 dark:text-white">
+                    {pairCode.slice(0, 3)} {pairCode.slice(3)}
+                  </div>
+                  <div className="flex justify-center gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        copyToClipboard(pairCode, () => {
+                          setCopiedCode(true);
+                          setTimeout(() => setCopiedCode(false), 2000);
+                        })
+                      }
+                      className="gap-1.5 text-xs cursor-pointer"
+                    >
+                      {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedCode ? "Скопировано!" : "Скопировать код"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleGeneratePairCode}
+                      disabled={isGeneratingCode}
+                      className="text-xs cursor-pointer text-slate-500"
+                    >
+                      Сгенерировать новый
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6 space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-950/40 text-orange-600 mx-auto flex items-center justify-center">
+                    <KeyRound className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-800 dark:text-zinc-200">
+                      Код привязки не сгенерирован
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                      Нажмите кнопку ниже, чтобы получить одноразовый 6-значный пин-код
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleGeneratePairCode}
+                    disabled={isGeneratingCode}
+                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs h-9 gap-2 cursor-pointer transition-all shadow-xs"
+                  >
+                    {isGeneratingCode ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <KeyRound className="w-3.5 h-3.5" />
+                    )}
+                    Сгенерировать 6-значный код
+                  </Button>
+                </div>
+              )}
+
+              {/* Instructions */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/60 dark:border-zinc-800/60 space-y-2.5 text-xs">
+                <div className="font-bold text-slate-800 dark:text-zinc-200 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                  Как подключить сервер за 1 минуту:
+                </div>
+                <ol className="list-decimal list-inside space-y-1.5 text-slate-600 dark:text-zinc-400 leading-relaxed">
+                  <li>Запустите файл <code className="font-mono bg-slate-200 dark:bg-zinc-800 px-1 py-0.5 rounded">dashmatch.exe</code> на серверном ПК клуба.</li>
+                  <li>В главном меню выберите пункт <code className="font-mono font-bold">[1]</code> и введите 6-значный код выше.</li>
+                  <li>После привязки выберите пункт <code className="font-mono font-bold">[2]</code> для запуска фоновой службы. Статус сервера станет зеленым!</li>
+                </ol>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card: Server Info & Hardware Slots */}
+          <Card className="border-slate-200/80 dark:border-zinc-800 shadow-xs">
+            <CardHeader>
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                <Server className="w-4 h-4 text-orange-500" />
+                Сетевой статус и слоты инстансов
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Текущие параметры ПК, где запущен агент DashMatch
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800">
+                  <div className="text-[11px] text-slate-400">Локальный IP клуба (LAN)</div>
+                  <div className="text-base font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5">
+                    {agent?.lan_ip || "—"}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800">
+                  <div className="text-[11px] text-slate-400">Пул портов серверов</div>
+                  <div className="text-base font-bold font-mono text-slate-800 dark:text-zinc-200 mt-0.5">
+                    {agent?.base_port ? `${agent.base_port} - ${agent.base_port + (agent.max_instances || 4) - 1}` : "—"}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800">
+                  <div className="text-[11px] text-slate-400">Лимит одновременных серверов</div>
+                  <div className="text-base font-bold text-slate-800 dark:text-zinc-200 mt-0.5">
+                    до {agent?.max_instances || 4} матчей
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800">
+                  <div className="text-[11px] text-slate-400">Последний пинг агента</div>
+                  <div className="text-base font-bold text-slate-800 dark:text-zinc-200 mt-0.5">
+                    {agent?.last_heartbeat
+                      ? new Date(agent.last_heartbeat).toLocaleTimeString()
+                      : "Нет связи"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Running Instances details */}
+              <div className="space-y-2 pt-2">
+                <div className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                  Запущенные инстансы CS2 на ПК:
+                </div>
+                {agent?.instances && agent.instances.length > 0 ? (
+                  <div className="space-y-2">
+                    {agent.instances.map((inst) => (
+                      <div
+                        key={inst.id}
+                        className="p-3 rounded-lg bg-slate-100/70 dark:bg-zinc-900 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                          <span className="font-bold">{inst.id}</span>
+                          <span className="text-slate-400">PID: {inst.pid}</span>
+                        </div>
+                        <div className="text-slate-600 dark:text-zinc-400">
+                          Порт: {inst.port} • Карта: {inst.map}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-400 p-3 rounded-lg bg-slate-50 dark:bg-zinc-900 text-center">
+                    Нет активных процессов CS2
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
