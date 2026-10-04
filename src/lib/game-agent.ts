@@ -115,14 +115,14 @@ export class GameAgentConnector {
     console.log(`[GameAgent] Whitelisting players on server ${serverId}: ${steamIds.join(", ")}`);
     
     // Enable MatchZy whitelist
-    await this.sendRcon(serverId, "matchzy_whitelist_enabled 1");
+    await this.sendRcon(serverId, "css_whitelist 1");
     // Clear any previous whitelist
-    await this.sendRcon(serverId, "matchzy_whitelist_clear");
+    await this.sendRcon(serverId, "css_whitelist_clear");
     
     // Add each SteamID
     for (const steamId of steamIds) {
       if (steamId && steamId.trim()) {
-        await this.sendRcon(serverId, `matchzy_whitelist_add ${steamId.trim()}`);
+        await this.sendRcon(serverId, `css_whitelist_add ${steamId.trim()}`);
       }
     }
   }
