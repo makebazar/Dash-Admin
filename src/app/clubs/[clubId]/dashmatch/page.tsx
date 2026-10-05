@@ -88,7 +88,7 @@ interface MatchRecord {
 
 import { parseCs2StatusPlayers } from "@/lib/cs2/utils";
 
-export interface LivePlayer {
+interface LivePlayer {
   id?: string;
   name: string;
   steamId: string;
@@ -96,18 +96,18 @@ export interface LivePlayer {
   isBot?: boolean;
 }
 
-export function parseConnectedPlayers(rconText?: string): LivePlayer[] {
+function parseConnectedPlayers(rconText?: string): LivePlayer[] {
   return parseCs2StatusPlayers(rconText);
 }
 
-export interface MapOption {
+interface MapOption {
   id: string;
   name: string;
   desc: string;
   badge: string;
 }
 
-export const MAP_CATALOG: Record<string, MapOption[]> = {
+const MAP_CATALOG: Record<string, MapOption[]> = {
   "5v5": [
     { id: "de_mirage", name: "Mirage", desc: "Главный соревновательный выбор, открытые пленты", badge: "Турнирная" },
     { id: "de_dust2", name: "Dust II", desc: "Золотая классика CS, сбалансированный темп", badge: "Классика" },
@@ -894,7 +894,7 @@ export default function DashMatchPage() {
                               {m.map_name} • {m.match_format} • Port {m.port || 27015}
                             </Badge>
 
-                            {isLive && (
+                            {m.status !== "stopped" && (
                               <Button
                                 size="sm"
                                 variant="destructive"

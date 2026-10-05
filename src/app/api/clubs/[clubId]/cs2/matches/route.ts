@@ -72,7 +72,8 @@ export async function POST(
     );
 
     // 3. Enqueue START_MATCH command for the agent
-    const configUrl = `https://mydashadmin.ru/api/clubs/${parsedClubId}/cs2/matches/${matchId}/config`;
+    const hasPlayers = Object.keys(team1Players).length > 0 || Object.keys(team2Players).length > 0;
+    const configUrl = hasPlayers ? `https://mydashadmin.ru/api/clubs/${parsedClubId}/cs2/matches/${matchId}/config` : "";
 
     await query(
       `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)

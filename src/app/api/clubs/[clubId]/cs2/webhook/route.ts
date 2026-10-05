@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { calculateCs2MatchElo, EloPlayerInput } from "@/lib/elo";
 import { advancePlayoffWinner } from "@/lib/brackets";
+import { broadcastSseCommand } from "@/lib/cs2/sse";
 
 export async function POST(
   request: Request,
@@ -64,12 +65,26 @@ export async function POST(
           [matchId, numericMatchId, parsedClubId]
         ).catch(() => {});
       } else if (event === "map_result" || event === "series_end") {
-        const team1Score = payload.team1?.score ?? 0;
-        const team2Score = payload.team2?.score ?? 0;
+        const team1Score = payload.team1_series_score ?? payload.team1?.score ?? payload.team1_score ?? 0;
+        const team2Score = payload.team2_series_score ?? payload.team2?.score ?? payload.team2_score ?? 0;
         await client.query(
           `UPDATE club_cs2_matches SET score1 = $1, score2 = $2, status = 'finished', game_state = 'finished', updated_at = NOW() WHERE (id = $3 OR matchzy_id = $4) AND club_id = $5`,
           [team1Score, team2Score, matchId, numericMatchId, parsedClubId]
         ).catch(() => {});
+
+        if (event === "series_end") {
+          // Enqueue STOP_MATCH command and notify agent via SSE to close cs2.exe
+          await client.query(
+            `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+             VALUES ($1, 'STOP_MATCH', $2, '{}'::jsonb, 'pending')`,
+            [parsedClubId, matchId]
+          ).catch(() => {});
+
+          broadcastSseCommand(parsedClubId, {
+            type: "STOP_MATCH",
+            match_id: matchId,
+          });
+        }
       }
     }
 
