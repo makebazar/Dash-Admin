@@ -86,6 +86,8 @@ interface MatchRecord {
   };
 }
 
+import { parseCs2StatusPlayers } from "@/lib/cs2/utils";
+
 export interface LivePlayer {
   id?: string;
   name: string;
@@ -95,30 +97,7 @@ export interface LivePlayer {
 }
 
 export function parseConnectedPlayers(rconText?: string): LivePlayer[] {
-  if (!rconText) return [];
-  const players: LivePlayer[] = [];
-  const lines = rconText.split("\n");
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("#") && !trimmed.includes("name") && !trimmed.includes("ping")) {
-      const match = trimmed.match(/#\s*(\d+)\s+"([^"]+)"(?:\s+\d+\s+(\d+))?/);
-      if (match) {
-        const id = match[1];
-        const name = match[2];
-        const ping = match[3];
-        const isBot = /bot/i.test(trimmed);
-        const steam64Match = trimmed.match(/(7656\d{13})/);
-        const steamId = steam64Match ? steam64Match[1] : (isBot ? `bot_${id}` : `ID_${id}`);
-        players.push({ id, name, steamId, ping, isBot });
-      }
-    } else if (trimmed.includes("[CSS]") && trimmed.includes("(") && trimmed.includes(")")) {
-      const match = trimmed.match(/(?:#\d+:\s*)?([^(]+)\s*\((7656\d{13})\)/);
-      if (match) {
-        players.push({ name: match[1].trim(), steamId: match[2].trim() });
-      }
-    }
-  }
-  return players;
+  return parseCs2StatusPlayers(rconText);
 }
 
 export interface MapOption {
@@ -1011,7 +990,12 @@ export default function DashMatchPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => setMatchControlTab((prev) => ({ ...prev, [m.id]: "players" }))}
+                                    onClick={() => {
+                                      setMatchControlTab((prev) => ({ ...prev, [m.id]: "players" }));
+                                      if (m.rcon_last_command !== "status") {
+                                        handleSendRcon(m.id, "status");
+                                      }
+                                    }}
                                     className={`px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
                                       activeControlTab === "players"
                                         ? "bg-orange-500 text-white shadow-xs"
@@ -1053,9 +1037,9 @@ export default function DashMatchPage() {
                                       <Button
                                         size="sm"
                                         disabled={isBusyRcon}
-                                        onClick={() => handleSendRcon(m.id, "mp_unpause_match; css_forceunpause")}
+                                        onClick={() => handleSendRcon(m.id, "css_forceunpause")}
                                         className="h-7 px-2.5 text-[11px] gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
-                                        title="Снять принудительную паузу"
+                                        title="Снять принудительную паузу MatchZy"
                                       >
                                         <Play className="w-3 h-3 fill-white" />
                                         Снять паузу
@@ -1065,9 +1049,9 @@ export default function DashMatchPage() {
                                         size="sm"
                                         variant="outline"
                                         disabled={isBusyRcon}
-                                        onClick={() => handleSendRcon(m.id, "mp_pause_match 1; css_forcepause")}
+                                        onClick={() => handleSendRcon(m.id, "css_forcepause")}
                                         className="h-7 px-2.5 text-[11px] gap-1.5 bg-white dark:bg-zinc-800 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 cursor-pointer"
-                                        title="Поставить принудительную админскую паузу"
+                                        title="Поставить принудительную админскую паузу MatchZy"
                                       >
                                         <Pause className="w-3 h-3 text-amber-500" />
                                         Пауза
@@ -1078,12 +1062,36 @@ export default function DashMatchPage() {
                                       size="sm"
                                       variant="outline"
                                       disabled={isBusyRcon}
-                                      onClick={() => handleSendRcon(m.id, "css_forceready; css_roundknife; mp_warmup_end 1")}
+                                      onClick={() => handleSendRcon(m.id, "css_tech")}
+                                      className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800"
+                                      title="Техническая пауза MatchZy"
+                                    >
+                                      <Clock className="w-3 h-3 text-amber-500" />
+                                      Тех. пауза
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "css_roundknife")}
                                       className="h-7 px-2 text-[11px] gap-1 bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-800 hover:bg-orange-100 cursor-pointer font-semibold"
-                                      title="Завершить разминку и запустить ножевой раунд"
+                                      title="Включить / выключить ножевой раунд"
                                     >
                                       <Swords className="w-3 h-3 text-orange-600" />
                                       Ножевой раунд
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "css_forceready")}
+                                      className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-blue-700 dark:text-blue-400 hover:bg-blue-50"
+                                      title="Подтвердить готовность всех игроков"
+                                    >
+                                      <ShieldCheck className="w-3 h-3 text-blue-500" />
+                                      Все готовы (.ready)
                                     </Button>
 
                                     <Button
@@ -1278,11 +1286,23 @@ export default function DashMatchPage() {
                                     <Button
                                       size="sm"
                                       disabled={isBusyRcon}
-                                      onClick={() => handleSendRcon(m.id, `css_restore ${prevRound}; matchzy_loadbackup matchzy_${m.id}_0_round${String(prevRound).padStart(2, "0")}.json`)}
+                                      onClick={() => handleSendRcon(m.id, `css_restore ${prevRound}`)}
                                       className="h-7 px-3 text-xs bg-slate-900 hover:bg-slate-800 text-white font-bold gap-1.5 cursor-pointer shadow-xs"
                                     >
                                       <History className="w-3.5 h-3.5" />
                                       Откатить на раунд #{prevRound} (-1 раунд)
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "matchzy_listbackups")}
+                                      className="h-7 px-2.5 text-xs bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 cursor-pointer gap-1"
+                                      title="Запросить список всех файлов бэкапов в MatchZy"
+                                    >
+                                      <Layers className="w-3.5 h-3.5 text-orange-500" />
+                                      Список бэкапов
                                     </Button>
 
                                     <span className="text-[11px] text-slate-500">
@@ -1312,12 +1332,12 @@ export default function DashMatchPage() {
                                       onClick={() => {
                                         const rnd = restoreRoundInput[m.id]?.trim();
                                         if (rnd) {
-                                          handleSendRcon(m.id, `css_restore ${rnd}; matchzy_loadbackup matchzy_${m.id}_0_round${String(rnd).padStart(2, "0")}.json`);
+                                          handleSendRcon(m.id, `css_restore ${rnd}`);
                                         }
                                       }}
                                       className="h-7 px-3 text-xs bg-slate-900 hover:bg-slate-800 text-white cursor-pointer"
                                     >
-                                      Восстановить
+                                      Восстановить (css_restore)
                                     </Button>
                                   </div>
 
@@ -1329,7 +1349,7 @@ export default function DashMatchPage() {
                                           key={r}
                                           type="button"
                                           disabled={isBusyRcon}
-                                          onClick={() => handleSendRcon(m.id, `css_restore ${r}; matchzy_loadbackup matchzy_${m.id}_0_round${String(r).padStart(2, "0")}.json`)}
+                                          onClick={() => handleSendRcon(m.id, `css_restore ${r}`)}
                                           className="px-2 py-0.5 rounded text-[10px] font-mono bg-white dark:bg-zinc-800 hover:bg-orange-500 hover:text-white text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-zinc-700 transition-colors cursor-pointer"
                                         >
                                           Р#{r}
@@ -1411,7 +1431,7 @@ export default function DashMatchPage() {
                                                       size="sm"
                                                       variant="outline"
                                                       disabled={isBusyRcon}
-                                                      onClick={() => handleSendRcon(m.id, `css_addplayer ${p.steamId} team1`)}
+                                                      onClick={() => handleSendRcon(m.id, `matchzy_addplayer ${p.steamId} team1 "${p.name}"`)}
                                                       className="h-6 px-1.5 text-[10px] text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 cursor-pointer"
                                                       title={`Пересадить в ${m.team1_name} (CT)`}
                                                     >
@@ -1421,11 +1441,21 @@ export default function DashMatchPage() {
                                                       size="sm"
                                                       variant="outline"
                                                       disabled={isBusyRcon}
-                                                      onClick={() => handleSendRcon(m.id, `css_addplayer ${p.steamId} team2`)}
+                                                      onClick={() => handleSendRcon(m.id, `matchzy_addplayer ${p.steamId} team2 "${p.name}"`)}
                                                       className="h-6 px-1.5 text-[10px] text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 cursor-pointer"
                                                       title={`Пересадить в ${m.team2_name} (T)`}
                                                     >
                                                       В T
+                                                    </Button>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      disabled={isBusyRcon}
+                                                      onClick={() => handleSendRcon(m.id, `matchzy_addplayer ${p.steamId} spec "${p.name}"`)}
+                                                      className="h-6 px-1.5 text-[10px] text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:bg-purple-50 cursor-pointer"
+                                                      title="Пересадить в зрители (Spectator)"
+                                                    >
+                                                      Спек
                                                     </Button>
                                                   </>
                                                 )}
@@ -1438,7 +1468,7 @@ export default function DashMatchPage() {
                                                       if (p.isBot) {
                                                         handleSendRcon(m.id, `bot_kick ${p.name}`);
                                                       } else {
-                                                        handleSendRcon(m.id, `css_removeplayer ${p.steamId}`);
+                                                        handleSendRcon(m.id, `kick "${p.name}"; matchzy_removeplayer ${p.steamId}`);
                                                       }
                                                     }
                                                   }}
@@ -1496,7 +1526,7 @@ export default function DashMatchPage() {
                                                     <button
                                                       type="button"
                                                       disabled={isBusyRcon}
-                                                      onClick={() => handleSendRcon(m.id, `css_removeplayer ${steam}`)}
+                                                      onClick={() => handleSendRcon(m.id, `matchzy_removeplayer ${steam}`)}
                                                       className="text-rose-500 hover:text-rose-700 text-[10px] px-1 font-bold cursor-pointer"
                                                       title="Удалить игрока"
                                                     >
@@ -1523,7 +1553,7 @@ export default function DashMatchPage() {
                                                     <button
                                                       type="button"
                                                       disabled={isBusyRcon}
-                                                      onClick={() => handleSendRcon(m.id, `css_removeplayer ${steam}`)}
+                                                      onClick={() => handleSendRcon(m.id, `matchzy_removeplayer ${steam}`)}
                                                       className="text-rose-500 hover:text-rose-700 text-[10px] px-1 font-bold cursor-pointer"
                                                       title="Удалить игрока"
                                                     >
@@ -1571,7 +1601,7 @@ export default function DashMatchPage() {
                                             const steam = (addPlayerSteamId[m.id] || "").trim();
                                             const team = addPlayerTeam[m.id] || "team1";
                                             if (steam) {
-                                              handleSendRcon(m.id, `css_addplayer ${steam} ${team}; css_whitelist_add ${steam}`);
+                                              handleSendRcon(m.id, `matchzy_addplayer ${steam} ${team} "Player_${steam.slice(-4)}"`);
                                               setAddPlayerSteamId((prev) => ({ ...prev, [m.id]: "" }));
                                             }
                                           }}
@@ -1678,7 +1708,7 @@ export default function DashMatchPage() {
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-[10px] text-slate-400">Шаблоны:</span>
-                                    {["status", "css_roundknife", "css_forceready", "mp_warmup_end 1", "mp_pause_match", "mp_unpause_match", "mp_restartgame 1", "bot_kick"].map((cmd) => (
+                                    {["status", "get5_status", "css_roundknife", "css_forceready", "css_forcepause", "css_forceunpause", "css_tech", "css_restore 1", "matchzy_listbackups", "mp_warmup_end 1", "bot_kick"].map((cmd) => (
                                       <button
                                         key={cmd}
                                         type="button"

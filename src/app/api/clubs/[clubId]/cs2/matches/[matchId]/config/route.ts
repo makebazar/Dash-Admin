@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getClient } from "@/db";
+import { getNumericMatchId } from "@/lib/cs2/utils";
 
 export async function GET(
   request: Request,
@@ -26,18 +27,22 @@ export async function GET(
       const team1Players = cfg.team1_players || {};
       const team2Players = cfg.team2_players || {};
       const hasPlayers = Object.keys(team1Players).length > 0 || Object.keys(team2Players).length > 0;
+      const numericMatchId = qm.matchzy_id ? parseInt(qm.matchzy_id, 10) : getNumericMatchId(matchId);
+      const isWingman = qm.match_format === "2v2" || qm.match_format === "1v1";
+      const playersPerTeam = qm.match_format === "1v1" ? 1 : qm.match_format === "2v2" ? 2 : 5;
 
       const matchZyConfig = {
-        matchid: matchId,
+        matchid: numericMatchId,
         num_maps: 1,
         maplist: [qm.map_name || "de_dust2"],
         map_sides: knifeRound && !practiceMode ? ["knife"] : ["team1_ct"],
-        side_type: knifeRound && !practiceMode ? "always_knife" : "standard",
+        side_type: knifeRound && !practiceMode ? "always_knife" : "never_knife",
         clinch_series: true,
-        players_per_team: qm.match_format === "1v1" ? 1 : qm.match_format === "2v2" ? 2 : 5,
+        players_per_team: playersPerTeam,
         min_players_to_ready: 1,
         min_spectators_to_ready: 0,
         skip_veto: true,
+        wingman: isWingman,
         team1: {
           name: qm.team1_name || "Команда 1",
           players: team1Players,
@@ -49,14 +54,18 @@ export async function GET(
         cvars: {
           hostname: `DashMatch: ${qm.team1_name || "Команда 1"} vs ${qm.team2_name || "Команда 2"}`,
           mp_friendlyfire: friendlyFire ? "1" : "0",
-          mp_warmuptime: warmupTime > 0 ? String(warmupTime) : "300",
+          mp_warmuptime: warmupTime > 0 ? String(warmupTime) : "9999",
           mp_warmup_pausetimer: warmupTime === 0 ? "1" : "0",
+          matchzy_time_to_start: warmupTime > 0 ? String(warmupTime) : "0",
           matchzy_remote_log_url: `http://127.0.0.1:8080/events`,
           matchzy_knife_enabled_default: knifeRound && !practiceMode ? "true" : "false",
           matchzy_minimum_ready_required: "1",
           matchzy_allow_force_ready: "true",
+          matchzy_ready_mode: hasPlayers ? "1" : "0",
+          matchzy_join_start_delay: "10",
           matchzy_whitelist_enabled_default: hasPlayers ? "true" : "false",
           matchzy_autostart_mode: practiceMode ? "2" : "1",
+          matchzy_pause_after_restore: "true",
         },
       };
       return NextResponse.json(matchZyConfig);
@@ -136,12 +145,15 @@ export async function GET(
 
     // Build MatchZy/Get5 compatible match config
     const matchZyConfig = {
-      matchid: matchId,
+      matchid: getNumericMatchId(matchId),
       num_maps: numMaps,
       maplist: mapPool,
       map_sides: ["knife"],
+      side_type: "always_knife",
       clinch_series: true,
       players_per_team: Object.keys(team1.players).length || 5,
+      min_players_to_ready: 1,
+      min_spectators_to_ready: 0,
       skip_veto: mapPool.length === 1,
       team1: {
         name: team1.name,
@@ -155,6 +167,12 @@ export async function GET(
         hostname: `DashAdmin: ${team1.name} vs ${team2.name}`,
         mp_friendlyfire: "0",
         matchzy_remote_log_url: `http://127.0.0.1:8080/events`,
+        matchzy_knife_enabled_default: "true",
+        matchzy_time_to_start: "120",
+        matchzy_ready_mode: "1",
+        matchzy_join_start_delay: "10",
+        matchzy_allow_force_ready: "true",
+        matchzy_pause_after_restore: "true",
       },
     };
 

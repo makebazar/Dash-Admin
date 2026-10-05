@@ -15,6 +15,7 @@ export async function POST(
     const payload = await request.json();
     const event = payload.event;
     const matchId = String(payload.matchid || "");
+    const numericMatchId = parseInt(matchId, 10) || 0;
 
     console.log(`[CS2 Webhook] Club ${parsedClubId} received event: ${event} for match ${matchId}`);
 
@@ -22,37 +23,52 @@ export async function POST(
     if (matchId) {
       if (event === "series_start") {
         await client.query(
-          `UPDATE club_cs2_matches SET status = 'warmup', game_state = 'warmup', updated_at = NOW() WHERE id = $1`,
-          [matchId]
+          `UPDATE club_cs2_matches SET status = 'warmup', game_state = 'warmup', updated_at = NOW() WHERE (id = $1 OR matchzy_id = $2) AND club_id = $3`,
+          [matchId, numericMatchId, parsedClubId]
+        ).catch(() => {});
+      } else if (event === "knife_start") {
+        await client.query(
+          `UPDATE club_cs2_matches SET status = 'knife', game_state = 'knife', updated_at = NOW() WHERE (id = $1 OR matchzy_id = $2) AND club_id = $3`,
+          [matchId, numericMatchId, parsedClubId]
+        ).catch(() => {});
+      } else if (event === "knife_won") {
+        await client.query(
+          `UPDATE club_cs2_matches SET game_state = 'knife_won', updated_at = NOW() WHERE (id = $1 OR matchzy_id = $2) AND club_id = $3`,
+          [matchId, numericMatchId, parsedClubId]
         ).catch(() => {});
       } else if (event === "going_live") {
         await client.query(
-          `UPDATE club_cs2_matches SET status = 'live', game_state = 'live', updated_at = NOW() WHERE id = $1`,
-          [matchId]
+          `UPDATE club_cs2_matches SET status = 'live', game_state = 'live', updated_at = NOW() WHERE (id = $1 OR matchzy_id = $2) AND club_id = $3`,
+          [matchId, numericMatchId, parsedClubId]
         ).catch(() => {});
       } else if (event === "round_end") {
         const team1Score = payload.team1?.score ?? payload.team1_score ?? 0;
         const team2Score = payload.team2?.score ?? payload.team2_score ?? 0;
         await client.query(
-          `UPDATE club_cs2_matches SET score1 = $1, score2 = $2, status = 'live', game_state = 'live', updated_at = NOW() WHERE id = $3`,
-          [team1Score, team2Score, matchId]
+          `UPDATE club_cs2_matches SET score1 = $1, score2 = $2, status = 'live', game_state = 'live', updated_at = NOW() WHERE (id = $3 OR matchzy_id = $4) AND club_id = $5`,
+          [team1Score, team2Score, matchId, numericMatchId, parsedClubId]
         ).catch(() => {});
       } else if (event === "game_paused") {
         await client.query(
-          `UPDATE club_cs2_matches SET game_state = 'paused', updated_at = NOW() WHERE id = $1`,
-          [matchId]
+          `UPDATE club_cs2_matches SET game_state = 'paused', updated_at = NOW() WHERE (id = $1 OR matchzy_id = $2) AND club_id = $3`,
+          [matchId, numericMatchId, parsedClubId]
         ).catch(() => {});
       } else if (event === "game_unpaused") {
         await client.query(
-          `UPDATE club_cs2_matches SET game_state = 'live', updated_at = NOW() WHERE id = $1`,
-          [matchId]
+          `UPDATE club_cs2_matches SET game_state = 'live', updated_at = NOW() WHERE (id = $1 OR matchzy_id = $2) AND club_id = $3`,
+          [matchId, numericMatchId, parsedClubId]
         ).catch(() => {});
-      } else if (event === "map_result") {
+      } else if (event === "backup_loaded") {
+        await client.query(
+          `UPDATE club_cs2_matches SET game_state = 'paused', updated_at = NOW() WHERE (id = $1 OR matchzy_id = $2) AND club_id = $3`,
+          [matchId, numericMatchId, parsedClubId]
+        ).catch(() => {});
+      } else if (event === "map_result" || event === "series_end") {
         const team1Score = payload.team1?.score ?? 0;
         const team2Score = payload.team2?.score ?? 0;
         await client.query(
-          `UPDATE club_cs2_matches SET score1 = $1, score2 = $2, status = 'finished', game_state = 'finished', updated_at = NOW() WHERE id = $3`,
-          [team1Score, team2Score, matchId]
+          `UPDATE club_cs2_matches SET score1 = $1, score2 = $2, status = 'finished', game_state = 'finished', updated_at = NOW() WHERE (id = $3 OR matchzy_id = $4) AND club_id = $5`,
+          [team1Score, team2Score, matchId, numericMatchId, parsedClubId]
         ).catch(() => {});
       }
     }

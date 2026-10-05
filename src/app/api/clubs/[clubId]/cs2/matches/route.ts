@@ -53,19 +53,22 @@ export async function POST(
     const serverIp = agent?.lan_ip || "127.0.0.1";
     const basePort = agent?.base_port || 27015;
 
-    // Generate unique short match ID
+    // Generate unique short match ID and integer MatchZy matchid
     const matchId = `dm-${Date.now().toString(36)}-${crypto.randomBytes(3).toString("hex")}`;
+    const matchzyId = Math.floor(Date.now() / 1000) % 2000000000 + 1;
 
-    // Ensure config_data column exists
+    // Ensure config_data and matchzy_id columns exist
     await query(`
       ALTER TABLE club_cs2_matches ADD COLUMN IF NOT EXISTS config_data JSONB DEFAULT '{}'::jsonb;
+      ALTER TABLE club_cs2_matches ADD COLUMN IF NOT EXISTS matchzy_id BIGINT;
+      CREATE INDEX IF NOT EXISTS idx_club_cs2_matches_matchzy_id ON club_cs2_matches(matchzy_id);
     `).catch(() => {});
 
     // 2. Insert match record
     await query(
-      `INSERT INTO club_cs2_matches (id, club_id, map_name, match_format, team1_name, team2_name, status, port, server_ip, config_data)
-       VALUES ($1, $2, $3, $4, $5, $6, 'starting', $7, $8, $9::jsonb)`,
-      [matchId, parsedClubId, mapName, matchFormat, team1Name, team2Name, basePort, serverIp, JSON.stringify(configData)]
+      `INSERT INTO club_cs2_matches (id, club_id, map_name, match_format, team1_name, team2_name, status, port, server_ip, config_data, matchzy_id)
+       VALUES ($1, $2, $3, $4, $5, $6, 'starting', $7, $8, $9::jsonb, $10)`,
+      [matchId, parsedClubId, mapName, matchFormat, team1Name, team2Name, basePort, serverIp, JSON.stringify(configData), matchzyId]
     );
 
     // 3. Enqueue START_MATCH command for the agent
