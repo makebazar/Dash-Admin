@@ -40,6 +40,8 @@ import {
   User,
   Target,
   Edit2,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -107,6 +109,18 @@ interface MapOption {
   name: string;
   desc: string;
   badge: string;
+  isCustom?: boolean;
+  customRecordId?: number;
+}
+
+interface CustomMapRecord {
+  id: number;
+  club_id: number;
+  map_id: string;
+  name: string;
+  description: string;
+  match_format: string;
+  created_at: string;
 }
 
 const MAP_CATALOG: Record<string, MapOption[]> = {
@@ -120,7 +134,7 @@ const MAP_CATALOG: Record<string, MapOption[]> = {
     { id: "de_vertigo", name: "Vertigo", desc: "Высотный небоскрёб с двумя этажами", badge: "Турнирная" },
     { id: "cs_office", name: "Office", desc: "Зимний офис, освобождение заложников", badge: "Заложники" },
     { id: "cs_italy", name: "Italy", desc: "Итальянские улочки и винный погреб", badge: "Заложники" },
-    { id: "workshop", name: "Карта из Мастерской", desc: "Укажите ID карты из Steam", badge: "Workshop" },
+    { id: "workshop", name: "Разовый ID из Мастерской", desc: "Ввести произвольный ID из Steam", badge: "Workshop" },
   ],
   "2v2": [
     { id: "de_inferno", name: "Inferno (Плент B)", desc: "Напарники: Банан, церковь и плент B", badge: "Wingman" },
@@ -129,18 +143,19 @@ const MAP_CATALOG: Record<string, MapOption[]> = {
     { id: "de_overpass", name: "Overpass (Плент B)", desc: "Напарники: Монстр, токсик, шорт и B", badge: "Wingman" },
     { id: "de_dust2", name: "Dust II (Шорт & A)", desc: "Напарники: Зигзаг, лонг и плент A", badge: "Wingman" },
     { id: "de_anubis", name: "Anubis (Плент B)", desc: "Напарники: Водный канал и плент B", badge: "Wingman" },
-    { id: "workshop", name: "Карта из Мастерской", desc: "Укажите ID карты из Steam", badge: "Workshop" },
+    { id: "workshop", name: "Разовый ID из Мастерской", desc: "Ввести произвольный ID из Steam", badge: "Workshop" },
   ],
   "1v1": [
     { id: "de_inferno", name: "Inferno (Арена Плент B)", desc: "Компактная дуэль 1x1 с барьерами: Банан и B", badge: "Wingman B" },
     { id: "de_nuke", name: "Nuke (Арена Плент B)", desc: "Компактная дуэль 1x1 с барьерами: Рампа и B", badge: "Wingman B" },
     { id: "de_vertigo", name: "Vertigo (Арена Плент B)", desc: "Компактная дуэль 1x1 с барьерами: Рампа и B", badge: "Wingman B" },
     { id: "de_overpass", name: "Overpass (Арена Плент B)", desc: "Компактная дуэль 1x1 с барьерами: Монстр и B", badge: "Wingman B" },
-    { id: "aim_map", name: "Aim Map", desc: "Классическая арена (нужен aim_map.vpk на сервере)", badge: "Workshop .vpk" },
-    { id: "aim_redline", name: "Aim Redline", desc: "Арена с укрытиями (нужен aim_redline.vpk на сервере)", badge: "Workshop .vpk" },
+    { id: "3070908653", name: "Aim Map", desc: "Классическая дуэльная арена (Steam Workshop)", badge: "Workshop" },
+    { id: "3070388277", name: "Aim Redline", desc: "Арена с укрытиями (Steam Workshop)", badge: "Workshop" },
+    { id: "3070389038", name: "AWP Lego 2", desc: "Популярная дуэль на снайперках (Steam Workshop)", badge: "Workshop" },
     { id: "de_dust2", name: "Dust II", desc: "Вся карта без ограничений", badge: "Вся карта" },
     { id: "de_mirage", name: "Mirage", desc: "Вся карта без ограничений", badge: "Вся карта" },
-    { id: "workshop", name: "Карта из Мастерской", desc: "Укажите ID карты из Steam", badge: "Workshop" },
+    { id: "workshop", name: "Разовый ID из Мастерской", desc: "Ввести произвольный ID из Steam", badge: "Workshop" },
   ],
 };
 
@@ -195,6 +210,87 @@ export default function DashMatchPage() {
   // RCON state per match
   const [rconInputs, setRconInputs] = useState<Record<string, string>>({});
   const [rconLoading, setRconLoading] = useState<Record<string, boolean>>({});
+
+  // Custom club maps from Steam Workshop
+  const [customMaps, setCustomMaps] = useState<CustomMapRecord[]>([]);
+  const [isAddMapOpen, setIsAddMapOpen] = useState(false);
+  const [newMapName, setNewMapName] = useState("");
+  const [newMapId, setNewMapId] = useState("");
+  const [newMapDesc, setNewMapDesc] = useState("");
+  const [newMapFormat, setNewMapFormat] = useState("all");
+  const [isSavingCustomMap, setIsSavingCustomMap] = useState(false);
+  const [customMapError, setCustomMapError] = useState<string | null>(null);
+
+  const fetchCustomMaps = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/cs2/custom-maps`);
+      if (res.ok) {
+        const data = await res.json();
+        setCustomMaps(data.maps || []);
+      }
+    } catch (err) {
+      console.error("Error fetching custom maps:", err);
+    }
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!clubId) return;
+    fetchCustomMaps();
+  }, [clubId, fetchCustomMaps]);
+
+  const handleSaveCustomMap = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCustomMapError(null);
+    const cleanId = newMapId.trim().replace(/[^0-9]/g, "");
+    if (!newMapName.trim() || !cleanId) {
+      setCustomMapError("Укажите название и числовой ID карты из Steam Workshop");
+      return;
+    }
+    setIsSavingCustomMap(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/cs2/custom-maps`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          map_id: cleanId,
+          name: newMapName.trim(),
+          description: newMapDesc.trim() || "Карта из Steam Workshop",
+          match_format: newMapFormat,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await fetchCustomMaps();
+        setSelectedMap(data.map.map_id);
+        setIsAddMapOpen(false);
+        setNewMapName("");
+        setNewMapId("");
+        setNewMapDesc("");
+      } else {
+        setCustomMapError(data.error || "Не удалось сохранить карту");
+      }
+    } catch (err) {
+      setCustomMapError("Ошибка сети при сохранении карты");
+    } finally {
+      setIsSavingCustomMap(false);
+    }
+  };
+
+  const handleDeleteCustomMap = async (mapRecordId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Удалить эту карту из каталога клуба?")) return;
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/cs2/custom-maps?id=${mapRecordId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await fetchCustomMaps();
+        setSelectedMap("de_mirage");
+      }
+    } catch (err) {
+      console.error("Error deleting custom map:", err);
+    }
+  };
 
   const handleFormatSelect = (fmt: string) => {
     setSelectedFormat(fmt);
@@ -582,17 +678,131 @@ export default function DashMatchPage() {
                       <label className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
                         Карта ({selectedFormat}):
                       </label>
-                      <span className="text-[10px] text-slate-400">
-                        {(MAP_CATALOG[selectedFormat] || MAP_CATALOG["5v5"]).length} карт в пуле
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
-                      {(MAP_CATALOG[selectedFormat] || MAP_CATALOG["5v5"]).map((m) => (
+                      <div className="flex items-center gap-2">
                         <button
-                          key={m.id}
                           type="button"
+                          onClick={() => setIsAddMapOpen(!isAddMapOpen)}
+                          className="text-[11px] font-medium text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Добавить карту</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Add Custom Map Form */}
+                    {isAddMapOpen && (
+                      <div className="p-3 my-2 rounded-lg bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/40 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-orange-900 dark:text-orange-200">
+                            Сохранить карту из Steam Workshop в каталог клуба
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddMapOpen(false)}
+                            className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {customMapError && (
+                          <div className="text-[11px] text-red-600 dark:text-red-400 font-medium">
+                            {customMapError}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-slate-500 dark:text-zinc-400 block mb-1">
+                              Название карты
+                            </label>
+                            <Input
+                              value={newMapName}
+                              onChange={(e) => setNewMapName(e.target.value)}
+                              placeholder="Например: AWP India"
+                              className="h-7 text-xs bg-white dark:bg-zinc-900"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500 dark:text-zinc-400 block mb-1">
+                              Steam Workshop ID (цифры)
+                            </label>
+                            <Input
+                              value={newMapId}
+                              onChange={(e) => setNewMapId(e.target.value.replace(/[^0-9]/g, ""))}
+                              placeholder="Например: 3070244462"
+                              className="h-7 text-xs font-mono bg-white dark:bg-zinc-900"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-slate-500 dark:text-zinc-400 block mb-1">
+                              Описание (опционально)
+                            </label>
+                            <Input
+                              value={newMapDesc}
+                              onChange={(e) => setNewMapDesc(e.target.value)}
+                              placeholder="Дуэль на снайперках"
+                              className="h-7 text-xs bg-white dark:bg-zinc-900"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500 dark:text-zinc-400 block mb-1">
+                              Для какого формата
+                            </label>
+                            <select
+                              value={newMapFormat}
+                              onChange={(e) => setNewMapFormat(e.target.value)}
+                              className="w-full h-7 text-xs bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-md px-2 outline-none"
+                            >
+                              <option value="all">Для всех форматов</option>
+                              <option value="1v1">Только 1x1</option>
+                              <option value="2v2">Только 2x2</option>
+                              <option value="5v5">Только 5x5</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setIsAddMapOpen(false)}
+                            className="h-7 text-xs"
+                          >
+                            Отмена
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleSaveCustomMap}
+                            disabled={isSavingCustomMap}
+                            className="h-7 text-xs bg-orange-600 hover:bg-orange-700 text-white"
+                          >
+                            {isSavingCustomMap ? "Сохранение..." : "Сохранить карту"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                      {[
+                        ...(MAP_CATALOG[selectedFormat] || MAP_CATALOG["5v5"]),
+                        ...customMaps
+                          .filter((cm) => cm.match_format === "all" || cm.match_format === selectedFormat)
+                          .map((cm) => ({
+                            id: cm.map_id,
+                            name: cm.name,
+                            desc: cm.description || `ID: ${cm.map_id}`,
+                            badge: "Моя карта",
+                            isCustom: true,
+                            customRecordId: cm.id,
+                          })),
+                      ].map((m) => (
+                        <div
+                          key={m.isCustom ? `custom-${m.customRecordId}` : m.id}
                           onClick={() => setSelectedMap(m.id)}
-                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer relative ${
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer relative group ${
                             selectedMap === m.id
                               ? "border-orange-500 bg-orange-50/70 dark:bg-orange-950/40 text-orange-950 dark:text-orange-100 font-medium shadow-xs"
                               : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-slate-700 dark:text-zinc-300 hover:border-slate-300"
@@ -600,18 +810,36 @@ export default function DashMatchPage() {
                         >
                           <div className="flex items-center justify-between gap-1">
                             <span className="text-xs font-bold truncate">{m.name}</span>
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 shrink-0">
-                              {m.badge}
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span
+                                className={`text-[9px] px-1 py-0.2 rounded font-medium ${
+                                  m.isCustom
+                                    ? "bg-orange-100 text-orange-700 dark:bg-orange-900/60 dark:text-orange-300"
+                                    : "bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400"
+                                }`}
+                              >
+                                {m.badge}
+                              </span>
+                              {m.isCustom && m.customRecordId && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteCustomMap(m.customRecordId!, e)}
+                                  title="Удалить из каталога"
+                                  className="text-slate-400 hover:text-red-500 p-0.5 rounded cursor-pointer opacity-80 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <div className="text-[10px] text-slate-400 dark:text-zinc-500 truncate mt-0.5">{m.desc}</div>
-                        </button>
+                        </div>
                       ))}
                     </div>
 
                     {selectedFormat === "1v1" && (
                       <div className="p-2 rounded-lg bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 text-[11px] text-blue-800 dark:text-blue-300">
-                        💡 <strong>Рекомендация:</strong> Карты с бейджем <em>Wingman B</em> (Inferno B, Nuke B) имеют официальные физические барьеры Valve и работают сразу. Кастомные карты <em>Workshop .vpk</em> требуют наличия соответствующего файла .vpk в папке <code className="font-mono text-[10px]">game/csgo/maps/</code> на сервере.
+                        💡 <strong>Подсказка:</strong> Карты с бейджем <em>Workshop</em> скачиваются сервером CS2 автоматически напрямую из Steam при первом старте. Карты с бейджем <em>Wingman B</em> (Inferno B, Nuke B) имеют официальные барьеры Valve.
                       </div>
                     )}
                     
