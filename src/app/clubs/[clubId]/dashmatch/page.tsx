@@ -353,18 +353,27 @@ export default function DashMatchPage() {
     onDone();
   };
 
-  // Helper to parse SteamID list
+  // Helper to parse SteamID list (supports raw 17-digit SteamID64 or steam community profile URLs)
   const parsePlayersList = (text: string): Record<string, string> => {
     const res: Record<string, string> = {};
     const lines = text.split("\n");
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-      const parts = trimmed.split(/[\s,;:]+/);
-      const steamId = parts[0];
-      const name = parts.slice(1).join(" ") || `Player_${steamId.slice(-4)}`;
-      if (steamId.length >= 10) {
+      // Extract 17-digit SteamID64 (starts with 7656119) if present anywhere in the line
+      const match = trimmed.match(/\b(7656119\d{10})\b/);
+      if (match) {
+        const steamId = match[1];
+        const nameClean = trimmed.replace(match[0], "").replace(/https?:\/\/[^\s]+/g, "").trim();
+        const name = nameClean || `Player_${steamId.slice(-4)}`;
         res[steamId] = name;
+      } else {
+        const parts = trimmed.split(/[\s,;:]+/);
+        const steamId = parts[0];
+        const name = parts.slice(1).join(" ") || `Player_${steamId.slice(-4)}`;
+        if (steamId.length >= 10 && /^\d+$/.test(steamId)) {
+          res[steamId] = name;
+        }
       }
     }
     return res;
@@ -972,26 +981,35 @@ export default function DashMatchPage() {
                       </label>
 
                       {enableWhitelist && (
-                        <div className="grid grid-cols-2 gap-2 pt-2 text-[11px]">
-                          <div className="space-y-1">
-                            <span className="text-[10px] text-slate-400">SteamID64 Команды 1:</span>
-                            <textarea
-                              rows={3}
-                              placeholder="76561198012345678 Player1&#10;76561198012345679 Player2"
-                              value={team1PlayersRaw}
-                              onChange={(e) => setTeam1PlayersRaw(e.target.value)}
-                              className="w-full text-[10px] p-1.5 rounded border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono"
-                            />
+                        <div className="pt-2 space-y-2">
+                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-semibold text-slate-600 dark:text-zinc-300">SteamID64 Команды 1 (CT):</span>
+                              <textarea
+                                rows={3}
+                                placeholder="76561198012345678 Player1&#10;76561198012345679 Player2"
+                                value={team1PlayersRaw}
+                                onChange={(e) => setTeam1PlayersRaw(e.target.value)}
+                                className="w-full text-[10px] p-1.5 rounded border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-semibold text-slate-600 dark:text-zinc-300">SteamID64 Команды 2 (T):</span>
+                              <textarea
+                                rows={3}
+                                placeholder="76561198098765431 Player3&#10;76561198098765432 Player4"
+                                value={team2PlayersRaw}
+                                onChange={(e) => setTeam2PlayersRaw(e.target.value)}
+                                className="w-full text-[10px] p-1.5 rounded border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono"
+                              />
+                            </div>
                           </div>
-                          <div className="space-y-1">
-                            <span className="text-[10px] text-slate-400">SteamID64 Команды 2:</span>
-                            <textarea
-                              rows={3}
-                              placeholder="76561198098765431 Player3&#10;76561198098765432 Player4"
-                              value={team2PlayersRaw}
-                              onChange={(e) => setTeam2PlayersRaw(e.target.value)}
-                              className="w-full text-[10px] p-1.5 rounded border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono"
-                            />
+                          <div className="p-2 rounded bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-[10px] text-amber-900 dark:text-amber-200 leading-relaxed">
+                            💡 <strong>Как получить SteamID64:</strong>
+                            <ul className="list-disc list-inside mt-0.5 space-y-0.5 opacity-90">
+                              <li><strong>Способ 1:</strong> В игре CS2 открыть консоль (<code className="font-mono">~</code>) и ввести <code className="font-mono">status</code> — напротив ника скопировать 17-значный номер <code className="font-mono">7656119...</code></li>
+                              <li><strong>Способ 2:</strong> В Steam открыть свой профиль → ПКМ → <em>«Скопировать адрес страницы»</em> и вставить ссылку прямо в поле (ID определится автоматически).</li>
+                            </ul>
                           </div>
                         </div>
                       )}
