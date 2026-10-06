@@ -353,27 +353,45 @@ export default function DashMatchPage() {
     onDone();
   };
 
-  // Helper to parse SteamID list (supports raw 17-digit SteamID64 or steam community profile URLs)
-  const parsePlayersList = (text: string): Record<string, string> => {
+  // Helper to parse and resolve SteamID list (supports raw SteamID64, profile URLs, and vanity /id/ URLs)
+  const resolvePlayersList = async (text: string): Promise<Record<string, string>> => {
     const res: Record<string, string> = {};
     const lines = text.split("\n");
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-      // Extract 17-digit SteamID64 (starts with 7656119) if present anywhere in the line
+      // 1. Direct 17-digit SteamID64
       const match = trimmed.match(/\b(7656119\d{10})\b/);
       if (match) {
         const steamId = match[1];
         const nameClean = trimmed.replace(match[0], "").replace(/https?:\/\/[^\s]+/g, "").trim();
         const name = nameClean || `Player_${steamId.slice(-4)}`;
         res[steamId] = name;
-      } else {
-        const parts = trimmed.split(/[\s,;:]+/);
-        const steamId = parts[0];
-        const name = parts.slice(1).join(" ") || `Player_${steamId.slice(-4)}`;
-        if (steamId.length >= 10 && /^\d+$/.test(steamId)) {
-          res[steamId] = name;
+        continue;
+      }
+
+      // 2. Custom vanity URL like /id/belyacov/
+      if (trimmed.includes("steamcommunity.com/id/") || (!trimmed.includes("/") && !trimmed.includes(" "))) {
+        try {
+          const fetchRes = await fetch(`/api/clubs/${clubId}/cs2/resolve-steamid?input=${encodeURIComponent(trimmed)}`);
+          if (fetchRes.ok) {
+            const data = await fetchRes.json();
+            if (data.steamId) {
+              res[data.steamId] = data.name || `Player_${data.steamId.slice(-4)}`;
+              continue;
+            }
+          }
+        } catch (e) {
+          // ignore
         }
+      }
+
+      // 3. Fallback
+      const parts = trimmed.split(/[\s,;:]+/);
+      const steamId = parts[0];
+      const name = parts.slice(1).join(" ") || `Player_${steamId.slice(-4)}`;
+      if (steamId.length >= 10 && /^\d+$/.test(steamId)) {
+        res[steamId] = name;
       }
     }
     return res;
@@ -386,8 +404,8 @@ export default function DashMatchPage() {
     setLaunchMessage(null);
 
     try {
-      const team1Players = enableWhitelist ? parsePlayersList(team1PlayersRaw) : {};
-      const team2Players = enableWhitelist ? parsePlayersList(team2PlayersRaw) : {};
+      const team1Players = enableWhitelist ? await resolvePlayersList(team1PlayersRaw) : {};
+      const team2Players = enableWhitelist ? await resolvePlayersList(team2PlayersRaw) : {};
 
       const res = await fetch(`/api/clubs/${clubId}/cs2/matches`, {
         method: "POST",
