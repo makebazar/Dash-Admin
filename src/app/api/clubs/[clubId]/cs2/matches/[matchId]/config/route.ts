@@ -31,10 +31,13 @@ export async function GET(
       const isWingman = qm.match_format === "2v2" || qm.match_format === "1v1";
       const playersPerTeam = qm.match_format === "1v1" ? 1 : qm.match_format === "2v2" ? 2 : 5;
 
+      const isWorkshop = /^\d+$/.test(qm.map_name || "");
+      const matchMap = isWorkshop ? `workshop/${qm.map_name}` : (qm.map_name || "de_dust2");
+
       const matchZyConfig = {
         matchid: numericMatchId,
         num_maps: 1,
-        maplist: [qm.map_name || "de_dust2"],
+        maplist: [matchMap],
         map_sides: knifeRound && !practiceMode ? ["knife"] : ["team1_ct"],
         side_type: knifeRound && !practiceMode ? "always_knife" : "never_knife",
         clinch_series: true,
