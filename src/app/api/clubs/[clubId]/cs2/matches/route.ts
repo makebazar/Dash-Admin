@@ -52,6 +52,23 @@ export async function POST(
     const agent = agentRes.rows[0];
     const serverIp = agent?.lan_ip || "127.0.0.1";
     const basePort = agent?.base_port || 27015;
+    const maxInstances = agent?.max_instances || 4;
+
+    // Find the lowest free port in [basePort, basePort+maxInstances)
+    // by checking which ports are already taken by active (non-stopped) matches
+    const usedPortsRes = await query(
+      `SELECT port FROM club_cs2_matches
+       WHERE club_id = $1 AND status NOT IN ('stopped', 'finished')`,
+      [parsedClubId]
+    );
+    const usedPorts = new Set(usedPortsRes.rows.map((r: any) => r.port));
+    let assignedPort = basePort;
+    for (let i = 0; i < maxInstances; i++) {
+      if (!usedPorts.has(basePort + i)) {
+        assignedPort = basePort + i;
+        break;
+      }
+    }
 
     // Generate unique short match ID and integer MatchZy matchid
     const matchId = `dm-${Date.now().toString(36)}-${crypto.randomBytes(3).toString("hex")}`;
@@ -68,12 +85,11 @@ export async function POST(
     await query(
       `INSERT INTO club_cs2_matches (id, club_id, map_name, match_format, team1_name, team2_name, status, port, server_ip, config_data, matchzy_id)
        VALUES ($1, $2, $3, $4, $5, $6, 'starting', $7, $8, $9::jsonb, $10)`,
-      [matchId, parsedClubId, mapName, matchFormat, team1Name, team2Name, basePort, serverIp, JSON.stringify(configData), matchzyId]
+      [matchId, parsedClubId, mapName, matchFormat, team1Name, team2Name, assignedPort, serverIp, JSON.stringify(configData), matchzyId]
     );
 
     // 3. Enqueue START_MATCH command for the agent
-    const hasPlayers = Object.keys(team1Players).length > 0 || Object.keys(team2Players).length > 0;
-    const configUrl = hasPlayers ? `https://mydashadmin.ru/api/clubs/${parsedClubId}/cs2/matches/${matchId}/config` : "";
+    const configUrl = `https://mydashadmin.ru/api/clubs/${parsedClubId}/cs2/matches/${matchId}/config`;
 
     await query(
       `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
@@ -104,8 +120,8 @@ export async function POST(
       success: true,
       match_id: matchId,
       server_ip: serverIp,
-      port: basePort,
-      connect_command: `connect ${serverIp}:${basePort}`,
+      port: assignedPort,
+      connect_command: `connect ${serverIp}:${assignedPort}`,
       message: "Команда запуска матча отправлена на сервер клуба!",
     });
   } catch (error: any) {

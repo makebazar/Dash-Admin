@@ -38,6 +38,8 @@ import {
   ChevronUp,
   Clock,
   User,
+  Target,
+  Edit2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -118,6 +120,7 @@ const MAP_CATALOG: Record<string, MapOption[]> = {
     { id: "de_vertigo", name: "Vertigo", desc: "Высотный небоскрёб с двумя этажами", badge: "Турнирная" },
     { id: "cs_office", name: "Office", desc: "Зимний офис, освобождение заложников", badge: "Заложники" },
     { id: "cs_italy", name: "Italy", desc: "Итальянские улочки и винный погреб", badge: "Заложники" },
+    { id: "workshop", name: "Карта из Мастерской", desc: "Укажите ID карты из Steam", badge: "Workshop" },
   ],
   "2v2": [
     { id: "de_inferno", name: "Inferno (Плент B)", desc: "Напарники: Банан, церковь и плент B", badge: "Wingman" },
@@ -126,6 +129,7 @@ const MAP_CATALOG: Record<string, MapOption[]> = {
     { id: "de_overpass", name: "Overpass (Плент B)", desc: "Напарники: Монстр, токсик, шорт и B", badge: "Wingman" },
     { id: "de_dust2", name: "Dust II (Шорт & A)", desc: "Напарники: Зигзаг, лонг и плент A", badge: "Wingman" },
     { id: "de_anubis", name: "Anubis (Плент B)", desc: "Напарники: Водный канал и плент B", badge: "Wingman" },
+    { id: "workshop", name: "Карта из Мастерской", desc: "Укажите ID карты из Steam", badge: "Workshop" },
   ],
   "1v1": [
     { id: "de_inferno", name: "Inferno (Арена Плент B)", desc: "Компактная дуэль 1x1 с барьерами: Банан и B", badge: "Wingman B" },
@@ -136,6 +140,7 @@ const MAP_CATALOG: Record<string, MapOption[]> = {
     { id: "aim_redline", name: "Aim Redline", desc: "Арена с укрытиями (нужен aim_redline.vpk на сервере)", badge: "Workshop .vpk" },
     { id: "de_dust2", name: "Dust II", desc: "Вся карта без ограничений", badge: "Вся карта" },
     { id: "de_mirage", name: "Mirage", desc: "Вся карта без ограничений", badge: "Вся карта" },
+    { id: "workshop", name: "Карта из Мастерской", desc: "Укажите ID карты из Steam", badge: "Workshop" },
   ],
 };
 
@@ -164,6 +169,7 @@ export default function DashMatchPage() {
   // Match creation state
   const [selectedFormat, setSelectedFormat] = useState("5v5");
   const [selectedMap, setSelectedMap] = useState("de_mirage");
+  const [workshopId, setWorkshopId] = useState("");
   const [matchMode, setMatchMode] = useState<"comp" | "practice" | "bots">("comp");
   const [knifeRound, setKnifeRound] = useState(true);
   const [friendlyFire, setFriendlyFire] = useState(false);
@@ -282,7 +288,7 @@ export default function DashMatchPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          map_name: selectedMap,
+          map_name: selectedMap === "workshop" ? workshopId : selectedMap,
           format: selectedFormat,
           team1_name: team1Name.trim() || "Команда 1",
           team2_name: team2Name.trim() || "Команда 2",
@@ -606,6 +612,22 @@ export default function DashMatchPage() {
                     {selectedFormat === "1v1" && (
                       <div className="p-2 rounded-lg bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 text-[11px] text-blue-800 dark:text-blue-300">
                         💡 <strong>Рекомендация:</strong> Карты с бейджем <em>Wingman B</em> (Inferno B, Nuke B) имеют официальные физические барьеры Valve и работают сразу. Кастомные карты <em>Workshop .vpk</em> требуют наличия соответствующего файла .vpk в папке <code className="font-mono text-[10px]">game/csgo/maps/</code> на сервере.
+                      </div>
+                    )}
+                    
+                    {selectedMap === "workshop" && (
+                      <div className="p-3 mt-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/50">
+                        <label className="block text-[11px] font-medium text-slate-600 dark:text-zinc-400 mb-1.5">
+                          ID Карты из Мастерской (Только цифры)
+                        </label>
+                        <input
+                          type="text"
+                          value={workshopId}
+                          onChange={(e) => setWorkshopId(e.target.value.replace(/[^0-9]/g, ""))}
+                          placeholder="Например: 3070244462"
+                          className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-md text-sm outline-none focus:border-orange-500 font-mono"
+                          required
+                        />
                       </div>
                     )}
                   </div>
@@ -1122,6 +1144,64 @@ export default function DashMatchPage() {
                                       size="sm"
                                       variant="outline"
                                       disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "css_prac")}
+                                      className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50"
+                                      title="Включить режим тренировки (Practice Mode)"
+                                    >
+                                      <Target className="w-3 h-3 text-cyan-500" />
+                                      Тренировка
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => handleSendRcon(m.id, "css_match")}
+                                      className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-pink-700 dark:text-pink-400 hover:bg-pink-50"
+                                      title="Выйти из тренировки в режим матча"
+                                    >
+                                      <Swords className="w-3 h-3 text-pink-500" />
+                                      Режим матча
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => {
+                                        const newName = window.prompt("Введите новое название для Команды 1 (CT):");
+                                        if (newName && newName.trim()) {
+                                          handleSendRcon(m.id, `css_team1 "${newName.trim()}"`);
+                                        }
+                                      }}
+                                      className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+                                      title="Переименовать Команду 1"
+                                    >
+                                      <Edit2 className="w-3 h-3 text-slate-500" />
+                                      Имя Команды 1
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
+                                      onClick={() => {
+                                        const newName = window.prompt("Введите новое название для Команды 2 (T):");
+                                        if (newName && newName.trim()) {
+                                          handleSendRcon(m.id, `css_team2 "${newName.trim()}"`);
+                                        }
+                                      }}
+                                      className="h-7 px-2 text-[11px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+                                      title="Переименовать Команду 2"
+                                    >
+                                      <Edit2 className="w-3 h-3 text-slate-500" />
+                                      Имя Команды 2
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={isBusyRcon}
                                       onClick={() => {
                                         if (confirm("Перезапустить матч со счета 0:0?")) {
                                           handleSendRcon(m.id, "mp_restartgame 1; css_restart");
@@ -1623,11 +1703,11 @@ export default function DashMatchPage() {
                                         </p>
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        <Button
+                                         <Button
                                           size="sm"
                                           variant="outline"
                                           disabled={isBusyRcon}
-                                          onClick={() => handleSendRcon(m.id, "css_whitelist 1")}
+                                          onClick={() => handleSendRcon(m.id, "matchzy_whitelist_enabled_default true")}
                                           className="h-7 px-2.5 text-xs text-indigo-600 dark:text-indigo-400 cursor-pointer"
                                         >
                                           <Shield className="w-3 h-3 mr-1" />
@@ -1637,7 +1717,7 @@ export default function DashMatchPage() {
                                           size="sm"
                                           variant="outline"
                                           disabled={isBusyRcon}
-                                          onClick={() => handleSendRcon(m.id, "css_whitelist 0")}
+                                          onClick={() => handleSendRcon(m.id, "matchzy_whitelist_enabled_default false")}
                                           className="h-7 px-2.5 text-xs text-slate-600 dark:text-zinc-400 cursor-pointer"
                                         >
                                           Свободный вход
@@ -1661,7 +1741,7 @@ export default function DashMatchPage() {
                                       disabled={isBusyRcon}
                                       onClick={() => {
                                         if (confirm(`Присудить техническую победу ${m.team1_name}?`)) {
-                                          handleSendRcon(m.id, "css_endmatch 1; get5_endmatch team1");
+                                          handleSendRcon(m.id, "css_endmatch 1");
                                         }
                                       }}
                                       className="h-8 text-xs font-semibold gap-1.5 border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 cursor-pointer"
@@ -1676,7 +1756,7 @@ export default function DashMatchPage() {
                                       disabled={isBusyRcon}
                                       onClick={() => {
                                         if (confirm(`Присудить техническую победу ${m.team2_name}?`)) {
-                                          handleSendRcon(m.id, "css_endmatch 2; get5_endmatch team2");
+                                          handleSendRcon(m.id, "css_endmatch 2");
                                         }
                                       }}
                                       className="h-8 text-xs font-semibold gap-1.5 border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 cursor-pointer"
@@ -1691,7 +1771,7 @@ export default function DashMatchPage() {
                                       disabled={isBusyRcon}
                                       onClick={() => {
                                         if (confirm("Завершить встречу ничьей?")) {
-                                          handleSendRcon(m.id, "css_endmatch 0; get5_endmatch");
+                                          handleSendRcon(m.id, "css_endmatch 0");
                                         }
                                       }}
                                       className="h-8 text-xs font-semibold gap-1.5 border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 cursor-pointer"
