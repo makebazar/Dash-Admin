@@ -114,6 +114,26 @@ export function parseCs2StatusPlayers(rconText?: string): ParsedCs2Player[] {
           isBot: false,
         });
       }
+    } else {
+      // New CS2 format without '#' and without SteamID:
+      //   2    02:06    0    0     active 786432 10.188.1.102:60971 'neutolim'
+      //   3      BOT    0    0     active      0 'DemoRecorder'
+      const match = trimmed.match(/^(\d+)\s+([^\s]+)\s+(\d+)\s+(\d+)\s+([^\s]+)\s+(\d+)\s*(.*?)\s*'([^']*)'$/);
+      if (match) {
+        const id = match[1];
+        const time = match[2];
+        const ping = match[3];
+        const name = match[8];
+        const isBot = time.toUpperCase() === "BOT" || /bot/i.test(name);
+        
+        players.push({
+          id,
+          name,
+          steamId: isBot ? `bot_${id}` : `ID_${id}`,
+          ping,
+          isBot,
+        });
+      }
     }
   }
 
