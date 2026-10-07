@@ -4,26 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Trophy,
-  Users,
-  User,
-  Coins,
-  ShieldAlert,
-  Loader2,
-  ChevronRight,
-  Plus,
-  LogOut,
-  Trash2,
-  Check,
-  Calendar,
-  Gamepad2,
-  BookOpen,
-  X,
-  Settings,
-  Clock,
-  ArrowLeft,
-} from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 const formatCurrency = (amount: number) => {
@@ -123,7 +104,7 @@ export default function TournamentsPortal() {
     } else {
       emblemContent = (
         <div className="w-28 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center relative group-hover:border-white/20 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.02)]">
-          <Gamepad2 className="w-7 h-7 text-gray-400 group-hover:text-white transition-colors" />
+          
         </div>
       );
     }
@@ -225,6 +206,10 @@ export default function TournamentsPortal() {
     try {
       if (!targetClubId) return;
       const boardRes = await fetch(`/api/promo/public/board-data?discipline=${discipline}&clubId=${targetClubId}`);
+      if (!boardRes.ok) {
+        setLeaderboard([]);
+        return;
+      }
       const boardData = await boardRes.json();
       setLeaderboard(boardData.leaderboard || []);
     } catch (err) {
@@ -466,7 +451,7 @@ export default function TournamentsPortal() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#070708] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+        <span>...</span>
       </div>
     );
   }
@@ -542,7 +527,7 @@ export default function TournamentsPortal() {
       <header className="border-b border-white/5 bg-[#0c0c0e]/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
-            <Trophy className="w-8 h-8 text-orange-500" />
+            
             <div>
               <h1 className="text-xl font-black uppercase italic tracking-tight">
                 Tournament <span className="text-orange-500">Portal</span>
@@ -944,7 +929,7 @@ export default function TournamentsPortal() {
                                         <>
                                           <span className="text-gray-700 font-normal">|</span>
                                           <span className="text-orange-500 font-black flex items-center gap-1">
-                                            <Clock className="w-3.5 h-3.5 text-orange-500 stroke-[2.5]" />
+                                            
                                             СТАРТ: {new Date(t.starts_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                                           </span>
                                         </>
@@ -1016,7 +1001,7 @@ export default function TournamentsPortal() {
                                     </div>
 
                                     {/* Action chevron */}
-                                    <ChevronRight className="w-5 h-5 text-gray-500 group-hover:text-white group-hover:translate-x-0.5 transition-all hidden md:block" />
+                                    
                                   </div>
                                 </div>
                               </motion.div>
@@ -1040,7 +1025,7 @@ export default function TournamentsPortal() {
               onClick={() => setActiveTournament(null)}
               className="group flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors"
             >
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+              
               К списку турниров
             </button>
 
@@ -1064,7 +1049,7 @@ export default function TournamentsPortal() {
                       <>
                         <span className="text-gray-700 font-normal">|</span>
                         <span className="text-orange-500 font-black flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-orange-500 stroke-[2.5]" />
+                          
                           СТАРТ: {new Date(activeTournament.starts_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }).toUpperCase()}, {new Date(activeTournament.starts_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </>
@@ -1107,7 +1092,7 @@ export default function TournamentsPortal() {
                     {/* Card 1: Prize Pool */}
                     <div className="bg-white/5 border border-white/5 p-5 rounded-3xl flex items-center gap-4 shadow-inner">
                       <div className="w-12 h-12 rounded-2xl bg-yellow-500/10 flex items-center justify-center shrink-0 border border-yellow-500/10">
-                        <Trophy className="w-6 h-6 text-yellow-500" />
+                        
                       </div>
                       <div className="min-w-0 flex-1 space-y-1.5">
                         <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-0.5">
@@ -1166,7 +1151,7 @@ export default function TournamentsPortal() {
                     {/* Card 2: Entry Fee */}
                     <div className="bg-white/5 border border-white/5 p-5 rounded-3xl flex items-center gap-4 shadow-inner">
                       <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0 border border-emerald-500/10">
-                        <Coins className="w-6 h-6 text-emerald-500" />
+                        
                       </div>
                       <div className="min-w-0 flex-1">
                         <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-0.5">
@@ -1203,7 +1188,7 @@ export default function TournamentsPortal() {
                     {/* Card 3: Competitors */}
                     <div className="bg-white/5 border border-white/5 p-5 rounded-3xl flex items-center gap-4 shadow-inner">
                       <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center shrink-0 border border-orange-500/10">
-                        <Users className="w-6 h-6 text-orange-500" />
+                        
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-0.5">
@@ -1221,7 +1206,7 @@ export default function TournamentsPortal() {
               {/* Prize Distribution Section */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-orange-500">
-                  <Trophy className="w-4 h-4" />
+                  
                   Призовые места
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1330,7 +1315,7 @@ export default function TournamentsPortal() {
               {/* Rules Section */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-orange-500">
-                  <BookOpen className="w-4 h-4" />
+                  
                   Правила турнира
                 </div>
                 <div className="text-sm text-gray-300 bg-black/40 p-6 rounded-3xl border border-white/5 max-h-60 overflow-y-auto leading-relaxed font-medium whitespace-pre-wrap">
@@ -1353,7 +1338,7 @@ export default function TournamentsPortal() {
                         <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-3xl space-y-3">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                              <Check className="w-6 h-6" />
+                              
                             </div>
                             <div>
                               <h4 className="text-sm font-black uppercase text-emerald-400">Вы зарегистрированы</h4>
@@ -1603,7 +1588,7 @@ export default function TournamentsPortal() {
                             className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:grayscale text-white py-5 rounded-3xl font-black uppercase italic text-lg shadow-lg shadow-orange-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                           >
                             {registering ? (
-                              <Loader2 className="w-6 h-6 animate-spin" />
+                              <span>...</span>
                             ) : isFull ? (
                               `Записаться в резерв (${(!selectedRegTeam || regMode === "solo") ? "Соло" : "Всей командой"})`
                             ) : (
@@ -1652,7 +1637,7 @@ export default function TournamentsPortal() {
                             className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:grayscale text-white py-5 rounded-3xl font-black uppercase italic text-lg shadow-lg shadow-orange-500/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                           >
                             {registering ? (
-                              <Loader2 className="w-6 h-6 animate-spin" />
+                              <span>...</span>
                             ) : isFull ? (
                               "Записаться в резерв (Соло)"
                             ) : (
@@ -1720,7 +1705,7 @@ export default function TournamentsPortal() {
                                       </div>
                                       {showLobbyBtn && (
                                         <Link
-                                          href={`/promo/tournaments/lobby/${m.id}?clubId=${clubId}`}
+                                          href={`/promo/tournaments/match/${m.id}?clubId=${clubId}`}
                                           className="bg-orange-500 hover:bg-orange-600 px-3.5 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest text-white transition-colors"
                                         >
                                           Лобби
@@ -1820,7 +1805,7 @@ export default function TournamentsPortal() {
 
                                       {showLobbyBtn && (
                                         <Link
-                                          href={`/promo/tournaments/lobby/${m.id}?clubId=${clubId}`}
+                                          href={`/promo/tournaments/match/${m.id}?clubId=${clubId}`}
                                           className="block w-full bg-orange-500 hover:bg-orange-600 py-3 rounded-2xl text-center font-black text-[10px] uppercase tracking-widest text-white transition-colors"
                                         >
                                           В лобби матча
@@ -1843,7 +1828,7 @@ export default function TournamentsPortal() {
             {/* Competitors Section (Moved below details) */}
             <div className="bg-[#0c0c0e]/95 border border-white/5 rounded-[2.5rem] p-8 space-y-6 shadow-2xl">
               <div className="flex items-center gap-2.5 text-md font-black uppercase italic tracking-tight text-white border-b border-white/5 pb-3">
-                <Users className="w-5 h-5 text-orange-500" />
+                
                 <h4>Список участников</h4>
               </div>
               <div className="space-y-6">
@@ -2023,7 +2008,7 @@ export default function TournamentsPortal() {
                     <div className="bg-[#0c0c0e] border border-white/5 rounded-[2.5rem] p-8 space-y-6 flex flex-col justify-between">
                       <div className="space-y-4">
                         <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center">
-                          <Plus className="w-6 h-6 text-orange-500" />
+                          
                         </div>
                         <h3 className="text-2xl font-black uppercase italic tracking-tight">
                           Создать команду
@@ -2054,7 +2039,7 @@ export default function TournamentsPortal() {
                     <div className="bg-[#0c0c0e] border border-white/5 rounded-[2.5rem] p-8 space-y-6 flex flex-col justify-between">
                       <div className="space-y-4">
                         <div className="w-12 h-12 rounded-2xl bg-orange-500/10 flex items-center justify-center">
-                          <Users className="w-6 h-6 text-orange-500" />
+                          
                         </div>
                         <h3 className="text-2xl font-black uppercase italic tracking-tight">
                           Вступить по коду
@@ -2119,7 +2104,7 @@ export default function TournamentsPortal() {
                             className="absolute right-0 top-0 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-xl transition-colors border border-white/5"
                             title="Редактировать команду"
                           >
-                            <Settings className="w-4 h-4" />
+                            
                           </button>
                         )}
                       </div>
@@ -2200,14 +2185,14 @@ export default function TournamentsPortal() {
                           onClick={handleDisbandTeam}
                           className="w-full py-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-black text-xs uppercase tracking-widest rounded-2xl border border-red-500/20 hover:border-red-500/40 transition-colors flex items-center justify-center gap-2"
                         >
-                          <Trash2 className="w-4.5 h-4.5" /> Распустить команду
+                           Распустить команду
                         </button>
                       ) : (
                         <button
                           onClick={handleLeaveTeam}
                           className="w-full py-4 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white font-black text-xs uppercase tracking-widest rounded-2xl border border-white/5 transition-colors flex items-center justify-center gap-2"
                         >
-                          <LogOut className="w-4.5 h-4.5" /> Покинуть команду
+                           Покинуть команду
                         </button>
                       )}
                     </div>
@@ -2227,7 +2212,7 @@ export default function TournamentsPortal() {
                           >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center font-black text-orange-500">
-                                {m.id === activeTeam.captainId ? "👑" : <User className="w-5 h-5 text-gray-400" />}
+                                {m.id === activeTeam.captainId ? "👑" : "P"}
                               </div>
                               <div>
                                 <span className="text-sm font-bold block">{m.fullName}</span>
@@ -2242,7 +2227,7 @@ export default function TournamentsPortal() {
                                 className="text-red-500 hover:bg-red-500/10 p-2.5 rounded-xl transition-colors border border-transparent hover:border-red-500/20"
                                 title="Исключить"
                               >
-                                <X className="w-4 h-4" />
+                                
                               </button>
                             )}
                           </div>
@@ -2389,7 +2374,7 @@ export default function TournamentsPortal() {
                 onClick={() => setShowEditModal(false)}
                 className="absolute top-6 right-6 text-gray-500 hover:text-white transition-colors"
               >
-                <X className="w-5 h-5" />
+                
               </button>
 
               <div>
@@ -2413,7 +2398,7 @@ export default function TournamentsPortal() {
                   )}
                   {uploadingLogo && (
                     <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                      <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+                      <span>...</span>
                     </div>
                   )}
                 </div>

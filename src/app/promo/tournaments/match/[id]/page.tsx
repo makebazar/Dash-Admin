@@ -3,16 +3,7 @@
 import React from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Loader2,
-  Tv,
-  MessageSquare,
-  Send,
-  UserCheck,
-  MapPin,
-  Flame,
-  Monitor,
-} from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
 interface ChatMessage {
@@ -27,7 +18,7 @@ export default function MatchLobby() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  const matchId = params.matchId as string;
+  const matchId = params.id; //params.id as string;
   const clubId = searchParams.get("clubId") || "";
 
   const [loading, setLoading] = React.useState(true);
@@ -160,7 +151,7 @@ export default function MatchLobby() {
   if (loading || !match) {
     return (
       <div className="min-h-screen bg-[#070708] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+        <span>...</span>
       </div>
     );
   }
@@ -207,7 +198,7 @@ export default function MatchLobby() {
       <header className="border-b border-white/5 bg-[#0c0c0e]/80 backdrop-blur-md sticky top-0 z-40 px-6 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center gap-4">
           <div className="flex items-center gap-3">
-            <Flame className="w-8 h-8 text-orange-500 animate-pulse" />
+            
             <div>
               <h1 className="text-lg font-black uppercase italic tracking-tight">
                 Lobby <span className="text-orange-500">CS2 Match</span>
@@ -269,7 +260,7 @@ export default function MatchLobby() {
               {statusLower === "scheduled" && (
                 <div className="text-center space-y-6 py-4">
                   <div className="w-16 h-16 bg-orange-500/10 rounded-3xl flex items-center justify-center mx-auto border border-orange-500/20">
-                    <Monitor className="w-8 h-8 text-orange-500 animate-bounce" />
+                    
                   </div>
                   <div className="space-y-2">
                     <h2 className="text-2xl font-black uppercase italic tracking-tight">
@@ -299,7 +290,7 @@ export default function MatchLobby() {
                     </div>
                   ) : (
                     <div className="inline-flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/20 px-4 py-2 rounded-2xl text-emerald-400 text-xs font-bold">
-                      <UserCheck className="w-4 h-4" />
+                      
                       Вы готовы (ПК: {myCheckin?.pc_number})
                     </div>
                   )}
@@ -372,7 +363,7 @@ export default function MatchLobby() {
               {statusLower === "live" && (
                 <div className="text-center space-y-6 py-6">
                   <div className="w-16 h-16 bg-emerald-500/10 rounded-3xl flex items-center justify-center mx-auto border border-emerald-500/20">
-                    <Tv className="w-8 h-8 text-emerald-500 animate-pulse" />
+                    
                   </div>
                   <div className="space-y-2">
                     <h2 className="text-2xl font-black uppercase italic tracking-tight text-emerald-400">
@@ -439,7 +430,7 @@ export default function MatchLobby() {
         {/* BOTTOM SECTION: Chat lobby */}
         <div className="bg-[#0c0c0e] border border-white/5 rounded-[2rem] p-6 space-y-4">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-orange-500 px-1">
-            <MessageSquare className="w-4 h-4" />
+            
             Чат лобби
           </div>
 
@@ -475,7 +466,7 @@ export default function MatchLobby() {
               disabled={isSendingMsg || !chatInput.trim()}
               className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 p-4 rounded-2xl text-white transition-colors"
             >
-              <Send className="w-4 h-4" />
+              
             </button>
           </form>
         </div>
