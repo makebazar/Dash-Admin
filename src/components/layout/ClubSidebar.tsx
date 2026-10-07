@@ -31,6 +31,7 @@ import {
   ChevronUp,
   Swords,
   Gamepad2,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -239,7 +240,16 @@ export function ClubSidebarContent({
       visible: false, // Временно скрыто
     },
     {
-      href: `/clubs/${clubId}/dashmatch`,
+        href: `/clubs/${clubId}/tournaments`,
+        label: "Турниры",
+        icon: (
+          <Trophy className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
+        ),
+        visible:
+          !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
+      },
+      {
+        href: `/clubs/${clubId}/dashmatch`,
       label: "DashMatch",
       icon: (
         <Gamepad2 className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
