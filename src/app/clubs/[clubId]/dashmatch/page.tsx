@@ -1278,8 +1278,8 @@ export default function DashMatchPage() {
                                     type="button"
                                     onClick={() => {
                                       setMatchControlTab((prev) => ({ ...prev, [m.id]: "players" }));
-                                      if (m.rcon_last_command !== "css_players") {
-                                        handleSendRcon(m.id, "css_players");
+                                      if (m.rcon_last_command !== "status") {
+                                        handleSendRcon(m.id, "status");
                                       }
                                     }}
                                     className={`px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
@@ -1730,12 +1730,12 @@ export default function DashMatchPage() {
                                         size="sm"
                                         variant="outline"
                                         disabled={isBusyRcon}
-                                        onClick={() => handleSendRcon(m.id, "css_players")}
+                                        onClick={() => handleSendRcon(m.id, "status")}
                                         className="h-6 px-2.5 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-slate-700 dark:text-zinc-300 hover:bg-slate-50"
                                         title="Запросить актуальный список подключенных игроков с сервера"
                                       >
                                         <RefreshCw className={`w-3 h-3 ${isBusyRcon ? "animate-spin" : ""}`} />
-                                        Обновить список (css_players)
+                                        Обновить список (status)
                                       </Button>
                                     </div>
 
@@ -2052,7 +2052,7 @@ export default function DashMatchPage() {
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-[10px] text-slate-400">Шаблоны:</span>
-                                    {["css_players", "get5_status", "css_roundknife", "css_forceready", "css_forcepause", "css_forceunpause", "css_tech", "css_restore 1", "matchzy_listbackups", "mp_warmup_end 1", "bot_kick"].map((cmd) => (
+                                    {["status", "get5_status", "css_roundknife", "css_forceready", "css_forcepause", "css_forceunpause", "css_tech", "css_restore 1", "matchzy_listbackups", "mp_warmup_end 1", "bot_kick"].map((cmd) => (
                                       <button
                                         key={cmd}
                                         type="button"
