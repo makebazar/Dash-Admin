@@ -68,7 +68,7 @@ export async function GET(
           matchzy_allow_force_ready: "true",
           matchzy_ready_mode: hasPlayers ? "1" : "0",
           matchzy_join_start_delay: "10",
-          matchzy_whitelist_enabled_default: hasPlayers ? "true" : "false",
+          matchzy_whitelist_enabled_default: "false",
           matchzy_kick_when_no_match_loaded: "false",
           matchzy_autostart_mode: practiceMode ? "2" : "1",
           matchzy_pause_after_restore: "true",
@@ -148,19 +148,20 @@ export async function GET(
     const tConfig = match.tournament_config || {};
     const mapPool = tConfig.mapPool || ["de_mirage", "de_dust2", "de_inferno"];
     const numMaps = tConfig.numMaps || 1;
+    const safeNumMaps = Math.max(1, Math.min(numMaps, mapPool.length));
 
     // Build MatchZy/Get5 compatible match config
     const matchZyConfig = {
       matchid: getNumericMatchId(matchId),
-      num_maps: numMaps,
+      num_maps: safeNumMaps,
       maplist: mapPool,
-      map_sides: ["knife"],
+      map_sides: Array(safeNumMaps).fill("knife"),
       side_type: "always_knife",
       clinch_series: true,
       players_per_team: Object.keys(team1.players).length || 5,
       min_players_to_ready: Object.keys(team1.players).length || 5,
       min_spectators_to_ready: 0,
-      skip_veto: mapPool.length === 1,
+      skip_veto: mapPool.length === safeNumMaps,
       team1: {
         name: team1.name,
         players: team1.players,

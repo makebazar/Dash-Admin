@@ -104,11 +104,11 @@ export function parseCs2StatusPlayers(rconText?: string): ParsedCs2Player[] {
       }
     } else if (trimmed.includes("[CSS]") && trimmed.includes("(") && trimmed.includes(")")) {
       // CounterStrikeSharp list format: [CSS] Nickname (76561198012345678)
-      const match = trimmed.match(/(?:#\d+:\s*)?([^(]+)\s*\((7656\d{13})\)/);
+      const match = trimmed.match(/(?:\[CSS\]\s*)?(?:#\d+:\s*)?([^(]+)\s*\((7656\d{13})\)/);
       if (match) {
         players.push({
           id: match[2].trim(),
-          name: match[1].trim(),
+          name: match[1].replace(/\[CSS\]\s*/g, '').trim(),
           steamId: match[2].trim(),
           ping: "0",
           isBot: false,

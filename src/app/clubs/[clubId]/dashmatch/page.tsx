@@ -1278,8 +1278,8 @@ export default function DashMatchPage() {
                                     type="button"
                                     onClick={() => {
                                       setMatchControlTab((prev) => ({ ...prev, [m.id]: "players" }));
-                                      if (m.rcon_last_command !== "status") {
-                                        handleSendRcon(m.id, "status");
+                                      if (m.rcon_last_command !== "css_players") {
+                                        handleSendRcon(m.id, "css_players");
                                       }
                                     }}
                                     className={`px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
@@ -1730,12 +1730,12 @@ export default function DashMatchPage() {
                                         size="sm"
                                         variant="outline"
                                         disabled={isBusyRcon}
-                                        onClick={() => handleSendRcon(m.id, "status")}
+                                        onClick={() => handleSendRcon(m.id, "css_players")}
                                         className="h-6 px-2.5 text-[10px] gap-1 bg-white dark:bg-zinc-800 cursor-pointer text-slate-700 dark:text-zinc-300 hover:bg-slate-50"
                                         title="Запросить актуальный список подключенных игроков с сервера"
                                       >
                                         <RefreshCw className={`w-3 h-3 ${isBusyRcon ? "animate-spin" : ""}`} />
-                                        Обновить список (status)
+                                        Обновить список (css_players)
                                       </Button>
                                     </div>
 
@@ -2005,7 +2005,7 @@ export default function DashMatchPage() {
                                       disabled={isBusyRcon}
                                       onClick={() => {
                                         if (confirm(`Присудить техническую победу ${m.team1_name}?`)) {
-                                          handleSendRcon(m.id, "css_endmatch 1");
+                                          handleSendRcon(m.id, "css_endmatch team1");
                                         }
                                       }}
                                       className="h-8 text-xs font-semibold gap-1.5 border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 cursor-pointer"
@@ -2020,7 +2020,7 @@ export default function DashMatchPage() {
                                       disabled={isBusyRcon}
                                       onClick={() => {
                                         if (confirm(`Присудить техническую победу ${m.team2_name}?`)) {
-                                          handleSendRcon(m.id, "css_endmatch 2");
+                                          handleSendRcon(m.id, "css_endmatch team2");
                                         }
                                       }}
                                       className="h-8 text-xs font-semibold gap-1.5 border-amber-300 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 cursor-pointer"
@@ -2035,7 +2035,7 @@ export default function DashMatchPage() {
                                       disabled={isBusyRcon}
                                       onClick={() => {
                                         if (confirm("Завершить встречу ничьей?")) {
-                                          handleSendRcon(m.id, "css_endmatch 0");
+                                          handleSendRcon(m.id, "css_endmatch");
                                         }
                                       }}
                                       className="h-8 text-xs font-semibold gap-1.5 border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 hover:bg-slate-100 cursor-pointer"
@@ -2052,7 +2052,7 @@ export default function DashMatchPage() {
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-[10px] text-slate-400">Шаблоны:</span>
-                                    {["status", "get5_status", "css_roundknife", "css_forceready", "css_forcepause", "css_forceunpause", "css_tech", "css_restore 1", "matchzy_listbackups", "mp_warmup_end 1", "bot_kick"].map((cmd) => (
+                                    {["css_players", "get5_status", "css_roundknife", "css_forceready", "css_forcepause", "css_forceunpause", "css_tech", "css_restore 1", "matchzy_listbackups", "mp_warmup_end 1", "bot_kick"].map((cmd) => (
                                       <button
                                         key={cmd}
                                         type="button"
