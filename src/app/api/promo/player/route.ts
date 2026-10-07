@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
     // Get player global data + club-specific balance
     let result = await client.query(
-      `SELECT p.id, p.full_name, p.phone_number, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
+      `SELECT p.id, p.full_name, p.phone_number, p.steam_link, p.faceit_link, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
              FROM promo_players p
              JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
              JOIN clubs c ON c.id = b.club_id
@@ -61,6 +61,15 @@ export async function GET(request: Request) {
 
     const data = result.rows[0];
 
+    // Фоновая синхронизация свежих платежей из SmartShell для этого игрока (non-blocking)
+    if (data.phone_number) {
+      import("@/lib/promo-smartshell-sync").then((m) => {
+        m.syncClientRecentPaymentsOnDemand(activeClubId, data.phone_number).catch((e) =>
+          console.warn("[On-Demand Promo Sync error]", e)
+        );
+      }).catch(() => {});
+    }
+
     // Get tickets for THIS club
     const ticketsResult = await client.query(
       `SELECT COUNT(*)::int as count
@@ -75,33 +84,9 @@ export async function GET(request: Request) {
       [activeClubId],
     );
 
-    // Get level info
-    const { getPlayerLevelInfo } = await import("@/lib/promo-quests");
     const totalXp = parseFloat(data.total_xp || 0);
-    const levelInfo = await getPlayerLevelInfo(client, activeClubId, totalXp);
-
-    // Get Battle Pass Info (Wrapped in try-catch to prevent crash if tables are missing)
-    let bpInfo = null;
-    try {
-      const { getPlayerBPInfo } = await import("@/lib/promo-bp");
-      const bpSettings =
-        data.promo_settings?.bp_enabled !== false
-          ? {
-              enabled: data.promo_settings?.bp_enabled ?? true,
-              price: data.promo_settings?.bp_price ?? 1000,
-              bp_xp_per_rub: data.promo_settings?.bp_xp_per_rub ?? 1,
-            }
-          : null;
-
-      bpInfo = await getPlayerBPInfo(
-        client,
-        activeClubId,
-        playerId,
-        bpSettings,
-      );
-    } catch (e) {
-      console.error("BP Info Error (possibly tables not migrated yet):", e);
-    }
+    const levelInfo = null;
+    const bpInfo = null;
 
     // Calculate monthly topups and withdrawals for limits
     let monthlyTopups = 0;
@@ -113,7 +98,7 @@ export async function GET(request: Request) {
       const topupRes = await client.query(
         `SELECT COALESCE(SUM((result_data->>'amount')::float), 0) as total
          FROM promo_history
-         WHERE player_id = $1 AND club_id = $2 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)`,
+         WHERE player_id = $1 AND club_id = $2 AND (game_type ILIKE '%topup%' OR game_type = 'pos_sale') AND created_at >= date_trunc('month', CURRENT_DATE)`,
         [playerId, activeClubId],
       );
       const topups = parseFloat(topupRes.rows[0].total);
@@ -151,7 +136,7 @@ export async function GET(request: Request) {
       console.error("Failed to fetch monthly stats for limits:", e);
     }
 
-    const hasPremiumBp = bpInfo?.progress?.hasPremium === true;
+    const hasPremiumBp = false;
 
     // Fetch package progress
     let packageProgress = null;
@@ -170,7 +155,7 @@ export async function GET(request: Request) {
          WHERE player_id = $1 AND club_id = $2 AND status = 'pending' AND loyalty_type IS NOT NULL`,
         [playerId, activeClubId]
       );
-      const pendingClaims = pendingClaimsRes.rows.map(r => r.loyalty_type);
+      const pendingClaims = pendingClaimsRes.rows.map((r: any) => r.loyalty_type);
 
       // Fetch all pending prizes (including bar items) to show player
       const pendingPrizesRes = await client.query(
@@ -225,11 +210,39 @@ export async function GET(request: Request) {
       console.error("Failed to fetch package progress for player:", err);
     }
 
+    let clubTariffs: Array<{ id: string; name: string }> = [];
+    let clubZones: Array<{ id: string; title: string }> = [];
+    try {
+      const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+      const ssClient = await getSmartShellClientForClub(parseInt(activeClubId));
+      if (ssClient) {
+        const [ssTariffs, ssZones] = await Promise.all([
+          ssClient.getTariffs(),
+          ssClient.getHostGroups(),
+        ]);
+        clubTariffs = ssTariffs.map((t) => ({ id: String(t.id), name: t.title }));
+        clubZones = ssZones.map((z) => ({ id: String(z.id), title: z.title }));
+      }
+    } catch (ssErr) {
+      console.warn("[Player Route SS Fetch Error]", ssErr);
+    }
+
+    // Merge manual service rules
+    if (Array.isArray(data.promo_settings?.service_rules)) {
+      for (const r of data.promo_settings.service_rules) {
+        if (r.id && r.name && !clubTariffs.some((t) => String(t.id) === String(r.id))) {
+          clubTariffs.push({ id: String(r.id), name: r.name });
+        }
+      }
+    }
+
     return NextResponse.json({
       player: {
         id: data.id,
         fullName: data.full_name,
         phoneNumber: data.phone_number,
+          steam_link: data.steam_link,
+          faceit_link: data.faceit_link,
         totalXp,
         bonusBalance: parseFloat(data.bonus_balance || 0),
         activeBoostPercent: parseInt(data.active_boost_percent || 0),
@@ -238,6 +251,8 @@ export async function GET(request: Request) {
         clubName: data.club_name,
         clubId: activeClubId,
         settings: data.promo_settings,
+        tariffs: clubTariffs,
+        zones: clubZones,
         level: levelInfo,
         bp: bpInfo,
         monthlyTopups,
