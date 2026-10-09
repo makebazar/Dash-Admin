@@ -3,6 +3,39 @@ import { getClient, query } from "@/db";
 import { cookies } from "next/headers";
 import { broadcastSseCommand } from "@/lib/cs2/sse";
 import { resolveMatchFormat } from "@/lib/brackets";
+import { verifySessionValue } from "@/lib/session";
+
+async function ensureMatchLobbyTables(client: any) {
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lobby_checkin (
+        match_id BIGINT NOT NULL,
+        player_id TEXT NOT NULL,
+        pc_number VARCHAR(50),
+        is_ready BOOLEAN DEFAULT FALSE,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (match_id, player_id)
+      );
+      CREATE TABLE IF NOT EXISTS match_veto (
+        match_id BIGINT PRIMARY KEY,
+        current_turn_competitor_id BIGINT,
+        banned_maps TEXT[] DEFAULT '{}',
+        selected_map VARCHAR(100),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS tournament_match_messages (
+        id BIGSERIAL PRIMARY KEY,
+        match_id BIGINT NOT NULL,
+        sender_kind VARCHAR(30) DEFAULT 'player',
+        sender_competitor_id BIGINT,
+        body TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+  } catch (e) {
+    console.warn("ensureMatchLobbyTables note:", e);
+  }
+}
 
 async function getExpectedPlayers(client: any, matchId: number, competitorAId: string | null, competitorBId: string | null): Promise<string[]> {
   const playerIds: string[] = [];
@@ -19,31 +52,27 @@ async function getExpectedPlayers(client: any, matchId: number, competitorAId: s
     if (comp.type === "TEAM") {
       if (comp.promo_team_id) {
         const membersRes = await client.query(
-          `SELECT COALESCE(p.id, tm.phone) as player_id 
+          `SELECT COALESCE(p.id::text, tm.phone) as player_id 
            FROM promo_team_members tm
            LEFT JOIN promo_players p ON tm.phone = p.phone_number
            WHERE tm.team_id = $1`,
           [comp.promo_team_id]
         );
         membersRes.rows.forEach((r: any) => {
-          if (r.player_id) playerIds.push(r.player_id);
+          if (r.player_id) playerIds.push(String(r.player_id));
         });
       } else if (comp.team_id) {
         const membersRes = await client.query(
-          `SELECT player_id FROM team_members WHERE team_id = $1`,
+          `SELECT player_id::text FROM team_members WHERE team_id = $1`,
           [comp.team_id]
         );
         membersRes.rows.forEach((r: any) => {
-          if (r.player_id) playerIds.push(r.player_id);
+          if (r.player_id) playerIds.push(String(r.player_id));
         });
       }
     } else {
-      const pid = comp.player_id || comp.id;
-      const botCheck = await client.query(
-        `SELECT is_bot FROM promo_players WHERE id = $1`,
-        [comp.player_id]
-      ).catch(() => ({ rows: [] }));
-      const isBot = Boolean(botCheck.rows[0]?.is_bot || comp.display_name?.startsWith("[BOT]"));
+      const pid = comp.player_id ? String(comp.player_id) : String(comp.id);
+      const isBot = Boolean(comp.display_name?.startsWith("[BOT]"));
       if (isBot) {
         await client.query(
           `INSERT INTO lobby_checkin (match_id, player_id, pc_number, is_ready, updated_at)
@@ -286,6 +315,8 @@ export async function GET(
     const { matchId } = await params;
     const parsedMatchId = parseInt(matchId);
 
+    await ensureMatchLobbyTables(client);
+
     // 1. Fetch match and tournament config
     const matchRes = await client.query(
       `SELECT m.id, m.tournament_id, m.round, m.order_in_round, m.competitor_a_id, m.competitor_b_id,
@@ -307,7 +338,7 @@ export async function GET(
     // 2. Fetch competitor details with captain info
     const compARes = await client.query(
       `SELECT c.id, c.display_name, c.team_id, c.promo_team_id, c.player_id, 
-              COALESCE(cap.id, t.captain_id) as captain_id,
+              COALESCE(cap.id::text, t.captain_id::text) as captain_id,
               t.logo_url as team_logo
        FROM tournament_competitors c
        LEFT JOIN teams t ON c.team_id = t.id
@@ -318,7 +349,7 @@ export async function GET(
     );
     const compBRes = await client.query(
       `SELECT c.id, c.display_name, c.team_id, c.promo_team_id, c.player_id, 
-              COALESCE(cap.id, t.captain_id) as captain_id,
+              COALESCE(cap.id::text, t.captain_id::text) as captain_id,
               t.logo_url as team_logo
        FROM tournament_competitors c
        LEFT JOIN teams t ON c.team_id = t.id
@@ -335,7 +366,7 @@ export async function GET(
       if (!comp) return [];
       if (comp.promo_team_id) {
         const res = await client.query(
-          `SELECT p.id, COALESCE(p.nickname, p.full_name, tm.phone) as name, p.avatar_url, p.steam_id, COALESCE(p.faceit_elo, 1000) as player_elo
+          `SELECT p.id::text, COALESCE(p.nickname, p.full_name, tm.phone) as name, p.avatar_url, p.steam_id, COALESCE(p.faceit_elo, 1000) as player_elo
            FROM promo_team_members tm
            LEFT JOIN promo_players p ON tm.phone = p.phone_number
            WHERE tm.team_id = $1`,
@@ -345,7 +376,7 @@ export async function GET(
       }
       if (comp.team_id) {
         const res = await client.query(
-          `SELECT tm.player_id as id, p.full_name as name, p.avatar_url, p.steam_id, COALESCE(p.faceit_elo, 1000) as player_elo
+          `SELECT tm.player_id::text as id, p.full_name as name, p.avatar_url, p.steam_id, COALESCE(p.faceit_elo, 1000) as player_elo
            FROM team_members tm
            JOIN promo_players p ON tm.player_id = p.id
            WHERE tm.team_id = $1`,
@@ -355,10 +386,10 @@ export async function GET(
       }
       if (comp.player_id) {
         const res = await client.query(
-          `SELECT p.id, COALESCE(p.nickname, p.full_name) as name, p.avatar_url, p.steam_id, COALESCE(p.faceit_elo, 1000) as player_elo
+          `SELECT p.id::text, COALESCE(p.nickname, p.full_name) as name, p.avatar_url, p.steam_id, COALESCE(p.faceit_elo, 1000) as player_elo
            FROM promo_players p
-           WHERE p.id = $1`,
-          [comp.player_id]
+           WHERE p.id::text = $1 OR p.phone_number = $1`,
+          [String(comp.player_id)]
         );
         return res.rows;
       }
@@ -369,7 +400,7 @@ export async function GET(
     const checkinsRes = await client.query(
       `SELECT c.player_id, c.pc_number, c.is_ready, p.full_name, p.nickname, p.avatar_url, p.steam_id
        FROM lobby_checkin c
-       JOIN promo_players p ON c.player_id = p.id
+       LEFT JOIN promo_players p ON (c.player_id = p.id::text OR c.player_id = p.phone_number)
        WHERE c.match_id = $1`,
       [parsedMatchId]
     );
@@ -393,7 +424,7 @@ export async function GET(
               COALESCE(p.nickname, p.full_name, tc.display_name, 'Участник') as sender_name
        FROM tournament_match_messages m
        LEFT JOIN tournament_competitors tc ON m.sender_competitor_id = tc.id
-       LEFT JOIN promo_players p ON tc.player_id = p.id
+       LEFT JOIN promo_players p ON (tc.player_id::text = p.id::text OR tc.player_id = p.phone_number)
        WHERE m.match_id = $1
        ORDER BY m.created_at ASC`,
       [parsedMatchId]
@@ -538,9 +569,18 @@ export async function POST(
     const { matchId } = await params;
     const parsedMatchId = parseInt(matchId);
 
+    await ensureMatchLobbyTables(client);
+
     const cookieStore = await cookies();
-    const playerId = cookieStore.get("promo_player_id")?.value;
+    let playerId = cookieStore.get("promo_player_id")?.value;
     const activeClubId = cookieStore.get("promo_active_club_id")?.value;
+
+    if (!playerId) {
+      const sessionUser = await verifySessionValue(cookieStore.get("session_user_id")?.value);
+      if (sessionUser) {
+        playerId = sessionUser;
+      }
+    }
 
     if (!playerId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -576,9 +616,9 @@ export async function POST(
       if (steamId && typeof steamId === "string" && steamId.trim().length > 0) {
         const cleanSteam = steamId.trim();
         await client.query(
-          `UPDATE promo_players SET steam_id = $1 WHERE id = $2`,
+          `UPDATE promo_players SET steam_id = $1 WHERE id::text = $2 OR phone_number = $2`,
           [cleanSteam, playerId]
-        );
+        ).catch(() => {});
       }
 
       // Save check-in
@@ -670,19 +710,19 @@ export async function POST(
             `SELECT pt.id 
              FROM promo_teams pt
              JOIN promo_players p ON pt.captain_phone = p.phone_number
-             WHERE pt.id = $1 AND p.id = $2`,
+             WHERE pt.id = $1 AND (p.id::text = $2 OR p.phone_number = $2)`,
             [currentComp.promo_team_id, playerId]
           );
           isCaptain = checkCap.rows.length > 0;
         } else if (currentComp.team_id) {
           const checkCap = await client.query(
-            `SELECT id FROM teams WHERE id = $1 AND captain_id = $2`,
+            `SELECT id FROM teams WHERE id = $1 AND captain_id::text = $2`,
             [currentComp.team_id, playerId]
           );
           isCaptain = checkCap.rows.length > 0;
         }
       } else {
-        isCaptain = currentComp.player_id === playerId;
+        isCaptain = String(currentComp.player_id) === String(playerId) || String(currentComp.id) === String(playerId);
       }
 
       if (!isCaptain) {
@@ -828,17 +868,17 @@ export async function POST(
 
       const checkInCompetitor = async (comp: any) => {
         if (!comp) return false;
-        if (comp.player_id === playerId) return true;
+        if (String(comp.player_id) === String(playerId) || String(comp.id) === String(playerId)) return true;
         if (comp.promo_team_id) {
           const r = await client.query(
-            `SELECT 1 FROM promo_team_members tm JOIN promo_players p ON tm.phone = p.phone_number WHERE tm.team_id = $1 AND p.id = $2`,
+            `SELECT 1 FROM promo_team_members tm JOIN promo_players p ON tm.phone = p.phone_number WHERE tm.team_id = $1 AND (p.id::text = $2 OR p.phone_number = $2)`,
             [comp.promo_team_id, playerId]
           );
           return r.rows.length > 0;
         }
         if (comp.team_id) {
           const r = await client.query(
-            `SELECT 1 FROM team_members WHERE team_id = $1 AND player_id = $2`,
+            `SELECT 1 FROM team_members WHERE team_id = $1 AND player_id::text = $2`,
             [comp.team_id, playerId]
           );
           return r.rows.length > 0;

@@ -411,28 +411,46 @@ export default function MatchLobby() {
   // Competitor details
   const compA = match.competitorA;
   const compB = match.competitorB;
-  const myCheckin = checkins.find((c) => c.player_id === player?.id);
-  const isCheckedIn = Boolean(myCheckin?.is_ready);
 
   const isSolo = (compA?.roster?.length || 1) <= 1 && (compB?.roster?.length || 1) <= 1;
 
-  const isParticipant = Boolean(
-    player?.id && (
-      compA?.playerId === player.id ||
-      compA?.captainId === player.id ||
-      compA?.roster?.some((p: any) => p.id === player.id || p.player_id === player.id) ||
-      compB?.playerId === player.id ||
-      compB?.captainId === player.id ||
-      compB?.roster?.some((p: any) => p.id === player.id || p.player_id === player.id) ||
-      checkins.some((c: any) => c.player_id === player.id)
-    )
-  );
+  const isParticipant = useMemo(() => {
+    if (!player) return false;
+    const pId = String(player.id || "");
+    const pPhone = String(player.phone_number || "");
+
+    const checkMatch = (targetId: any) => {
+      if (!targetId) return false;
+      const t = String(targetId);
+      return (pId && t === pId) || (pPhone && t === pPhone);
+    };
+
+    if (checkMatch(compA?.playerId) || checkMatch(compA?.captainId) || checkMatch(compA?.id)) return true;
+    if (checkMatch(compB?.playerId) || checkMatch(compB?.captainId) || checkMatch(compB?.id)) return true;
+
+    if (compA?.roster?.some((p: any) => checkMatch(p.id) || checkMatch(p.player_id) || checkMatch(p.phone))) return true;
+    if (compB?.roster?.some((p: any) => checkMatch(p.id) || checkMatch(p.player_id) || checkMatch(p.phone))) return true;
+
+    if (checkins.some((c: any) => checkMatch(c.player_id))) return true;
+
+    return false;
+  }, [player, compA, compB, checkins]);
+
+  const myCheckin = useMemo(() => {
+    if (!player) return null;
+    const pId = String(player.id || "");
+    const pPhone = String(player.phone_number || "");
+    return checkins.find((c) => String(c.player_id) === pId || (pPhone && String(c.player_id) === pPhone));
+  }, [player, checkins]);
+
+  const isCheckedIn = Boolean(myCheckin?.is_ready);
 
   const isMyTurnToBan = Boolean(
+    isParticipant &&
     veto &&
     veto.current_turn_competitor_id &&
-    ((veto.current_turn_competitor_id === compA?.id && (compA.playerId === player?.id || compA.captainId === player?.id)) ||
-     (veto.current_turn_competitor_id === compB?.id && (compB.playerId === player?.id || compB.captainId === player?.id)))
+    ((veto.current_turn_competitor_id === compA?.id && (String(compA.playerId) === String(player?.id) || String(compA.captainId) === String(player?.id))) ||
+     (veto.current_turn_competitor_id === compB?.id && (String(compB.playerId) === String(player?.id) || String(compB.captainId) === String(player?.id))))
   );
 
   const activeTurnName = veto?.current_turn_competitor_id === compA?.id
@@ -492,6 +510,12 @@ export default function MatchLobby() {
 
           {/* Right Section: Clean Status without containers */}
           <div className="shrink-0 flex items-center gap-2 text-xs font-black uppercase tracking-wider">
+            {!isParticipant && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-orange-400 mr-1">
+                <Radio className="w-3 h-3 text-orange-400 animate-pulse" />
+                <span>Наблюдатель</span>
+              </div>
+            )}
             {isFinished ? (
               <div className="flex items-center gap-2 text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -606,7 +630,7 @@ export default function MatchLobby() {
 
               <div className="space-y-2">
                 {(compA?.roster || [{ id: compA?.playerId, full_name: compA?.name, nickname: compA?.name }]).map((p: any) => {
-                  const checkin = checkins.find((c) => c.player_id === p.id);
+                  const checkin = checkins.find((c) => String(c.player_id) === String(p.id));
                   const isCap = compA?.captainId === p.id || compA?.playerId === p.id;
                   const playerName = p.nickname || p.full_name || p.name || compA?.name || "Игрок";
                   const profileUrl = p.id ? `/promo/player/${p.id}${clubId ? `?clubId=${clubId}` : ""}` : null;
@@ -642,8 +666,14 @@ export default function MatchLobby() {
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-gray-400 font-mono mt-0.5">
-                          ПК {checkin?.pc_number ? `#${checkin.pc_number}` : "—"}
+                        <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-mono mt-0.5">
+                          <span>ПК {checkin?.pc_number ? `#${checkin.pc_number}` : "—"}</span>
+                          {p.player_elo && (
+                            <>
+                              <span className="text-gray-600">•</span>
+                              <span className="text-orange-400 font-bold">{p.player_elo} ELO</span>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -676,10 +706,12 @@ export default function MatchLobby() {
                     Этап 1: Готовность к матчу
                   </div>
                   <h2 className="text-lg font-black uppercase tracking-tight text-white">
-                    Подтверждение участия за ПК
+                    {isParticipant ? "Подтверждение участия за ПК" : "Ожидание готовности участников"}
                   </h2>
                   <p className="text-xs text-gray-400">
-                    Укажите номер вашего игрового места в клубе для авторизации на сервере
+                    {isParticipant
+                      ? "Укажите номер вашего игрового места в клубе для авторизации на сервере"
+                      : "Игроки занимают места в клубе и подтверждают готовность"}
                   </p>
                 </div>
 
@@ -697,73 +729,85 @@ export default function MatchLobby() {
                   </div>
                 </div>
 
-                {/* Form */}
-                {!isCheckedIn ? (
-                  <div className="bg-[#121217] border border-white/10 rounded-xl p-5 space-y-4">
-                    <div>
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-gray-300 block mb-1.5">
-                        Номер ПК в зале клуба *
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Например: 14 или VIP-2"
-                        value={pcNumber}
-                        onChange={(e) => setPcNumber(e.target.value)}
-                        className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-orange-500 transition-all"
-                      />
-                    </div>
-
-                    {player?.steam_id || player?.steam_link ? (
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                            Steam аккаунт
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            Привязан
-                          </span>
-                        </div>
-                        <div className="bg-black/50 border border-white/5 rounded-xl px-3.5 py-2.5 text-xs font-mono text-gray-300 truncate">
-                          {player?.steam_id || player?.steam_link}
-                        </div>
-                      </div>
-                    ) : (
+                {/* Form or Spectator Mode Notice */}
+                {isParticipant ? (
+                  !isCheckedIn ? (
+                    <div className="bg-[#121217] border border-white/10 rounded-xl p-5 space-y-4">
                       <div>
                         <label className="text-[11px] font-bold uppercase tracking-wider text-gray-300 block mb-1.5">
-                          Steam ID / Ссылка на профиль *
+                          Номер ПК в зале клуба *
                         </label>
                         <input
                           type="text"
-                          placeholder="76561198000000000 или ссылка"
-                          value={steamIdInput}
-                          onChange={(e) => setSteamIdInput(e.target.value)}
+                          placeholder="Например: 14 или VIP-2"
+                          value={pcNumber}
+                          onChange={(e) => setPcNumber(e.target.value)}
                           className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-orange-500 transition-all"
                         />
                       </div>
-                    )}
 
-                    <button
-                      onClick={handleCheckin}
-                      disabled={isSubmittingCheckin || !pcNumber.trim() || !(player?.steam_id || player?.steam_link || steamIdInput.trim())}
-                      className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 active:scale-[0.99] flex items-center justify-center gap-2"
-                    >
-                      {isSubmittingCheckin ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      {player?.steam_id || player?.steam_link ? (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                              Steam аккаунт
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              Привязан
+                            </span>
+                          </div>
+                          <div className="bg-black/50 border border-white/5 rounded-xl px-3.5 py-2.5 text-xs font-mono text-gray-300 truncate">
+                            {player?.steam_id || player?.steam_link}
+                          </div>
+                        </div>
                       ) : (
-                        <CheckCheck className="w-4 h-4" />
+                        <div>
+                          <label className="text-[11px] font-bold uppercase tracking-wider text-gray-300 block mb-1.5">
+                            Steam ID / Ссылка на профиль *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="76561198000000000 или ссылка"
+                            value={steamIdInput}
+                            onChange={(e) => setSteamIdInput(e.target.value)}
+                            className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-orange-500 transition-all"
+                          />
+                        </div>
                       )}
-                      <span>Я готов к матчу</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="bg-[#121217] border border-white/5 rounded-xl p-5 text-center space-y-1.5">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-wider">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Вы готовы (ПК #{myCheckin?.pc_number})
+
+                      <button
+                        onClick={handleCheckin}
+                        disabled={isSubmittingCheckin || !pcNumber.trim() || !(player?.steam_id || player?.steam_link || steamIdInput.trim())}
+                        className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 active:scale-[0.99] flex items-center justify-center gap-2"
+                      >
+                        {isSubmittingCheckin ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <CheckCheck className="w-4 h-4" />
+                        )}
+                        <span>Я готов к матчу</span>
+                      </button>
                     </div>
-                    <p className="text-xs text-gray-400">
-                      Ожидаем готовности остальных игроков...
+                  ) : (
+                    <div className="bg-[#121217] border border-white/5 rounded-xl p-5 text-center space-y-1.5">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        Вы готовы (ПК #{myCheckin?.pc_number})
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        Ожидаем готовности остальных игроков...
+                      </p>
+                    </div>
+                  )
+                ) : (
+                  <div className="bg-[#121217] border border-white/5 rounded-xl p-6 text-center space-y-3">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 text-gray-300 text-xs font-bold uppercase tracking-wider">
+                      <Radio className="w-3.5 h-3.5 text-orange-400 animate-pulse" />
+                      Режим зрителя • Вы наблюдаете за лобби
+                    </div>
+                    <p className="text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
+                      Матч и стадия выбора карт начнутся автоматически, как только все заявленные участники займут ПК в клубе и подтвердят готовность.
                     </p>
                   </div>
                 )}
@@ -1223,7 +1267,7 @@ export default function MatchLobby() {
 
               <div className="space-y-2">
                 {(compB?.roster || [{ id: compB?.playerId, full_name: compB?.name, nickname: compB?.name }]).map((p: any) => {
-                  const checkin = checkins.find((c) => c.player_id === p.id);
+                  const checkin = checkins.find((c) => String(c.player_id) === String(p.id));
                   const isCap = compB?.captainId === p.id || compB?.playerId === p.id;
                   const playerName = p.nickname || p.full_name || p.name || compB?.name || "Игрок";
                   const profileUrl = p.id ? `/promo/player/${p.id}${clubId ? `?clubId=${clubId}` : ""}` : null;
@@ -1259,8 +1303,14 @@ export default function MatchLobby() {
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-gray-400 font-mono mt-0.5">
-                          ПК {checkin?.pc_number ? `#${checkin.pc_number}` : "—"}
+                        <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-mono mt-0.5">
+                          <span>ПК {checkin?.pc_number ? `#${checkin.pc_number}` : "—"}</span>
+                          {p.player_elo && (
+                            <>
+                              <span className="text-gray-600">•</span>
+                              <span className="text-blue-400 font-bold">{p.player_elo} ELO</span>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -1284,43 +1334,43 @@ export default function MatchLobby() {
 
         </div>
 
-        {/* FULL-WIDTH MATCH CHAT (Only for match participants) */}
-        {isParticipant && (
-          <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-4 shadow-xl space-y-3">
-            <div className="flex items-center justify-between border-b border-white/5 pb-2">
-              <h3 className="text-xs font-black uppercase tracking-wider text-white">
-                Чат матча
-              </h3>
-              <span className="text-[10px] text-gray-500 font-medium">
-                Только для участников лобби
-              </span>
-            </div>
+        {/* FULL-WIDTH MATCH CHAT */}
+        <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-4 shadow-xl space-y-3">
+          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+            <h3 className="text-xs font-black uppercase tracking-wider text-white">
+              Чат матча
+            </h3>
+            <span className="text-[10px] text-gray-500 font-medium">
+              {isParticipant ? "Общий чат игроков лобби" : "Режим просмотра чата"}
+            </span>
+          </div>
 
-            {/* Message Feed */}
-            <div className="min-h-[40px] max-h-[160px] overflow-y-auto py-1 space-y-1.5 pr-1 text-xs">
-              {messages.length === 0 ? (
-                <div className="py-3 text-[11px] text-gray-500 uppercase tracking-wider text-center">
-                  Сообщений пока нет
+          {/* Message Feed */}
+          <div className="min-h-[40px] max-h-[160px] overflow-y-auto py-1 space-y-1.5 pr-1 text-xs">
+            {messages.length === 0 ? (
+              <div className="py-3 text-[11px] text-gray-500 uppercase tracking-wider text-center">
+                Сообщений пока нет
+              </div>
+            ) : (
+              messages.map((m) => (
+                <div key={m.id} className="flex items-baseline gap-2 py-0.5">
+                  <span className="text-[10px] font-mono text-gray-500 shrink-0">
+                    {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <span className="font-bold text-orange-400 shrink-0 text-xs">
+                    {m.sender_name}:
+                  </span>
+                  <span className="text-gray-200 break-words text-xs">
+                    {m.body}
+                  </span>
                 </div>
-              ) : (
-                messages.map((m) => (
-                  <div key={m.id} className="flex items-baseline gap-2 py-0.5">
-                    <span className="text-[10px] font-mono text-gray-500 shrink-0">
-                      {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    <span className="font-bold text-orange-400 shrink-0 text-xs">
-                      {m.sender_name}:
-                    </span>
-                    <span className="text-gray-200 break-words text-xs">
-                      {m.body}
-                    </span>
-                  </div>
-                ))
-              )}
-              <div ref={chatBottomRef} />
-            </div>
+              ))
+            )}
+            <div ref={chatBottomRef} />
+          </div>
 
-            {/* Chat Input */}
+          {/* Chat Input */}
+          {isParticipant ? (
             <form onSubmit={handleSendMessage} className="pt-1 flex gap-2">
               <input
                 type="text"
@@ -1338,8 +1388,12 @@ export default function MatchLobby() {
                 <span>Отправить</span>
               </button>
             </form>
-          </div>
-        )}
+          ) : (
+            <div className="text-[11px] text-gray-500 text-center py-1">
+              Отправка сообщений доступна участникам матча
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

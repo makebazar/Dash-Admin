@@ -244,15 +244,35 @@ export const getClubApiAccess = cache(
   console.log(`[DEBUG] Resolved modules:`, JSON.stringify(modules));
 
   const permissions = {
-    is_full_access: !!rawPerms.is_full_access,
-    employee_only: !!rawPerms.employee_only,
-    modules,
+    is_full_access: isFullAccess,
+    employee_only: !isFullAccess && !!rawPerms.employee_only,
+    modules: isFullAccess
+      ? {
+          dashboard: "edit",
+          shifts: "edit",
+          schedule: "edit",
+          employees: "edit",
+          salaries: "edit",
+          requests: "edit",
+          finance: "edit",
+          inventory: "edit",
+          equipment: "edit",
+          signage: "edit",
+          kb: "edit",
+          reviews: "edit",
+          tasks: "edit",
+          settings_general: "edit",
+          settings_salary: "edit",
+          settings_reports: "edit",
+          settings_checklists: "edit",
+        }
+      : modules,
     // Legacy flags for compatibility where they are directly used
-    can_view_reports: !!rawPerms.can_view_reports,
-    can_edit_settings: !!rawPerms.can_edit_settings,
-    can_manage_employees: !!rawPerms.can_manage_employees,
-    can_manage_inventory: !!rawPerms.can_manage_inventory,
-    can_manage_equipment: !!rawPerms.can_manage_equipment,
+    can_view_reports: isFullAccess || !!rawPerms.can_view_reports,
+    can_edit_settings: isFullAccess || !!rawPerms.can_edit_settings,
+    can_manage_employees: isFullAccess || !!rawPerms.can_manage_employees,
+    can_manage_inventory: isFullAccess || !!rawPerms.can_manage_inventory,
+    can_manage_equipment: isFullAccess || !!rawPerms.can_manage_equipment,
   };
 
   const accessData = {
