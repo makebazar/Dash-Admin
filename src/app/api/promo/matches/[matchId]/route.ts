@@ -922,9 +922,12 @@ export async function POST(
     }
 
     return NextResponse.json({ error: "Неверное действие" }, { status: 400 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Match POST Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || "Internal Server Error", detail: String(error) },
+      { status: 500 }
+    );
   } finally {
     client.release();
   }
