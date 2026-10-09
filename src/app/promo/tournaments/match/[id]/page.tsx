@@ -254,21 +254,25 @@ export default function MatchLobby() {
   // Veto countdown timer (synced with server updated_at timestamp)
   useEffect(() => {
     if (match?.status?.toLowerCase() === "veto" && veto?.current_turn_competitor_id) {
-      const calculateRemaining = () => {
+      const getRemaining = () => {
         if (!veto?.updated_at) return 45;
         const turnStartTime = new Date(veto.updated_at).getTime();
-        const elapsedSeconds = Math.floor((Date.now() - turnStartTime) / 1000);
-        return Math.max(0, 45 - elapsedSeconds);
+        const elapsed = Math.floor((Date.now() - turnStartTime) / 1000);
+        return Math.max(0, 45 - elapsed);
       };
 
-      setVetoCountdown(calculateRemaining());
+      setVetoCountdown(getRemaining());
+
       const timer = setInterval(() => {
-        const remaining = calculateRemaining();
-        setVetoCountdown(remaining);
-        if (remaining === 0) {
-          fetchLobbyData();
-        }
+        setVetoCountdown((prev) => {
+          if (prev <= 1) {
+            fetchLobbyData();
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
+
       return () => clearInterval(timer);
     }
   }, [match?.status, veto?.current_turn_competitor_id, veto?.updated_at]);
