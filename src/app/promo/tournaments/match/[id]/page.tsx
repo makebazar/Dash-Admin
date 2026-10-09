@@ -397,25 +397,12 @@ export default function MatchLobby() {
     setTimeout(() => setCopiedConnect(false), 2500);
   };
 
-  if (loading || !match) {
-    return (
-      <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center text-white space-y-4">
-        <div className="w-10 h-10 border-2 border-orange-500/20 border-t-orange-500 rounded-full animate-spin" />
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-          Загрузка лобби...
-        </p>
-      </div>
-    );
-  }
-
-  // Competitor details
-  const compA = match.competitorA;
-  const compB = match.competitorB;
-
-  const isSolo = (compA?.roster?.length || 1) <= 1 && (compB?.roster?.length || 1) <= 1;
+  // --- Hooks must come before any early return (Rules of Hooks) ---
+  const compA = match?.competitorA;
+  const compB = match?.competitorB;
 
   const isParticipant = useMemo(() => {
-    if (!player) return false;
+    if (!player || !match) return false;
     const pId = String(player.id || "");
     const pPhone = String(player.phone_number || "");
 
@@ -434,7 +421,7 @@ export default function MatchLobby() {
     if (checkins.some((c: any) => checkMatch(c.player_id))) return true;
 
     return false;
-  }, [player, compA, compB, checkins]);
+  }, [player, match, compA, compB, checkins]);
 
   const myCheckin = useMemo(() => {
     if (!player) return null;
@@ -442,6 +429,20 @@ export default function MatchLobby() {
     const pPhone = String(player.phone_number || "");
     return checkins.find((c) => String(c.player_id) === pId || (pPhone && String(c.player_id) === pPhone));
   }, [player, checkins]);
+  // ----------------------------------------------------------------
+
+  if (loading || !match) {
+    return (
+      <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center text-white space-y-4">
+        <div className="w-10 h-10 border-2 border-orange-500/20 border-t-orange-500 rounded-full animate-spin" />
+        <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+          Загрузка лобби...
+        </p>
+      </div>
+    );
+  }
+
+  const isSolo = (compA?.roster?.length || 1) <= 1 && (compB?.roster?.length || 1) <= 1;
 
   const isCheckedIn = Boolean(myCheckin?.is_ready);
 
