@@ -40,6 +40,7 @@ import { EmployeeTransferWizard } from "./_components/EmployeeTransferWizard";
 import { EmployeeRequestWizard } from "./_components/EmployeeRequestWizard";
 import { EmployeeSignageControlCard } from "./_components/EmployeeSignageControlCard";
 import { EmployeePromoControlCard } from "./_components/EmployeePromoControlCard";
+import { EmployeeExpirationWidget } from "./_components/EmployeeExpirationWidget";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type ShiftAccountabilityStatusResponse = {
@@ -219,6 +220,14 @@ export default function EmployeeClubPage({
   const [isRequestWizardOpen, setIsRequestWizardOpen] = useState(false);
   // Report Modal State
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  // SmartShell: диалог ввода наличных при открытии смены
+  const [isSsCashDialogOpen, setIsSsCashDialogOpen] = useState(false);
+  const [ssCashInput, setSsCashInput] = useState("0");
+  const pendingEvalCallbackRef = useRef<((newShiftId: string) => Promise<void>) | null>(null);
+  // SmartShell: данные SS смены для wizard'а закрытия
+  // Используем ref для синхронного доступа + state для ре-рендера
+  const ssShiftDataRef = useRef<{ reportData: Record<string, any>; fieldMapping: Record<string, string> } | null>(null);
+  const [ssShiftData, setSsShiftData] = useState<{ reportData: Record<string, any>; fieldMapping: Record<string, string> } | null>(null);
   const [hasShiftAccountability, setHasShiftAccountability] = useState<
     boolean | null
   >(null);
@@ -788,7 +797,7 @@ export default function EmployeeClubPage({
     }
   }
 
-  const executeStartShift = useCallback(async () => {
+  const executeStartShift = useCallback(async (cashOnStart?: number) => {
     setIsActionLoading(true);
     try {
       const res = await fetch("/api/employee/shifts", {
@@ -797,6 +806,7 @@ export default function EmployeeClubPage({
         body: JSON.stringify({
           club_id: parseInt(clubId),
           role_id: selectedShiftRoleId,
+          cash_on_start: cashOnStart ?? 0,
         }),
       });
 
@@ -850,14 +860,16 @@ export default function EmployeeClubPage({
       return;
     }
 
-    await executeStartShift();
+    // Показываем диалог ввода наличных на начало смены
+    pendingEvalCallbackRef.current = null;
+    setSsCashInput("0");
+    setIsSsCashDialogOpen(true);
   }, [
     canStartShift,
     checklistTemplates,
     clubId,
     club,
     employeeSettings?.handover_checklist_on_start,
-    executeStartShift,
   ]);
 
   const handleEndShiftClick = async () => {
@@ -866,6 +878,28 @@ export default function EmployeeClubPage({
         submitEndShift({});
       }
       return;
+    }
+
+    // Если SmartShell включён — предзагружаем данные смены перед открытием wizard
+    if (normalizedInventorySettings.smartshell_integration_enabled && activeShift?.id) {
+      try {
+        const ssRes = await fetch(`/api/employee/clubs/${clubId}/smartshell-shift-data`, { cache: "no-store" });
+        const ssData = await ssRes.json();
+        if (ssData.enabled && ssData.reportData) {
+          const data = { reportData: ssData.reportData, fieldMapping: ssData.fieldMapping || {} };
+          ssShiftDataRef.current = data;  // синхронно — для wizard'а
+          setSsShiftData(data);           // для ре-рендера
+        } else {
+          ssShiftDataRef.current = null;
+          setSsShiftData(null);
+        }
+      } catch {
+        ssShiftDataRef.current = null;
+        setSsShiftData(null);
+      }
+    } else {
+      ssShiftDataRef.current = null;
+      setSsShiftData(null);
     }
 
     try {
@@ -1435,6 +1469,14 @@ export default function EmployeeClubPage({
                 </div>
               )}
             </section>
+
+            {/* Expiration Tracking Alert Widget */}
+            <EmployeeExpirationWidget
+              clubId={clubId}
+              userId={currentUserId}
+              activeShiftId={activeShift?.id ? String(activeShift.id) : undefined}
+            />
+
             {activeShift && (
               <EmployeeSignageControlCard
                 clubId={clubId}
@@ -1815,37 +1857,38 @@ export default function EmployeeClubPage({
                     : "SHIFT";
                 if (targetMode === "SELF") {
                   setIsHandoverOpen(false);
-                  const newShiftId = await executeStartShift();
-                  if (!newShiftId) return;
-
-                  const evalRes = await fetch(
-                    `/api/clubs/${clubId}/evaluations`,
-                    {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        template_id: handoverTemplate.id,
-                        employee_id: currentUserId,
-                        target_user_id: currentUserId,
-                        shift_id: newShiftId,
-                        responses: Object.entries(checklistResponses).map(
-                          ([k, v]: any) => ({
-                            item_id: parseInt(k),
-                            score: v.score,
-                            comment: v.comment,
-                            photo_urls: v.photo_urls,
-                            selected_workstations: v.selected_workstations,
-                          }),
-                        ),
-                      }),
-                    },
-                  );
-                  if (!evalRes.ok) {
-                    const err = await evalRes.json().catch(() => ({}));
-                    alert(
-                      err.error || "Не удалось сохранить результат чеклиста",
+                  pendingEvalCallbackRef.current = async (newShiftId: string) => {
+                    const evalRes = await fetch(
+                      `/api/clubs/${clubId}/evaluations`,
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          template_id: handoverTemplate.id,
+                          employee_id: currentUserId,
+                          target_user_id: currentUserId,
+                          shift_id: newShiftId,
+                          responses: Object.entries(checklistResponses).map(
+                            ([k, v]: any) => ({
+                              item_id: parseInt(k),
+                              score: v.score,
+                              comment: v.comment,
+                              photo_urls: v.photo_urls,
+                              selected_workstations: v.selected_workstations,
+                            }),
+                          ),
+                        }),
+                      },
                     );
-                  }
+                    if (!evalRes.ok) {
+                      const err = await evalRes.json().catch(() => ({}));
+                      alert(
+                        err.error || "Не удалось сохранить результат чеклиста",
+                      );
+                    }
+                  };
+                  setSsCashInput("0");
+                  setIsSsCashDialogOpen(true);
                   return;
                 }
 
@@ -1879,42 +1922,113 @@ export default function EmployeeClubPage({
                   return;
                 }
 
-                const evalRes = await fetch(
-                  `/api/clubs/${clubId}/evaluations`,
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      template_id: handoverTemplate.id,
-                      employee_id: targetUserId,
-                      target_user_id: targetUserId,
-                      shift_id: effectiveShiftId,
-                      responses: Object.entries(checklistResponses).map(
-                        ([k, v]: any) => ({
-                          item_id: parseInt(k),
-                          score: v.score,
-                          comment: v.comment,
-                          photo_urls: v.photo_urls,
-                          selected_workstations: v.selected_workstations,
-                        }),
-                      ),
-                    }),
-                  },
-                );
+                setIsHandoverOpen(false);
+                pendingEvalCallbackRef.current = async (newShiftId: string) => {
+                  const evalRes = await fetch(
+                    `/api/clubs/${clubId}/evaluations`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        template_id: handoverTemplate.id,
+                        employee_id: targetUserId,
+                        target_user_id: targetUserId,
+                        shift_id: effectiveShiftId || newShiftId,
+                        responses: Object.entries(checklistResponses).map(
+                          ([k, v]: any) => ({
+                            item_id: parseInt(k),
+                            score: v.score,
+                            comment: v.comment,
+                            photo_urls: v.photo_urls,
+                            selected_workstations: v.selected_workstations,
+                          }),
+                        ),
+                      }),
+                    },
+                  );
 
-                if (!evalRes.ok) {
-                  const err = await evalRes.json().catch(() => ({}));
-                  alert(err.error || "Не удалось сохранить результат чеклиста");
-                  return;
-                }
+                  if (!evalRes.ok) {
+                    const err = await evalRes.json().catch(() => ({}));
+                    alert(err.error || "Не удалось сохранить результат чеклиста");
+                  }
+                };
+                setSsCashInput("0");
+                setIsSsCashDialogOpen(true);
               } catch (e) {
                 console.error(e);
+                setIsHandoverOpen(false);
+                setSsCashInput("0");
+                setIsSsCashDialogOpen(true);
               }
-              setIsHandoverOpen(false);
-              await executeStartShift();
             }}
             checklistTemplate={handoverTemplate}
           />
+        )}
+
+        {/* Диалог ввода наличных при открытии смены */}
+        {isSsCashDialogOpen && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8 w-full max-w-sm shadow-2xl space-y-6">
+              <div className="space-y-1">
+                <div className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">
+                  {normalizedInventorySettings.smartshell_integration_enabled ? "SmartShell + DashAdmin" : "Касса"}
+                </div>
+                <h2 className="text-xl font-black text-white uppercase italic tracking-tight">Касса на начало смены</h2>
+                <p className="text-sm text-zinc-400">Пересчитайте наличные в кассе и введите сумму</p>
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-2xl h-16 px-4 text-2xl font-black text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                  value={ssCashInput}
+                  onChange={(e) => setSsCashInput(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  autoFocus
+                  placeholder="0"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 font-black italic text-sm">₽</span>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setIsSsCashDialogOpen(false);
+                    pendingEvalCallbackRef.current = null;
+                  }}
+                  className="flex-1 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 font-bold uppercase text-sm hover:bg-zinc-800 transition-colors"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={async () => {
+                    const startCash = Number(ssCashInput) || 0;
+                    setIsSsCashDialogOpen(false);
+                    const newShiftId = await executeStartShift(startCash);
+                    if (newShiftId && pendingEvalCallbackRef.current) {
+                      try {
+                        await pendingEvalCallbackRef.current(newShiftId);
+                      } catch (err) {
+                        console.error("Failed to run pending eval:", err);
+                      } finally {
+                        pendingEvalCallbackRef.current = null;
+                      }
+                    }
+                  }}
+                  disabled={isActionLoading}
+                  className="flex-1 h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-black uppercase italic text-sm shadow-[0_0_30px_rgba(16,185,129,0.25)] disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  {isActionLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Открываем...</span>
+                    </>
+                  ) : (
+                    <span>Начать смену</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {canUseShiftReport && activeShift && club && (
@@ -1927,6 +2041,7 @@ export default function EmployeeClubPage({
             reportTemplate={reportTemplate}
             activeShiftId={activeShift.id}
             checklistTemplates={checklistTemplates}
+            ssShiftData={ssShiftData ?? ssShiftDataRef.current}
           />
         )}
         <EmployeeSupplyWizard

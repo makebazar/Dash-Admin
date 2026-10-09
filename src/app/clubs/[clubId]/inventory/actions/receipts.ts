@@ -367,7 +367,7 @@ export async function createShiftReceipt(
   data: {
     shift_id: string;
     payment_type: ShiftReceiptPaymentType;
-    items: { product_id: number; quantity: number }[];
+    items: { product_id: number; quantity: number; combo_set_id?: string | null }[];
     cash_amount?: number;
     card_amount?: number;
     notes?: string;
@@ -410,6 +410,7 @@ export async function createShiftReceipt(
       .map((i) => ({
         product_id: Number(i.product_id),
         quantity: Number(i.quantity),
+        combo_set_id: i.combo_set_id ? String(i.combo_set_id) : null,
       }))
       .filter(
         (i) => Number.isFinite(i.product_id) && Number.isFinite(i.quantity),
@@ -571,7 +572,7 @@ export async function createShiftReceipt(
         const topupRes = await client.query(
           `SELECT COALESCE(SUM((result_data->>'amount')::float), 0) as total
            FROM promo_history
-           WHERE player_id = $1 AND club_id = $2 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)`,
+           WHERE player_id = $1 AND club_id = $2 AND (game_type ILIKE '%topup%' OR game_type = 'pos_sale') AND created_at >= date_trunc('month', CURRENT_DATE)`,
           [data.promo_player_id, clubId],
         );
         const topups = parseFloat(topupRes.rows[0].total);
@@ -797,9 +798,9 @@ export async function createShiftReceipt(
       }
       await client.query(
         `
-                INSERT INTO shift_receipt_items (receipt_id, product_id, quantity, selling_price_snapshot, cost_price_snapshot, warehouse_id)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                `,
+        INSERT INTO shift_receipt_items (receipt_id, product_id, quantity, selling_price_snapshot, cost_price_snapshot, warehouse_id, combo_set_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `,
         [
           receiptId,
           item.product_id,
@@ -807,6 +808,7 @@ export async function createShiftReceipt(
           unitPrice,
           p.cost_price,
           itemWarehouseId,
+          item.combo_set_id || null,
         ],
       );
     }
@@ -823,6 +825,20 @@ export async function createShiftReceipt(
         item.product_id,
         -item.quantity,
       );
+
+      // FIFO batch deduction for perishable goods
+      try {
+        const { deductProductBatches } = await import("./expiration");
+        await deductProductBatches(
+          client,
+          clubId,
+          item.product_id,
+          itemWarehouseId,
+          item.quantity,
+        );
+      } catch (batchErr) {
+        console.warn("deductProductBatches error:", batchErr);
+      }
 
       const p = priceMap.get(item.product_id)!;
       const unitPrice = unitPriceMap.get(item.product_id) ?? p.selling_price;

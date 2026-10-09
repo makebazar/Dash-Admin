@@ -38,6 +38,8 @@ interface ShiftClosingWizardProps {
   reportTemplate: any;
   activeShiftId: string | number;
   checklistTemplates?: any[];
+  /** Данные из SmartShell: reportData (автозаполнение) и fieldMapping (какие поля заблокировать) */
+  ssShiftData?: { reportData: Record<string, any>; fieldMapping: Record<string, string> } | null;
 }
 
 function normalizeExpenseEntries(value: any) {
@@ -80,6 +82,7 @@ export function ShiftClosingWizard({
   reportTemplate,
   activeShiftId,
   checklistTemplates = [],
+  ssShiftData = null,
 }: ShiftClosingWizardProps) {
   const { showMessage, Dialogs } = useUiDialogs();
   const [step, setStep] = useState<1 | 2>(1);
@@ -125,21 +128,69 @@ export function ShiftClosingWizard({
     }
   }, [isOpen, activeShiftId, fetchIndicators]);
 
+  const [fetchedSsData, setFetchedSsData] = useState<{
+    reportData: Record<string, any>;
+    fieldMapping: Record<string, string>;
+  } | null>(null);
+
+  const currentSsData = ssShiftData || fetchedSsData;
+
   useEffect(() => {
-    if (isOpen && activeShiftId) {
-      const saved = localStorage.getItem(persistenceKey);
-      if (saved) {
-        try {
-          const data = JSON.parse(saved);
-          setStep(Number(data.step || 1) as 1 | 2);
-          setReportData(data.reportData || {});
-          setChecklistResponses(data.checklistResponses || {});
-        } catch (e) {
-          console.error("Failed to restore state", e);
-        }
-      }
+    if (isOpen && clubId) {
+      fetch(`/api/employee/clubs/${clubId}/smartshell-shift-data?_t=${Date.now()}`, {
+        cache: "no-store",
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.enabled && data?.reportData) {
+            setFetchedSsData({
+              reportData: data.reportData,
+              fieldMapping: data.fieldMapping || {},
+            });
+          }
+        })
+        .catch(console.error);
     }
-  }, [isOpen, activeShiftId, persistenceKey]);
+  }, [isOpen, clubId]);
+
+  useEffect(() => {
+    if (!isOpen || !activeShiftId) return;
+
+    const saved = localStorage.getItem(persistenceKey);
+    let parsedSaved: any = null;
+    if (saved) {
+      try {
+        parsedSaved = JSON.parse(saved);
+      } catch {}
+    }
+
+    if (currentSsData?.reportData) {
+      const base: Record<string, any> = { ...currentSsData.reportData };
+      // cash_income оставляем пустым или восстанавливаем то, что ввел пользователь
+      const cashKey = Object.keys(currentSsData.fieldMapping).find(
+        (k) => currentSsData.fieldMapping[k] === "money.sum.cash",
+      );
+      if (cashKey) delete base[cashKey];
+      delete base["cash_income"];
+
+      // Базовые данные SmartShell имеют приоритет над старыми нулями из черновика
+      const merged = { ...(parsedSaved?.reportData || {}), ...base };
+      if (parsedSaved?.reportData?.cash_income !== undefined) {
+        merged.cash_income = parsedSaved.reportData.cash_income;
+      }
+      if (cashKey && parsedSaved?.reportData?.[cashKey] !== undefined) {
+        merged[cashKey] = parsedSaved.reportData[cashKey];
+      }
+
+      setReportData(merged);
+      if (parsedSaved?.checklistResponses) {
+        setChecklistResponses(parsedSaved.checklistResponses);
+      }
+    } else if (parsedSaved?.reportData) {
+      setReportData(parsedSaved.reportData);
+      setChecklistResponses(parsedSaved.checklistResponses || {});
+    }
+  }, [isOpen, activeShiftId, persistenceKey, currentSsData]);
 
   useEffect(() => {
     if (isOpen && activeShiftId) {
@@ -341,39 +392,67 @@ export function ShiftClosingWizard({
                             f.field_type !== "EXPENSE" &&
                             f.field_type !== "EXPENSE_LIST"),
                       )
-                      .map((field: any, idx: number) => (
-                        <div key={idx} className="space-y-2 group">
-                          <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1 group-focus-within:text-emerald-500 transition-colors">
-                            {field.custom_label || field.metric_key}
-                            {field.is_required && (
-                              <span className="text-emerald-500 ml-1">*</span>
-                            )}
-                          </Label>
-                          <div className="relative">
-                            <Input
-                              type={
-                                field.metric_key.includes("comment")
-                                  ? "text"
-                                  : "number"
-                              }
-                              className="bg-zinc-900 h-16 rounded-2xl border-zinc-800 text-lg font-black text-white focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all placeholder:text-zinc-700"
-                              placeholder="0.00"
-                              value={reportData[field.metric_key] || ""}
-                              onChange={(e) =>
-                                setReportData({
-                                  ...reportData,
-                                  [field.metric_key]: e.target.value,
-                                })
-                              }
-                            />
-                            {!field.metric_key.includes("comment") && (
-                              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 font-black italic uppercase text-xs">
-                                RUB
+                      .map((field: any, idx: number) => {
+                        const ssSource = currentSsData?.fieldMapping?.[field.metric_key];
+                        // Поле заблокировано если SS маппит его И это не cash (cash вводит сотрудник)
+                        const isCashField = ssSource === "money.sum.cash";
+                        const isLocked = Boolean(ssSource) && !isCashField;
+                        // Значение из SS для показа hint рядом с cash полем
+                        const ssHintValue = isCashField
+                          ? currentSsData?.reportData?.[field.metric_key] ?? currentSsData?.reportData?.["cash_income"]
+                          : null;
+                        return (
+                          <div key={idx} className="space-y-2 group">
+                            <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1 group-focus-within:text-emerald-500 transition-colors flex items-center gap-2">
+                              {field.custom_label || field.metric_key}
+                              {field.is_required && (
+                                <span className="text-emerald-500">*</span>
+                              )}
+                              {isLocked && (
+                                <span className="text-[9px] text-emerald-600 font-bold bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">SmartShell</span>
+                              )}
+                              {isCashField && (
+                                <span className="text-[9px] text-amber-500 font-bold bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-full">Пересчитайте вручную</span>
+                              )}
+                            </Label>
+                            {isCashField && ssHintValue != null && (
+                              <div className="text-[11px] text-zinc-500 ml-1">
+                                По SmartShell: <span className="text-emerald-400 font-bold">{Number(ssHintValue).toLocaleString()} ₽</span>
                               </div>
                             )}
+                            <div className="relative">
+                              <Input
+                                type={
+                                  field.metric_key.includes("comment")
+                                    ? "text"
+                                    : "number"
+                                }
+                                className={cn(
+                                  "h-16 rounded-2xl text-lg font-black text-white transition-all placeholder:text-zinc-700",
+                                  isLocked
+                                    ? "bg-zinc-900/50 border-emerald-900/50 text-emerald-300 cursor-not-allowed opacity-70"
+                                    : "bg-zinc-900 border-zinc-800 focus:ring-emerald-500/20 focus:border-emerald-500/50"
+                                )}
+                                placeholder="0.00"
+                                value={reportData[field.metric_key] ?? ""}
+                                readOnly={isLocked}
+                                onChange={(e) =>
+                                  !isLocked && setReportData({
+                                    ...reportData,
+                                    [field.metric_key]: e.target.value,
+                                  })
+                                }
+                              />
+                              {!field.metric_key.includes("comment") && (
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 font-black italic uppercase text-xs">
+                                  RUB
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
+
                   </div>
                 </div>
               </div>
@@ -384,69 +463,145 @@ export function ShiftClosingWizard({
                   <div className="space-y-6">
                     <div className="flex items-center gap-3 px-1">
                       <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em]">
-                        Сверка кассы
+                        {currentSsData?.reportData
+                          ? "Сверка наличных (SmartShell)"
+                          : "Сверка кассы"}
                       </span>
                       <div className="h-px flex-1 bg-zinc-800" />
                     </div>
                     <div className="bg-zinc-900 rounded-[2.5rem] border border-zinc-800 overflow-hidden shadow-xl">
-                      <div className="p-8 grid grid-cols-2 md:grid-cols-4 gap-10">
-                        <div className="space-y-2">
-                          <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
-                            Введено вами
-                          </span>
-                          <div className="text-2xl font-black text-white italic">
-                            {(() => {
-                              const key =
-                                shiftIndicators?.inventory_settings
-                                  ?.employee_default_metric_key;
-                              const val =
-                                key && reportData[key] !== undefined
-                                  ? reportData[key]
-                                  : key === "Bar" &&
-                                      reportData["bar_revenue"] !== undefined
-                                    ? reportData["bar_revenue"]
-                                    : Number(reportData.cash_income || 0) +
-                                      Number(reportData.card_income || 0);
-                              return Number(val || 0).toLocaleString();
-                            })()}{" "}
-                            ₽
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
-                            Касса DashAdmin
-                          </span>
-                          <div className="text-2xl font-black text-white italic">
-                            {(
-                              shiftIndicators.calculated_revenue || 0
-                            ).toLocaleString()}{" "}
-                            ₽
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
-                            Количество чеков
-                          </span>
-                          <div className="text-2xl font-black text-white italic">
-                            {shiftIndicators.receipts_count || 0}
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
-                            Средний чек
-                          </span>
-                          <div className="text-2xl font-black text-white italic">
-                            {(
-                              shiftIndicators.average_check || 0
-                            ).toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}{" "}
-                            ₽
-                          </div>
-                        </div>
-                      </div>
                       {(() => {
+                        const isSmartShell = Boolean(currentSsData?.reportData);
+                        if (isSmartShell) {
+                          const cashKey =
+                            Object.keys(currentSsData?.fieldMapping || {}).find(
+                              (k) =>
+                                currentSsData?.fieldMapping[k] ===
+                                "money.sum.cash",
+                            ) || "cash_income";
+
+                          const enteredCash = Number(
+                            reportData[cashKey] ??
+                              reportData.cash_income ??
+                              0,
+                          );
+                          const expectedCash = Number(
+                            currentSsData?.reportData?.[cashKey] ??
+                              currentSsData?.reportData?.cash_income ??
+                              0,
+                          );
+                          const cashOnStart = Number(
+                            currentSsData?.reportData?.cash_on_start ?? 0,
+                          );
+                          const receiptsCount =
+                            currentSsData?.reportData?.receipts_count ?? 0;
+                          const diff = enteredCash - expectedCash;
+
+                          return (
+                            <>
+                              <div className="p-8 grid grid-cols-2 md:grid-cols-4 gap-10">
+                                <div className="space-y-2">
+                                  <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                                    Факт в кассе
+                                  </span>
+                                  <div className="text-2xl font-black text-white italic">
+                                    {enteredCash.toLocaleString()} ₽
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                                    По SmartShell
+                                  </span>
+                                  <div className="text-2xl font-black text-emerald-400 italic">
+                                    {expectedCash.toLocaleString()} ₽
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                                    Касса на старте
+                                  </span>
+                                  <div className="text-2xl font-black text-white italic">
+                                    {cashOnStart.toLocaleString()} ₽
+                                  </div>
+                                </div>
+                                <div className="space-y-2">
+                                  <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                                    Чеков в смене
+                                  </span>
+                                  <div className="text-2xl font-black text-white italic">
+                                    {receiptsCount}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div
+                                className={cn(
+                                  "px-8 py-6 border-t border-zinc-800 flex items-center justify-between",
+                                  diff === 0
+                                    ? "bg-emerald-500/5"
+                                    : diff > 0
+                                      ? "bg-amber-500/5"
+                                      : "bg-rose-500/5",
+                                )}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={cn(
+                                      "h-10 w-10 rounded-xl flex items-center justify-center border",
+                                      diff === 0
+                                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                                        : diff > 0
+                                          ? "bg-amber-500/10 border-amber-500/20 text-amber-500"
+                                          : "bg-rose-500/10 border-rose-500/20 text-rose-500",
+                                    )}
+                                  >
+                                    {diff === 0 ? (
+                                      <CheckCircle2 className="h-5 w-5" />
+                                    ) : (
+                                      <AlertTriangle className="h-5 w-5" />
+                                    )}
+                                  </div>
+                                  <div>
+                                    <div
+                                      className={cn(
+                                        "text-xs font-black uppercase italic tracking-tight",
+                                        diff === 0
+                                          ? "text-emerald-500"
+                                          : diff > 0
+                                            ? "text-amber-500"
+                                            : "text-rose-500",
+                                      )}
+                                    >
+                                      {diff === 0
+                                        ? "Наличные сходятся"
+                                        : diff > 0
+                                          ? "Излишек наличных"
+                                          : "Недостача наличных"}
+                                    </div>
+                                    <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">
+                                      Разница между фактом и учётом SmartShell
+                                    </div>
+                                  </div>
+                                </div>
+                                <div
+                                  className={cn(
+                                    "text-xl font-black tabular-nums italic",
+                                    diff === 0
+                                      ? "text-emerald-500"
+                                      : diff > 0
+                                        ? "text-amber-500"
+                                        : "text-rose-500",
+                                  )}
+                                >
+                                  {diff > 0 ? "+" : ""}
+                                  {diff.toLocaleString()} ₽
+                                </div>
+                              </div>
+                            </>
+                          );
+                        }
+
+                        // Fallback для режима без SmartShell
                         const key =
                           shiftIndicators?.inventory_settings
                             ?.employee_default_metric_key;
@@ -461,70 +616,117 @@ export function ShiftClosingWizard({
                         const calculated =
                           shiftIndicators.calculated_revenue || 0;
                         const diff = reported - calculated;
+
                         return (
-                          <div
-                            className={cn(
-                              "px-8 py-6 border-t border-zinc-800 flex items-center justify-between",
-                              diff === 0
-                                ? "bg-emerald-500/5"
-                                : diff > 0
-                                  ? "bg-amber-500/5"
-                                  : "bg-rose-500/5",
-                            )}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={cn(
-                                  "h-10 w-10 rounded-xl flex items-center justify-center border",
-                                  diff === 0
-                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
-                                    : diff > 0
-                                      ? "bg-amber-500/10 border-amber-500/20 text-amber-500"
-                                      : "bg-rose-500/10 border-rose-500/20 text-rose-500",
-                                )}
-                              >
-                                {diff === 0 ? (
-                                  <CheckCircle2 className="h-5 w-5" />
-                                ) : (
-                                  <AlertTriangle className="h-5 w-5" />
-                                )}
-                              </div>
-                              <div>
-                                <div
-                                  className={cn(
-                                    "text-xs font-black uppercase italic tracking-tight",
-                                    diff === 0
-                                      ? "text-emerald-500"
-                                      : diff > 0
-                                        ? "text-amber-500"
-                                        : "text-rose-500",
-                                  )}
-                                >
-                                  {diff === 0
-                                    ? "Касса сходится"
-                                    : diff > 0
-                                      ? "Излишек по кассе"
-                                      : "Недостача по кассе"}
+                          <>
+                            <div className="p-8 grid grid-cols-2 md:grid-cols-4 gap-10">
+                              <div className="space-y-2">
+                                <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                                  Введено вами
+                                </span>
+                                <div className="text-2xl font-black text-white italic">
+                                  {Number(reported || 0).toLocaleString()} ₽
                                 </div>
-                                <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">
-                                  Разница между фактом и учетом
+                              </div>
+                              <div className="space-y-2">
+                                <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                                  Касса DashAdmin
+                                </span>
+                                <div className="text-2xl font-black text-white italic">
+                                  {(
+                                    shiftIndicators.calculated_revenue || 0
+                                  ).toLocaleString()}{" "}
+                                  ₽
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                                  Количество чеков
+                                </span>
+                                <div className="text-2xl font-black text-white italic">
+                                  {shiftIndicators.receipts_count || 0}
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest leading-none">
+                                  Средний чек
+                                </span>
+                                <div className="text-2xl font-black text-white italic">
+                                  {(
+                                    shiftIndicators.average_check || 0
+                                  ).toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}{" "}
+                                  ₽
                                 </div>
                               </div>
                             </div>
+
                             <div
                               className={cn(
-                                "text-xl font-black tabular-nums italic",
+                                "px-8 py-6 border-t border-zinc-800 flex items-center justify-between",
                                 diff === 0
-                                  ? "text-emerald-500"
+                                  ? "bg-emerald-500/5"
                                   : diff > 0
-                                    ? "text-amber-500"
-                                    : "text-rose-500",
+                                    ? "bg-amber-500/5"
+                                    : "bg-rose-500/5",
                               )}
                             >
-                              {diff > 0 ? "+" : ""}
-                              {diff.toLocaleString()} ₽
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={cn(
+                                    "h-10 w-10 rounded-xl flex items-center justify-center border",
+                                    diff === 0
+                                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                                      : diff > 0
+                                        ? "bg-amber-500/10 border-amber-500/20 text-amber-500"
+                                        : "bg-rose-500/10 border-rose-500/20 text-rose-500",
+                                  )}
+                                >
+                                  {diff === 0 ? (
+                                    <CheckCircle2 className="h-5 w-5" />
+                                  ) : (
+                                    <AlertTriangle className="h-5 w-5" />
+                                  )}
+                                </div>
+                                <div>
+                                  <div
+                                    className={cn(
+                                      "text-xs font-black uppercase italic tracking-tight",
+                                      diff === 0
+                                        ? "text-emerald-500"
+                                        : diff > 0
+                                          ? "text-amber-500"
+                                          : "text-rose-500",
+                                    )}
+                                  >
+                                    {diff === 0
+                                      ? "Касса сходится"
+                                      : diff > 0
+                                        ? "Излишек по кассе"
+                                        : "Недостача по кассе"}
+                                  </div>
+                                  <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">
+                                    Разница между фактом и учетом
+                                  </div>
+                                </div>
+                              </div>
+                              <div
+                                className={cn(
+                                  "text-xl font-black tabular-nums italic",
+                                  diff === 0
+                                    ? "text-emerald-500"
+                                    : diff > 0
+                                      ? "text-amber-500"
+                                      : "text-rose-500",
+                                )}
+                              >
+                                {diff > 0 ? "+" : ""}
+                                {diff.toLocaleString()} ₽
+                              </div>
                             </div>
-                          </div>
+                          </>
                         );
                       })()}
                     </div>
@@ -670,33 +872,52 @@ export function ShiftClosingWizard({
                           f.field_type !== "INCOME" &&
                           !f.is_required,
                       )
-                      .map((field: any, idx: number) => (
-                        <div key={idx} className="space-y-2 group">
-                          <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1 group-focus-within:text-emerald-500 transition-colors">
-                            {field.custom_label || field.metric_key}
-                          </Label>
-                          <Input
-                            type={
-                              field.metric_key.includes("comment")
-                                ? "text"
-                                : "number"
-                            }
-                            className="bg-zinc-900 h-14 rounded-2xl border-zinc-800 text-base font-bold text-zinc-200 focus:border-zinc-700 placeholder:text-zinc-700"
-                            placeholder={
-                              field.metric_key.includes("comment")
-                                ? "Ваш комментарий..."
-                                : "0"
-                            }
-                            value={reportData[field.metric_key] || ""}
-                            onChange={(e) =>
-                              setReportData({
-                                ...reportData,
-                                [field.metric_key]: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                      ))}
+                      .map((field: any, idx: number) => {
+                        const ssSource = currentSsData?.fieldMapping?.[field.metric_key];
+                        const isCashField = ssSource === "money.sum.cash";
+                        const isLocked = Boolean(ssSource) && !isCashField;
+                        return (
+                          <div key={idx} className="space-y-2 group">
+                            <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1 group-focus-within:text-emerald-500 transition-colors flex items-center gap-2">
+                              {field.custom_label || field.metric_key}
+                              {isLocked && (
+                                <span className="text-[9px] text-emerald-600 font-bold bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">
+                                  SmartShell
+                                </span>
+                              )}
+                            </Label>
+                            <div className="relative">
+                              <Input
+                                type={
+                                  field.metric_key.includes("comment")
+                                    ? "text"
+                                    : "number"
+                                }
+                                className={cn(
+                                  "h-14 rounded-2xl text-base font-bold transition-all placeholder:text-zinc-700",
+                                  isLocked
+                                    ? "bg-zinc-900/50 border-emerald-900/50 text-emerald-300 cursor-not-allowed opacity-70"
+                                    : "bg-zinc-900 border-zinc-800 text-zinc-200 focus:border-zinc-700"
+                                )}
+                                placeholder={
+                                  field.metric_key.includes("comment")
+                                    ? "Ваш комментарий..."
+                                    : "0"
+                                }
+                                value={reportData[field.metric_key] ?? ""}
+                                readOnly={isLocked}
+                                onChange={(e) =>
+                                  !isLocked &&
+                                  setReportData({
+                                    ...reportData,
+                                    [field.metric_key]: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               </div>

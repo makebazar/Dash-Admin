@@ -138,24 +138,19 @@ export const PrizesSidebar = ({
             className="fixed top-0 right-0 h-full w-full max-w-[320px] bg-[#0f0f0f] border-l border-white/10 shadow-2xl z-210 flex flex-col pointer-events-auto"
           >
             <div className="p-6 flex items-center justify-between border-b border-white/5">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center">
-                  <Gift className="w-5 h-5 text-orange-500" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black uppercase italic tracking-tight text-white">
-                    Призы
-                  </h2>
-                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                    Что можно выиграть
-                  </p>
-                </div>
+              <div className="space-y-0.5">
+                <h2 className="text-lg font-black uppercase italic tracking-tight text-white">
+                  Призы
+                </h2>
+                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                  Что можно выиграть в клубе
+                </p>
               </div>
               <button
                 onClick={onClose}
-                className="w-10 h-10 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center transition-colors text-white/50 hover:text-white"
+                className="w-9 h-9 bg-white/5 hover:bg-white/10 rounded-xl flex items-center justify-center transition-colors text-white/50 hover:text-white cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 

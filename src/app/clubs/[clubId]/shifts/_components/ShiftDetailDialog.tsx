@@ -280,7 +280,8 @@ export function ShiftDetailDialog({
                                 })
                                 .map((key) => {
                                   const excludedKeys = new Set([
-                                    "cash", "card", "cash_diff", "actual_cash", "expected_cash", "total_revenue"
+                                    "cash", "card", "cash_diff", "actual_cash", "expected_cash", "total_revenue",
+                                    "shift_comment", "report_comment", "comment", "commentary", "notes"
                                   ]);
                                   if (!shift || key.startsWith("_") || key === "has_discrepancies" || key === "discrepancy_details" || excludedKeys.has(key)) return null;
 

@@ -11,7 +11,8 @@ import {
     Loader2, Trash2, Search, Camera, Package, 
     ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart, Warehouse
 } from "lucide-react"
-import { getProducts, createSupplySafe, getProductByBarcode, getWarehouses, type Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/actions"
+import { getProducts, createSupplySafe, getProductByBarcode, getWarehouses } from "@/app/clubs/[clubId]/inventory/actions"
+import type { Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/types"
 import { 
     Table, TableBody, TableCell, TableRow 
 } from "@/components/ui/table"
@@ -32,6 +33,7 @@ interface SupplyItem {
     name: string
     quantity: number
     cost_price: number
+    expiration_date?: string
 }
 
 export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeShiftId }: EmployeeSupplyWizardProps) {
@@ -50,8 +52,11 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
     const [selectedProductId, setSelectedProductId] = useState<string>("")
     const [itemQty, setItemQty] = useState("1")
     const [itemCost, setItemCost] = useState("0")
+    const [itemExpirationDate, setItemExpirationDate] = useState("")
     const [supplierName, setSupplierName] = useState("")
     const [notes, setNotes] = useState("")
+
+    const selectedProduct = allProducts.find(p => p.id === Number(selectedProductId))
 
     // iOS Scroll Lock
     useEffect(() => {
@@ -94,13 +99,15 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
         if (existingIdx > -1) {
             const newItems = [...items]
             newItems[existingIdx].quantity += Number(itemQty)
+            if (itemExpirationDate) newItems[existingIdx].expiration_date = itemExpirationDate
             setItems(newItems)
         } else {
             setItems(prev => [...prev, {
                 product_id: product.id,
                 name: product.name,
                 quantity: Number(itemQty),
-                cost_price: Number(itemCost) || product.cost_price || 0
+                cost_price: Number(itemCost) || product.cost_price || 0,
+                expiration_date: itemExpirationDate || undefined,
             }])
         }
 
@@ -108,6 +115,7 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
         setSelectedProductId("")
         setItemQty("1")
         setItemCost("0")
+        setItemExpirationDate("")
     }
 
     const handleBarcodeScan = useCallback(async (barcode: string): Promise<boolean> => {
@@ -120,11 +128,18 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                     newItems[existingIdx].quantity += 1
                     setItems(newItems)
                 } else {
+                    let expDate: string | undefined = undefined
+                    if (product.track_expiration && product.shelf_life_days && product.shelf_life_days > 0) {
+                        const exp = new Date()
+                        exp.setDate(exp.getDate() + Number(product.shelf_life_days))
+                        expDate = exp.toISOString().split('T')[0]
+                    }
                     setItems(prev => [...prev, {
                         product_id: product.id,
                         name: product.name,
                         quantity: 1,
-                        cost_price: product.cost_price || 0
+                        cost_price: product.cost_price || 0,
+                        expiration_date: expDate,
                     }])
                 }
                 return true
@@ -165,7 +180,8 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                     items: items.map(i => ({
                         product_id: i.product_id,
                         quantity: i.quantity,
-                        cost_price: i.cost_price
+                        cost_price: i.cost_price,
+                        expiration_date: i.expiration_date || undefined,
                     }))
                 })
                 if (!result.ok) {
@@ -262,7 +278,14 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                                         <TableRow key={item.product_id} className="border-slate-800 hover:bg-primary/90/50">
                                                             <TableCell className="py-3 pr-0">
                                                                 <div className="flex flex-col">
-                                                                    <span className="text-sm font-medium text-slate-200 truncate max-w-[140px]">{item.name}</span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-sm font-medium text-slate-200 truncate max-w-[140px]">{item.name}</span>
+                                                                        {item.expiration_date && (
+                                                                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                                                                до {new Date(item.expiration_date).toLocaleDateString('ru-RU')}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                     <div className="flex items-center gap-2 mt-1">
                                                                         <Input 
                                                                             type="number" 
@@ -438,9 +461,23 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                     onClick={() => {
                                         setSelectedProductId(p.id.toString())
                                         setItemCost((p as any).cost_price?.toString() || "0")
+                                        if (p.track_expiration && p.shelf_life_days && p.shelf_life_days > 0) {
+                                            const exp = new Date()
+                                            exp.setDate(exp.getDate() + Number(p.shelf_life_days))
+                                            setItemExpirationDate(exp.toISOString().split('T')[0])
+                                        } else {
+                                            setItemExpirationDate("")
+                                        }
                                     }}
                                 >
-                                    {p.name}
+                                    <div className="flex items-center justify-between">
+                                        <span>{p.name}</span>
+                                        {p.track_expiration && (
+                                            <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                                                Срок годности
+                                            </span>
+                                        )}
+                                    </div>
                                 </button>
                             ))}
                         </div>
@@ -465,6 +502,17 @@ export function EmployeeSupplyWizard({ isOpen, onClose, clubId, userId, activeSh
                                         className="bg-primary border-slate-800 h-12 text-lg font-bold"
                                     />
                                 </div>
+                                {selectedProduct?.track_expiration && (
+                                    <div className="space-y-2 col-span-2">
+                                        <Label className="text-[10px] uppercase text-amber-400 font-bold">Срок годности (Годен до)</Label>
+                                        <Input 
+                                            type="date" 
+                                            value={itemExpirationDate} 
+                                            onChange={e => setItemExpirationDate(e.target.value)}
+                                            className="bg-primary border-amber-500/50 text-amber-200 h-12 text-sm"
+                                        />
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

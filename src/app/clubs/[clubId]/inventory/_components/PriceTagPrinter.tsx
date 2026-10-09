@@ -1,6 +1,6 @@
 "use client"
 
-import { Product, PriceTagTemplate } from "../actions"
+import type { Product, PriceTagTemplate } from "../types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Printer } from "lucide-react"

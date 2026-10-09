@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PageShell } from "@/components/layout/PageShell"
 import { useRouter } from "next/navigation"
-import { createSupply, type Product, type Warehouse } from "../../actions"
+import { createSupply } from "../../actions"
+import type { Product, Warehouse } from "../../types"
 import Link from "next/link"
 
 interface NewSupplyClientProps {
@@ -28,20 +29,30 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
     const [supplierId, setSupplierId] = useState("")
     const [notes, setNotes] = useState("")
     const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("")
-    const [items, setItems] = useState<{ productId: number, quantity: number, cost: number }[]>([])
+    const [items, setItems] = useState<{ productId: number, quantity: number, cost: number, expirationDate?: string }[]>([])
     const [supplyStatus, setSupplyStatus] = useState<'DRAFT' | 'COMPLETED'>('COMPLETED')
     
     // New Item State
     const [selectedProductId, setSelectedProductId] = useState<string>("")
     const [qty, setQty] = useState("")
     const [cost, setCost] = useState("")
+    const [expirationDate, setExpirationDate] = useState("")
 
-    // When product is selected, pre-fill cost with current cost_price
+    const selectedProduct = products.find(p => p.id === Number(selectedProductId))
+
+    // When product is selected, pre-fill cost with current cost_price and expiry date if shelf_life_days
     const handleProductSelect = (val: string) => {
         setSelectedProductId(val)
         const product = products.find(p => p.id === Number(val))
         if (product) {
             setCost(product.cost_price.toString())
+            if (product.track_expiration && product.shelf_life_days && product.shelf_life_days > 0) {
+                const exp = new Date()
+                exp.setDate(exp.getDate() + Number(product.shelf_life_days))
+                setExpirationDate(exp.toISOString().split('T')[0])
+            } else {
+                setExpirationDate("")
+            }
         }
     }
 
@@ -53,20 +64,22 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
         setItems(prev => [...prev, {
             productId: Number(selectedProductId),
             quantity: Number(qty),
-            cost: Number(cost)
+            cost: Number(cost),
+            expirationDate: expirationDate || undefined,
         }])
         
         // Reset item fields
         setSelectedProductId("")
         setQty("")
         setCost("")
+        setExpirationDate("")
     }
 
     const handleRemoveItem = (index: number) => {
         setItems(prev => prev.filter((_, i) => i !== index))
     }
 
-    const handleUpdateItem = (index: number, field: 'quantity' | 'cost', value: number) => {
+    const handleUpdateItem = (index: number, field: 'quantity' | 'cost' | 'expirationDate', value: any) => {
         setItems(prev => prev.map((item, i) => 
             i === index ? { ...item, [field]: value } : item
         ))
@@ -85,7 +98,8 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                 items: items.map(i => ({
                     product_id: i.productId,
                     quantity: i.quantity,
-                    cost_price: i.cost
+                    cost_price: i.cost,
+                    expiration_date: i.expirationDate || undefined,
                 }))
             })
             router.push(`/clubs/${clubId}/inventory?tab=supplies`)
@@ -117,55 +131,40 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                         <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Поставщик</Label>
                         {suppliers.length === 0 ? (
                             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400">
-                                Нет поставщиков.{" "}
-                                <a href={`/clubs/${clubId}/inventory?tab=suppliers`} className="text-blue-600 underline">Добавить в настройках</a>
+                                Нет сохраненных поставщиков.
                             </div>
                         ) : (
                             <Select value={supplierId} onValueChange={setSupplierId}>
-                                <SelectTrigger className="h-10 bg-slate-50 hover:bg-slate-100 border-slate-200">
-                                    <SelectValue placeholder="Выберите поставщика..." />
+                                <SelectTrigger className="bg-slate-50 h-10 border-slate-200">
+                                    <SelectValue placeholder="Выберите поставщика" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {suppliers.map(sup => (
-                                        <SelectItem key={sup.id} value={sup.id.toString()}>{sup.name}</SelectItem>
+                                    {suppliers.map(s => (
+                                        <SelectItem key={s.id} value={s.id.toString()}>{s.name}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         )}
                     </div>
                     <div className="space-y-2">
-                        <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Склад приема</Label>
+                        <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Склад назначения</Label>
                         <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
-                            <SelectTrigger className="h-10 bg-slate-50 hover:bg-slate-100 border-slate-200">
-                                <SelectValue placeholder="По умолчанию (Основной)" />
+                            <SelectTrigger className="bg-slate-50 h-10 border-slate-200">
+                                <SelectValue placeholder="Основной склад (по умолчанию)" />
                             </SelectTrigger>
                             <SelectContent>
                                 {warehouses.map(w => (
-                                    <SelectItem key={w.id} value={w.id.toString()}>
-                                        {w.name} {w.is_default ? '(Основной)' : ''}
-                                    </SelectItem>
+                                    <SelectItem key={w.id} value={w.id.toString()}>{w.name} {w.is_default ? '(Основной)' : ''}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-2">
-                        <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Статус</Label>
-                        <Select value={supplyStatus} onValueChange={(v: any) => setSupplyStatus(v)}>
-                            <SelectTrigger className="h-10 bg-slate-50 hover:bg-slate-100 border-slate-200">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="COMPLETED">Провести (обновит остатки)</SelectItem>
-                                <SelectItem value="DRAFT">Черновик (только запись)</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-2">
-                        <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Заметки</Label>
+                    <div className="space-y-2 sm:col-span-2">
+                        <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Примечание / Номер накладной</Label>
                         <Input 
-                            placeholder="Номер накладной и т.д." 
-                            value={notes}
-                            onChange={e => setNotes(e.target.value)}
+                            value={notes} 
+                            onChange={e => setNotes(e.target.value)} 
+                            placeholder="Например: Накладная №12345 от 20.08"
                             className="h-10 bg-slate-50 border-slate-200"
                         />
                     </div>
@@ -190,8 +189,8 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="flex w-full sm:w-auto gap-3 items-end">
-                            <div className="flex-1 sm:w-28 space-y-2">
+                        <div className="flex flex-wrap sm:flex-nowrap w-full sm:w-auto gap-3 items-end">
+                            <div className="flex-1 sm:w-24 space-y-2">
                                 <Label className="text-[10px] uppercase font-bold text-slate-500">Кол-во</Label>
                                 <Input 
                                     type="number" 
@@ -200,7 +199,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                                     onChange={e => setQty(e.target.value)}
                                 />
                             </div>
-                            <div className="flex-1 sm:w-32 space-y-2">
+                            <div className="flex-1 sm:w-28 space-y-2">
                                 <Label className="text-[10px] uppercase font-bold text-slate-500">Цена за ед.</Label>
                                 <Input 
                                     type="number" 
@@ -210,6 +209,17 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                                     onChange={e => setCost(e.target.value)}
                                 />
                             </div>
+                            {selectedProduct?.track_expiration && (
+                                <div className="flex-1 sm:w-36 space-y-2">
+                                    <Label className="text-[10px] uppercase font-bold text-amber-600">Годен до</Label>
+                                    <Input 
+                                        type="date" 
+                                        className="bg-amber-50/40 border-amber-200 h-10 text-xs" 
+                                        value={expirationDate}
+                                        onChange={e => setExpirationDate(e.target.value)}
+                                    />
+                                </div>
+                            )}
                             <Button 
                                 onClick={handleAddItem} 
                                 disabled={!selectedProductId || !qty || !cost} 
@@ -229,6 +239,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                                         <TableHead className="text-[10px] uppercase font-bold text-slate-500">Товар</TableHead>
                                         <TableHead className="text-center text-[10px] uppercase font-bold text-slate-500 w-32">Кол-во</TableHead>
                                         <TableHead className="text-right text-[10px] uppercase font-bold text-slate-500 w-40">Цена</TableHead>
+                                        <TableHead className="text-center text-[10px] uppercase font-bold text-slate-500 w-36">Годен до</TableHead>
                                         <TableHead className="text-right text-[10px] uppercase font-bold text-slate-500 w-32">Сумма</TableHead>
                                         <TableHead className="w-12"></TableHead>
                                     </TableRow>
@@ -236,7 +247,7 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                                 <TableBody>
                                     {items.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="text-center text-sm text-slate-500 py-12 italic bg-slate-50/30">
+                                            <TableCell colSpan={6} className="text-center text-sm text-slate-500 py-12 italic bg-slate-50/30">
                                                 Список пуст. Добавьте товары выше.
                                             </TableCell>
                                         </TableRow>
@@ -257,16 +268,27 @@ export function NewSupplyClient({ clubId, currentUserId, products, warehouses, s
                                                     <div className="flex items-center justify-end gap-2">
                                                         <Input 
                                                             type="number" 
-                                                            className="h-9 w-24 text-right border-slate-200"
+                                                            className="h-9 w-24 text-right font-mono border-slate-200"
                                                             value={item.cost}
                                                             onChange={e => handleUpdateItem(idx, 'cost', Number(e.target.value))}
                                                         />
-                                                        <span className="text-sm font-bold text-slate-400">₽</span>
+                                                        <span className="text-xs text-slate-400 font-bold">₽</span>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-right py-3 font-black text-slate-900">{(item.quantity * item.cost).toLocaleString('ru-RU')} ₽</TableCell>
-                                                <TableCell className="py-3 text-right">
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50" onClick={() => handleRemoveItem(idx)}>
+                                                <TableCell className="text-center py-3">
+                                                    {item.expirationDate ? (
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                                            {new Date(item.expirationDate).toLocaleDateString('ru-RU')}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400">—</span>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell className="text-right py-3 font-bold font-mono text-sm text-slate-900">
+                                                    {(item.quantity * item.cost).toLocaleString('ru-RU')} ₽
+                                                </TableCell>
+                                                <TableCell className="py-3">
+                                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(idx)} className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 h-8 w-8">
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
                                                 </TableCell>

@@ -5,6 +5,7 @@ import type { Product, Warehouse } from "./types";
 import { assertUserCanAccessClub, getInventoryAccessScope, requireClubAccess } from "./auth";
 import { getActionErrorMessage } from "./receipts";
 import { logStockMovement } from "./stock";
+import { normalizeInventorySettings } from "@/lib/inventory-settings";
 
 export async function assertProductBelongsToClub(
   db: { query: (sql: string, params?: any[]) => Promise<any> },
@@ -165,6 +166,8 @@ export async function createProduct(
     current_stock: number;
     min_stock_level?: number;
     units_per_box?: number;
+    track_expiration?: boolean;
+    shelf_life_days?: number | null;
   },
 ) {
   await assertUserCanAccessClub(clubId, userId);
@@ -185,8 +188,8 @@ export async function createProduct(
     // 1. Create Product
     const res = await client.query(
       `
-            INSERT INTO warehouse_products (club_id, category_id, name, barcode, barcodes, cost_price, selling_price, current_stock, min_stock_level, units_per_box)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO warehouse_products (club_id, category_id, name, barcode, barcodes, cost_price, selling_price, current_stock, min_stock_level, units_per_box, track_expiration, shelf_life_days)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING id
         `,
       [
@@ -200,6 +203,8 @@ export async function createProduct(
         data.current_stock,
         data.min_stock_level || 0,
         data.units_per_box || 1,
+        Boolean(data.track_expiration),
+        data.shelf_life_days ? Number(data.shelf_life_days) : null,
       ],
     );
 
@@ -228,6 +233,17 @@ export async function createProduct(
         [warehouseId, productId, data.current_stock],
       );
 
+      // If track_expiration is enabled and shelf_life_days provided, create batch for initial stock
+      if (data.track_expiration && data.shelf_life_days && data.shelf_life_days > 0) {
+        const expDate = new Date();
+        expDate.setDate(expDate.getDate() + Number(data.shelf_life_days));
+        await client.query(
+          `INSERT INTO warehouse_product_batches (club_id, product_id, warehouse_id, quantity, expiration_date)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [clubId, productId, warehouseId, data.current_stock, expDate.toISOString().split('T')[0]]
+        );
+      }
+
       await logStockMovement(
         client,
         clubId,
@@ -243,6 +259,32 @@ export async function createProduct(
         null,
         warehouseId,
       );
+    }
+
+    // 3. Авто-создание товара в SmartShell при включенной интеграции
+    try {
+      const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+      const smartshellClient = await getSmartShellClientForClub(clubId);
+      if (smartshellClient) {
+        const createdGood = await smartshellClient.createGood({
+          title: data.name,
+          cost: data.selling_price,
+          wholesale_cost: data.cost_price,
+          amount: data.current_stock,
+          unit_name: "шт",
+          eans: data.barcode ? [data.barcode] : [],
+        });
+        if (createdGood?.id) {
+          if (!data.barcode) {
+            await client.query(
+              `UPDATE warehouse_products SET barcode = $1 WHERE id = $2`,
+              [String(createdGood.id), productId],
+            );
+          }
+        }
+      }
+    } catch (ssErr) {
+      console.error("SmartShell createGood auto-sync error:", ssErr);
     }
 
     await client.query("COMMIT");
@@ -277,6 +319,8 @@ export async function updateProduct(
     min_stock_level?: number;
     is_active: boolean;
     units_per_box?: number;
+    track_expiration?: boolean;
+    shelf_life_days?: number | null;
   },
 ) {
   await assertUserCanAccessClub(clubId, userId);
@@ -287,8 +331,8 @@ export async function updateProduct(
     await client.query(
       `
             UPDATE warehouse_products
-            SET name = $1, barcode = $2, barcodes = $3, category_id = $4, cost_price = $5, selling_price = $6, min_stock_level = $7, is_active = $8, units_per_box = $9
-            WHERE id = $10
+            SET name = $1, barcode = $2, barcodes = $3, category_id = $4, cost_price = $5, selling_price = $6, min_stock_level = $7, is_active = $8, units_per_box = $9, track_expiration = $10, shelf_life_days = $11
+            WHERE id = $12
         `,
       [
         data.name,
@@ -300,9 +344,33 @@ export async function updateProduct(
         data.min_stock_level || 0,
         data.is_active,
         data.units_per_box || 1,
+        Boolean(data.track_expiration),
+        data.shelf_life_days ? Number(data.shelf_life_days) : null,
         id,
       ],
     );
+
+    // Авто-обновление свойств товара в SmartShell
+    try {
+      const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+      const smartshellClient = await getSmartShellClientForClub(clubId);
+      if (smartshellClient) {
+        const goodId = await smartshellClient.resolveGoodId({
+          name: data.name,
+          barcode: data.barcode,
+        });
+        if (goodId) {
+          await smartshellClient.updateGood(goodId, {
+            title: data.name,
+            cost: data.selling_price,
+            wholesale_cost: data.cost_price,
+            eans: data.barcode ? [data.barcode] : [],
+          });
+        }
+      }
+    } catch (ssErr) {
+      console.warn("SmartShell updateGood auto-sync warning:", ssErr);
+    }
 
     await client.query("COMMIT");
     await logOperation(clubId, userId, "UPDATE_PRODUCT", "PRODUCT", id, data);
@@ -562,6 +630,28 @@ export async function bulkUpdatePrices(
       [value, ids, clubId],
     );
   }
+  // Авто-синхронизация массового изменения цен в SmartShell
+  try {
+    const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+    const smartshellClient = await getSmartShellClientForClub(clubId);
+    if (smartshellClient) {
+      const updatedProds = await query(
+        `SELECT id, name, barcode, selling_price, cost_price FROM warehouse_products WHERE id = ANY($1::int[]) AND club_id = $2`,
+        [ids, clubId]
+      );
+      for (const prod of updatedProds.rows) {
+        const goodId = await smartshellClient.resolveGoodId(prod);
+        if (goodId) {
+          await smartshellClient.updateGood(goodId, {
+            cost: Number(prod.selling_price || 0),
+          });
+        }
+      }
+    }
+  } catch (ssErr) {
+    console.warn("SmartShell bulkUpdatePrices auto-sync warning:", ssErr);
+  }
+
   revalidatePath(`/clubs/${clubId}/inventory`);
 }
 
@@ -693,6 +783,321 @@ export async function getProduct(clubId: string, productId: number) {
         `;
     const res = await client.query(queryStr, stockParams);
     return res.rows[0] || null;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Импорт и синхронизация номенклатуры (товаров и остатков) из SmartShell в DashAdmin
+ */
+export async function syncSmartShellCatalog(clubId: string) {
+  const { getSmartShellClientForClub, syncSmartShellShifts } = await import("@/lib/smartshell/shift-sync");
+  
+  try {
+    await syncSmartShellShifts(clubId);
+  } catch (sErr) {
+    console.error("syncSmartShellShifts error during catalog sync:", sErr);
+  }
+
+  const smartshellClient = await getSmartShellClientForClub(clubId);
+
+  if (!smartshellClient) {
+    throw new Error("Учетные данные SmartShell не заполнены в настройках клуба");
+  }
+
+  const queryStr = `
+    query GetGoodsList {
+      goods {
+        id
+        title
+        subtitle
+        amount
+        cost
+        wholesale_cost
+        unit_name
+        category {
+          id
+          title
+        }
+      }
+    }
+  `;
+
+  const response = await (smartshellClient as any).request(queryStr);
+  const goods: any[] = response?.goods || [];
+
+  if (!Array.isArray(goods) || goods.length === 0) {
+    return { success: true, count: 0, importedCount: 0, message: "В SmartShell нет товаров для импорта" };
+  }
+
+  const client = await import("@/db").then((m) => m.getClient());
+  let importedCount = 0;
+
+  try {
+    await client.query("BEGIN");
+
+    const whRes = await client.query(
+      "SELECT id FROM warehouses WHERE club_id = $1 ORDER BY is_default DESC LIMIT 1",
+      [clubId]
+    );
+    const warehouseId = whRes.rows[0]?.id;
+
+    for (const good of goods) {
+      if (!good || !good.id || !good.title) continue;
+
+      let categoryId: number | null = null;
+      if (good.category?.title) {
+        const catRes = await client.query(
+          `SELECT id FROM warehouse_categories WHERE club_id = $1 AND lower(name) = lower($2) LIMIT 1`,
+          [clubId, good.category.title.trim()]
+        );
+        if (catRes.rows.length > 0) {
+          categoryId = catRes.rows[0].id;
+        } else {
+          const newCat = await client.query(
+            `INSERT INTO warehouse_categories (club_id, name) VALUES ($1, $2) RETURNING id`,
+            [clubId, good.category.title.trim()]
+          );
+          categoryId = newCat.rows[0].id;
+        }
+      }
+
+      const barCodeStr = String(good.id);
+      const prodRes = await client.query(
+        `SELECT id FROM warehouse_products WHERE club_id = $1 AND (barcode = $2 OR lower(name) = lower($3)) LIMIT 1`,
+        [clubId, barCodeStr, good.title.trim()]
+      );
+
+      const costPrice = Number(good.wholesale_cost || 0);
+      const sellingPrice = Number(good.cost || 0);
+      const stock = Math.max(0, Number(good.amount || 0));
+
+      if (prodRes.rows.length > 0) {
+        const existingId = prodRes.rows[0].id;
+        await client.query(
+          `UPDATE warehouse_products
+           SET selling_price = $1, cost_price = $2, current_stock = $3, barcode = $4, category_id = COALESCE($5, category_id)
+           WHERE id = $6 AND club_id = $7`,
+          [sellingPrice, costPrice, stock, barCodeStr, categoryId, existingId, clubId]
+        );
+        if (warehouseId) {
+          await client.query(
+            `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (warehouse_id, product_id)
+             DO UPDATE SET quantity = EXCLUDED.quantity`,
+            [warehouseId, existingId, stock]
+          );
+        }
+      } else {
+        const newProd = await client.query(
+          `INSERT INTO warehouse_products (club_id, category_id, name, barcode, cost_price, selling_price, current_stock)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id`,
+          [clubId, categoryId, good.title.trim(), barCodeStr, costPrice, sellingPrice, stock]
+        );
+        const newProdId = newProd.rows[0].id;
+        if (warehouseId) {
+          await client.query(
+            `INSERT INTO warehouse_stock (warehouse_id, product_id, quantity)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (warehouse_id, product_id)
+             DO UPDATE SET quantity = EXCLUDED.quantity`,
+            [warehouseId, newProdId, stock]
+          );
+        }
+        importedCount++;
+      }
+    }
+
+    await client.query("COMMIT");
+    revalidatePath(`/clubs/${clubId}/inventory`);
+    return { success: true, count: goods.length, importedCount, message: `Успешно синхронизировано ${goods.length} товаров` };
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    console.error("syncSmartShellCatalog error:", err);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Выгрузка существующих товаров из DashAdmin в SmartShell (для тех товаров, которых еще нет в SmartShell)
+ */
+export async function pushProductsToSmartShell(clubId: string) {
+  const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+  const smartshellClient = await getSmartShellClientForClub(clubId);
+
+  if (!smartshellClient) {
+    throw new Error("Учетные данные SmartShell не заполнены в настройках клуба");
+  }
+
+  const client = await import("@/db").then((m) => m.getClient());
+  let pushedCount = 0;
+
+  try {
+    const settingsRes = await client.query(
+      `SELECT inventory_settings FROM clubs WHERE id = $1`,
+      [clubId]
+    );
+    const invSettings = normalizeInventorySettings(settingsRes.rows[0]?.inventory_settings);
+    const cashboxWarehouseIds: number[] = Array.isArray(invSettings.cashbox_warehouse_ids) && invSettings.cashbox_warehouse_ids.length > 0
+      ? invSettings.cashbox_warehouse_ids
+      : (invSettings.cashbox_warehouse_id ? [invSettings.cashbox_warehouse_id] : []);
+
+    let productsQuery: string;
+    let productsParams: any[];
+
+    if (cashboxWarehouseIds.length > 0) {
+      productsQuery = `
+        SELECT p.id, p.name, p.barcode, p.cost_price, p.selling_price, COALESCE(SUM(ws.quantity), 0) as stock_qty
+        FROM warehouse_products p
+        LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = ANY($2::int[])
+        WHERE p.club_id = $1 AND p.is_active = true
+        GROUP BY p.id, p.name, p.barcode, p.cost_price, p.selling_price
+      `;
+      productsParams = [clubId, cashboxWarehouseIds];
+    } else {
+      productsQuery = `
+        SELECT p.id, p.name, p.barcode, p.cost_price, p.selling_price, COALESCE(SUM(ws.quantity), 0) as stock_qty
+        FROM warehouse_products p
+        LEFT JOIN warehouse_stock ws ON p.id = ws.product_id 
+        LEFT JOIN warehouses w ON ws.warehouse_id = w.id
+        WHERE p.club_id = $1 
+          AND p.is_active = true
+          AND (w.shift_accountability_enabled = true OR w.type = 'BAR' OR w.is_default = true)
+        GROUP BY p.id, p.name, p.barcode, p.cost_price, p.selling_price
+      `;
+      productsParams = [clubId];
+    }
+
+    const res = await client.query(productsQuery, productsParams);
+    const products = res.rows || [];
+
+    for (const p of products) {
+      if (p.barcode && /^\d+$/.test(p.barcode)) {
+        continue;
+      }
+
+      try {
+        const createdGood = await smartshellClient.createGood({
+          title: p.name,
+          cost: Number(p.selling_price || 0),
+          wholesale_cost: Number(p.cost_price || 0),
+          amount: Math.max(0, Number(p.stock_qty || 0)),
+          unit_name: "шт",
+          eans: p.barcode ? [p.barcode] : [],
+        });
+
+        if (createdGood?.id) {
+          await client.query(
+            `UPDATE warehouse_products SET barcode = $1 WHERE id = $2 AND club_id = $3`,
+            [String(createdGood.id), p.id, clubId]
+          );
+          pushedCount++;
+        }
+      } catch (err) {
+        console.error(`Error pushing product ${p.name} to SmartShell:`, err);
+      }
+    }
+
+    revalidatePath(`/clubs/${clubId}/inventory`);
+    return {
+      success: true,
+      pushedCount,
+      message: pushedCount > 0
+        ? `Успешно создано ${pushedCount} товаров в SmartShell`
+        : "Все существующие товары уже связаны со SmartShell",
+    };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Выравнивание остатков: принудительная установка остатков SmartShell равными текущим остаткам DashAdmin (SET)
+ */
+export async function pushStockToSmartShell(clubId: string) {
+  const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+  const smartshellClient = await getSmartShellClientForClub(clubId);
+
+  if (!smartshellClient) {
+    throw new Error("Учетные данные SmartShell не заполнены в настройках клуба");
+  }
+
+  const client = await import("@/db").then((m) => m.getClient());
+  try {
+    const settingsRes = await client.query(
+      `SELECT inventory_settings FROM clubs WHERE id = $1`,
+      [clubId]
+    );
+    const invSettings = normalizeInventorySettings(settingsRes.rows[0]?.inventory_settings);
+    const cashboxWarehouseIds: number[] = Array.isArray(invSettings.cashbox_warehouse_ids) && invSettings.cashbox_warehouse_ids.length > 0
+      ? invSettings.cashbox_warehouse_ids
+      : (invSettings.cashbox_warehouse_id ? [invSettings.cashbox_warehouse_id] : []);
+
+    let productsQuery: string;
+    let productsParams: any[];
+
+    if (cashboxWarehouseIds.length > 0) {
+      productsQuery = `
+        SELECT p.id, p.name, p.barcode, COALESCE(SUM(ws.quantity), 0) as stock_qty
+        FROM warehouse_products p
+        LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = ANY($2::int[])
+        WHERE p.club_id = $1 AND p.is_active = true
+        GROUP BY p.id, p.name, p.barcode
+      `;
+      productsParams = [clubId, cashboxWarehouseIds];
+    } else {
+      productsQuery = `
+        SELECT p.id, p.name, p.barcode, COALESCE(SUM(ws.quantity), 0) as stock_qty
+        FROM warehouse_products p
+        LEFT JOIN warehouse_stock ws ON p.id = ws.product_id 
+        LEFT JOIN warehouses w ON ws.warehouse_id = w.id
+        WHERE p.club_id = $1 
+          AND p.is_active = true
+          AND (w.shift_accountability_enabled = true OR w.type = 'BAR' OR w.is_default = true)
+        GROUP BY p.id, p.name, p.barcode
+      `;
+      productsParams = [clubId];
+    }
+
+    const res = await client.query(productsQuery, productsParams);
+    const products = res.rows || [];
+
+    const itemsToSet: { id: number; quantity: number }[] = [];
+
+    for (const p of products) {
+      const goodId = await smartshellClient.resolveGoodId(p);
+      if (goodId) {
+        itemsToSet.push({
+          id: goodId,
+          quantity: Math.max(0, Number(p.stock_qty || 0)),
+        });
+      }
+    }
+
+    if (itemsToSet.length === 0) {
+      return {
+        success: false,
+        message: "Не найдено связанных со SmartShell товаров для обновления",
+      };
+    }
+
+    await smartshellClient.setGoodsQuantity(
+      itemsToSet,
+      "Выравнивание остатков из DashAdmin"
+    );
+
+    revalidatePath(`/clubs/${clubId}/inventory`);
+
+    return {
+      success: true,
+      syncedCount: itemsToSet.length,
+      message: `Успешно выровнены остатки по ${itemsToSet.length} позициям в SmartShell!`,
+    };
   } finally {
     client.release();
   }

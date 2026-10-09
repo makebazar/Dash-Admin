@@ -3,8 +3,9 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CategoriesTab } from "./CategoriesTab"
 import { WarehousesTab } from "./WarehousesTab"
-import { Category, Warehouse, updateInventorySettings, PriceTagSettings, Product, getEmployees, getMetrics, createSupplier, deleteSupplier, getSuppliers } from "../actions"
 import { useRouter, useSearchParams, useParams } from "next/navigation"
+import { updateInventorySettings, getEmployees, getMetrics, createSupplier, deleteSupplier, getSuppliers } from "../actions"
+import type { Category, Warehouse, PriceTagSettings, Product } from "../types"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -15,6 +16,7 @@ import { PriceTagTemplateTab } from "./PriceTagTemplateTab"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { normalizeInventorySettings } from "@/lib/inventory-settings"
+import { Badge } from "@/components/ui/badge"
 
 interface SettingsTabProps {
     products: Product[]
@@ -528,9 +530,16 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
                                 </div>
 
                                 {/* Склады кассы */}
-                                {isCashboxEnabled && (
+                                {(isCashboxEnabled || Boolean(normalizedSettings?.smartshell_integration_enabled)) && (
                                     <div className="py-4 space-y-2">
-                                        <div className="font-semibold text-slate-900 text-sm">Склады кассы</div>
+                                        <div className="flex items-center justify-between">
+                                            <div className="font-semibold text-slate-900 text-sm">Склады кассы</div>
+                                            {Boolean(normalizedSettings?.smartshell_integration_enabled) && (
+                                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px]">
+                                                    Интеграция SmartShell активна
+                                                </Badge>
+                                            )}
+                                        </div>
                                         <div className="divide-y divide-slate-100">
                                             {warehouses.filter((w) => w.is_active).map((warehouse) => {
                                                 const selected = (normalizedSettings.cashbox_warehouse_ids || []).includes(Number(warehouse.id))
@@ -546,7 +555,7 @@ export function SettingsTab({ products, categories, warehouses, currentUserId, i
                                                 )
                                             })}
                                         </div>
-                                        <p className="text-xs text-slate-400">Касса спишет чек со склада из этого списка, на котором достаточно остатков.</p>
+                                        <p className="text-xs text-slate-400">Склад, с которого автоматически списываются чеки и остатки товаров при продажах через SmartShell или кассу DashAdmin.</p>
                                     </div>
                                 )}
 

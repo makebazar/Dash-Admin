@@ -35,9 +35,8 @@ import {
   massAssignShiftToMovements,
   correctStockMovement,
   createManualSale,
-  Warehouse,
-  Product,
 } from "../actions";
+import type { Warehouse, Product } from "../types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,8 +75,8 @@ interface SalesTabProps {
 }
 
 export function SalesTab({
-  sales,
-  shifts,
+  sales: rawSales,
+  shifts: rawShifts,
   clubId,
   warehouses,
   products,
@@ -85,6 +84,9 @@ export function SalesTab({
   inventorySettings,
   currentMonth,
 }: SalesTabProps) {
+  const sales = useMemo(() => (Array.isArray(rawSales) ? rawSales : []), [rawSales]);
+  const shifts = useMemo(() => (Array.isArray(rawShifts) ? rawShifts : []), [rawShifts]);
+
   const [expandedShifts, setExpandedShifts] = useState<Record<string, boolean>>(
     {},
   );

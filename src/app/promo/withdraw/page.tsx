@@ -141,6 +141,7 @@ export default function PromoWithdraw() {
   const [withdrawAmount, setWithdrawAmount] = useState<string>("");
   const [isClaiming, setIsClaiming] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
   const router = useRouter();
 
   const fetchData = async () => {
@@ -226,6 +227,7 @@ export default function PromoWithdraw() {
 
     setIsClaiming(true);
     setError("");
+    setSuccessMsg("");
 
     try {
       const res = await fetch("/api/promo/player/bonus/claim", {
@@ -236,6 +238,7 @@ export default function PromoWithdraw() {
 
       if (data.success) {
         setWithdrawAmount("");
+        setSuccessMsg(data.message || "Бонусы успешно зачислены!");
         await fetchData(); // Refresh balance and history
       } else {
         setError(data.error || "Ошибка при отправке запроса");
@@ -617,6 +620,12 @@ export default function PromoWithdraw() {
           {error && (
             <p className="text-red-500 text-[10px] font-black uppercase tracking-widest text-center mb-6">
               {error}
+            </p>
+          )}
+
+          {successMsg && (
+            <p className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 py-2.5 px-4 rounded-xl text-xs font-bold text-center mb-6">
+              {successMsg}
             </p>
           )}
 

@@ -422,14 +422,20 @@ export function mapKpiToUnifiedProps(
         mainValue: formatCurrency(data.bonus_amount || 0),
         mainLabel: "Ваша премия",
         stats: [
-          ...(data.metric_breakdown || []).map((b: any) => ({
-            label: getPromoLabel(b.source),
-            value:
-              b.source === "promo_topup_total_sum" || b.source?.includes("(sum)")
-                ? formatCurrency(b.count || b.value)
-                : Math.round(b.count || b.value),
-            subValue: "+" + formatCurrency(b.earned || b.bonus),
-          })),
+          ...(data.metric_breakdown || []).map((b: any) => {
+            const rawVal = Number(b.count ?? b.value ?? 0);
+            const numVal = Number.isFinite(rawVal) ? rawVal : 0;
+            const earnedVal = Number(b.earned ?? b.bonus ?? 0);
+            const numEarned = Number.isFinite(earnedVal) ? earnedVal : 0;
+            return {
+              label: getPromoLabel(b.source),
+              value:
+                b.source === "promo_topup_total_sum" || b.source?.includes("(sum)")
+                  ? formatCurrency(numVal)
+                  : String(Math.round(numVal)),
+              subValue: "+" + formatCurrency(numEarned),
+            };
+          }),
           {
             label: "Итого премия",
             value: "+" + formatCurrency(data.bonus_amount),

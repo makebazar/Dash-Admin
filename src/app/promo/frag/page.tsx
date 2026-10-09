@@ -326,59 +326,70 @@ export default function FragPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white pb-28 font-sans">
-      <PromoHeader initialPlayer={player} title="frag зона" />
-      <div className="max-w-xl lg:max-w-6xl mx-auto px-4 pt-6 space-y-6">
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-4 sm:p-6 pb-48 sm:pb-36 font-sans">
+      <PromoHeader initialPlayer={player} title="FRAG зона" />
+      <div className="max-w-xl lg:max-w-6xl mx-auto pt-4 space-y-6">
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column */}
-          <div className="lg:col-span-7 space-y-6">
-            {/* TYPOGRAPHY HEADER */}
-        <div className="text-center py-2">
-          <h1 className="text-2xl font-black uppercase tracking-tight mb-2">
-            Играй и получай <span className="text-orange-500">бонусы</span>
-          </h1>
-          <p className="text-gray-500 text-xs max-w-sm mx-auto leading-relaxed">
-            Полноценный трекинг игровых матчей в клубе. Ваши достижения автоматически конвертируются в реальный баланс.
-          </p>
+        {/* Banner header */}
+        <div className="relative rounded-3xl sm:rounded-[2rem] bg-gradient-to-br from-amber-500/15 via-orange-500/5 to-transparent border border-amber-500/25 p-5 sm:p-6 overflow-hidden">
+          <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/15 rounded-full blur-3xl opacity-40 pointer-events-none" />
+          <div className="max-w-2xl space-y-2 relative z-10">
+            <h2 className="text-xl sm:text-2xl font-black uppercase italic tracking-tight text-white leading-snug">
+              Киберспортивная зона FRAG
+            </h2>
+            <p className="text-gray-300 text-xs sm:text-sm font-medium leading-relaxed">
+              Играй в соревновательных матчах на клубных ПК. Твои фраги, победы и ассисты автоматически конвертируются в реальный баланс на аккаунте.
+            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">CS2 • Dota 2 • PUBG</span>
+              <span className="text-gray-600 font-normal">•</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">Авто-выплаты на баланс</span>
+              <span className="text-gray-600 font-normal">•</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">Клубные турниры</span>
+            </div>
+          </div>
         </div>
 
         {/* COMPACT ONLINE STATUS & ACTION */}
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between px-4 py-2 bg-white/[0.02] border border-white/5 rounded-full text-xs font-bold">
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between px-4 py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold">
+            <div className="flex items-center gap-2.5">
               <span className={cn(
-                "w-2 h-2 rounded-full",
-                agentOnline ? "bg-green-500" : "bg-orange-500 animate-pulse"
+                "w-2.5 h-2.5 rounded-full",
+                agentOnline ? "bg-emerald-400 shadow-sm shadow-emerald-400/50 animate-pulse" : "bg-amber-400 animate-pulse"
               )} />
-              <span className="text-gray-400">
+              <span className="text-gray-300 font-medium">
                 {agentOnline
                   ? isPlaying
                     ? `В игре: ${agentState?.ActiveGame}`
                     : "Агент активен, ожидание игры"
-                  : "Агент отключен"
+                  : "Агент на ПК отключен"
                 }
               </span>
             </div>
             {!agentOnline && (
-              <a href="dashfrag://launch" className="text-orange-500 hover:text-orange-400 flex items-center gap-1">
+              <a href="dashfrag://launch" className="text-amber-400 hover:text-amber-300 flex items-center gap-1 font-bold text-xs uppercase tracking-wider">
                 <Play className="w-3 h-3 fill-current" /> Запустить
               </a>
             )}
           </div>
           {!fragEnabled && (
-            <div className="text-center text-[10px] font-black uppercase text-red-400 tracking-wider">
-              ⚠️ Модуль Frag отключен администратором клуба
+            <div className="text-center text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 py-2 rounded-xl">
+              ⚠️ Модуль FRAG временно отключен в клубе
             </div>
           )}
         </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
+          {/* Left Column */}
+          <div className="lg:col-span-7 space-y-6">
+
         {/* TOURNAMENTS SECTION - PREMIUM BANNER */}
         {tournaments.length > 0 && (
-          <div className="space-y-3 pt-2">
+          <div className="space-y-3">
             <div className="flex items-center gap-2 px-1">
-              <Trophy className="w-4 h-4 text-orange-500 animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600">
+              <Trophy className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-black uppercase tracking-[0.2em] text-white/40">
                 Рейтинговые Турниры
               </span>
             </div>
@@ -395,7 +406,7 @@ export default function FragPage() {
               return (
                 <div
                   onClick={() => router.push(`/promo/frag/tournaments`)}
-                  className="relative overflow-hidden group cursor-pointer bg-gradient-to-br from-indigo-950/20 via-slate-900/60 to-purple-950/20 border border-indigo-500/20 hover:border-indigo-500/40 rounded-[2rem] p-6 shadow-[0_0_30px_rgba(99,102,241,0.03)] transition-all hover:scale-[1.01] hover:shadow-[0_0_30px_rgba(99,102,241,0.1)] flex flex-col justify-between gap-5 min-h-[140px]"
+                  className="relative overflow-hidden group cursor-pointer bg-gradient-to-br from-indigo-950/30 via-slate-900/60 to-purple-950/25 border border-indigo-500/20 hover:border-indigo-500/40 rounded-3xl p-5 sm:p-6 shadow-xl transition-all flex flex-col justify-between gap-5"
                 >
                   {/* Decorative neon spots */}
                   <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-indigo-500/20 transition-colors" />
@@ -403,8 +414,8 @@ export default function FragPage() {
 
                   <div className="flex justify-between items-start gap-4 relative z-10">
                     <div className="space-y-1">
-                      <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         <span className="text-emerald-400">Активен</span>
                         <span className="text-gray-600 select-none">•</span>
                         <span>{daysLeft > 0 ? `Осталось: ${daysLeft} дн.` : "Сезон завершен"}</span>
@@ -413,35 +424,35 @@ export default function FragPage() {
                         {activeT.title}
                       </h4>
                       {activeT.description && (
-                        <p className="text-[11px] text-gray-400 mt-1 leading-relaxed line-clamp-2 max-w-[260px] font-medium">
+                        <p className="text-xs text-gray-400 mt-1 leading-relaxed line-clamp-2 max-w-[280px] font-medium">
                           {activeT.description}
                         </p>
                       )}
                     </div>
 
                     <div className="text-right shrink-0">
-                      <div className="text-gray-500 uppercase tracking-wider text-[8px] font-bold">Ваше место</div>
+                      <div className="text-gray-400 uppercase tracking-wider text-[9px] font-bold">Ваше место</div>
                       <div className="text-xl font-black text-indigo-400 mt-0.5">
                         {activeT.myStats?.rank ? `#${activeT.myStats.rank}` : "—"}
                       </div>
-                      <div className="text-[10px] font-bold text-gray-400">
+                      <div className="text-xs font-bold text-gray-300">
                         {activeT.myStats?.points ?? 0} PTS
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-white/5 relative z-10 text-[11px]">
+                  <div className="flex items-center justify-between pt-3 border-t border-white/5 relative z-10 text-xs">
                     <div className="text-gray-400 font-medium flex items-center gap-1">
                       {activeT.myStats?.qualified ? (
                         <span className="text-emerald-400 flex items-center gap-1">✓ Квалификация пройдена</span>
                       ) : (
-                        <span className="text-orange-400">
+                        <span className="text-amber-400">
                           Игры: {activeT.myStats?.matches_count ?? 0} из {activeT.min_matches} для зачета
                         </span>
                       )}
                     </div>
-                    <span className="font-black uppercase italic text-[10px] tracking-wider text-indigo-400 group-hover:text-indigo-300 flex items-center gap-1 transition-colors">
-                      Лидерборд и Правила <span className="translate-x-0 group-hover:translate-x-1 transition-transform">→</span>
+                    <span className="font-bold uppercase text-xs tracking-wider text-indigo-400 group-hover:text-indigo-300 flex items-center gap-1 transition-colors">
+                      Таблица <span className="translate-x-0 group-hover:translate-x-1 transition-transform">→</span>
                     </span>
                   </div>
                 </div>
@@ -635,24 +646,38 @@ export default function FragPage() {
         </AnimatePresence>
 
         
-            {/* DYNAMIC HOW IT WORKS WITHOUT HEAVY BOXES */}
+        {/* HOW IT WORKS / QUICK START */}
         <div className="space-y-3 pt-2">
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600 px-1">
-            Быстрый старт
+          <div className="text-xs font-black uppercase tracking-[0.2em] text-white/40 px-1">
+            Как это работает
           </div>
-          <div className="space-y-2">
-            {[
-              { label: "Шаг 1", text: "Агент автоматически запускается на игровом компьютере" },
-              { label: "Шаг 2", text: "Играйте в соревновательных режимах (MM, Премьер, Faceit) в CS2 или в Dota 2" },
-              { label: "Шаг 3", text: "Бонусы начисляются на баланс профиля в реальном времени" }
-            ].map((step, i) => (
-              <div key={i} className="flex items-center gap-3 text-xs text-gray-400 px-1">
-                <span className="text-[9px] font-black uppercase tracking-wider bg-white/5 px-2 py-0.5 rounded text-orange-500">
-                  {step.label}
-                </span>
-                <span>{step.text}</span>
+          <div className="space-y-3.5">
+            <div>
+              <div className="text-sm font-black uppercase italic tracking-tight text-amber-400">
+                1. Запусти агент FRAG на ПК
               </div>
-            ))}
+              <p className="text-xs text-gray-300 font-medium mt-0.5 leading-relaxed">
+                Открой приложение Dash FRAG на игровом компьютере и убедись, что индикатор выше показывает «Агент активен».
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-white/5">
+              <div className="text-sm font-black uppercase italic tracking-tight text-amber-400">
+                2. Запусти игру и начни матч
+              </div>
+              <p className="text-xs text-gray-300 font-medium mt-0.5 leading-relaxed">
+                Играй в соревновательных режимах CS2 (MM, Премьер, Faceit), рейтинге Dota 2 или в PUBG.
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-white/5">
+              <div className="text-sm font-black uppercase italic tracking-tight text-amber-400">
+                3. Получай рубли за каждое действие
+              </div>
+              <p className="text-xs text-gray-300 font-medium mt-0.5 leading-relaxed">
+                Фраги, хедшоты, серии убийств и победы моментально начисляют бонусы на твой клубный баланс в реальном времени.
+              </p>
+            </div>
           </div>
         </div>
           </div>
@@ -660,179 +685,179 @@ export default function FragPage() {
           {/* Right Column */}
           <div className="lg:col-span-5 space-y-6">
             {/* GAME TAB SELECTOR */}
-            <div className="bg-white/5 p-1 rounded-2xl flex items-center border border-white/5">
-              <button
-                onClick={() => setActiveTab("CS2")}
-                className={cn(
-                  "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
-                  activeTab === "CS2" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
-                )}
-              >
-                CS2
-              </button>
-              <button
-                onClick={() => setActiveTab("Dota2")}
-                className={cn(
-                  "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
-                  activeTab === "Dota2" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
-                )}
-              >
-                Dota 2
-              </button>
-              <button
-                onClick={() => setActiveTab("PUBG")}
-                className={cn(
-                  "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
-                  activeTab === "PUBG" ? "bg-[#1c1c1e] text-white shadow-lg" : "text-gray-500 hover:text-gray-300"
-                )}
-              >
-                PUBG
-              </button>
-            </div>
-
-            {/* ULTRA-COMPACT TARIFFS LIST */}
-        <div className="space-y-3">
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600 px-1">
-            Тарифы начисления ({activeTab})
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {(activeTab === "CS2" ? cs2Tariffs : activeTab === "Dota2" ? dotaTariffs : pubgTariffs).map((t, i) => (
-              <div key={i} className="flex items-center justify-between px-3 py-2 bg-white/[0.015] border border-white/5 rounded-xl">
-                <span className="text-xs text-gray-400">{t.label}</span>
-                <span className="text-xs font-black text-green-400">+{t.value.toFixed(1)} ₽</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* RECENT MATCHES HISTORY */}
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600">
-              Последние матчи
-            </span>
-          </div>
-
-          {historyLoading ? (
-            <div className="text-center py-6 text-gray-600 text-xs">Загрузка...</div>
-          ) : filteredHistory.length === 0 ? (
-            <div className="text-center py-6 text-gray-700 text-xs">Матчи ещё не сыграны</div>
-          ) : (
-            <div className="divide-y divide-white/5">
-              {filteredHistory.slice(0, 10).map((match) => {
-                const date = new Date(match.played_at);
-                const timeStr = date.toLocaleString("ru-RU", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
-                const earned = parseFloat(match.earned);
-                const isExpanded = expandedMatchId === match.id;
-
-                let parsedEvents: string[] = [];
-                if (match.events) {
-                  try {
-                    parsedEvents = typeof match.events === "string" ? JSON.parse(match.events) : match.events;
-                  } catch (e) {
-                    // ignore
-                  }
-                }
-
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              {(["CS2", "Dota2", "PUBG"] as const).map((game) => {
+                const label = game === "Dota2" ? "Dota 2" : game;
+                const isSelected = activeTab === game;
                 return (
-                  <div key={match.id} className="py-3">
-                    <div
-                      className="flex items-center justify-between cursor-pointer hover:bg-white/[0.01] px-1 py-1 rounded-lg transition-colors"
-                      onClick={() => toggleMatchExpand(match.id)}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black uppercase text-white">{match.game}</span>
-                          <span className="text-[10px] text-gray-500 truncate max-w-[120px]">{match.map}</span>
-                          {match.score && (
-                            <span className="text-[9px] bg-white/5 border border-white/10 text-gray-400 px-1.5 py-0.5 rounded font-black">
-                              {match.score}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-gray-500 mt-0.5">
-                          K/D/A: <strong className="text-gray-300">{match.kills} / {match.deaths} / {match.assists}</strong>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 text-right shrink-0">
-                        <div>
-                          <div className="text-xs font-black text-green-400">+{earned.toFixed(1)} ₽</div>
-                          <div className="text-[9px] text-gray-600 mt-0.5">{timeStr}</div>
-                        </div>
-                        <span className="text-gray-600 text-xs transition-transform duration-200" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>
-                          ▶
-                        </span>
-                      </div>
-                    </div>
-
-                    <AnimatePresence>
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden mt-3 px-2 pb-1 space-y-3"
-                        >
-                          {/* Detailed metrics grid */}
-                          <div className="grid grid-cols-4 gap-2 text-center bg-white/[0.01] border border-white/5 p-2.5 rounded-xl text-[11px]">
-                            <div>
-                              <div className="text-gray-500 uppercase tracking-wider text-[8px]">Киллы</div>
-                              <div className="font-bold text-white mt-0.5">{match.kills}</div>
-                            </div>
-                            <div>
-                              <div className="text-gray-500 uppercase tracking-wider text-[8px]">Смерти</div>
-                              <div className="font-bold text-white mt-0.5">{match.deaths}</div>
-                            </div>
-                            <div>
-                              <div className="text-gray-500 uppercase tracking-wider text-[8px]">Ассисты</div>
-                              <div className="font-bold text-white mt-0.5">{match.assists}</div>
-                            </div>
-                            <div>
-                              {match.game === "CS2" ? (
-                                <>
-                                  <div className="text-gray-500 uppercase tracking-wider text-[8px]">Хедшоты</div>
-                                  <div className="font-bold text-white mt-0.5">{match.headshots ?? 0}</div>
-                                </>
-                              ) : match.game === "PUBG" ? (
-                                <>
-                                  <div className="text-gray-500 uppercase tracking-wider text-[8px]">Результат</div>
-                                  <div className="font-bold text-white mt-0.5">{match.score ?? "-"}</div>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="text-gray-500 uppercase tracking-wider text-[8px]">Крипы</div>
-                                  <div className="font-bold text-white mt-0.5">{match.last_hits ?? 0}</div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Events logs */}
-                          {parsedEvents && parsedEvents.length > 0 && (
-                            <div className="space-y-1 bg-white/[0.005] border border-white/5 p-2.5 rounded-xl">
-                              <div className="text-[8px] font-black uppercase tracking-widest text-gray-500">Хронология матча</div>
-                              <div className="space-y-1 max-h-32 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10 mt-1.5">
-                                {parsedEvents.map((evt, idx) => (
-                                  <div key={idx} className="text-[10px] text-gray-400 py-1 border-b border-white/[0.02] last:border-0">
-                                    {evt}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                  <button
+                    key={game}
+                    onClick={() => setActiveTab(game)}
+                    className={cn(
+                      "flex-1 py-2 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer border text-center",
+                      isSelected
+                        ? "bg-white/10 text-white border-white/20 shadow-sm"
+                        : "bg-transparent text-gray-500 border-transparent hover:text-gray-300 hover:bg-white/5"
+                    )}
+                  >
+                    {label}
+                  </button>
                 );
               })}
             </div>
-          )}
+
+            {/* TARIFFS LIST */}
+            <div className="space-y-3">
+              <div className="text-xs font-black uppercase tracking-[0.2em] text-white/40 px-1">
+                Тарифы за действия ({activeTab === "Dota2" ? "Dota 2" : activeTab})
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(activeTab === "CS2" ? cs2Tariffs : activeTab === "Dota2" ? dotaTariffs : pubgTariffs).map((t, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2 px-3.5 py-2.5 bg-white/5 border border-white/10 rounded-2xl">
+                    <span className="text-xs text-gray-300 font-medium truncate">{t.label}</span>
+                    <span className="text-xs font-black text-amber-400 whitespace-nowrap shrink-0">
+                      +{t.value % 1 === 0 ? t.value : t.value.toFixed(1)} ₽
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* RECENT MATCHES HISTORY */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-black uppercase tracking-[0.2em] text-white/40">
+                  Последние матчи
+                </span>
+              </div>
+
+              {historyLoading ? (
+                <div className="text-center py-6 text-gray-500 text-xs font-medium">Загрузка матчей...</div>
+              ) : filteredHistory.length === 0 ? (
+                <div className="bg-white/2 border border-white/5 rounded-2xl p-6 text-center text-gray-500 text-xs font-medium">
+                  Матчи в {activeTab === "Dota2" ? "Dota 2" : activeTab} ещё не сыграны
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {filteredHistory.slice(0, 10).map((match) => {
+                    const date = new Date(match.played_at);
+                    const timeStr = date.toLocaleString("ru-RU", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    });
+                    const earned = parseFloat(match.earned);
+                    const isExpanded = expandedMatchId === match.id;
+
+                    let parsedEvents: string[] = [];
+                    if (match.events) {
+                      try {
+                        parsedEvents = typeof match.events === "string" ? JSON.parse(match.events) : match.events;
+                      } catch (e) {
+                        // ignore
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={match.id}
+                        className="bg-white/5 border border-white/10 hover:border-white/20 rounded-2xl p-3.5 transition-all"
+                      >
+                        <div
+                          className="flex items-center justify-between cursor-pointer"
+                          onClick={() => toggleMatchExpand(match.id)}
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black uppercase text-white">{match.game}</span>
+                              <span className="text-xs text-gray-400 truncate max-w-[120px]">{match.map}</span>
+                              {match.score && (
+                                <span className="text-[10px] bg-white/10 border border-white/15 text-white px-2 py-0.5 rounded-lg font-bold">
+                                  {match.score}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              K/D/A: <strong className="text-white font-bold">{match.kills} / {match.deaths} / {match.assists}</strong>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 text-right shrink-0">
+                            <div>
+                              <div className="text-xs font-black text-amber-400">+{earned.toFixed(1)} ₽</div>
+                              <div className="text-[10px] text-gray-500 mt-0.5">{timeStr}</div>
+                            </div>
+                            <span className="text-gray-500 text-xs transition-transform duration-200" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>
+                              ▶
+                            </span>
+                          </div>
+                        </div>
+
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden mt-3 pt-3 border-t border-white/5 space-y-3"
+                            >
+                              {/* Detailed metrics grid */}
+                              <div className="grid grid-cols-4 gap-2 text-center bg-white/5 border border-white/10 p-2.5 rounded-xl text-xs">
+                                <div>
+                                  <div className="text-gray-400 uppercase tracking-wider text-[9px] font-bold">Киллы</div>
+                                  <div className="font-bold text-white mt-0.5">{match.kills}</div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-400 uppercase tracking-wider text-[9px] font-bold">Смерти</div>
+                                  <div className="font-bold text-white mt-0.5">{match.deaths}</div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-400 uppercase tracking-wider text-[9px] font-bold">Ассисты</div>
+                                  <div className="font-bold text-white mt-0.5">{match.assists}</div>
+                                </div>
+                                <div>
+                                  {match.game === "CS2" ? (
+                                    <>
+                                      <div className="text-gray-400 uppercase tracking-wider text-[9px] font-bold">Хедшоты</div>
+                                      <div className="font-bold text-white mt-0.5">{match.headshots ?? 0}</div>
+                                    </>
+                                  ) : match.game === "PUBG" ? (
+                                    <>
+                                      <div className="text-gray-400 uppercase tracking-wider text-[9px] font-bold">Результат</div>
+                                      <div className="font-bold text-white mt-0.5">{match.score ?? "-"}</div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="text-gray-400 uppercase tracking-wider text-[9px] font-bold">Крипы</div>
+                                      <div className="font-bold text-white mt-0.5">{match.last_hits ?? 0}</div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Events logs */}
+                              {parsedEvents && parsedEvents.length > 0 && (
+                                <div className="space-y-1 bg-white/5 border border-white/10 p-2.5 rounded-xl">
+                                  <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">Хронология матча</div>
+                                  <div className="space-y-1 max-h-32 overflow-y-auto pr-1 no-scrollbar mt-1.5">
+                                    {parsedEvents.map((evt, idx) => (
+                                      <div key={idx} className="text-xs text-gray-300 py-1 border-b border-white/5 last:border-0">
+                                        {evt}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
       </div>
@@ -935,8 +960,6 @@ export default function FragPage() {
         )}
       </AnimatePresence>
 
-      </div>
-        </div>
       <BottomNav />
     </div>
   );

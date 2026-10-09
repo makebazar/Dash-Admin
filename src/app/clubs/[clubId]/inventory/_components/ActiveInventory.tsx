@@ -57,17 +57,19 @@ import {
   getInventoryItems,
   updateInventoryItem,
   closeInventory,
-  Inventory,
-  InventoryItem,
   addProductToInventory,
   getProducts,
   getProductByBarcode,
   correctInventoryItem,
   getInventoryShiftReceipts,
   getInventoryPostCloseCorrections,
+} from "../actions";
+import type {
+  Inventory,
+  InventoryItem,
   InventoryPostCloseCorrection,
   ShiftReceipt,
-} from "../actions";
+} from "../types";
 import { useParams } from "next/navigation";
 import { Plus, Pencil } from "lucide-react";
 import {

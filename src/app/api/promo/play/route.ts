@@ -51,22 +51,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check level requirements
-    const { getPlayerLevelInfo } = await import("@/lib/promo-quests");
-    const totalXp = parseFloat(playerResult.rows[0]?.total_xp || 0);
-    const levelInfo = await getPlayerLevelInfo(client, activeClubId, totalXp);
-    const playerLevel = levelInfo.currentLevel;
-    const minLevel = gameConfig.min_level || 0;
-
-    if (playerLevel < minLevel) {
-      await client.query("ROLLBACK");
-      return NextResponse.json(
-        {
-          error: `This game requires level ${minLevel}. Your level is ${playerLevel}.`,
-        },
-        { status: 403 },
-      );
-    }
+    // Level requirements check removed
 
     const ticketsNeeded = gameConfig.tickets_per_play || 1;
 
@@ -87,7 +72,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const ticketIds = ticketsResult.rows.map((r) => r.id);
+    const ticketIds = ticketsResult.rows.map((r: any) => r.id);
 
     // 3. Mark tickets as used
     await client.query(
@@ -125,10 +110,7 @@ export async function POST(request: Request) {
         [activeClubId, gameType],
       );
 
-      // Filter prizes specifically for this level tier
-      let prizes = prizesResult.rows.filter(
-        (p) => (p.target_level || 1) === playerLevel,
-      );
+      let prizes = prizesResult.rows;
 
       if (gameType === "dice") {
         const d1 = Math.floor(Math.random() * 6) + 1;

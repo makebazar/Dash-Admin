@@ -56,7 +56,7 @@ import {
   type HandoverSourceCandidate,
   type ShiftZoneSnapshotDraftItem,
   type ShiftZoneSnapshotType,
-} from "@/app/clubs/[clubId]/inventory/actions";
+} from "@/app/clubs/[clubId]/inventory/types";
 
 import { cn } from "@/lib/utils";
 

@@ -349,8 +349,8 @@ export async function GET(request: Request) {
 
         (SELECT COALESCE(SUM(bonus_balance), 0) FROM promo_player_balances WHERE club_id = $1) as total_bonus_debt,
 
-        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'TOPUP' AND created_at >= CURRENT_DATE) as real_topup_today,
-        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)) as real_topup_month,
+        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND (game_type ILIKE '%topup%' OR game_type = 'pos_sale') AND created_at >= CURRENT_DATE) as real_topup_today,
+        (SELECT COALESCE(SUM((result_data->>'amount')::float), 0) FROM promo_history WHERE club_id = $1 AND (game_type ILIKE '%topup%' OR game_type = 'pos_sale') AND created_at >= date_trunc('month', CURRENT_DATE)) as real_topup_month,
         (SELECT COUNT(DISTINCT player_id) FROM promo_history WHERE club_id = $1 AND created_at >= CURRENT_DATE) as active_players_today
       `,
       [clubId],

@@ -331,6 +331,8 @@ export async function saveShiftZoneSnapshot(
           };
 
     const shouldSyncStock = snapshotType === "OPEN" || snapshotType === "CLOSE";
+    // Собираем дельты для SmartShell-синхронизации (за пределами транзакции)
+    const ssDeltas = new Map<number, { productId: number; delta: number; warehouseId: number }>();
 
     for (const warehousePayload of normalizedPayload) {
       const snapshotRes = await client.query(
@@ -474,6 +476,15 @@ export async function saveShiftZoneSnapshot(
               warehousePayload.warehouse_id,
               null,
             );
+
+            // Накапливаем дельту для SmartShell
+            const key = item.product_id;
+            const existing = ssDeltas.get(key);
+            if (existing) {
+              existing.delta += stockDelta;
+            } else {
+              ssDeltas.set(key, { productId: item.product_id, delta: stockDelta, warehouseId: warehousePayload.warehouse_id });
+            }
           }
         }
       }
@@ -482,6 +493,68 @@ export async function saveShiftZoneSnapshot(
     await syncProductsCurrentStock(client, clubId, touchedProductIds);
 
     await client.query("COMMIT");
+
+    // Авто-синхронизация дельт передачи зон со SmartShell (после коммита, fire-and-forget)
+    if (ssDeltas.size > 0) {
+      try {
+        const { getClubInventorySettingsInternal } = await import("./inventories");
+        const invSettingsClient = await import("@/db").then((m) => m.getClient());
+        try {
+          const invSettings = await getClubInventorySettingsInternal(invSettingsClient, clubId);
+          if (invSettings.smartshell_integration_enabled) {
+            const cashboxWarehouseIds: number[] = Array.isArray(invSettings.cashbox_warehouse_ids)
+              ? invSettings.cashbox_warehouse_ids
+              : [];
+            const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+            const smartshellClient = await getSmartShellClientForClub(clubId);
+            if (smartshellClient) {
+              const itemsToAdd: { id: number; quantity: number }[] = [];
+              const itemsToDispose: { id: number; quantity: number }[] = [];
+
+              for (const entry of ssDeltas.values()) {
+                // Только если склад входит в кассовые
+                if (cashboxWarehouseIds.length > 0 && !cashboxWarehouseIds.includes(entry.warehouseId)) continue;
+
+                const pRes = await invSettingsClient.query(
+                  `SELECT name, barcode FROM warehouse_products WHERE id = $1`,
+                  [entry.productId]
+                );
+                const prod = pRes.rows[0];
+                if (!prod) continue;
+                const goodId = await smartshellClient.resolveGoodId(prod);
+                if (!goodId) continue;
+
+                if (entry.delta > 0) {
+                  itemsToAdd.push({ id: goodId, quantity: entry.delta });
+                } else if (entry.delta < 0) {
+                  itemsToDispose.push({ id: goodId, quantity: Math.abs(entry.delta) });
+                }
+              }
+
+              if (itemsToDispose.length > 0) {
+                await smartshellClient.changeGoodsQuantity({
+                  items: itemsToDispose,
+                  operation: "DISPOSAL",
+                  comment: `Передача зоны (${snapshotType === "OPEN" ? "приёмка" : "сдача"}) смена #${shiftId}: списание недостачи`,
+                });
+              }
+              if (itemsToAdd.length > 0) {
+                await smartshellClient.changeGoodsQuantity({
+                  items: itemsToAdd,
+                  operation: "ADD",
+                  comment: `Передача зоны (${snapshotType === "OPEN" ? "приёмка" : "сдача"}) смена #${shiftId}: оприходование излишков`,
+                });
+              }
+            }
+          }
+        } finally {
+          invSettingsClient.release();
+        }
+      } catch (ssErr) {
+        console.error("SmartShell saveShiftZoneSnapshot auto-sync error:", ssErr);
+      }
+    }
+
     revalidatePath(`/employee/clubs/${clubId}`);
     revalidatePath(`/clubs/${clubId}/shifts/${shiftId}`);
     revalidatePath(`/clubs/${clubId}/inventory`);

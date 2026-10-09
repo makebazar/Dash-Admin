@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getClient } from "@/db";
-import { cookies } from "next/headers";
+import { requireModuleAccess } from "@/lib/club-api-access";
 import { calculateTournamentPoints } from "@/lib/promo-frag-utils";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +15,12 @@ export async function POST(
     const { id: tournamentId } = await params;
     const body = await request.json();
     const { clubId } = body;
-    const userId = (await cookies()).get("session_user_id")?.value;
 
-    if (!userId || !clubId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!clubId) {
+      return NextResponse.json({ error: "Club ID is required" }, { status: 400 });
     }
+
+    await requireModuleAccess(clubId, "dashboard", "view");
 
     // 1. Fetch tournament details
     const tournamentRes = await client.query(

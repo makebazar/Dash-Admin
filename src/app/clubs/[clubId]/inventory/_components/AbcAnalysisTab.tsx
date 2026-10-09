@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Product } from "../actions"
+import type { Product } from "../types"
 
 interface AbcAnalysisTabProps {
     clubId: string

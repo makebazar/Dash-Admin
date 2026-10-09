@@ -119,7 +119,7 @@ export async function createSupply(
   data: {
     supplier_name: string;
     notes: string;
-    items: { product_id: number; quantity: number; cost_price: number }[];
+    items: { product_id: number; quantity: number; cost_price: number; expiration_date?: string | null }[];
     warehouse_id?: number;
     status?: "DRAFT" | "COMPLETED";
     shift_id?: string;
@@ -226,10 +226,12 @@ export async function createSupply(
 
     // 3. Add Items & Update Stock if COMPLETED
     for (const item of data.items) {
+      const expDate = item.expiration_date ? item.expiration_date.split("T")[0] : null;
+
       await client.query(
         `
-                INSERT INTO warehouse_supply_items (supply_id, product_id, quantity, cost_price, total_cost)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO warehouse_supply_items (supply_id, product_id, quantity, cost_price, total_cost, expiration_date)
+                VALUES ($1, $2, $3, $4, $5, $6)
             `,
         [
           supplyId,
@@ -237,6 +239,7 @@ export async function createSupply(
           item.quantity,
           item.cost_price,
           item.quantity * item.cost_price,
+          expDate,
         ],
       );
 
@@ -247,6 +250,15 @@ export async function createSupply(
           item.product_id,
           item.quantity,
         );
+
+        // Record in product batches if expiration date exists
+        if (expDate) {
+          await client.query(
+            `INSERT INTO warehouse_product_batches (club_id, product_id, warehouse_id, supply_id, quantity, expiration_date)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [clubId, item.product_id, warehouseId, supplyId, item.quantity, expDate]
+          );
+        }
 
         await client.query(
           `
@@ -282,6 +294,41 @@ export async function createSupply(
                 `,
           [item.product_id, item.cost_price, clubId],
         );
+      }
+    }
+
+    // Авто-синхронизация поступления на бар со SmartShell
+    if (status === "COMPLETED" && usesStock && warehouseId && inventorySettings.smartshell_integration_enabled) {
+      const cashboxWarehouseIds: number[] = Array.isArray(inventorySettings.cashbox_warehouse_ids)
+        ? inventorySettings.cashbox_warehouse_ids
+        : [];
+      if (cashboxWarehouseIds.length === 0 || cashboxWarehouseIds.includes(Number(warehouseId))) {
+        try {
+          const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+          const smartshellClient = await getSmartShellClientForClub(clubId);
+          if (smartshellClient) {
+            const ssItemsToAdd: { id: number; quantity: number }[] = [];
+            for (const item of data.items) {
+              const pRes = await client.query(`SELECT name, barcode FROM warehouse_products WHERE id = $1`, [item.product_id]);
+              const prod = pRes.rows[0];
+              if (prod) {
+                const goodId = await smartshellClient.resolveGoodId(prod);
+                if (goodId) {
+                  ssItemsToAdd.push({ id: goodId, quantity: item.quantity });
+                }
+              }
+            }
+            if (ssItemsToAdd.length > 0) {
+              await smartshellClient.changeGoodsQuantity({
+                items: ssItemsToAdd,
+                operation: "ADD",
+                comment: `Поставка #${supplyId} (${data.supplier_name || "Поставщик"}) в DashAdmin`,
+              });
+            }
+          }
+        } catch (ssErr) {
+          console.error("SmartShell createSupply auto-sync error:", ssErr);
+        }
       }
     }
 
@@ -391,6 +438,41 @@ export async function deleteSupply(
         }
 
         await syncProductsCurrentStock(client, clubId, touchedProductIds);
+      }
+
+      // Авто-синхронизация отмены поставки со SmartShell (DISPOSAL)
+      if (supply.status === "COMPLETED" && usesStock && supply.warehouse_id && inventorySettings.smartshell_integration_enabled) {
+        const cashboxWarehouseIds: number[] = Array.isArray(inventorySettings.cashbox_warehouse_ids)
+          ? inventorySettings.cashbox_warehouse_ids
+          : [];
+        if (cashboxWarehouseIds.length === 0 || cashboxWarehouseIds.includes(Number(supply.warehouse_id))) {
+          try {
+            const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+            const smartshellClient = await getSmartShellClientForClub(clubId);
+            if (smartshellClient) {
+              const ssItemsToDispose: { id: number; quantity: number }[] = [];
+              for (const item of itemsRes.rows) {
+                const pRes = await client.query(`SELECT name, barcode FROM warehouse_products WHERE id = $1`, [item.product_id]);
+                const prod = pRes.rows[0];
+                if (prod) {
+                  const goodId = await smartshellClient.resolveGoodId(prod);
+                  if (goodId) {
+                    ssItemsToDispose.push({ id: goodId, quantity: Number(item.quantity) });
+                  }
+                }
+              }
+              if (ssItemsToDispose.length > 0) {
+                await smartshellClient.changeGoodsQuantity({
+                  items: ssItemsToDispose,
+                  operation: "DISPOSAL",
+                  comment: `Отмена поставки #${supplyId} в DashAdmin`,
+                });
+              }
+            }
+          } catch (ssErr) {
+            console.error("SmartShell deleteSupply auto-sync error:", ssErr);
+          }
+        }
       }
 
       await client.query(

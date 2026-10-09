@@ -8,8 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Save, Trash2, Plus, Barcode, TrendingUp, ArrowUpDown, History, Package, Box, RefreshCw } from "lucide-react"
-import { Product, Category, Warehouse, ReplenishmentRule, createProduct, updateProduct, deleteProduct, adjustWarehouseStock, createReplenishmentRule, deleteReplenishmentRule, archiveProduct, restoreProduct } from "../../actions"
+import { ArrowLeft, Save, Trash2, Plus, Barcode, TrendingUp, ArrowUpDown, History, Package, Box, RefreshCw, Clock } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { createProduct, updateProduct, deleteProduct, adjustWarehouseStock, createReplenishmentRule, deleteReplenishmentRule, archiveProduct, restoreProduct } from "../../actions"
+import type { Product, Category, Warehouse, ReplenishmentRule } from "../../types"
 import { useUiDialogs } from "../../_components/useUiDialogs"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
@@ -101,7 +103,9 @@ export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, ca
                         selling_price: Number(editingProduct.selling_price) || 0,
                         current_stock: Number(editingProduct.current_stock) || 0,
                         min_stock_level: Number(editingProduct.min_stock_level) || 0,
-                        units_per_box: Number(editingProduct.units_per_box) || 1
+                        units_per_box: Number(editingProduct.units_per_box) || 1,
+                        track_expiration: Boolean(editingProduct.track_expiration),
+                        shelf_life_days: editingProduct.shelf_life_days ? Number(editingProduct.shelf_life_days) : null,
                     })
                     router.push(`/clubs/${clubId}/inventory`)
                 } else {
@@ -114,7 +118,9 @@ export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, ca
                         selling_price: Number(editingProduct.selling_price) || 0,
                         min_stock_level: Number(editingProduct.min_stock_level) || 0,
                         is_active: editingProduct.is_active ?? true,
-                        units_per_box: Number(editingProduct.units_per_box) || 1
+                        units_per_box: Number(editingProduct.units_per_box) || 1,
+                        track_expiration: Boolean(editingProduct.track_expiration),
+                        shelf_life_days: editingProduct.shelf_life_days ? Number(editingProduct.shelf_life_days) : null,
                     })
                     showMessage({ title: "Успешно", description: "Товар сохранен" })
                     router.refresh()
@@ -516,6 +522,43 @@ export function ProductDetailsClient({ clubId, userId, initialProduct, isNew, ca
                                 />
                             </div>
                         </div>
+                    </div>
+
+                    {/* Expiration Tracking */}
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <Clock className="h-5 w-5 text-amber-500" /> Срок годности
+                                </h2>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Контроль свежести и требование даты годности при приёмке поставок
+                                </p>
+                            </div>
+                            <Switch 
+                                checked={Boolean(editingProduct.track_expiration)}
+                                onCheckedChange={v => setEditingProduct(p => ({ ...p, track_expiration: v }))}
+                            />
+                        </div>
+
+                        {Boolean(editingProduct.track_expiration) && (
+                            <div className="pt-4 border-t border-slate-100 grid sm:grid-cols-2 gap-4">
+                                <div className="space-y-1.5 sm:col-span-2">
+                                    <Label className="text-slate-500 font-medium text-xs">Срок хранения (дней)</Label>
+                                    <Input 
+                                        type="number"
+                                        placeholder="Например: 5 для сэндвичей, 14 для десертов"
+                                        value={editingProduct.shelf_life_days ?? ''}
+                                        onChange={e => setEditingProduct(p => ({ ...p, shelf_life_days: e.target.value ? Number(e.target.value) : null }))}
+                                        min={1}
+                                        className="bg-slate-50 border-slate-200"
+                                    />
+                                    <p className="text-[11px] text-slate-500">
+                                        При оформлении поставки дата «Годен до» будет автоматически рассчитываться от текущего дня
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* History */}

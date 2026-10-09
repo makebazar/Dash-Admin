@@ -159,7 +159,7 @@ export function UnifiedKpiCard({
                   colorMap[stat.color || "default"],
                 )}
               >
-                {stat.value}
+                {typeof stat.value === "number" && isNaN(stat.value) ? "0" : (stat.value ?? "—")}
               </p>
               {stat.subValue && (
                 <p className="text-[10px] text-zinc-500 font-bold">
@@ -176,13 +176,13 @@ export function UnifiedKpiCard({
             <div className="flex items-center justify-between text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
               <span>{progress.label}</span>
               <span className="text-white">
-                {progress.displayValue || `${progress.percent}%`}
+                {progress.displayValue || (Number.isFinite(progress.percent) ? `${progress.percent}%` : "0%")}
               </span>
             </div>
             <div className="h-2.5 w-full bg-[#1a1a1d] rounded-full overflow-hidden">
               <div
                 className="h-full bg-orange-500 rounded-full transition-all duration-500 shadow-[0_0_15px_rgba(249,115,22,0.3)]"
-                style={{ width: `${progress.percent}%` }}
+                style={{ width: `${Number.isFinite(progress.percent) ? Math.min(100, Math.max(0, progress.percent)) : 0}%` }}
               />
             </div>
           </div>

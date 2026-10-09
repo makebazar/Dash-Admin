@@ -123,15 +123,15 @@ export function calculateTournamentPoints(matches: any[], maxBestMatches: number
       }
     }
 
-    return Math.max(0, matchPoints);
+    return { match: m, points: Math.max(0, matchPoints) };
   });
 
   // Sort matches by points descending
-  const sortedPoints = [...matchPointsList].sort((a, b) => b - a);
+  const sortedMatches = [...matchPointsList].sort((a, b) => b.points - a.points);
 
   // Take top N (15) matches
-  const bestPoints = sortedPoints.slice(0, maxBestMatches);
-  const totalPoints = bestPoints.reduce((sum, pts) => sum + pts, 0);
+  const bestMatchesData = sortedMatches.slice(0, maxBestMatches);
+  const totalPoints = bestMatchesData.reduce((sum, item) => sum + item.points, 0);
 
   // General totals from ALL valid matches
   let wins = 0;
@@ -164,6 +164,127 @@ export function calculateTournamentPoints(matches: any[], maxBestMatches: number
     matchesCount: validMatches.length,
     totalKills,
     totalDeaths,
-    totalAssists
+    totalAssists,
+    bestMatches: bestMatchesData
   };
+}
+
+export function parseEventItem(raw: string) {
+  if (!raw) return null;
+  let text = raw.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '');
+  text = text.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim();
+  text = text.replace(/\s*\([^)]*\)$/gi, '').trim();
+  text = text.replace(/руб\./gi, 'TP');
+
+  const pointsMatch = text.match(/\+([0-9.,]+)\s*TP/i);
+  let pointsVal = 0;
+  if (pointsMatch) {
+    let valStr = pointsMatch[1].replace(',', '.');
+    pointsVal = parseFloat(valStr) || 0;
+  }
+
+  let titleStr = text.replace(/\s*\+[0-9.,]+\s*TP/gi, '').trim();
+
+  return {
+    title: titleStr || text,
+    unitPoints: pointsVal
+  };
+}
+
+export function getMatchPointBreakdown(m: any) {
+  if (!m) return [];
+  const isCs2 = m.game === "CS2";
+  const isPubg = m.game === "PUBG";
+  const events: string[] = typeof m.events === "string" ? JSON.parse(m.events) : (m.events || []);
+
+  const items: { title: string; points: number }[] = [];
+
+  let isWin = false;
+  let isTop10 = false;
+
+  events.forEach(evt => {
+    if (!evt) return;
+    const lower = evt.toLowerCase();
+    if (lower.includes("победа") || lower.includes("🏆") || lower.includes("топ-1")) isWin = true;
+    if (lower.includes("топ-10") || lower.includes("🎖️")) isTop10 = true;
+  });
+
+  if (isCs2) {
+    if (isWin) {
+      items.push({ title: "Победа в матче", points: 15.0 });
+    } else {
+      items.push({ title: "Поражение в матче", points: -10.0 });
+    }
+    if ((m.kills || 0) > 0) {
+      items.push({ title: `Убийства (${m.kills})`, points: (m.kills || 0) * 1.0 });
+    }
+    if ((m.assists || 0) > 0) {
+      items.push({ title: `Помощь (${m.assists})`, points: (m.assists || 0) * 0.5 });
+    }
+    if ((m.headshots || 0) > 0) {
+      items.push({ title: `Попадания в голову (${m.headshots})`, points: (m.headshots || 0) * 0.5 });
+    }
+    if ((m.deaths || 0) > 0) {
+      items.push({ title: `Штраф за смерти (${m.deaths})`, points: -(m.deaths || 0) * 0.8 });
+    }
+  } else if (isPubg) {
+    if (isWin) {
+      items.push({ title: "Победа (Топ-1)", points: 20.0 });
+    } else if (isTop10) {
+      items.push({ title: "Попадание в Топ-10", points: 10.0 });
+    } else {
+      items.push({ title: "Штраф за поражение", points: -10.0 });
+    }
+    if ((m.kills || 0) > 0) {
+      items.push({ title: `Убийства (${m.kills})`, points: (m.kills || 0) * 2.0 });
+    }
+  } else {
+    if (isWin) {
+      items.push({ title: "Победа в матче", points: 15.0 });
+    } else {
+      items.push({ title: "Поражение в матче", points: -10.0 });
+    }
+    if ((m.kills || 0) > 0) {
+      items.push({ title: `Убийства (${m.kills})`, points: (m.kills || 0) * 1.5 });
+    }
+    if ((m.assists || 0) > 0) {
+      items.push({ title: `Помощь (${m.assists})`, points: (m.assists || 0) * 0.75 });
+    }
+    if ((m.last_hits || 0) > 0) {
+      items.push({ title: `Ластхиты (${m.last_hits})`, points: (m.last_hits || 0) * 0.05 });
+    }
+    if ((m.denies || 0) > 0) {
+      items.push({ title: `Денаи союзных крипов (${m.denies})`, points: (m.denies || 0) * 0.05 });
+    }
+    if ((m.deaths || 0) > 0) {
+      items.push({ title: `Штраф за смерти (${m.deaths})`, points: -(m.deaths || 0) * 1.0 });
+    }
+  }
+
+  const eventCounts = new Map<string, { count: number; unitPoints: number }>();
+
+  events.forEach(rawEvt => {
+    const parsed = parseEventItem(rawEvt);
+    if (!parsed || !parsed.title) return;
+
+    const lower = parsed.title.toLowerCase();
+    if (lower.includes("победа") || lower.includes("топ-1")) return;
+
+    const existing = eventCounts.get(parsed.title);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      eventCounts.set(parsed.title, { count: 1, unitPoints: parsed.unitPoints });
+    }
+  });
+
+  eventCounts.forEach((val, key) => {
+    const totalPts = val.unitPoints > 0 ? val.count * val.unitPoints : 0;
+    items.push({
+      title: val.count > 1 ? `${key} (x${val.count})` : key,
+      points: totalPts
+    });
+  });
+
+  return items;
 }

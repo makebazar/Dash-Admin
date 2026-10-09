@@ -43,6 +43,26 @@ export async function POST(request: Request) {
       lastHits = 0,
       earnedBonuses = 0,
       events = [],
+      // Extended CS2 fields
+      totalDamage = 0,
+      roundsPlayed = 0,
+      bombsPlanted = 0,
+      bombsDefused = 0,
+      clutchKills = 0,
+      flashKills = 0,
+      smokeKills = 0,
+      ecoKills = 0,
+      roundResults = [],
+      weaponKills = {},
+      // Extended Dota 2 fields
+      denies = 0,
+      gpm = 0,
+      xpm = 0,
+      netWorth = 0,
+      heroName = "",
+      wardsPlaced = 0,
+      wardsDestroyed = 0,
+      dotaStats = {},
     } = body;
 
     // CS2 whitelist & practice/bot match validation
@@ -60,10 +80,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, ignored: true, message: "Bot/practice session ignored" });
     }
 
+    // Extract dotaStats values if present in sub-object
+    const finalDenies = dotaStats.denies ?? denies;
+    const finalGpm = dotaStats.gpm ?? gpm;
+    const finalXpm = dotaStats.xpm ?? xpm;
+    const finalNetWorth = dotaStats.netWorth ?? netWorth;
+    const finalHeroName = dotaStats.heroName ?? heroName;
+    const finalWardsPlaced = dotaStats.wardsPlaced ?? wardsPlaced;
+    const finalWardsDestroyed = dotaStats.wardsDestroyed ?? wardsDestroyed;
+
     await client.query(
       `INSERT INTO promo_frag_matches
-         (player_id, club_id, game, map, score, kills, deaths, assists, headshots, last_hits, earned, events)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+         (player_id, club_id, game, map, score, kills, deaths, assists, headshots, last_hits, earned, events,
+          total_damage, rounds_played, bombs_planted, bombs_defused, clutch_kills, flash_kills, smoke_kills, eco_kills, round_results, weapon_kills,
+          hero_name, denies, gpm, xpm, net_worth, wards_placed, wards_destroyed, dota_stats)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)`,
       [
         playerId,
         activeClubId,
@@ -77,6 +108,24 @@ export async function POST(request: Request) {
         lastHits,
         earnedBonuses,
         JSON.stringify(events),
+        totalDamage,
+        roundsPlayed,
+        bombsPlanted,
+        bombsDefused,
+        clutchKills,
+        flashKills,
+        smokeKills,
+        ecoKills,
+        JSON.stringify(roundResults),
+        JSON.stringify(weaponKills),
+        finalHeroName,
+        finalDenies,
+        finalGpm,
+        finalXpm,
+        finalNetWorth,
+        finalWardsPlaced,
+        finalWardsDestroyed,
+        JSON.stringify(dotaStats),
       ]
     );
 
@@ -88,13 +137,27 @@ export async function POST(request: Request) {
       [playerId, activeClubId]
     );
 
+    // Fetch club's max_bonus_per_match tariff setting if configured
+    let finalEarned = Number(earnedBonuses) || 0;
+    const clubSettingsRes = await client.query(
+      `SELECT settings FROM clubs WHERE id = $1`,
+      [activeClubId]
+    );
+    const clubFragTariffs = clubSettingsRes.rows[0]?.settings?.frag?.tariffs;
+    if (clubFragTariffs && typeof clubFragTariffs.max_bonus_per_match === "number") {
+      const cap = clubFragTariffs.max_bonus_per_match;
+      if (cap > 0 && finalEarned > cap) {
+        finalEarned = cap;
+      }
+    }
+
     // Credit match earnings to player's balance
-    if (earnedBonuses > 0) {
+    if (finalEarned > 0) {
       await client.query(
         `UPDATE promo_player_balances
          SET bonus_balance = COALESCE(bonus_balance, 0) + $1
          WHERE player_id = $2 AND club_id = $3`,
-        [earnedBonuses, playerId, activeClubId]
+        [finalEarned, playerId, activeClubId]
       );
 
       // Record in promo_history

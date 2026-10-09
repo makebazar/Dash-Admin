@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { createCategory, updateCategory, deleteCategory, Category } from "../actions"
+import { createCategory, updateCategory, deleteCategory } from "../actions"
+import type { Category } from "../types"
 import { useParams } from "next/navigation"
 import { useUiDialogs } from "./useUiDialogs"
 

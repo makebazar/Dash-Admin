@@ -13,9 +13,9 @@ import {
     Ban, Warehouse, Plus
 } from "lucide-react"
 import { 
-    getProducts, createWriteOffSafe, getProductByBarcode, getWarehouses, getClubSettings, 
-    type Warehouse as WarehouseType 
+    getProducts, createWriteOffSafe, getProductByBarcode, getWarehouses, getClubSettings
 } from "@/app/clubs/[clubId]/inventory/actions"
+import type { Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/types"
 import { 
     Table, TableBody, TableCell, TableRow 
 } from "@/components/ui/table"

@@ -45,9 +45,17 @@ function getResetTimeText(quest: any) {
 
     const diff = nextResetDate.getTime() - now.getTime();
     if (diff > 0) {
-      const h = Math.floor(diff / (1000 * 60 * 60));
-      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      return `Сброс через ${h}ч ${m}м`;
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (days > 0) {
+        return `Сброс через ${days} дн. ${hours > 0 ? `${hours} ч.` : ""}`.trim();
+      }
+      if (hours > 0) {
+        return `Сброс через ${hours} ч. ${minutes > 0 ? `${minutes} мин.` : ""}`.trim();
+      }
+      return `Сброс через ${minutes} мин.`;
     }
   }
   return null;
@@ -170,22 +178,29 @@ export default function QuestsPage() {
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-orange-500/30 overflow-x-hidden">
       <PromoHeader title="Задания" />
 
-      <main className="max-w-6xl mx-auto p-4 sm:p-6 pt-6 sm:pt-10 pb-32">
+      <main className="max-w-6xl mx-auto p-4 sm:p-6 pt-6 sm:pt-10 pb-48 sm:pb-36">
         {/* Banner header */}
-        <div className="mb-8 relative rounded-[2rem] bg-gradient-to-br from-orange-600/10 via-zinc-900 to-zinc-950 border border-white/5 p-6 overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-[80px] -z-10 pointer-events-none" />
-          <div className="max-w-lg space-y-2 relative z-10">
-            <h2 className="text-2xl sm:text-3xl font-black uppercase italic tracking-tight leading-none">
-              Выполняй и <span className="text-orange-500">Зарабатывай</span>
+        <div className="mb-8 relative rounded-3xl sm:rounded-[2rem] bg-gradient-to-br from-amber-500/15 via-orange-500/5 to-transparent border border-amber-500/25 p-5 sm:p-6 overflow-hidden">
+          <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/15 rounded-full blur-3xl opacity-40 pointer-events-none" />
+          <div className="max-w-2xl space-y-2 relative z-10">
+            <h2 className="text-xl sm:text-2xl font-black uppercase italic tracking-tight text-white">
+              Задания клуба
             </h2>
-            <p className="text-gray-400 text-xs sm:text-sm font-medium leading-relaxed">
-              Покупай в баре, пользуйся услугами или выполняй активности в клубе, чтобы получать бонусы на баланс, билеты и опыт.
+            <p className="text-gray-300 text-xs sm:text-sm font-medium leading-relaxed">
+              Пополняй баланс, заказывай в баре и участвуй в клубных активностях. За каждый выполненный квест ты получаешь билеты для мини-игр и бонусы на свой игровой счет.
             </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">Бонусы на баланс</span>
+              <span className="text-gray-600 font-normal">•</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">Билеты для мини-игр</span>
+              <span className="text-gray-600 font-normal">•</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">Авто-начисление наград</span>
+            </div>
           </div>
         </div>
 
         {/* Tab Filters */}
-        <div className="flex gap-2 overflow-x-auto pb-4 mb-8 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-8 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
           {[
             { id: "all", label: "Все задания", count: quests.length },
             { id: "active", label: "Выполняются", count: inProgressQuests.length },
@@ -193,26 +208,33 @@ export default function QuestsPage() {
             { id: "pending", label: "На проверке", count: pendingQuests.length },
             { id: "locked", label: "Будут доступны", count: lockedQuests.length },
             { id: "history", label: "История", count: completedQuests.length },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap border shrink-0",
-                activeTab === tab.id
-                  ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-500/20"
-                  : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10"
-              )}
-            >
-              {tab.label}
-              <span className={cn(
-                "px-1.5 py-0.5 rounded-md text-[9px] font-black",
-                activeTab === tab.id ? "bg-white text-orange-600" : "bg-white/10 text-gray-300"
-              )}>
-                {tab.count}
-              </span>
-            </button>
-          ))}
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 cursor-pointer border",
+                  isActive
+                    ? "bg-white/10 text-white border-white/20 shadow-sm"
+                    : "bg-transparent text-gray-500 border-transparent hover:text-gray-300 hover:bg-white/5"
+                )}
+              >
+                <span>{tab.label}</span>
+                {tab.count > 0 && (
+                  <span
+                    className={cn(
+                      "text-[10px] font-black tracking-tight",
+                      isActive ? "text-amber-400" : "text-gray-500"
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {quests.length === 0 ? (
@@ -383,6 +405,8 @@ export default function QuestsPage() {
             {activeTab === "history" && completedQuests.length === 0 && (
               <EmptyState message="Вы еще не завершили ни одного задания" icon={<Trophy className="w-8 h-8 text-gray-500" />} />
             )}
+            {/* Bottom spacer for floating bottom nav */}
+            <div className="h-12 sm:h-6" />
           </div>
         )}
       </main>
@@ -458,35 +482,27 @@ function QuestCard({ quest, onClick }: { quest: any; onClick: () => void }) {
     <motion.div
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={!isLocked ? { y: -4, scale: 1.01 } : {}}
-      transition={{ duration: 0.3 }}
+      whileHover={!isLocked ? { y: -3 } : {}}
+      transition={{ duration: 0.2 }}
       onClick={onClick}
       className={cn(
-        "relative rounded-[2.5rem] bg-zinc-950/80 border border-white/5 overflow-hidden flex flex-col justify-between cursor-pointer group select-none min-h-[300px]",
-        isLocked ? "opacity-75 grayscale-[0.3]" : "hover:border-orange-500/30 hover:shadow-[0_0_20px_rgba(249,115,22,0.1)] transition-all duration-300"
+        "relative rounded-3xl p-5 sm:p-6 bg-white/5 border overflow-hidden flex flex-col justify-between cursor-pointer group select-none transition-all duration-300 min-h-[220px]",
+        isLocked
+          ? "border-white/5 opacity-60 grayscale-[0.3]"
+          : "border-white/10 hover:border-amber-500/40 hover:bg-white/[0.07] shadow-lg shadow-black/20"
       )}
     >
-      {/* Background card image or gradient header */}
-      {quest.image_url ? (
-        <div className="h-32 w-full relative overflow-hidden">
-          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${quest.image_url})` }} />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
-        </div>
-      ) : (
-        <div className={cn(
-          "h-24 w-full relative overflow-hidden bg-gradient-to-br from-zinc-900 to-zinc-950",
-          isLocked ? "from-zinc-950 to-zinc-950" : ""
-        )}>
-          <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full blur-2xl" />
-        </div>
+      {/* Dynamic Background Glow */}
+      {!isLocked && (
+        <div className="absolute -top-12 -right-12 w-36 h-36 bg-amber-500/10 rounded-full blur-3xl opacity-30 group-hover:opacity-70 transition-opacity pointer-events-none" />
       )}
 
       {/* Level Lock Badge */}
       {isLocked && (
-        <div className="absolute top-4 right-6 z-10">
-          <div className="bg-zinc-900/90 border border-white/10 px-3 py-1.5 rounded-2xl flex items-center gap-1.5 shadow-2xl backdrop-blur-md">
-            <Lock className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-orange-500">
+        <div className="absolute top-4 right-5 z-10">
+          <div className="bg-black/60 border border-white/10 px-2.5 py-1 rounded-xl flex items-center gap-1.5 backdrop-blur-md">
+            <Lock className="w-3 h-3 text-amber-400" />
+            <span className="text-[9px] font-black uppercase tracking-wider text-amber-400">
               Ур. {quest.min_level}
             </span>
           </div>
@@ -494,103 +510,100 @@ function QuestCard({ quest, onClick }: { quest: any; onClick: () => void }) {
       )}
 
       {/* Content wrapper */}
-      <div className="px-6 pb-6 pt-2 flex-1 flex flex-col justify-between relative -mt-8 z-10">
-        <div className="space-y-3">
-          {/* Reset time (daily/weekly etc) */}
-          {resetText && (
-            <div className="bg-orange-500/10 border border-orange-500/20 px-2.5 py-0.5 rounded-lg inline-flex items-center gap-1">
-              <Clock className="w-2.5 h-2.5 text-orange-500 animate-pulse" />
-              <span className="text-[8px] font-black text-orange-500 uppercase tracking-wider">
-                {resetText}
-              </span>
-            </div>
-          )}
+      <div className="space-y-3 relative z-10">
+        {/* Reset time (daily/weekly etc) */}
+        {resetText && (
+          <div className="bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-lg inline-flex items-center gap-1">
+            <Clock className="w-2.5 h-2.5 text-amber-400" />
+            <span className="text-[8px] font-black text-amber-400 uppercase tracking-wider">
+              {resetText}
+            </span>
+          </div>
+        )}
 
-          {/* Title and descriptions */}
-          <div className="space-y-1">
-            <h4 className="text-lg font-black uppercase italic tracking-tight leading-tight group-hover:text-orange-400 transition-colors">
-              {quest.title}
-            </h4>
-            <p className="text-gray-400 text-xs leading-relaxed font-medium line-clamp-2">
+        {/* Title and descriptions */}
+        <div className="space-y-1">
+          <h4 className="text-base sm:text-lg font-black uppercase italic tracking-tight leading-tight text-white group-hover:text-amber-400 transition-colors">
+            {quest.title}
+          </h4>
+          {quest.description && (
+            <p className="text-gray-300 text-xs leading-relaxed font-medium line-clamp-2">
               {quest.description}
             </p>
-          </div>
-
-          {/* Service Dependency Banner */}
-          {quest.target_service_id && quest.required_service_name && (
-            <div className={cn(
-              "px-3 py-2 rounded-xl text-[10px] font-bold flex items-center gap-2 border",
-              quest.is_service_purchased
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                : "bg-orange-500/10 border-orange-500/20 text-orange-400"
-            )}>
-              <Info className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">
-                {quest.is_service_purchased ? "Услуга куплена: " : "Требуется услуга: "}
-                {quest.required_service_name}
-              </span>
-            </div>
           )}
-
-          {/* Rewards Grid */}
-          <div className="flex flex-wrap gap-2 pt-1">
-            {quest.reward_xp > 0 && (
-              <div className="flex items-center gap-1 px-2.5 py-1 bg-white/5 border border-white/10 rounded-xl">
-                <Zap className="w-3 h-3 text-orange-500" />
-                <span className="text-[10px] font-black">+{Math.floor(quest.reward_xp)} XP</span>
-              </div>
-            )}
-            {quest.reward_tickets > 0 && (
-              <div className="flex items-center gap-1 px-2.5 py-1 bg-white/5 border border-white/10 rounded-xl">
-                <Ticket className="w-3 h-3 text-orange-500" />
-                <span className="text-[10px] font-black">+{Math.floor(quest.reward_tickets)}</span>
-              </div>
-            )}
-            {quest.reward_bonus_balance > 0 && (
-              <div className="flex items-center gap-1 px-2.5 py-1 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
-                <Coins className="w-3 h-3 text-yellow-500" />
-                <span className="text-[10px] font-black text-yellow-500">+{Math.floor(quest.reward_bonus_balance)}₽</span>
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Progress bar or button CTA */}
-        <div className="mt-6 pt-4 border-t border-white/5">
-          {isLocked ? (
-            <div className="bg-white/2 border border-white/5 p-3 rounded-2xl text-[10px] font-black text-gray-500 uppercase tracking-widest text-center italic">
-              Заблокировано
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {quest.trigger_type !== "manual_verification" ? (
-                <>
-                  <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-500 px-1">
-                    <span>Прогресс</span>
-                    <span className="text-white/80">
-                      {Math.floor(progress)}/{Math.floor(target)} {quest.quest_unit || "шт."}
-                    </span>
-                  </div>
-                  <div className="w-full bg-black/40 rounded-full h-2 overflow-hidden border border-white/5">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${percent}%` }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      className="h-full rounded-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"
-                    />
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center justify-between bg-orange-500/5 hover:bg-orange-500/10 border border-orange-500/10 px-4 py-2.5 rounded-2xl group/btn transition-colors">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-orange-500">
-                    {quest.requires_photo_verification ? "Требуется фотоотчет" : "Подтвердить выполнение"}
+        {/* Service Dependency Banner */}
+        {quest.target_service_id && quest.required_service_name && (
+          <div className={cn(
+            "px-3 py-2 rounded-xl text-[10px] font-bold flex items-center gap-2 border",
+            quest.is_service_purchased
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+              : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+          )}>
+            <Info className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">
+              {quest.is_service_purchased ? "Услуга куплена: " : "Требуется услуга: "}
+              {quest.required_service_name}
+            </span>
+          </div>
+        )}
+
+        {/* Rewards Grid */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {quest.reward_xp > 0 && (
+            <span className="text-[11px] font-black text-indigo-400">+{Math.floor(quest.reward_xp)} XP</span>
+          )}
+          {quest.reward_xp > 0 && (quest.reward_tickets > 0 || quest.reward_bonus_balance > 0) && (
+            <span className="text-gray-600 font-normal">•</span>
+          )}
+          {quest.reward_tickets > 0 && (
+            <span className="text-[11px] font-black text-amber-400">+{Math.floor(quest.reward_tickets)} билета</span>
+          )}
+          {quest.reward_tickets > 0 && quest.reward_bonus_balance > 0 && (
+            <span className="text-gray-600 font-normal">•</span>
+          )}
+          {quest.reward_bonus_balance > 0 && (
+            <span className="text-[11px] font-black text-yellow-400">+{Math.floor(quest.reward_bonus_balance)} ₽</span>
+          )}
+        </div>
+      </div>
+
+      {/* Progress bar or button CTA */}
+      <div className="mt-5 pt-3 border-t border-white/5 relative z-10">
+        {isLocked ? (
+          <div className="bg-white/5 border border-white/10 p-2.5 rounded-2xl text-[10px] font-black text-gray-500 uppercase tracking-widest text-center italic">
+            Заблокировано
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {quest.trigger_type !== "manual_verification" ? (
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-gray-300">
+                  <span>Прогресс</span>
+                  <span className="font-black text-white">
+                    <span className="text-amber-400">{Math.floor(progress)}</span> / {Math.floor(target)} {quest.quest_unit || "шт."}
                   </span>
-                  <ChevronRight className="w-4 h-4 text-orange-500 group-hover/btn:translate-x-1 transition-transform" />
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${percent}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                    className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 shadow-md shadow-amber-500/20"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-amber-400 group-hover:text-amber-300 transition-colors py-1">
+                <span>
+                  {quest.requires_photo_verification ? "Требуется фотоотчет" : "Подтвердить выполнение"}
+                </span>
+                <ChevronRight className="w-4 h-4 translate-x-0 group-hover:translate-x-1 transition-transform" />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -680,44 +693,43 @@ function CompletedQuestCard({ quest }: { quest: any }) {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-zinc-950/60 border border-white/5 rounded-3xl p-4 flex items-center justify-between gap-4 group hover:bg-white/2 transition-colors select-none"
+      className="bg-white/5 border border-white/10 rounded-3xl p-4 sm:p-5 flex items-center justify-between gap-4 group hover:border-white/20 transition-all select-none"
     >
-      <div className="flex items-center gap-4 min-w-0">
+      <div className="flex items-center gap-3.5 min-w-0">
         <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-          <CheckCircle2 className="w-5.5 h-5.5 text-emerald-500" />
+          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
         </div>
-        <div className="min-w-0">
-          <h4 className="text-sm font-black uppercase italic tracking-tight truncate text-gray-300 group-hover:text-emerald-400 transition-colors">
+        <div className="min-w-0 space-y-0.5">
+          <h4 className="text-sm font-black uppercase italic tracking-tight truncate text-white group-hover:text-emerald-300 transition-colors">
             {quest.title}
           </h4>
           {resetText ? (
-            <p className="text-[10px] font-bold text-orange-500 uppercase tracking-widest mt-0.5 flex items-center gap-1">
-              <Clock className="w-3 h-3 text-orange-500 animate-pulse" /> {resetText}
+            <p className="text-[11px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1">
+              <Clock className="w-3 h-3 text-amber-400" /> {resetText}
             </p>
           ) : (
-            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-0.5">
-              Задание завершено
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+              Задание выполнено
             </p>
           )}
         </div>
       </div>
 
-      <div className="flex gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         {quest.reward_xp > 0 && (
-          <div className="bg-orange-500/10 border border-orange-500/20 px-2 py-1 rounded-lg flex items-center gap-0.5">
-            <Zap className="w-2.5 h-2.5 text-orange-500" />
-            <span className="text-[9px] font-black text-orange-500">
-              +{Math.floor(quest.reward_xp)}
-            </span>
-          </div>
+          <span className="text-xs font-black text-indigo-400">+{Math.floor(quest.reward_xp)} XP</span>
+        )}
+        {quest.reward_xp > 0 && (quest.reward_tickets > 0 || quest.reward_bonus_balance > 0) && (
+          <span className="text-gray-600 font-normal">•</span>
         )}
         {quest.reward_tickets > 0 && (
-          <div className="bg-white/5 border border-white/10 px-2 py-1 rounded-lg flex items-center gap-0.5">
-            <Ticket className="w-2.5 h-2.5 text-gray-400" />
-            <span className="text-[9px] font-black">
-              +{Math.floor(quest.reward_tickets)}
-            </span>
-          </div>
+          <span className="text-xs font-black text-amber-400">+{Math.floor(quest.reward_tickets)} билетов</span>
+        )}
+        {quest.reward_tickets > 0 && quest.reward_bonus_balance > 0 && (
+          <span className="text-gray-600 font-normal">•</span>
+        )}
+        {quest.reward_bonus_balance > 0 && (
+          <span className="text-xs font-black text-yellow-400">+{Math.floor(quest.reward_bonus_balance)} ₽</span>
         )}
       </div>
     </motion.div>

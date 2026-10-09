@@ -60,6 +60,58 @@ export default function ShiftsPage({
   // Abort controller ref for fetching shifts
   const fetchAbortController = useRef<AbortController | null>(null);
 
+  const fetchShifts = useCallback(
+    async (id: string, startDate?: string, endDate?: string) => {
+      if (fetchAbortController.current) {
+        fetchAbortController.current.abort();
+      }
+      fetchAbortController.current = new AbortController();
+
+      setIsLoading(true);
+      try {
+        let url = `/api/clubs/${id}/shifts`;
+        const params = new URLSearchParams();
+        if (startDate) params.append("startDate", startDate);
+        if (endDate) params.append("endDate", endDate);
+        if (params.toString()) url += "?" + params.toString();
+
+        const res = await fetch(url, {
+          signal: fetchAbortController.current.signal,
+        });
+        const data = await res.json();
+        if (res.ok) {
+          const newShifts = Array.isArray(data.shifts) ? data.shifts : [];
+          setShifts(newShifts);
+
+          const currentTotalRevenue = newShifts.reduce(
+            (sum: number, s: Shift) =>
+              sum + (parseFloat(String(s.cash_income)) || 0) + (parseFloat(String(s.card_income)) || 0),
+            0,
+          );
+          if (
+            lastRevenueRef.current !== null &&
+            Math.abs(currentTotalRevenue - lastRevenueRef.current) > 100000
+          ) {
+            console.warn(`[Metrics] Significant revenue jump detected`);
+          }
+          lastRevenueRef.current = currentTotalRevenue;
+        }
+      } catch (error: any) {
+        if (error.name !== "AbortError") {
+          console.error("Error fetching shifts:", error);
+        }
+      } finally {
+        if (
+          fetchAbortController.current &&
+          !fetchAbortController.current.signal.aborted
+        ) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [],
+  );
+
   const calculateShiftTotalIncome = useCallback(
     (shift: Shift) => {
       const cash = getMetricValue(shift, "cash_income");
@@ -97,6 +149,34 @@ export default function ShiftsPage({
         .catch(() => {});
     });
   }, [params]);
+
+  // Подключение живого SSE-потока событий смен SmartShell без поллинга
+  useEffect(() => {
+    if (!clubId) return;
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`/api/clubs/${clubId}/shifts/live-stream`);
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.synced) {
+            fetchShifts(clubId, filterStartDate, filterEndDate);
+          }
+        } catch (e) {
+          // ignore
+        }
+      };
+    } catch (e) {
+      console.error("SSE live stream error:", e);
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [clubId, fetchShifts, filterStartDate, filterEndDate]);
 
   const fetchReportTemplate = async (id: string) => {
     try {
@@ -150,58 +230,6 @@ export default function ShiftsPage({
       console.error("Error fetching employees:", error);
     }
   };
-
-  const fetchShifts = useCallback(
-    async (id: string, startDate?: string, endDate?: string) => {
-      if (fetchAbortController.current) {
-        fetchAbortController.current.abort();
-      }
-      fetchAbortController.current = new AbortController();
-
-      setIsLoading(true);
-      try {
-        let url = `/api/clubs/${id}/shifts`;
-        const params = new URLSearchParams();
-        if (startDate) params.append("startDate", startDate);
-        if (endDate) params.append("endDate", endDate);
-        if (params.toString()) url += "?" + params.toString();
-
-        const res = await fetch(url, {
-          signal: fetchAbortController.current.signal,
-        });
-        const data = await res.json();
-        if (res.ok) {
-          const newShifts = Array.isArray(data.shifts) ? data.shifts : [];
-          setShifts(newShifts);
-
-          const currentTotalRevenue = newShifts.reduce(
-            (sum: number, s: Shift) =>
-              sum + (parseFloat(String(s.cash_income)) || 0) + (parseFloat(String(s.card_income)) || 0),
-            0,
-          );
-          if (
-            lastRevenueRef.current !== null &&
-            Math.abs(currentTotalRevenue - lastRevenueRef.current) > 100000
-          ) {
-            console.warn(`[Metrics] Significant revenue jump detected`);
-          }
-          lastRevenueRef.current = currentTotalRevenue;
-        }
-      } catch (error: any) {
-        if (error.name !== "AbortError") {
-          console.error("Error fetching shifts:", error);
-        }
-      } finally {
-        if (
-          fetchAbortController.current &&
-          !fetchAbortController.current.signal.aborted
-        ) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [],
-  );
 
   const handleMonthSelect = useCallback(
     (monthOffset: number) => {

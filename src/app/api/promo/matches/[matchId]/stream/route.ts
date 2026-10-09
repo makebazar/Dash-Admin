@@ -8,16 +8,11 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ matchId: string }> }
 ) {
-  const cookieStore = await cookies();
-  const playerId = cookieStore.get("promo_player_id")?.value;
-  const activeClubId = cookieStore.get("promo_active_club_id")?.value;
-
-  if (!playerId || !activeClubId) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
   const { matchId } = await params;
   const parsedMatchId = parseInt(matchId);
+  if (isNaN(parsedMatchId)) {
+    return new Response("Invalid match ID", { status: 400 });
+  }
 
   const encoder = new TextEncoder();
   let closed = false;

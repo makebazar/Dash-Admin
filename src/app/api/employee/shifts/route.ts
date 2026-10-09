@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
 import { hasColumn } from "@/lib/db-compat";
+import { getSmartShellClientForClub } from "@/lib/smartshell/shift-sync";
+import { normalizeInventorySettings } from "@/lib/inventory-settings";
 
 // POST - Start a new shift
 export async function POST(request: Request) {
@@ -14,7 +16,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { club_id, role_id } = body;
+    const { club_id, role_id, cash_on_start } = body;
 
     if (!club_id) {
       return NextResponse.json({ error: "Club ID required" }, { status: 400 });
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
 
     // Check if already has active shift in this club
     const activeCheck = await query(
-      `SELECT id FROM shifts WHERE user_id = $1 AND club_id = $2 AND check_out IS NULL`,
+      `SELECT id FROM shifts WHERE user_id = $1 AND club_id = $2 AND status IN ('ACTIVE', 'OPEN') AND check_out IS NULL`,
       [userId, club_id],
     );
 
@@ -301,7 +303,33 @@ export async function POST(request: Request) {
       }
     }
 
-    // Create new shift with lateness fields
+    // Открываем смену в SmartShell синхронно (перед INSERT, чтобы не создавать смену при ошибке SS)
+    // Проверяем включена ли интеграция для этого клуба
+    let smartshellShiftId: string | null = null;
+    const clubSettingsForSS = await query(`SELECT inventory_settings FROM clubs WHERE id = $1`, [club_id]);
+    const invSettingsForSS = normalizeInventorySettings(clubSettingsForSS.rows[0]?.inventory_settings);
+    if (invSettingsForSS.smartshell_integration_enabled) {
+      const ssClient = await getSmartShellClientForClub(String(club_id));
+      if (ssClient) {
+        try {
+          const activeSs = await ssClient.getActiveWorkShift();
+          if (activeSs?.id) {
+            smartshellShiftId = String(activeSs.id);
+          } else {
+            const ssShift = await ssClient.startWorkShift(Number(cash_on_start) || 0);
+            if (ssShift?.id) {
+              smartshellShiftId = String(ssShift.id);
+            }
+          }
+        } catch (ssErr: any) {
+          return NextResponse.json(
+            { error: `Не удалось открыть смену в SmartShell: ${ssErr.message || ssErr}` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const result = await query(
       `INSERT INTO shifts (
         user_id, 
@@ -312,9 +340,13 @@ export async function POST(request: Request) {
         shift_role_name_snapshot,
         lateness_minutes,
         lateness_status,
-        lateness_penalty
+        lateness_penalty,
+        smartshell_shift_id,
+        smartshell_synced_at,
+        cash_on_start,
+        status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'ACTIVE')
       RETURNING id`,
       [
         userId,
@@ -325,7 +357,10 @@ export async function POST(request: Request) {
         effectiveRoleName,
         latenessMinutes,
         latenessStatus,
-        latenessPenalty
+        latenessPenalty,
+        smartshellShiftId || null,
+        smartshellShiftId ? new Date() : null,
+        Number(cash_on_start) || 0
       ],
     );
 

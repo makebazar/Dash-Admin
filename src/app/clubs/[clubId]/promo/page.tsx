@@ -12,11 +12,11 @@ import {
   User,
   Disc,
   Gamepad2,
-  Target,
   CheckCircle2,
   ShoppingCart,
   Users,
   Package,
+  Award,
 } from "lucide-react";
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,10 +27,9 @@ import {
 import { HistoryTab } from "@/app/clubs/[clubId]/promo/_components/HistoryTab";
 import { PlayersTab } from "@/app/clubs/[clubId]/promo/_components/PlayersTab";
 import { GeneralTab } from "@/app/clubs/[clubId]/promo/_components/GeneralTab";
-import { LevelsTab } from "@/app/clubs/[clubId]/promo/_components/LevelsTab";
 import { QuestsTab } from "@/app/clubs/[clubId]/promo/_components/QuestsTab";
+import { LoyaltyTab } from "@/app/clubs/[clubId]/promo/_components/LoyaltyTab";
 import { VerificationTab } from "@/app/clubs/[clubId]/promo/_components/VerificationTab";
-import { BattlePassTab } from "@/app/clubs/[clubId]/promo/_components/BattlePassTab";
 import { ServicesTab } from "@/app/clubs/[clubId]/promo/_components/ServicesTab";
 import { AccrualTab } from "@/app/clubs/[clubId]/promo/_components/AccrualTab";
 import { BarTab } from "@/app/clubs/[clubId]/promo/_components/BarTab";
@@ -41,7 +40,6 @@ import {
   type Prize,
   GAMES,
 } from "@/app/clubs/[clubId]/promo/_components/GamesTab";
-import { FragTab } from "@/app/clubs/[clubId]/promo/_components/FragTab";
 
 /**
  * ПАНЕЛЬ УПРАВЛЕНИЯ АКЦИЯМИ (ДЛЯ ВЛАДЕЛЬЦА / УПРАВА)
@@ -61,14 +59,12 @@ export default function PromotionsPage() {
     | "general"
     | "services"
     | "bar"
-    | "levels"
     | "quests"
+    | "loyalty"
     | "verification"
-    | "battlepass"
     | "accrual"
     | "referrals"
     | "cases"
-    | "frag"
   >((tabParam as any) || "queue");
 
   // Sync activeTab if search param changes externally
@@ -103,6 +99,8 @@ export default function PromotionsPage() {
   // Data State
   const [players, setPlayers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [tariffs, setTariffs] = useState<any[]>([]);
+  const [zones, setZones] = useState<any[]>([]);
   const [selectedGame, setSelectedGame] = useState<string>("wheel");
 
   useEffect(() => {
@@ -156,6 +154,7 @@ export default function PromotionsPage() {
         logsRes,
         playersRes,
         productsRes,
+        tariffsRes,
       ] = await Promise.all([
         fetch(`/api/clubs/${clubId}`),
         fetch(`/api/promo/admin/prizes?clubId=${clubId}`),
@@ -163,6 +162,7 @@ export default function PromotionsPage() {
         fetch(`/api/promo/admin/logs?clubId=${clubId}`),
         fetch(`/api/promo/admin/players?clubId=${clubId}`),
         fetch(`/api/promo/products?clubId=${clubId}&all=true`),
+        fetch(`/api/clubs/${clubId}/tariffs`),
       ]);
 
       const settingsData = await settingsRes.json();
@@ -171,6 +171,7 @@ export default function PromotionsPage() {
       const logsData = await logsRes.json();
       const playersData = await playersRes.json();
       const productsData = await productsRes.json();
+      const tariffsData = await tariffsRes.json();
 
       setSettings(settingsData.club?.promo_settings || {});
       setPrizes(prizesData.prizes || []);
@@ -182,6 +183,8 @@ export default function PromotionsPage() {
       });
       setPlayers(playersData.players || []);
       setProducts(productsData.products || []);
+      setTariffs(tariffsData.tariffs || []);
+      setZones(tariffsData.zones || []);
     } catch (error) {
       console.error("Fetch Data Error:", error);
     } finally {
@@ -204,7 +207,7 @@ export default function PromotionsPage() {
     return cats;
   }, [products]);
 
-  const serviceRules = settings?.service_rules || [];
+  const serviceRules = tariffs.length > 0 ? tariffs : (settings?.service_rules || []);
 
   const saveSettings = async (newSettings: any) => {
     setIsSaving(true);
@@ -248,6 +251,19 @@ export default function PromotionsPage() {
     }
   };
 
+  const handleReject = async (id: string) => {
+    try {
+      await fetch(`/api/promo/admin/queue/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "reject" }),
+      });
+      fetchData();
+    } catch (error) {
+      console.error("Reject Prize Error:", error);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -280,16 +296,10 @@ export default function PromotionsPage() {
                 icon: History,
                 color: "emerald",
               },
-              { id: "games", label: "Игры", icon: Gamepad2, color: "indigo" },
-              { id: "levels", label: "Уровни", icon: Target, color: "purple" },
+              { id: "loyalty", label: "Лояльность", icon: Award, color: "amber" },
               { id: "quests", label: "Квесты", icon: Plus, color: "pink" },
+              { id: "games", label: "Игры", icon: Gamepad2, color: "indigo" },
               { id: "cases", label: "Кейсы", icon: Package, color: "orange" },
-              {
-                id: "battlepass",
-                label: "Battle Pass",
-                icon: Disc,
-                color: "yellow",
-              },
               {
                 id: "verification",
                 label: "Верификация",
@@ -320,12 +330,6 @@ export default function PromotionsPage() {
                 label: "Настройки",
                 icon: Settings,
                 color: "slate",
-              },
-              {
-                id: "frag",
-                label: "Frag",
-                icon: Gamepad2,
-                color: "indigo",
               },
             ].map((tab) => (
               <button
@@ -365,6 +369,18 @@ export default function PromotionsPage() {
             />
           )}
 
+          {activeTab === "loyalty" && (
+            <LoyaltyTab
+              clubId={clubId as string}
+              products={products}
+              categories={categories}
+              tariffs={tariffs}
+              zones={zones}
+              settings={settings}
+              saveSettings={saveSettings}
+            />
+          )}
+
           {activeTab === "games" && (
             <motion.div
               key="games"
@@ -391,13 +407,13 @@ export default function PromotionsPage() {
             />
           )}
 
-          {activeTab === "levels" && <LevelsTab clubId={clubId as string} />}
           {activeTab === "quests" && (
             <QuestsTab
               clubId={clubId as string}
               products={products}
               categories={categories}
               serviceRules={serviceRules}
+              zones={zones}
               settings={settings}
               saveSettings={saveSettings}
             />
@@ -408,11 +424,8 @@ export default function PromotionsPage() {
           {activeTab === "verification" && (
             <VerificationTab clubId={clubId as string} />
           )}
-          {activeTab === "battlepass" && (
-            <BattlePassTab clubId={clubId as string} products={products} />
-          )}
           {activeTab === "services" && (
-            <ServicesTab settings={settings} saveSettings={saveSettings} />
+            <ServicesTab settings={settings} saveSettings={saveSettings} tariffs={tariffs} zones={zones} />
           )}
           {activeTab === "accrual" && (
             <AccrualTab settings={settings} saveSettings={saveSettings} />
@@ -427,9 +440,6 @@ export default function PromotionsPage() {
           )}
           {activeTab === "referrals" && (
             <ReferralsTab settings={settings} saveSettings={saveSettings} />
-          )}
-          {activeTab === "frag" && (
-            <FragTab settings={settings} saveSettings={saveSettings} clubId={clubId as string} />
           )}
         </AnimatePresence>
       </div>

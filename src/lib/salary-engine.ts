@@ -702,7 +702,7 @@ export async function generateMonthlySalaryReport(
         (SELECT COUNT(DISTINCT p.id)::int
          FROM promo_players p
          JOIN promo_history h ON h.player_id = p.id
-         WHERE h.club_id = $1 AND h.game_type = 'TOPUP'
+         WHERE h.club_id = $1 AND (h.game_type ILIKE '%topup%' OR h.game_type = 'pos_sale')
            AND EXISTS (
                SELECT 1 FROM employee_shifts es
                WHERE es.user_id = s.user_id
@@ -712,7 +712,7 @@ export async function generateMonthlySalaryReport(
         ) as promo_new_paying_players,
         (SELECT SUM((h.result_data->>'amount')::numeric)::float
          FROM promo_history h
-         WHERE h.club_id = $1 AND h.game_type = 'TOPUP'
+         WHERE h.club_id = $1 AND (h.game_type ILIKE '%topup%' OR h.game_type = 'pos_sale')
            AND EXISTS (SELECT 1 FROM employee_shifts es WHERE es.user_id = s.user_id AND h.created_at BETWEEN es.check_in AND es.check_out)
         ) as promo_topup_total_sum,
         (SELECT COUNT(*)::int

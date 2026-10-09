@@ -3,6 +3,8 @@ import { query } from "@/db";
 import { calculateSalary } from "@/lib/salary-calculator";
 import { getEmployeeRoleAccess } from "@/lib/employee-role-access";
 import { hasColumn } from "@/lib/db-compat";
+import { getSmartShellClientForClub, buildReportDataFromSmartShell } from "@/lib/smartshell/shift-sync";
+import { normalizeInventorySettings } from "@/lib/inventory-settings";
 
 export async function executeShiftClose(
   request: Request,
@@ -386,6 +388,50 @@ export async function executeShiftClose(
     }
 
     const isPartial = body?.partial === true;
+
+    // Синхронизируем показатели и закрываем смену в SmartShell синхронно ДО записи в БД DashAdmin
+    if (!isPartial) {
+      const clubSettingsForSS = await query(`SELECT inventory_settings FROM clubs WHERE id = $1`, [clubId]);
+      const invSettingsForSS = normalizeInventorySettings(clubSettingsForSS.rows[0]?.inventory_settings);
+      if (invSettingsForSS.smartshell_integration_enabled) {
+        const ssClient = await getSmartShellClientForClub(String(clubId));
+        if (ssClient) {
+          // 1. Получаем актуальные данные активной смены ДО её закрытия (таймаут 6с)
+          let activeShift = null;
+          try {
+            const timeoutFetch = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+            activeShift = await Promise.race([ssClient.getActiveWorkShift(), timeoutFetch]);
+            if (activeShift) {
+              const ssReportData = await buildReportDataFromSmartShell(Number(clubId), activeShift);
+              const employeeCash = safeReportData["cash_income"];
+              Object.assign(safeReportData, ssReportData);
+              if (employeeCash !== undefined && employeeCash !== null && employeeCash !== "") {
+                safeReportData["cash_income"] = employeeCash;
+              }
+            }
+          } catch (e) {
+            console.warn("[SmartShell] Could not fetch active shift data before close:", e);
+          }
+
+          // 2. Закрываем смену в SmartShell (таймаут 7с, не блокируем закрытие в DashAdmin при ошибке/таймауте/если уже закрыта)
+          if (activeShift) {
+            const timeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("SmartShell не отвечает (timeout 7s)")), 7000)
+            );
+            try {
+              await Promise.race([ssClient.finishWorkShift(comment || undefined), timeoutPromise]);
+              console.log("[SmartShell] Successfully closed work shift in SmartShell");
+            } catch (ssErr: any) {
+              const errMsg = String(ssErr?.message || ssErr);
+              console.warn("[SmartShell] Note: Could not close shift in SmartShell (might already be closed or SmartShell is slow/unreachable):", errMsg);
+              // Не блокируем завершение смены в DashAdmin, чтобы сотрудник мог сохранить подсчет и сдать смену
+            }
+          } else {
+            console.log("[SmartShell] No active shift in SmartShell when closing DashAdmin shift. Skipping SS finishWorkShift.");
+          }
+        }
+      }
+    }
 
     // End shift and save report
     await query(

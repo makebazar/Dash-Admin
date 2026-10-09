@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, useTransition } from "react"
-import { Plus, Search, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers, Barcode, History, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Plus, Search, MoreVertical, Pencil, Trash2, LayoutGrid, Box, RefreshCw, Layers, Barcode, History, TrendingUp, TrendingDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +10,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, Product, Category, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, ReplenishmentRule, Warehouse, PriceTagSettings, archiveProduct, restoreProduct } from "../actions"
+import { Switch } from "@/components/ui/switch"
+import { createProduct, updateProduct, deleteProduct, bulkUpdatePrices, writeOffProduct, getProductHistory, adjustWarehouseStock, getReplenishmentRulesForProduct, createReplenishmentRule, deleteReplenishmentRule, archiveProduct, restoreProduct, syncSmartShellCatalog, pushProductsToSmartShell, pushStockToSmartShell } from "../actions"
+import type { Product, Category, ReplenishmentRule, Warehouse, PriceTagSettings } from "../types"
 import { PageToolbar, ToolbarGroup, SearchInput } from "@/components/layout/PageShell"
 import { useParams, useRouter } from "next/navigation"
 import { format } from "date-fns"
@@ -70,6 +72,68 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
 
     const [isPending, startTransition] = useTransition()
     const { confirmAction, showMessage, Dialogs } = useUiDialogs()
+    const [isSyncingSmartShell, setIsSyncingSmartShell] = useState(false)
+
+    const handleSyncSmartShell = () => {
+        setIsSyncingSmartShell(true)
+        startTransition(async () => {
+            try {
+                const result = await syncSmartShellCatalog(clubId)
+                showMessage({ title: "Успешно", description: result.message || "Каталог успешно синхронизирован" })
+                router.refresh()
+            } catch (err: any) {
+                showMessage({ title: "Ошибка синхронизации", description: err.message || "Не удалось синхронизировать каталог" })
+            } finally {
+                setIsSyncingSmartShell(false)
+            }
+        })
+    }
+
+    const [isPushingSmartShell, setIsPushingSmartShell] = useState(false)
+
+    const handlePushSmartShell = () => {
+        setIsPushingSmartShell(true)
+        startTransition(async () => {
+            try {
+                const result = await pushProductsToSmartShell(clubId)
+                showMessage({ title: "Успешно", description: result.message || "Товары выгружены в SmartShell" })
+                router.refresh()
+            } catch (err: any) {
+                showMessage({ title: "Ошибка выгрузки", description: err.message || "Не удалось выгрузить товары" })
+            } finally {
+                setIsPushingSmartShell(false)
+            }
+        })
+    }
+
+    const [isPushingStock, setIsPushingStock] = useState(false)
+
+    const handlePushStockSmartShell = async () => {
+        const confirmed = await confirmAction({
+            title: "Выровнять остатки в SmartShell?",
+            description: "Текущие остатки складов кассы из DashAdmin будут принудительно установлены (SET) для всех товаров в SmartShell. Продолжить?",
+            confirmText: "Да, выровнять",
+            cancelText: "Отмена",
+        })
+        if (!confirmed) return
+
+        setIsPushingStock(true)
+        startTransition(async () => {
+            try {
+                const result = await pushStockToSmartShell(clubId)
+                if (result.success) {
+                    showMessage({ title: "Успешно", description: result.message })
+                    router.refresh()
+                } else {
+                    showMessage({ title: "Внимание", description: result.message })
+                }
+            } catch (err: any) {
+                showMessage({ title: "Ошибка", description: err.message || "Не удалось выровнять остатки" })
+            } finally {
+                setIsPushingStock(false)
+            }
+        })
+    }
 
     const getHistoryTypeMeta = (log: any) => {
         if (log.related_entity_type === "TRANSFER") {
@@ -284,7 +348,9 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                         selling_price: Number(editingProduct.selling_price) || 0,
                         min_stock_level: Number(editingProduct.min_stock_level) || 0,
                         is_active: editingProduct.is_active ?? true,
-                        units_per_box: Number(editingProduct.units_per_box) || 1
+                        units_per_box: Number(editingProduct.units_per_box) || 1,
+                        track_expiration: Boolean(editingProduct.track_expiration),
+                        shelf_life_days: editingProduct.shelf_life_days ? Number(editingProduct.shelf_life_days) : null,
                     })
                 } else {
                     await createProduct(clubId, currentUserId, {
@@ -296,7 +362,9 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                         selling_price: Number(editingProduct.selling_price) || 0,
                         current_stock: Number(editingProduct.current_stock) || 0,
                         min_stock_level: Number(editingProduct.min_stock_level) || 0,
-                        units_per_box: Number(editingProduct.units_per_box) || 1
+                        units_per_box: Number(editingProduct.units_per_box) || 1,
+                        track_expiration: Boolean(editingProduct.track_expiration),
+                        shelf_life_days: editingProduct.shelf_life_days ? Number(editingProduct.shelf_life_days) : null,
                     })
                 }
                 setIsDialogOpen(false)
@@ -465,18 +533,84 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                     </Select>
                 </ToolbarGroup>
                 <ToolbarGroup align="end" className="w-full md:w-auto mt-3 md:mt-0">
-                    {selectedIds.size > 0 && (
-                        <>
-                            <Button variant="outline" onClick={() => setIsPrintDialogOpen(true)} className="flex-1 md:flex-none h-9 bg-white">
-                                <Printer className="mr-2 h-4 w-4" />
-                                Печать ({selectedIds.size})
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button 
+                                variant="outline" 
+                                disabled={isSyncingSmartShell || isPushingSmartShell || isPushingStock}
+                                className="flex-1 md:flex-none h-9 bg-white text-slate-800 border-slate-200 hover:bg-slate-50 font-medium"
+                            >
+                                {(isSyncingSmartShell || isPushingSmartShell || isPushingStock) ? (
+                                    <RefreshCw className="mr-2 h-4 w-4 animate-spin text-slate-500" />
+                                ) : (
+                                    <Layers className="mr-2 h-4 w-4 text-slate-500" />
+                                )}
+                                Действия
+                                <ChevronDown className="ml-2 h-3.5 w-3.5 text-slate-400" />
                             </Button>
-                            <Button variant="outline" onClick={() => setIsBulkDialogOpen(true)} className="flex-1 md:flex-none h-9 bg-white">
-                                <Layers className="mr-2 h-4 w-4" />
-                                Цены ({selectedIds.size})
-                            </Button>
-                        </>
-                    )}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-64 rounded-xl p-1.5 shadow-lg border-slate-200">
+                            <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                Интеграция SmartShell
+                            </div>
+                            <DropdownMenuItem 
+                                onClick={handleSyncSmartShell}
+                                disabled={isSyncingSmartShell || isPushingSmartShell || isPushingStock}
+                                className="cursor-pointer rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                                <RefreshCw className="mr-2.5 h-4 w-4 text-emerald-600 shrink-0" />
+                                <div>
+                                    <div className="font-semibold text-slate-900">Импорт из SmartShell</div>
+                                    <div className="text-[10px] text-slate-500">Загрузить каталог и остатки</div>
+                                </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                                onClick={handlePushSmartShell}
+                                disabled={isSyncingSmartShell || isPushingSmartShell || isPushingStock}
+                                className="cursor-pointer rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                                <RefreshCw className="mr-2.5 h-4 w-4 text-blue-600 shrink-0" />
+                                <div>
+                                    <div className="font-semibold text-slate-900">Выгрузить новые товары</div>
+                                    <div className="text-[10px] text-slate-500">Создать отсутствующие в SmartShell</div>
+                                </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                                onClick={handlePushStockSmartShell}
+                                disabled={isSyncingSmartShell || isPushingSmartShell || isPushingStock}
+                                className="cursor-pointer rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                                <RefreshCw className="mr-2.5 h-4 w-4 text-amber-600 shrink-0" />
+                                <div>
+                                    <div className="font-semibold text-amber-900">Выровнять остатки</div>
+                                    <div className="text-[10px] text-slate-500">DashAdmin → SmartShell (SET)</div>
+                                </div>
+                            </DropdownMenuItem>
+                            
+                            {selectedIds.size > 0 && (
+                                <>
+                                    <DropdownMenuSeparator className="my-1" />
+                                    <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                        Выбрано: {selectedIds.size} шт
+                                    </div>
+                                    <DropdownMenuItem 
+                                        onClick={() => setIsPrintDialogOpen(true)}
+                                        className="cursor-pointer rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                                    >
+                                        <Printer className="mr-2.5 h-4 w-4 text-slate-600 shrink-0" />
+                                        Печать ценников
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                        onClick={() => setIsBulkDialogOpen(true)}
+                                        className="cursor-pointer rounded-lg py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                                    >
+                                        <Layers className="mr-2.5 h-4 w-4 text-slate-600 shrink-0" />
+                                        Массовое изменение цен
+                                    </DropdownMenuItem>
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button onClick={() => router.push(`/clubs/${clubId}/inventory/products/new`)} className="flex-1 md:flex-none h-9">
                         <Plus className="mr-2 h-4 w-4" />
                         Добавить товар
@@ -1059,6 +1193,34 @@ export function ProductsTab({ products, categories, warehouses, currentUserId, p
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {/* Expiration Tracking */}
+                        <div className="rounded-lg border p-3 bg-slate-50/50 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label className="text-sm font-medium">Срок годности</Label>
+                                    <p className="text-xs text-muted-foreground">Указывать срок годности при поставках и отслеживать свежесть</p>
+                                </div>
+                                <Switch 
+                                    checked={Boolean(editingProduct?.track_expiration)}
+                                    onCheckedChange={(v: boolean) => setEditingProduct(prev => ({ ...prev!, track_expiration: v }))}
+                                />
+                            </div>
+                            {Boolean(editingProduct?.track_expiration) && (
+                                <div className="space-y-1.5 pt-2 border-t border-slate-200">
+                                    <Label className="text-xs font-medium">Срок хранения (дней)</Label>
+                                    <Input 
+                                        type="number"
+                                        placeholder="Например: 5 для сэндвичей, 14 для десертов"
+                                        value={editingProduct?.shelf_life_days ?? ''}
+                                        onChange={e => setEditingProduct(prev => ({ ...prev!, shelf_life_days: e.target.value ? Number(e.target.value) : null }))}
+                                        min={1}
+                                    />
+                                    <p className="text-[11px] text-slate-500">Автоматически подставляет дату «Годен до» при приёмке поставки</p>
+                                </div>
+                            )}
+                        </div>
+
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Отмена</Button>
                             <Button type="submit" disabled={isPending}>Сохранить</Button>

@@ -290,7 +290,7 @@ export async function PATCH(
     }
 
     const shift = shiftRes.rows[0];
-    if (shift.status !== "ACTIVE") {
+    if (shift.status !== "ACTIVE" && shift.status !== "OPEN") {
       return NextResponse.json(
         {
           error:

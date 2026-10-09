@@ -414,6 +414,43 @@ export async function createTransfer(
         [product_id, clubId],
       );
 
+      // 5b. Авто-синхронизация пополнения / возврата со SmartShell при перемещении
+      const cashboxWarehouseIds: number[] = Array.isArray(inventorySettings.cashbox_warehouse_ids) && inventorySettings.cashbox_warehouse_ids.length > 0
+        ? inventorySettings.cashbox_warehouse_ids
+        : (inventorySettings.cashbox_warehouse_id ? [inventorySettings.cashbox_warehouse_id] : []);
+
+      const isSourceCashbox = cashboxWarehouseIds.includes(Number(source_warehouse_id));
+      const isTargetCashbox = cashboxWarehouseIds.includes(Number(target_warehouse_id));
+
+      if (inventorySettings.smartshell_integration_enabled && isSourceCashbox !== isTargetCashbox) {
+        try {
+          const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+          const smartshellClient = await getSmartShellClientForClub(clubId);
+          if (smartshellClient) {
+            const pRes = await client.query(
+              `SELECT name, barcode FROM warehouse_products WHERE id = $1`,
+              [product_id]
+            );
+            const prod = pRes.rows[0];
+            if (prod) {
+              const goodId = await smartshellClient.resolveGoodId(prod);
+              if (goodId) {
+                const isAddingToCashbox = isTargetCashbox;
+                await smartshellClient.changeGoodsQuantity({
+                  items: [{ id: goodId, quantity }],
+                  operation: isAddingToCashbox ? "ADD" : "DISPOSAL",
+                  comment: isAddingToCashbox
+                    ? `Перемещение на точку продаж в DashAdmin (+${quantity} шт)`
+                    : `Перемещение с точки продаж на склад в DashAdmin (-${quantity} шт)`
+                });
+              }
+            }
+          }
+        } catch (ssErr) {
+          console.error("SmartShell transfer sync error:", ssErr);
+        }
+      }
+
       // 6. AUTO-CLOSE RESTOCK TASKS
       // If we are moving TO a warehouse that is a Target in some RESTOCK rule,
       // we check if that rule's requirements are now met.
@@ -1130,6 +1167,47 @@ export async function createWriteOff(
       }
     }
 
+    // Авто-синхронизация списания сотрудником со SmartShell (для складов кассы / бара)
+    if (inventorySettings.smartshell_integration_enabled) {
+      const cashboxWarehouseIds: number[] = Array.isArray(inventorySettings.cashbox_warehouse_ids)
+        ? inventorySettings.cashbox_warehouse_ids
+        : [];
+      
+      const isCashboxWarehouse = cashboxWarehouseIds.length === 0 || cashboxWarehouseIds.includes(Number(warehouseId));
+      if (isCashboxWarehouse) {
+        try {
+          const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+          const smartshellClient = await getSmartShellClientForClub(clubId);
+          if (smartshellClient) {
+            const ssItems: { id: number; quantity: number }[] = [];
+            for (const item of data.items) {
+              const pRes = await client.query(
+                `SELECT name, barcode FROM warehouse_products WHERE id = $1`,
+                [item.product_id]
+              );
+              const prod = pRes.rows[0];
+              if (prod) {
+                const goodId = await smartshellClient.resolveGoodId(prod);
+                if (goodId) {
+                  ssItems.push({ id: goodId, quantity: item.quantity });
+                }
+              }
+            }
+
+            if (ssItems.length > 0) {
+              await smartshellClient.changeGoodsQuantity({
+                items: ssItems,
+                operation: "DISPOSAL",
+                comment: `Списание сотрудником в DashAdmin (${data.notes || "Списание"}): -${ssItems.reduce((s, i) => s + i.quantity, 0)} шт`,
+              });
+            }
+          }
+        } catch (ssErr) {
+          console.error("SmartShell createWriteOff auto-sync error:", ssErr);
+        }
+      }
+    }
+
     await client.query("COMMIT");
 
     // Check if write-off triggered new replenishment needs
@@ -1215,6 +1293,39 @@ export async function adjustWarehouseStock(
       null,
       warehouseId,
     );
+
+    // Авто-синхронизация изменения остатка со SmartShell (только для складов кассы)
+    const inventorySettings = await getClubInventorySettingsInternal(client, clubId);
+    const cashboxWarehouseIds: number[] = Array.isArray(inventorySettings.cashbox_warehouse_ids)
+      ? inventorySettings.cashbox_warehouse_ids
+      : [];
+    const isEditCashboxWarehouse = cashboxWarehouseIds.length === 0 || cashboxWarehouseIds.includes(Number(warehouseId));
+
+    if (inventorySettings.smartshell_integration_enabled && isEditCashboxWarehouse) {
+      try {
+        const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+        const smartshellClient = await getSmartShellClientForClub(clubId);
+        if (smartshellClient) {
+          const pRes = await client.query(
+            `SELECT name, barcode FROM warehouse_products WHERE id = $1`,
+            [productId]
+          );
+          const prod = pRes.rows[0];
+          if (prod) {
+            const goodId = await smartshellClient.resolveGoodId(prod);
+            if (goodId) {
+              await smartshellClient.changeGoodsQuantity({
+                items: [{ id: goodId, quantity: Math.abs(diff) }],
+                operation: diff > 0 ? "ADD" : "DISPOSAL",
+                comment: `Корректировка остатка в DashAdmin (${reason}): ${previousStock} -> ${newStock} шт`
+              });
+            }
+          }
+        }
+      } catch (ssErr) {
+        console.error("SmartShell adjustWarehouseStock auto-sync error:", ssErr);
+      }
+    }
 
     await client.query("COMMIT");
   } catch (e) {
@@ -1332,6 +1443,44 @@ export async function writeOffProduct(
         `,
       [productId, clubId],
     );
+
+    // Авто-синхронизация списания со SmartShell (для складов кассы / бара)
+    const inventorySettings = await getClubInventorySettingsInternal(client, clubId);
+    if (inventorySettings.smartshell_integration_enabled) {
+      const cashboxWarehouseIds: number[] = Array.isArray(inventorySettings.cashbox_warehouse_ids)
+        ? inventorySettings.cashbox_warehouse_ids
+        : [];
+      
+      const cashboxWriteOffAmount = writeOffs
+        .filter((wo) => cashboxWarehouseIds.length === 0 || cashboxWarehouseIds.includes(Number(wo.warehouseId)))
+        .reduce((sum, wo) => sum + wo.amount, 0);
+
+      if (cashboxWriteOffAmount > 0) {
+        try {
+          const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+          const smartshellClient = await getSmartShellClientForClub(clubId);
+          if (smartshellClient) {
+            const pRes = await client.query(
+              `SELECT name, barcode FROM warehouse_products WHERE id = $1`,
+              [productId]
+            );
+            const prod = pRes.rows[0];
+            if (prod) {
+              const goodId = await smartshellClient.resolveGoodId(prod);
+              if (goodId) {
+                await smartshellClient.changeGoodsQuantity({
+                  items: [{ id: goodId, quantity: cashboxWriteOffAmount }],
+                  operation: "DISPOSAL",
+                  comment: `Списание товара в DashAdmin (${reason}): -${cashboxWriteOffAmount} шт`,
+                });
+              }
+            }
+          }
+        } catch (ssErr) {
+          console.error("SmartShell writeOffProduct auto-sync error:", ssErr);
+        }
+      }
+    }
 
     await client.query("COMMIT");
   } catch (e) {

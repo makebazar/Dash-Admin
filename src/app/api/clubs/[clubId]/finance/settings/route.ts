@@ -57,7 +57,7 @@ export async function POST(
 ) {
   try {
     const { clubId } = await params;
-    await requireModuleAccess(clubId, "finance", "manage");
+    await requireModuleAccess(clubId, "finance", "edit");
 
     const body = await request.json();
     const {

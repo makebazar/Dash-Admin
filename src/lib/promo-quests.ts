@@ -1,5 +1,4 @@
 import { PoolClient } from "pg";
-import { accrueBPXP } from "./promo-bp";
 
 export type ReceiptItem = {
   product_id: number;
@@ -13,6 +12,7 @@ export function evaluateTrigger(
     target_entity_id?: string | null;
     target_entity_id_type?: string | null;
     target_service_id?: string | null;
+    target_zone_id?: string | null;
   },
   event: {
     type: "receipt" | "game" | "topup" | "service" | "visit";
@@ -24,8 +24,15 @@ export function evaluateTrigger(
     ticketsSpent?: number;
     amount?: number;
     serviceRuleId?: string | number;
+    zoneId?: string | number;
   }
 ): number {
+  if (trigger.target_zone_id && event.zoneId) {
+    if (String(trigger.target_zone_id) !== String(event.zoneId)) {
+      return 0;
+    }
+  }
+
   let progressDelta = 0;
 
   if (event.type === "receipt") {
@@ -201,7 +208,7 @@ export async function handleQuestProgress(
 }
 
 /**
- * Processes a receipt to update player XP and check active quests.
+ * Processes a receipt and checks active quests.
  */
 export async function processReceiptEvent(
   client: PoolClient,
@@ -211,22 +218,7 @@ export async function processReceiptEvent(
   totalAmount: number,
   items: ReceiptItem[],
 ) {
-  // 1. Fetch club settings for XP rules
-  const clubRes = await client.query(
-    `SELECT promo_settings FROM clubs WHERE id = $1`,
-    [clubId],
-  );
-  const settings = clubRes.rows[0]?.promo_settings || {};
-  const xpPer100 = settings.xp_per_100_rub ?? 100;
-
-  // 1. Calculate and award base XP for the purchase (e.g., 100 XP per 100 RUB)
-  const xpEarned = Math.floor(totalAmount / 100) * xpPer100;
-  if (xpEarned > 0) {
-    // This now updates both Permanent XP and Battle Pass XP
-    await addPlayerXP(client, clubId, playerId, xpEarned, true);
-  }
-
-  // 2. Fetch active quests for this player
+  // 1. Fetch active quests for this player
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
 
   // 2.1 Fetch categories for products in receipt (needed for category quests)
@@ -257,6 +249,46 @@ export async function processReceiptEvent(
     await processPackagePurchase(client, clubId, playerId, items);
   } catch (err) {
     console.error("Failed to process package purchase loyalty:", err);
+  }
+}
+
+/**
+ * Processes a service/tariff purchase event for quests and package loyalty programs.
+ */
+export async function processServiceEvent(
+  client: any,
+  clubId: number | string,
+  playerId: string,
+  serviceRuleId?: string | number,
+  quantity: number = 1,
+  zoneId?: string | number
+) {
+  const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
+  for (const quest of activeQuests) {
+    await handleQuestProgress(client, clubId, playerId, quest, {
+      type: "service",
+      serviceRuleId: String(serviceRuleId || ""),
+      zoneId,
+    });
+  }
+
+  // Update package loyalty progress
+  try {
+    const { processPackagePurchase } = await import("./promo-packages");
+    await processPackagePurchase(
+      client,
+      clubId,
+      playerId,
+      [
+        {
+          service_id: String(serviceRuleId || ""),
+          quantity,
+        },
+      ],
+      zoneId
+    );
+  } catch (err) {
+    console.error("Failed to process package loyalty purchase:", err);
   }
 }
 
@@ -302,21 +334,6 @@ export async function processBalanceTopupEvent(
   playerId: string,
   amount: number,
 ) {
-  // 1. Fetch club settings for XP rules
-  const clubRes = await client.query(
-    `SELECT promo_settings FROM clubs WHERE id = $1`,
-    [clubId],
-  );
-  const settings = clubRes.rows[0]?.promo_settings || {};
-  const xpPer100 = settings.xp_per_100_rub ?? 100;
-
-  // 1. Calculate and award base XP for the topup (e.g., 100 XP per 100 RUB)
-  const xpEarned = Math.floor(amount / 100) * xpPer100;
-  if (xpEarned > 0) {
-    // This now updates both Permanent XP and Battle Pass XP
-    await addPlayerXP(client, clubId, playerId, xpEarned, true);
-  }
-
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
 
   for (const quest of activeQuests) {
@@ -467,7 +484,6 @@ async function getActiveQuestsForPlayer(
        q.target_entity_id,
        q.target_entity_id_type,
        q.target_value,
-       q.reward_xp,
        q.reward_tickets,
        q.reward_bonus_balance,
        q.reward_prize_id,
@@ -475,26 +491,17 @@ async function getActiveQuestsForPlayer(
        pq.id as player_quest_id,
        pq.period_start,
        q.reset_period,
-       q.min_level,
        q.target_service_id,
        q.combo_triggers,
+       q.target_zone_id,
        pq.combo_progress,
        pq.last_visit_at
        FROM promo_quests q
        LEFT JOIN promo_player_quests pq ON pq.quest_id = q.id AND pq.player_id = $1::uuid
-       JOIN promo_player_balances pb ON pb.player_id = $1::uuid AND pb.club_id = $2::int
-       JOIN clubs c ON c.id = pb.club_id
-       LEFT JOIN LATERAL (
-         SELECT level_number
-         FROM promo_levels
-         WHERE club_id = $2::int AND xp_required <= pb.total_xp
-         ORDER BY level_number DESC
-         LIMIT 1
-       ) AS current_lvl ON TRUE
+       LEFT JOIN clubs c ON c.id = q.club_id
        WHERE q.club_id = $2::int
          AND q.is_active = TRUE
          AND (pq.id IS NULL OR pq.status = 'active' OR pq.status = 'pending_verification')
-         AND q.min_level <= COALESCE(current_lvl.level_number, 1)
          AND (q.available_days IS NULL OR (EXTRACT(DOW FROM timezone(COALESCE(c.timezone, 'Europe/Moscow'), now()))) = ANY(q.available_days))
          AND (q.time_start IS NULL OR (timezone(COALESCE(c.timezone, 'Europe/Moscow'), now()))::TIME >= q.time_start)
          AND (q.time_end IS NULL OR (timezone(COALESCE(c.timezone, 'Europe/Moscow'), now()))::TIME <= q.time_end)`,
@@ -559,25 +566,16 @@ export async function rewardPlayerForQuest(
   playerId: string,
   quest: any,
 ) {
-  // Add XP and Bonus Balance
-  const rewardXp = Number(quest.reward_xp || 0);
+  // Award Bonus Balance
   const rewardBonusBalance = Number(quest.reward_bonus_balance || 0);
-  if (rewardXp > 0 || rewardBonusBalance > 0) {
-    // 1. Award XP (Quest XP also goes to BP, usually without money boosts unless specified)
-    if (rewardXp > 0) {
-      await addPlayerXP(client, clubId, playerId, rewardXp);
-    }
-
-    // 2. Award Bonus Balance
-    if (rewardBonusBalance > 0) {
-      await client.query(
-        `UPDATE promo_player_balances
-         SET bonus_balance = COALESCE(bonus_balance, 0) + $1::numeric,
-             updated_at = NOW()
-         WHERE player_id = $2::uuid AND club_id = $3::int`,
-        [rewardBonusBalance, playerId, clubId],
-      );
-    }
+  if (rewardBonusBalance > 0) {
+    await client.query(
+      `UPDATE promo_player_balances
+       SET bonus_balance = COALESCE(bonus_balance, 0) + $1::numeric,
+           updated_at = NOW()
+       WHERE player_id = $2::uuid AND club_id = $3::int`,
+      [rewardBonusBalance, playerId, clubId],
+    );
   }
 
   // Issue Tickets
@@ -635,87 +633,7 @@ export async function rewardPlayerForQuest(
   }
 }
 
-/**
- * Adds XP to a player and checks for level up (optional notification logic).
- */
-export async function addPlayerXP(
-  client: PoolClient,
-  clubId: number | string,
-  playerId: string,
-  xpAmount: number,
-  isMoneyBased: boolean = false,
-) {
-  // 1. Add to Battle Pass (if active)
-  const { addXPToBP } = await import("./promo-bp");
-  const finalXP = await addXPToBP(
-    client,
-    clubId,
-    playerId,
-    xpAmount,
-    isMoneyBased,
-  );
-
-  // 2. Update Permanent Global Balance
-  await client.query(
-    `INSERT INTO promo_player_balances (player_id, club_id, total_xp)
-     VALUES ($1::uuid, $2::int, $3::numeric)
-     ON CONFLICT (player_id, club_id)
-     DO UPDATE SET total_xp = COALESCE(promo_player_balances.total_xp, 0) + $3::numeric,
-                   updated_at = NOW()`,
-    [playerId, clubId, finalXP || xpAmount],
-  );
-}
-
-/**
- * Calculates current level details based on XP and promo_levels table.
- */
-export async function getPlayerLevelInfo(
-  client: PoolClient,
-  clubId: number | string,
-  totalXp: number,
-) {
-  // Find the highest level where xp_required <= totalXp
-  const levelRes = await client.query(
-    `SELECT level_number, xp_required
-     FROM promo_levels
-     WHERE club_id = $1::int AND xp_required <= $2::numeric
-     ORDER BY level_number DESC
-     LIMIT 1`,
-    [clubId, totalXp],
-  );
-
-  const currentLevel = levelRes.rows[0] || { level_number: 1, xp_required: 0 };
-
-  // Find the next level
-  const nextLevelRes = await client.query(
-    `SELECT level_number, xp_required
-     FROM promo_levels
-     WHERE club_id = $1::int AND level_number > $2::int
-     ORDER BY level_number ASC
-     LIMIT 1`,
-    [clubId, currentLevel.level_number],
-  );
-
-  const nextLevel = nextLevelRes.rows[0] || null;
-
-  // Progress within current level: (totalXp - currentLevelXp) / (nextLevelXp - currentLevelXp)
-  // If no next level, we are at MAX level.
-  const progressXp = totalXp - currentLevel.xp_required;
-  const targetXp = nextLevel
-    ? nextLevel.xp_required - currentLevel.xp_required
-    : null;
-
-  return {
-    currentLevel: currentLevel.level_number,
-    currentLevelXp: currentLevel.xp_required,
-    nextLevel: nextLevel ? nextLevel.level_number : null,
-    nextLevelXp: nextLevel ? nextLevel.xp_required : null,
-    totalXp: totalXp,
-    progressXp,
-    targetXp,
-    isMaxLevel: !nextLevel,
-  };
-}
+// ponytail: addPlayerXP and getPlayerLevelInfo removed — XP/levels system stripped out
 
 /**
  * Processes confirmed daily player visit events.
@@ -726,11 +644,17 @@ export async function processVisitEvent(
   clubId: number | string,
   playerId: string,
   seatNumber?: string,
+  zoneId?: string | number,
 ) {
   const activeQuests = await getActiveQuestsForPlayer(client, clubId, playerId);
   const confirmedAt = new Date();
 
   for (const quest of activeQuests) {
+    if (quest.target_zone_id && zoneId) {
+      if (String(quest.target_zone_id) !== String(zoneId)) {
+        continue;
+      }
+    }
     const isCombo = quest.combo_triggers && Array.isArray(quest.combo_triggers) && quest.combo_triggers.length > 0;
 
     if (isCombo) {
@@ -894,7 +818,7 @@ export async function processVisitEvent(
   // Update visit loyalty progress
   try {
     const { processPlayerVisit } = await import("./promo-packages");
-    await processPlayerVisit(client, clubId, playerId);
+    await processPlayerVisit(client, clubId, playerId, zoneId);
   } catch (err) {
     console.error("Failed to process player visit loyalty:", err);
   }

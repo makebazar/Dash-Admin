@@ -33,8 +33,22 @@ interface TemplateField {
     show_in_stats: boolean
     show_for_employee?: boolean
     account_id?: number // For INCOME fields - which account to credit
+    smartshell_source?: string // SmartShell API mapping field
     id: string // for frontend dnd (required for sortable)
 }
+
+const SMARTSHELL_SOURCES = [
+    { value: 'none', label: 'Вручную (Без SmartShell)' },
+    { value: 'money.sum.cash', label: 'SmartShell: Выручка Наличные (cash)' },
+    { value: 'money.sum.card', label: 'SmartShell: Выручка Безнал (card)' },
+    { value: 'goods.total', label: 'SmartShell: Выручка Бара / Товаров (goods)' },
+    { value: 'services.total', label: 'SmartShell: Выручка за Время / Услуги (time)' },
+    { value: 'money.sum.deposit', label: 'SmartShell: Списания с Депозита (deposit)' },
+    { value: 'money.sum.bonus', label: 'SmartShell: Списания Бонусов (bonus)' },
+    { value: 'money.sum.total', label: 'SmartShell: Итого выручка (total)' },
+    { value: 'money.cash_on_start', label: 'SmartShell: Касса на начало (cash_on_start)' },
+    { value: 'payments.count', label: 'SmartShell: Количество чеков (payments.count)' },
+]
 
 interface Account {
     id: number
@@ -53,6 +67,7 @@ const normalizeTemplateFields = (fields: TemplateField[]) =>
         show_in_stats: field.show_in_stats,
         show_for_employee: field.show_for_employee ?? true,
         account_id: field.account_id ?? null,
+        smartshell_source: field.smartshell_source ?? null,
     }))
 
 function SortableField({ 
@@ -257,6 +272,32 @@ function SortableField({
                                 onCheckedChange={(checked) => onUpdate(index, 'show_in_stats', checked)}
                                 className="data-[state=checked]:bg-slate-900"
                             />
+                        </div>
+
+                        <div className="h-px bg-slate-200" />
+
+                        <div className="space-y-2">
+                            <Label className="text-xs font-semibold text-slate-500">Источник в SmartShell API</Label>
+                            <Select
+                                value={field.smartshell_source || 'none'}
+                                onValueChange={(val) => onUpdate(index, 'smartshell_source', val === 'none' ? undefined : val)}
+                            >
+                                <SelectTrigger className="h-10 rounded-xl bg-white border-slate-200">
+                                    <SelectValue placeholder="Выберите источник" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-xl border-slate-200">
+                                    {SMARTSHELL_SOURCES.map((src) => (
+                                        <SelectItem key={src.value} value={src.value} className="rounded-lg">
+                                            {src.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-[11px] text-slate-400">
+                                {field.smartshell_source && field.smartshell_source !== 'none'
+                                    ? "Значение поля будет автоматически загружаться из SmartShell API."
+                                    : "Поле заносят сотрудники вручную."}
+                            </p>
                         </div>
 
                         <div className="h-px bg-slate-200" />

@@ -7,6 +7,7 @@ export type SupplyItem = {
   quantity: number;
   cost_price: number;
   total_cost: number;
+  expiration_date?: string | null;
   created_at: string;
 };
 
@@ -27,6 +28,10 @@ export type Product = {
   back_stock?: number;
   max_front_stock?: number;
   min_front_stock?: number;
+
+  // Expiration tracking
+  track_expiration?: boolean;
+  shelf_life_days?: number | null;
 
   // New Multi-Warehouse fields
   stocks?: {

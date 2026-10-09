@@ -46,16 +46,7 @@ export async function GET(request: Request) {
           [playerId, activeClubId],
         );
 
-        if (playerResult.rowCount && playerResult.rows[0].total_xp !== null) {
-          const { getPlayerLevelInfo } = await import("@/lib/promo-quests");
-          const totalXp = parseFloat(playerResult.rows[0].total_xp || 0);
-          const levelInfo = await getPlayerLevelInfo(
-            client,
-            activeClubId,
-            totalXp,
-          );
-          playerLevel = levelInfo.currentLevel;
-        }
+        // playerLevel defaults to 1
       } finally {
         client.release();
       }

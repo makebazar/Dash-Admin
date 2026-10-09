@@ -230,15 +230,68 @@ export async function correctInventoryItem(
       ],
     );
 
+    // Авто-синхронизация пост-корректировки со SmartShell
+    const invSettings = await getClubInventorySettingsInternal(client, clubId);
+    if (invSettings.smartshell_integration_enabled) {
+      const cashboxWarehouseIds: number[] = Array.isArray(invSettings.cashbox_warehouse_ids)
+        ? invSettings.cashbox_warehouse_ids
+        : [];
+      if (cashboxWarehouseIds.length === 0 || cashboxWarehouseIds.includes(Number(warehouseId))) {
+        try {
+          const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+          const smartshellClient = await getSmartShellClientForClub(clubId);
+          if (smartshellClient) {
+            const pRes = await client.query(`SELECT name, barcode FROM warehouse_products WHERE id = $1`, [productId]);
+            const prod = pRes.rows[0];
+            if (prod) {
+              const goodId = await smartshellClient.resolveGoodId(prod);
+              if (goodId) {
+                await smartshellClient.setGoodsQuantity(
+                  [{ id: goodId, quantity: normalizedActualStock }],
+                  `Пост-корректировка ревизии #${inventoryId} в DashAdmin: ${oldActualStock} -> ${normalizedActualStock} шт`
+                );
+              }
+            }
+          }
+        } catch (ssErr) {
+          console.error("SmartShell correctInventoryItem auto-sync error:", ssErr);
+        }
+      }
+    }
+
     await client.query("COMMIT");
     revalidatePath(`/clubs/${clubId}/inventory`);
     return { success: true };
   } catch (e: any) {
     await client.query("ROLLBACK");
-    console.error("Inventory correction error:", e);
     throw e;
   } finally {
     client.release();
+  }
+}
+
+/**
+ * Отправка точного остатка инвентаризации в SmartShell (операция SET)
+ */
+export async function syncInventoryCorrectionToSmartShell(
+  clubId: string,
+  goodId: number,
+  actualStock: number,
+  userName?: string
+) {
+  try {
+    const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+    const client = await getSmartShellClientForClub(clubId);
+    if (!client) return false;
+
+    const comment = `Корректировка по результатам инвентаризации в DashAdmin${userName ? ` (Сотрудник: ${userName})` : ""}`;
+    return await client.setGoodsQuantity(
+      [{ id: goodId, quantity: actualStock }],
+      comment
+    );
+  } catch (err) {
+    console.error("SmartShell inventory correction sync error:", err);
+    return false;
   }
 }
 
@@ -1378,6 +1431,72 @@ export async function closeInventory(
         !isRevision ? "SHIFT" : null,
       ],
     );
+
+    // 6. Авто-синхронизация итогов инвентаризации со SmartShell (для складов кассы / бара)
+    const invSettings = await getClubInventorySettingsInternal(client, clubId);
+    if (invSettings.smartshell_integration_enabled) {
+      const cashboxWarehouseIds: number[] = Array.isArray(invSettings.cashbox_warehouse_ids) && invSettings.cashbox_warehouse_ids.length > 0
+        ? invSettings.cashbox_warehouse_ids
+        : (invSettings.cashbox_warehouse_id ? [invSettings.cashbox_warehouse_id] : []);
+
+      const isCashboxInventory = cashboxWarehouseIds.length > 0
+        ? cashboxWarehouseIds.includes(Number(warehouseId))
+        : true;
+
+      if (isCashboxInventory) {
+        try {
+          const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+          const smartshellClient = await getSmartShellClientForClub(clubId);
+          if (smartshellClient) {
+            const countedProductIds = itemsRes.rows
+              .filter((i: any) => i.actual_stock !== null)
+              .map((i: any) => i.product_id);
+
+            if (countedProductIds.length > 0) {
+              const stockQuery = cashboxWarehouseIds.length > 0
+                ? `SELECT p.id, p.name, p.barcode, COALESCE(SUM(ws.quantity), 0) as cashbox_stock
+                   FROM warehouse_products p
+                   LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = ANY($2::int[])
+                   WHERE p.club_id = $1 AND p.id = ANY($3::int[])
+                   GROUP BY p.id, p.name, p.barcode`
+                : `SELECT p.id, p.name, p.barcode, COALESCE(SUM(ws.quantity), 0) as cashbox_stock
+                   FROM warehouse_products p
+                   LEFT JOIN warehouse_stock ws ON p.id = ws.product_id
+                   LEFT JOIN warehouses w ON ws.warehouse_id = w.id
+                   WHERE p.club_id = $1 AND p.id = ANY($2::int[])
+                     AND (w.shift_accountability_enabled = true OR w.type = 'BAR' OR w.is_default = true)
+                   GROUP BY p.id, p.name, p.barcode`;
+
+              const stockParams = cashboxWarehouseIds.length > 0
+                ? [clubId, cashboxWarehouseIds, countedProductIds]
+                : [clubId, countedProductIds];
+
+              const stockRes = await client.query(stockQuery, stockParams);
+              const ssItemsToSet: { id: number; quantity: number }[] = [];
+
+              for (const row of stockRes.rows) {
+                const goodId = await smartshellClient.resolveGoodId({
+                  name: row.name,
+                  barcode: row.barcode,
+                });
+                if (goodId) {
+                  ssItemsToSet.push({ id: goodId, quantity: Math.max(0, Number(row.cashbox_stock || 0)) });
+                }
+              }
+
+              if (ssItemsToSet.length > 0) {
+                await smartshellClient.setGoodsQuantity(
+                  ssItemsToSet,
+                  `Фиксация остатков по ревизии #${inventoryId} в DashAdmin`
+                );
+              }
+            }
+          }
+        } catch (ssErr) {
+          console.error("SmartShell closeInventory auto-sync error:", ssErr);
+        }
+      }
+    }
 
     await client.query("COMMIT");
     await checkReplenishmentNeeds(clubId);

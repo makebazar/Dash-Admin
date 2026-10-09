@@ -17,7 +17,7 @@ const unlinkSafe = (filePath: string) => {
 };
 
 /** Extract first valid JSON object from LLM response (brace-counting, handles nesting). */
-function extractJson(raw: string): object | null {
+function extractJson(raw: string): any {
   const start = raw.indexOf("{");
   if (start === -1) return null;
   let depth = 0;

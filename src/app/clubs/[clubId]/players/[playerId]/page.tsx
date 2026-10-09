@@ -1,788 +1,794 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import { PageShell } from "@/components/layout/PageShell";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
-import { 
-    User, Phone, Wallet, Clock, Coins, 
-    Calendar, AlertCircle, Loader2, ArrowLeft,
-    CheckCircle, ShieldAlert, KeyRound, Save, Plus,
-    Activity, Receipt, CreditCard
+import React, { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Swords,
+  Trophy,
+  Gamepad2,
+  Plus,
+  Edit2,
+  Loader2,
+  Calendar,
+  CheckCircle2,
+  XCircle,
+  User,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-interface SessionLog {
-    id: string;
-    workstationId: number;
-    startedAt: string;
-    endedAt: string | null;
-    status: string;
-    totalAmount: number;
-    paidAmount: number;
-}
+const formatPrizeText = (prize: any) => {
+  if (!prize) return '—';
+  const parts: string[] = [];
+  if (prize.reward > 0) parts.push(`${prize.reward} ₽`);
+  if (prize.textPrize) parts.push(prize.textPrize);
+  return parts.length > 0 ? parts.join(' + ') : '—';
+};
 
-interface TransactionLog {
-    id: string;
-    type: string;
-    amount: number;
-    paymentMethod: string;
-    description: string;
-    createdAt: string;
-}
+const DashFragTournamentCard = ({ tournament, clubId, playerId }: { tournament: any; clubId: string; playerId: string }) => {
+  const stats = tournament.stats;
+  const isFinished = tournament.status !== 'active' || new Date() > new Date(tournament.end_date);
+  const statusLabel = isFinished ? 'Завершен' : 'Активен';
 
-interface PlayerDetails {
-    id: string;
-    phone: string | null;
-    fullName: string;
-    balance: number;
-    bonusBalance: number;
-    totalHours: number;
-    totalSpent: number;
-    visitsCount: number;
-    tier: string;
-    loyaltyTierId: number | null;
-    promisedPaymentAllowed: boolean;
-}
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between flex-wrap gap-4 border-b border-slate-100 pb-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+              {statusLabel}
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {tournament.game === 'ALL' ? 'Мульти-дисциплина' : tournament.game}
+            </span>
+          </div>
+          <h3 className="text-xl font-bold text-slate-900">
+            {tournament.title}
+          </h3>
+          <div className="text-xs text-slate-500 font-medium mt-0.5">
+            {new Date(tournament.start_date).toLocaleDateString()} — {new Date(tournament.end_date).toLocaleDateString()}
+          </div>
+        </div>
+      </div>
 
-interface LoyaltyTier {
-    id: number;
-    name: string;
-}
+      {/* Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {/* Rank */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-center">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Место</div>
+          {tournament.rank ? (
+            <div className="text-xl font-bold text-slate-900">#{tournament.rank} <span className="text-xs font-normal text-slate-400">/ {tournament.totalPlayers}</span></div>
+          ) : (
+            <div className="text-sm font-bold text-slate-400">—</div>
+          )}
+        </div>
 
-export default function PlayerDetailPage({ params }: { params: Promise<{ clubId: string; playerId: string }> }) {
-    const { clubId, playerId } = use(params);
-    const router = useRouter();
-    
-    const [player, setPlayer] = useState<PlayerDetails | null>(null);
-    const [history, setHistory] = useState<{ sessions: SessionLog[]; transactions: TransactionLog[] }>({ sessions: [], transactions: [] });
-    const [loyaltyTiers, setLoyaltyTiers] = useState<LoyaltyTier[]>([]);
-    
-    const [isLoading, setIsLoading] = useState(true);
-    const [errorMsg, setErrorMsg] = useState("");
-    const [successMsg, setSuccessMsg] = useState("");
-    
-    const [activeTab, setActiveTab] = useState<"logs" | "edit" | "actions">("logs");
-    const [logsSubTab, setLogsSubTab] = useState<"transactions" | "sessions">("transactions");
+        {/* TP */}
+        <div className="bg-slate-900 text-white rounded-xl p-3.5 text-center">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Очки TP</div>
+          <div className="text-xl font-bold leading-tight">{stats.points}</div>
+        </div>
 
-    // Form inputs for editing profile
-    const [editName, setEditName] = useState("");
-    const [editPhone, setEditPhone] = useState("");
-    const [editBalance, setEditBalance] = useState(0);
-    const [editBonusBalance, setEditBonusBalance] = useState(0);
-    const [editTierId, setEditTierId] = useState<string>("");
-    const [editPromisedAllowed, setEditPromisedAllowed] = useState(false);
+        {/* Prize */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-center">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+            {isFinished ? 'Выигрыш' : 'Текущий приз'}
+          </div>
+          <div className="text-sm font-bold text-slate-900 truncate" title={formatPrizeText(tournament.myPrize)}>
+            {formatPrizeText(tournament.myPrize)}
+          </div>
+        </div>
 
-    // Form inputs for actions
-    const [depositAmt, setDepositAmt] = useState("");
-    const [depositMethod, setDepositMethod] = useState("cash");
-    
-    const [bonusAmt, setBonusAmt] = useState("");
-    const [bonusComment, setBonusComment] = useState("");
-    
-    const [tempPin, setTempPin] = useState("");
+        {/* Matches */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-center">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Сыграно</div>
+          <div className="text-sm font-bold text-slate-900">{stats.matchesCount} ({stats.wins}W / {stats.losses}L)</div>
+        </div>
 
-    const [isSubmitting, setIsSubmitting] = useState(false);
+        {/* Detail Link */}
+        <a
+          href={`/clubs/${clubId}/players/${playerId}/tournaments/${tournament.id}`}
+          className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl p-3.5 flex flex-col justify-center items-center gap-0.5 transition-all group cursor-pointer no-underline"
+        >
+          <div className="text-xs font-bold uppercase tracking-wider">Подробнее</div>
+          <div className="text-[10px] text-slate-400">Топ-15 матчей</div>
+        </a>
+      </div>
+    </div>
+  );
+};
 
-    useEffect(() => {
-        if (clubId && playerId) {
-            loadData();
-        }
-    }, [clubId, playerId]);
+export default function EsportsPlayerProfilePage() {
+  const { clubId, playerId } = useParams();
+  const router = useRouter();
 
-    const loadData = async () => {
-        setIsLoading(true);
-        setErrorMsg("");
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/players/${playerId}`);
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || "Ошибка загрузки данных");
-            }
-            if (data.player) {
-                setPlayer(data.player);
-                setHistory(data.history || { sessions: [], transactions: [] });
-                setLoyaltyTiers(data.loyaltyTiers || []);
-                
-                // Initialize edit form
-                setEditName(data.player.fullName || "");
-                setEditPhone(data.player.phone || "");
-                setEditBalance(data.player.balance || 0);
-                setEditBonusBalance(data.player.bonusBalance || 0);
-                setEditTierId(data.player.loyaltyTierId ? String(data.player.loyaltyTierId) : "");
-                setEditPromisedAllowed(Boolean(data.player.promisedPaymentAllowed));
-            }
-        } catch (err: any) {
-            setErrorMsg(err.message || "Не удалось загрузить данные клиента");
-        } finally {
-            setIsLoading(false);
-        }
-    };
+  const [data, setData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeGame, setActiveGame] = useState<"cs2" | "dota2" | "pubg" | "tournaments" | null>("cs2");
+  const [resultFilter, setResultFilter] = useState<"all" | "win" | "loss">("all");
+  const [periodFilter, setPeriodFilter] = useState<"all" | "today" | "week" | "month">("all");
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
 
-    const handleUpdateProfile = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-        setErrorMsg("");
-        setSuccessMsg("");
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/players/${playerId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    fullName: editName,
-                    phone: editPhone,
-                    balance: editBalance,
-                    bonusBalance: editBonusBalance,
-                    loyaltyTierId: editTierId || null,
-                    promisedPaymentAllowed: editPromisedAllowed
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || "Ошибка обновления профиля");
-            }
-            setSuccessMsg("Профиль клиента успешно обновлен!");
-            loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || "Не удалось обновить профиль");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+  const toggleDay = (day: string) => {
+    setExpandedDays((prev) => ({ ...prev, [day]: !prev[day] }));
+  };
 
-    const handleDepositBalance = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!depositAmt || parseFloat(depositAmt) <= 0) return;
-        setIsSubmitting(true);
-        setErrorMsg("");
-        setSuccessMsg("");
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/players/${playerId}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "deposit",
-                    amount: parseFloat(depositAmt),
-                    paymentMethod: depositMethod
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || "Ошибка пополнения баланса");
-            }
-            setSuccessMsg(`Баланс успешно пополнен на ${depositAmt} ₽!`);
-            setDepositAmt("");
-            loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || "Не удалось пополнить баланс");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+  // Modal States
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
+  const [isAdjustSubmitting, setIsAdjustSubmitting] = useState(false);
 
-    const handleDepositBonus = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!bonusAmt || parseFloat(bonusAmt) <= 0) return;
-        setIsSubmitting(true);
-        setErrorMsg("");
-        setSuccessMsg("");
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/players/${playerId}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "deposit-bonus",
-                    amount: parseFloat(bonusAmt),
-                    comment: bonusComment
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || "Ошибка начисления бонусов");
-            }
-            setSuccessMsg(`Успешно начислено ${bonusAmt} бонусов!`);
-            setBonusAmt("");
-            setBonusComment("");
-            loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || "Не удалось начислить бонусы");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
+  const [isIdsModalOpen, setIsIdsModalOpen] = useState(false);
+  const [steamId, setSteamId] = useState("");
+  const [dotaId, setDotaId] = useState("");
+  const [pubgNickname, setPubgNickname] = useState("");
+  const [isIdsSubmitting, setIsIdsSubmitting] = useState(false);
 
-    const handleResetPin = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!tempPin) return;
-        setIsSubmitting(true);
-        setErrorMsg("");
-        setSuccessMsg("");
-        try {
-            const res = await fetch(`/api/clubs/${clubId}/players/${playerId}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "reset-pin",
-                    tempPin
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                throw new Error(data.error || "Ошибка сброса PIN-кода");
-            }
-            setSuccessMsg("Временный PIN-код успешно установлен!");
-            setTempPin("");
-            loadData();
-        } catch (err: any) {
-            setErrorMsg(err.message || "Не удалось сбросить PIN-код");
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const getTxTypeLabel = (type: string) => {
-        switch (type) {
-            case "deposit": return "Пополнение баланса";
-            case "bonus_deposit": return "Начисление бонусов";
-            case "session_start": return "Запуск сессии";
-            case "session_extension": return "Продление сессии";
-            case "session_refund": return "Возврат средств";
-            case "order_payment": return "Покупка товаров";
-            default: return type;
-        }
-    };
-
-    const formatDate = (dateValue: any) => {
-        if (!dateValue) return "—";
-        const isNumeric = /^\d+$/.test(String(dateValue));
-        if (isNumeric) {
-            return new Date(parseInt(String(dateValue))).toLocaleString('ru-RU');
-        }
-        const d = new Date(dateValue);
-        return isNaN(d.getTime()) ? "—" : d.toLocaleString('ru-RU');
-    };
-
-    const formatPaymentMethod = (method: string) => {
-        if (!method) return "—";
-        const upper = method.toUpperCase();
-        if (upper === "CASH") return "Наличные";
-        if (upper === "CARD") return "Карта";
-        if (upper === "QR") return "СБП (QR-код)";
-        if (upper === "SYSTEM") return "Вручную (Панель)";
-        if (upper === "BONUS") return "Бонусы";
-        if (upper.includes("____") || upper.startsWith("*")) {
-            const digits = upper.replace(/[^0-9]/g, '');
-            if (digits) return `Карта (*${digits})`;
-            return "Карта";
-        }
-        return method;
-    };
-
-    const getTxTypeColor = (type: string) => {
-        if (type === "bonus_deposit") return "text-amber-600 bg-amber-50 border-amber-100";
-        if (type === "deposit" || type === "session_refund") return "text-emerald-600 bg-emerald-50 border-emerald-100";
-        return "text-slate-700 bg-slate-50 border-slate-100";
-    };
-
-    if (isLoading) {
-        return (
-            <PageShell maxWidth="7xl">
-                <div className="flex h-[80vh] items-center justify-center">
-                    <div className="flex flex-col items-center gap-3">
-                        <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
-                        <span className="text-base font-bold text-slate-500">Загрузка карточки клиента...</span>
-                    </div>
-                </div>
-            </PageShell>
-        );
+  const fetchProfileData = async () => {
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/players/${playerId}/esports`);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+        setSteamId(json.player?.steamId || "");
+        setDotaId(json.player?.dotaId || "");
+        setPubgNickname(json.player?.pubgNickname || "");
+      } else {
+        console.error("Fetch profile failed status:", res.status);
+      }
+    } catch (err) {
+      console.error("Fetch Profile Error:", err);
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    if (!player) {
-        return (
-            <PageShell maxWidth="7xl">
-                <div className="bg-red-50 border border-red-100 rounded-3xl p-8 max-w-2xl mx-auto mt-12 text-center">
-                    <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-                    <h2 className="text-xl font-bold text-red-950">Клиент не найден</h2>
-                    <p className="text-red-700 mt-2">{errorMsg || "Запрошенный пользователь не найден в системе DashLock."}</p>
-                    <Button onClick={() => router.push(`/clubs/${clubId}/players`)} className="mt-6 bg-slate-900 text-white rounded-xl">
-                        Вернуться к списку
-                    </Button>
-                </div>
-            </PageShell>
-        );
+  useEffect(() => {
+    if (clubId && playerId) {
+      fetchProfileData();
     }
+  }, [clubId, playerId]);
 
+  const handleAdjustPoints = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustAmount || !adjustReason.trim()) return;
+
+    setIsAdjustSubmitting(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/players/${playerId}/adjust-points`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: adjustAmount,
+          reason: adjustReason,
+        }),
+      });
+
+      if (res.ok) {
+        setIsAdjustModalOpen(false);
+        setAdjustAmount("");
+        setAdjustReason("");
+        fetchProfileData();
+      } else {
+        const errJson = await res.json();
+        alert(`Ошибка: ${errJson.error}`);
+      }
+    } catch (err: any) {
+      alert(`Ошибка сервера: ${err.message}`);
+    } finally {
+      setIsAdjustSubmitting(false);
+    }
+  };
+
+  const handleUpdateIds = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsIdsSubmitting(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/players/${playerId}/update-game-ids`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          steamId,
+          dotaId,
+          pubgNickname,
+        }),
+      });
+
+      if (res.ok) {
+        setIsIdsModalOpen(false);
+        fetchProfileData();
+      } else {
+        const errJson = await res.json();
+        alert(`Ошибка: ${errJson.error}`);
+      }
+    } catch (err: any) {
+      alert(`Ошибка сервера: ${err.message}`);
+    } finally {
+      setIsIdsSubmitting(false);
+    }
+  };
+
+  if (isLoading) {
     return (
-        <PageShell maxWidth="7xl">
-            <div className="space-y-6 pb-16">
-                {/* Back Button & Notifications */}
-                <div className="flex flex-col gap-4">
-                    <div className="flex items-center gap-3">
-                        <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-10 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl"
-                            onClick={() => router.push(`/clubs/${clubId}/players`)}
-                        >
-                            <ArrowLeft className="h-4 w-4 mr-2" />
-                            К списку клиентов
-                        </Button>
-                    </div>
-
-                    {successMsg && (
-                        <div className="bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-2xl p-4 flex items-center gap-3 animate-fade-in">
-                            <CheckCircle className="h-5 w-5 text-emerald-500 shrink-0" />
-                            <span className="font-semibold text-sm">{successMsg}</span>
-                        </div>
-                    )}
-
-                    {errorMsg && (
-                        <div className="bg-red-50 border border-red-100 text-red-800 rounded-2xl p-4 flex items-center gap-3 animate-fade-in">
-                            <ShieldAlert className="h-5 w-5 text-red-500 shrink-0" />
-                            <span className="font-semibold text-sm">{errorMsg}</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Grid Layout */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                    
-                    {/* Left Side: Summary & Quick Actions */}
-                    <div className="space-y-6">
-                        {/* Profile Summary Card */}
-                        <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 relative">
-                            <div className="text-center pb-6 border-b border-slate-100">
-                                <div className="h-20 w-20 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mx-auto mb-4 border border-indigo-100/50 shadow-sm">
-                                    <User className="h-10 w-10" />
-                                </div>
-                                <h2 className="text-2xl font-black text-slate-900 leading-tight">{player.fullName}</h2>
-                                <p className="text-sm font-mono text-slate-400 mt-1.5">{player.phone || 'Номер не указан'}</p>
-                                <div className="mt-3.5 inline-block">
-                                    <span className="px-3 py-1 text-xs font-bold bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-full">
-                                        {player.tier}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 pt-6">
-                                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                        <Wallet className="h-4 w-4 text-emerald-500" />
-                                        Депозит
-                                    </div>
-                                    <div className="text-xl font-extrabold text-emerald-600 mt-1">{Math.round(player.balance)} ₽</div>
-                                </div>
-                                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                        <Coins className="h-4 w-4 text-amber-500" />
-                                        Бонусы
-                                    </div>
-                                    <div className="text-xl font-extrabold text-amber-600 mt-1">{Math.round(player.bonusBalance)} Б</div>
-                                </div>
-                                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                        <Clock className="h-4 w-4 text-indigo-500" />
-                                        Времени
-                                    </div>
-                                    <div className="text-xl font-extrabold text-slate-900 mt-1">{Math.round(player.totalHours)} ч</div>
-                                </div>
-                                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                                    <div className="text-xs text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                        <Receipt className="h-4 w-4 text-violet-500" />
-                                        Потрачено
-                                    </div>
-                                    <div className="text-xl font-extrabold text-slate-900 mt-1">{Math.round(player.totalSpent)} ₽</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Navigation Menu (Tabs selector) */}
-                        <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-3 flex flex-col gap-1">
-                            <button
-                                onClick={() => setActiveTab("logs")}
-                                className={`flex items-center gap-3 w-full p-3 rounded-2xl text-sm font-semibold transition-colors ${activeTab === "logs" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
-                            >
-                                <Activity className="h-4.5 w-4.5" />
-                                Логи и история операций
-                            </button>
-                            <button
-                                onClick={() => setActiveTab("edit")}
-                                className={`flex items-center gap-3 w-full p-3 rounded-2xl text-sm font-semibold transition-colors ${activeTab === "edit" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
-                            >
-                                <User className="h-4.5 w-4.5" />
-                                Редактировать профиль
-                            </button>
-                            <button
-                                onClick={() => setActiveTab("actions")}
-                                className={`flex items-center gap-3 w-full p-3 rounded-2xl text-sm font-semibold transition-colors ${activeTab === "actions" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
-                            >
-                                <Plus className="h-4.5 w-4.5" />
-                                Быстрые действия
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Right Side: Tab Contents */}
-                    <div className="lg:col-span-2 space-y-6">
-                        
-                        {/* Tab 1: LOGS */}
-                        {activeTab === "logs" && (
-                            <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8">
-                                <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
-                                    <h3 className="text-lg font-bold text-slate-900">История активности</h3>
-                                    
-                                    {/* Sub-tabs selector */}
-                                    <div className="bg-slate-100 rounded-xl p-1 flex items-center gap-1">
-                                        <button
-                                            onClick={() => setLogsSubTab("transactions")}
-                                            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors ${logsSubTab === "transactions" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
-                                        >
-                                            Транзакции
-                                        </button>
-                                        <button
-                                            onClick={() => setLogsSubTab("sessions")}
-                                            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-colors ${logsSubTab === "sessions" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
-                                        >
-                                            Сессии
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {logsSubTab === "transactions" ? (
-                                    history.transactions.length === 0 ? (
-                                        <div className="text-center py-16 text-slate-400">
-                                            <Receipt className="h-10 w-10 mx-auto mb-2 text-slate-300" />
-                                            Транзакции отсутствуют
-                                        </div>
-                                    ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left text-xs sm:text-sm border-collapse">
-                                                <thead>
-                                                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                                                        <th className="p-3">Описание</th>
-                                                        <th className="p-3">Тип</th>
-                                                        <th className="p-3">Способ</th>
-                                                        <th className="p-3 text-right">Сумма</th>
-                                                        <th className="p-3 text-right">Дата</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-50">
-                                                    {history.transactions.map((tx) => (
-                                                        <tr key={tx.id} className="hover:bg-slate-50/50">
-                                                            <td className="p-3 font-semibold text-slate-800">{tx.description}</td>
-                                                            <td className="p-3">
-                                                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${getTxTypeColor(tx.type)}`}>
-                                                                    {getTxTypeLabel(tx.type)}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-3 font-medium text-slate-500">{formatPaymentMethod(tx.paymentMethod)}</td>
-                                                            <td className={`p-3 text-right font-bold ${tx.type === "bonus_deposit" ? "text-amber-600" : tx.type === "deposit" || tx.type === "session_refund" ? "text-emerald-600" : "text-slate-900"}`}>
-                                                                {tx.amount} {tx.type === "bonus_deposit" ? "Б" : "₽"}
-                                                            </td>
-                                                            <td className="p-3 text-right text-slate-400">{formatDate(tx.createdAt)}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )
-                                ) : (
-                                    history.sessions.length === 0 ? (
-                                        <div className="text-center py-16 text-slate-400">
-                                            <Clock className="h-10 w-10 mx-auto mb-2 text-slate-300" />
-                                            Сессии запуск-стоп отсутствуют
-                                        </div>
-                                    ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left text-xs sm:text-sm border-collapse">
-                                                <thead>
-                                                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                                                        <th className="p-3">ПК #</th>
-                                                        <th className="p-3">Старт</th>
-                                                        <th className="p-3">Завершение</th>
-                                                        <th className="p-3">Статус</th>
-                                                        <th className="p-3 text-right">Начислено</th>
-                                                        <th className="p-3 text-right">Оплачено</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-50">
-                                                    {history.sessions.map((s) => (
-                                                        <tr key={s.id} className="hover:bg-slate-50/50">
-                                                            <td className="p-3 font-bold text-indigo-600">Компьютер {s.workstationId}</td>
-                                                            <td className="p-3 text-slate-500">{formatDate(s.startedAt)}</td>
-                                                            <td className="p-3 text-slate-500">{s.endedAt ? formatDate(s.endedAt) : 'Активна'}</td>
-                                                            <td className="p-3">
-                                                                <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${s.status === 'completed' ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'}`}>
-                                                                    {s.status === 'completed' ? 'Завершена' : s.status}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-3 text-right font-bold text-slate-700">{s.totalAmount} ₽</td>
-                                                            <td className="p-3 text-right font-bold text-slate-900">{s.paidAmount} ₽</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )
-                                )}
-                            </div>
-                        )}
-
-                        {/* Tab 2: EDIT PROFILE */}
-                        {activeTab === "edit" && (
-                            <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8">
-                                <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-4 mb-6">
-                                    Редактирование профиля клиента
-                                </h3>
-
-                                <form onSubmit={handleUpdateProfile} className="space-y-5">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="fullName" className="text-xs font-bold text-slate-500 uppercase">Полное имя</Label>
-                                            <Input
-                                                id="fullName"
-                                                type="text"
-                                                className="h-11 rounded-xl border-slate-200"
-                                                value={editName}
-                                                onChange={(e) => setEditName(e.target.value)}
-                                                required
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="phone" className="text-xs font-bold text-slate-500 uppercase">Номер телефона</Label>
-                                            <Input
-                                                id="phone"
-                                                type="text"
-                                                className="h-11 rounded-xl border-slate-200"
-                                                value={editPhone}
-                                                onChange={(e) => setEditPhone(e.target.value)}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="balance" className="text-xs font-bold text-slate-500 uppercase">Основной баланс (₽)</Label>
-                                            <Input
-                                                id="balance"
-                                                type="number"
-                                                className="h-11 rounded-xl border-slate-200"
-                                                value={editBalance}
-                                                onChange={(e) => setEditBalance(parseFloat(e.target.value) || 0)}
-                                                required
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="bonusBalance" className="text-xs font-bold text-slate-500 uppercase">Бонусный баланс (Б)</Label>
-                                            <Input
-                                                id="bonusBalance"
-                                                type="number"
-                                                className="h-11 rounded-xl border-slate-200"
-                                                value={editBonusBalance}
-                                                onChange={(e) => setEditBonusBalance(parseFloat(e.target.value) || 0)}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="loyaltyTier" className="text-xs font-bold text-slate-500 uppercase">Уровень лояльности</Label>
-                                            <select
-                                                id="loyaltyTier"
-                                                className="flex h-11 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-slate-900"
-                                                value={editTierId}
-                                                onChange={(e) => setEditTierId(e.target.value)}
-                                            >
-                                                <option value="">Без уровня</option>
-                                                {loyaltyTiers.map(t => (
-                                                    <option key={t.id} value={t.id}>{t.name}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div className="flex items-center gap-3 pt-6 sm:pt-8">
-                                            <input
-                                                id="promisedAllowed"
-                                                type="checkbox"
-                                                className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                                                checked={editPromisedAllowed}
-                                                onChange={(e) => setEditPromisedAllowed(e.target.checked)}
-                                            />
-                                            <Label htmlFor="promisedAllowed" className="text-sm font-semibold text-slate-700 cursor-pointer">
-                                                Разрешить доверительный платеж
-                                            </Label>
-                                        </div>
-                                    </div>
-
-                                    <div className="pt-4 border-t border-slate-100 flex justify-end">
-                                        <Button
-                                            type="submit"
-                                            disabled={isSubmitting}
-                                            className="h-11 rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-6 font-semibold flex items-center gap-2"
-                                        >
-                                            {isSubmitting ? (
-                                                <Loader2 className="h-4.5 w-4.5 animate-spin" />
-                                            ) : (
-                                                <Save className="h-4.5 w-4.5" />
-                                            )}
-                                            Сохранить изменения
-                                        </Button>
-                                    </div>
-                                </form>
-                            </div>
-                        )}
-
-                        {/* Tab 3: QUICK ACTIONS */}
-                        {activeTab === "actions" && (
-                            <div className="space-y-6">
-                                {/* Balance Deposit Card */}
-                                <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8">
-                                    <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-4 mb-5 flex items-center gap-2">
-                                        <Wallet className="h-5 w-5 text-emerald-500" />
-                                        Пополнение баланса (депозита)
-                                    </h3>
-                                    
-                                    <form onSubmit={handleDepositBalance} className="space-y-4">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="depositAmount" className="text-xs font-bold text-slate-500 uppercase">Сумма пополнения (₽)</Label>
-                                                <Input
-                                                    id="depositAmount"
-                                                    type="number"
-                                                    placeholder="Введите сумму..."
-                                                    className="h-11 rounded-xl border-slate-200"
-                                                    value={depositAmt}
-                                                    onChange={(e) => setDepositAmt(e.target.value)}
-                                                    required
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="paymentMethod" className="text-xs font-bold text-slate-500 uppercase">Способ оплаты</Label>
-                                                <div className="flex gap-2">
-                                                    <Button
-                                                        type="button"
-                                                        variant={depositMethod === "cash" ? "default" : "outline"}
-                                                        onClick={() => setDepositMethod("cash")}
-                                                        className="flex-1 h-11 rounded-xl font-semibold"
-                                                    >
-                                                        Наличные
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant={depositMethod === "card" ? "default" : "outline"}
-                                                        onClick={() => setDepositMethod("card")}
-                                                        className="flex-1 h-11 rounded-xl font-semibold"
-                                                    >
-                                                        Карта
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <Button
-                                            type="submit"
-                                            disabled={isSubmitting || !depositAmt}
-                                            className="h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-2 px-6"
-                                        >
-                                            Пополнить баланс
-                                        </Button>
-                                    </form>
-                                </div>
-
-                                {/* Bonus Deposit Card */}
-                                <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8">
-                                    <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-4 mb-5 flex items-center gap-2">
-                                        <Coins className="h-5 w-5 text-amber-500" />
-                                        Начисление бонусных баллов
-                                    </h3>
-                                    
-                                    <form onSubmit={handleDepositBonus} className="space-y-4">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label htmlFor="bonusAmount" className="text-xs font-bold text-slate-500 uppercase">Сумма бонусов (Б)</Label>
-                                                <Input
-                                                    id="bonusAmount"
-                                                    type="number"
-                                                    placeholder="Введите сумму бонусов..."
-                                                    className="h-11 rounded-xl border-slate-200"
-                                                    value={bonusAmt}
-                                                    onChange={(e) => setBonusAmt(e.target.value)}
-                                                    required
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label htmlFor="bonusComment" className="text-xs font-bold text-slate-500 uppercase">Комментарий к начислению</Label>
-                                                <Input
-                                                    id="bonusComment"
-                                                    type="text"
-                                                    placeholder="Причина начисления..."
-                                                    className="h-11 rounded-xl border-slate-200"
-                                                    value={bonusComment}
-                                                    onChange={(e) => setBonusComment(e.target.value)}
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <Button
-                                            type="submit"
-                                            disabled={isSubmitting || !bonusAmt}
-                                            className="h-11 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold flex items-center gap-2 px-6"
-                                        >
-                                            Начислить бонусы
-                                        </Button>
-                                    </form>
-                                </div>
-
-                                {/* Security / Reset PIN Card */}
-                                <div className="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 sm:p-8">
-                                    <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-4 mb-5 flex items-center gap-2">
-                                        <KeyRound className="h-5 w-5 text-indigo-500" />
-                                        Сброс или установка PIN-кода
-                                    </h3>
-                                    
-                                    <form onSubmit={handleResetPin} className="space-y-4">
-                                        <div className="max-w-md space-y-2">
-                                            <Label htmlFor="tempPin" className="text-xs font-bold text-slate-500 uppercase">Временный PIN-код (для входа на ПК)</Label>
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    id="tempPin"
-                                                    type="text"
-                                                    maxLength={4}
-                                                    placeholder="4 цифры, например: 1234"
-                                                    className="h-11 rounded-xl border-slate-200 font-mono text-center tracking-widest text-lg"
-                                                    value={tempPin}
-                                                    onChange={(e) => setTempPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                                                    required
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    onClick={() => setTempPin(Math.floor(1000 + Math.random() * 9000).toString())}
-                                                    className="h-11 rounded-xl font-semibold px-4 shrink-0"
-                                                >
-                                                    Сгенерировать
-                                                </Button>
-                                            </div>
-                                        </div>
-
-                                        <Button
-                                            type="submit"
-                                            disabled={isSubmitting || tempPin.length < 4}
-                                            className="h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-2 px-6"
-                                        >
-                                            Установить PIN-код
-                                        </Button>
-                                    </form>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </PageShell>
+      <div className="flex h-screen items-center justify-center bg-[#F8FAFC] text-slate-900">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
     );
+  }
+
+  if (!data || !data.player) {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center bg-[#F8FAFC] text-slate-900 space-y-4">
+        <p className="text-xl font-bold">Игрок не найден</p>
+        <button
+          onClick={() => router.back()}
+          className="px-6 py-2.5 bg-indigo-600 text-white rounded-2xl font-bold uppercase text-xs shadow-lg shadow-indigo-500/20"
+        >
+          Вернуться назад
+        </button>
+      </div>
+    );
+  }
+
+  const { player, stats, matchHistory, pointLogs } = data;
+
+  const filteredMatchHistory = matchHistory?.filter((m: any) => {
+    const game = m.game_name?.toLowerCase() || "";
+    
+    // Game Filter
+    if (activeGame) {
+      if (activeGame === "cs2" && !(game === "cs2" || game === "csgo" || m.game?.includes("CS"))) return false;
+      if (activeGame === "dota2" && !(game === "dota2" || game === "dota 2")) return false;
+      if (activeGame === "pubg" && game !== "pubg" && m.game !== "PUBG") return false;
+    }
+
+    // Result Filter
+    if (resultFilter === "win" && !m.is_win) return false;
+    if (resultFilter === "loss" && m.is_win) return false;
+    
+    // Period Filter
+    if (periodFilter !== "all" && m.created_at) {
+      const matchDate = new Date(m.created_at);
+      const now = new Date();
+      if (periodFilter === "today") {
+        if (matchDate.toDateString() !== now.toDateString()) return false;
+      } else if (periodFilter === "week") {
+        const weekAgo = new Date();
+        weekAgo.setDate(now.getDate() - 7);
+        if (matchDate < weekAgo) return false;
+      } else if (periodFilter === "month") {
+        const monthAgo = new Date();
+        monthAgo.setMonth(now.getMonth() - 1);
+        if (matchDate < monthAgo) return false;
+      }
+    }
+
+    return true;
+  }) || [];
+
+  const groupedMatches = filteredMatchHistory.reduce((acc: any, m: any) => {
+    const dateStr = new Date(m.created_at).toLocaleDateString("ru-RU", { day: 'numeric', month: 'long', year: 'numeric' });
+    if (!acc[dateStr]) acc[dateStr] = [];
+    acc[dateStr].push(m);
+    return acc;
+  }, {});
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans p-4 md:p-8 space-y-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-2.5 px-5 py-2.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-black uppercase tracking-wider transition-all shadow-sm max-w-fit"
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-500" />
+            Назад к списку
+          </button>
+
+          <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
+            <span>ID: {player.id}</span>
+            <span>•</span>
+            <span>Регистрация: {new Date(player.createdAt).toLocaleDateString("ru-RU")}</span>
+          </div>
+        </div>
+
+        {/* Hero Esports Card */}
+        <div className="bg-white border border-slate-200 p-8 md:p-10 rounded-[2.5rem] shadow-sm space-y-8 relative overflow-hidden">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+            {/* Player Main Info */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div>
+                  <h1 className="text-3xl md:text-4xl font-black uppercase italic tracking-tight text-slate-900">
+                    {player.fullName || "Без имени"}
+                  </h1>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-6 text-slate-500 text-sm font-bold flex-wrap mt-2">
+                <span>{player.phoneNumber}</span>
+                {player.steamId && (
+                  <span className="text-indigo-600 font-mono text-xs bg-indigo-50 px-3 py-1 rounded-xl">Steam: {player.steamId}</span>
+                )}
+                {player.pubgNickname && (
+                  <span className="text-amber-600 font-mono text-xs bg-amber-50 px-3 py-1 rounded-xl">PUBG: {player.pubgNickname}</span>
+                )}
+              </div>
+            </div>
+
+            {/* DashFrag Points & Action Controls */}
+            <div className="flex items-center gap-6 shrink-0 bg-slate-50 border border-slate-100 p-6 rounded-3xl">
+              <div className="space-y-1 text-center sm:text-left">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Заработано в играх
+                </div>
+                <div className="text-4xl font-black text-indigo-600 italic tracking-tight">
+                  {Math.round(player.totalEarnedInGames || 0)} ₽
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => setIsAdjustModalOpen(true)}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-2xl transition-all shadow-md shadow-indigo-500/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  Корректировка баланса
+                </button>
+                <button
+                  onClick={() => setIsIdsModalOpen(true)}
+                  className="flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-700 font-black text-xs uppercase px-4 py-2 rounded-2xl transition-all border border-slate-200"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-slate-500" />
+                  Игровые ID
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Discipline Stats Switcher */}
+          <div className="pt-6 border-t border-slate-100 flex items-center gap-3">
+            {[
+              { id: "cs2", label: "CS2", color: "indigo" },
+              { id: "dota2", label: "Dota 2", color: "red" },
+              { id: "pubg", label: "PUBG", color: "amber" },
+              { id: "tournaments", label: "Турниры", color: "purple" },
+            ].map((game) => (
+              <button
+                key={game.id}
+                onClick={() => setActiveGame(game.id as any)}
+                className={cn(
+                  "px-6 py-2.5 rounded-2xl font-black uppercase italic text-xs tracking-wider transition-all duration-200",
+                  activeGame === game.id
+                    ? "bg-slate-900 text-white shadow-md scale-105"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200"
+                )}
+              >
+                {game.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Stats Cards Section */}
+        <AnimatePresence mode="wait">
+          {activeGame === "cs2" && (
+            <motion.div
+              key="cs2-stats"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-6"
+            >
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Mатчей CS2</div>
+                <div className="text-3xl font-black text-slate-900 italic">{stats.cs2.matchesCount}</div>
+                <div className="text-xs text-emerald-600 font-bold">{stats.cs2.winsCount} побед ({stats.cs2.winrate}%)</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">K/D Ratio</div>
+                <div className="text-3xl font-black text-indigo-600 italic">{stats.cs2.kdRatio}</div>
+                <div className="text-xs text-slate-500 font-mono">{stats.cs2.kills} K / {stats.cs2.deaths} D</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">% Headshots</div>
+                <div className="text-3xl font-black text-amber-600 italic">{stats.cs2.headshotsPercent}%</div>
+                <div className="text-xs text-slate-500 font-bold">Эйсы (1v5): {stats.cs2.acesCount}</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Любимая карта</div>
+                <div className="text-3xl font-black text-slate-900 italic">{stats.cs2.favoriteMap}</div>
+                <div className="text-xs text-indigo-600 font-bold">Высокая точность</div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeGame === "dota2" && (
+            <motion.div
+              key="dota-stats"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-6"
+            >
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Матчей Dota 2</div>
+                <div className="text-3xl font-black text-slate-900 italic">{stats.dota2.matchesCount}</div>
+                <div className="text-xs text-emerald-600 font-bold">{stats.dota2.winsCount} побед ({stats.dota2.winrate}%)</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">KDA Ratio</div>
+                <div className="text-3xl font-black text-red-600 italic">{stats.dota2.kdaRatio}</div>
+                <div className="text-xs text-slate-500 font-mono">{stats.dota2.kills} / {stats.dota2.deaths} / {stats.dota2.assists}</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Avg Last Hits</div>
+                <div className="text-3xl font-black text-slate-900 italic">{stats.dota2.avgLastHits}</div>
+                <div className="text-xs text-slate-500 font-bold">Denies: {stats.dota2.avgDenies}</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Роль</div>
+                <div className="text-3xl font-black text-red-600 italic">Core / Carry</div>
+                <div className="text-xs text-slate-500 font-bold">Клубный состав</div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeGame === "pubg" && (
+            <motion.div
+              key="pubg-stats"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-6"
+            >
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Матчей PUBG</div>
+                <div className="text-3xl font-black text-slate-900 italic">{stats.pubg.matchesCount}</div>
+                <div className="text-xs text-amber-600 font-bold">Top-1 Побед: {stats.pubg.top1Wins} ({stats.pubg.winrate}%)</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Всего Киллов</div>
+                <div className="text-3xl font-black text-amber-600 italic">{stats.pubg.kills}</div>
+                <div className="text-xs text-slate-500 font-mono">PUBG Tracking</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Средний Урон</div>
+                <div className="text-3xl font-black text-slate-900 italic">{stats.pubg.avgDamage}</div>
+                <div className="text-xs text-slate-500 font-bold">ADR в клубе</div>
+              </div>
+              <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">PUBG Ник</div>
+                <div className="text-3xl font-black text-amber-600 italic">{player.pubgNickname || "Не указан"}</div>
+                <div className="text-xs text-slate-500 font-bold">В игре</div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {activeGame === "tournaments" && (
+          <motion.div
+            key="tournaments-view"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-6"
+          >
+            <h2 className="text-xl font-black uppercase italic tracking-tight text-slate-900">
+              Турниры DashFrag
+            </h2>
+            {data?.dashfragTournaments?.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 text-center text-slate-500 font-medium">
+                Игрок пока не участвовал ни в одном турнире.
+              </div>
+            ) : (
+              data?.dashfragTournaments?.map((t: any) => (
+                <DashFragTournamentCard key={t.id} tournament={t} clubId={clubId as string} playerId={playerId as string} />
+              ))
+            )}
+          </motion.div>
+        )}
+
+        {/* Logs Navigation & Tables */}
+        {activeGame !== "tournaments" && (
+        <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4 flex-wrap gap-4">
+            <h2 className="text-xl font-black uppercase italic tracking-tight text-slate-900">
+              История матчей
+            </h2>
+            <div className="flex items-center gap-3">
+              <Select value={periodFilter} onValueChange={(val: any) => setPeriodFilter(val)}>
+                <SelectTrigger className="w-[160px] bg-slate-50 border-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider h-10 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 hover:bg-slate-100 transition-all">
+                  <SelectValue placeholder="За всё время" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-slate-200 shadow-xl bg-white">
+                  <SelectItem value="all" className="font-bold text-xs uppercase text-slate-700 focus:bg-indigo-50 focus:text-indigo-600 cursor-pointer">За всё время</SelectItem>
+                  <SelectItem value="today" className="font-bold text-xs uppercase text-slate-700 focus:bg-indigo-50 focus:text-indigo-600 cursor-pointer">За сегодня</SelectItem>
+                  <SelectItem value="week" className="font-bold text-xs uppercase text-slate-700 focus:bg-indigo-50 focus:text-indigo-600 cursor-pointer">За неделю</SelectItem>
+                  <SelectItem value="month" className="font-bold text-xs uppercase text-slate-700 focus:bg-indigo-50 focus:text-indigo-600 cursor-pointer">За месяц</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={resultFilter} onValueChange={(val: any) => setResultFilter(val)}>
+                <SelectTrigger className="w-[170px] bg-slate-50 border-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider h-10 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 hover:bg-slate-100 transition-all">
+                  <SelectValue placeholder="Все результаты" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-slate-200 shadow-xl bg-white">
+                  <SelectItem value="all" className="font-bold text-xs uppercase text-slate-700 focus:bg-indigo-50 focus:text-indigo-600 cursor-pointer">Все результаты</SelectItem>
+                  <SelectItem value="win" className="font-bold text-xs uppercase text-emerald-600 focus:bg-emerald-50 focus:text-emerald-700 cursor-pointer">Победы</SelectItem>
+                  <SelectItem value="loss" className="font-bold text-xs uppercase text-red-600 focus:bg-red-50 focus:text-red-700 cursor-pointer">Поражения</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-slate-400 font-black uppercase tracking-wider border-b border-slate-100">
+                    <th className="pb-3">Дата</th>
+                    <th className="pb-3">Игра</th>
+                    <th className="pb-3">Карта / Режим</th>
+                    <th className="pb-3">Результат</th>
+                    <th className="pb-3">K / D / A</th>
+                    <th className="pb-3 text-right">Начислено бонусов</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {Object.keys(groupedMatches).length > 0 ? (
+                    Object.keys(groupedMatches).map((date) => (
+                      <React.Fragment key={date}>
+                        {/* Day Header */}
+                        <tr 
+                          onClick={() => toggleDay(date)}
+                          className="bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors group"
+                        >
+                          <td className="py-3 px-4 font-bold text-slate-900 border-b border-slate-200">
+                            <div className="flex items-center gap-2">
+                              {date}
+                              <span className="text-xs font-medium text-slate-400 ml-1">
+                                {groupedMatches[date].length} {groupedMatches[date].length === 1 ? 'матч' : groupedMatches[date].length < 5 ? 'матча' : 'матчей'}
+                              </span>
+                            </div>
+                          </td>
+                          <td colSpan={2} className="py-3 border-b border-slate-200"></td>
+                          <td className="py-3 border-b border-slate-200">
+                            {(() => {
+                              const wins = groupedMatches[date].filter((m: any) => m.is_win).length;
+                              const losses = groupedMatches[date].length - wins;
+                              return (
+                                <span className="text-xs font-bold text-slate-500">
+                                  {wins}W / {losses}L
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="py-3 border-b border-slate-200">
+                            {(() => {
+                              const kills = groupedMatches[date].reduce((sum: number, m: any) => sum + (m.kills || 0), 0);
+                              const deaths = groupedMatches[date].reduce((sum: number, m: any) => sum + (m.deaths || 0), 0);
+                              const assists = groupedMatches[date].reduce((sum: number, m: any) => sum + (m.assists || 0), 0);
+                              const kd = deaths > 0 ? (kills / deaths).toFixed(2) : kills.toFixed(2);
+                              return (
+                                <span className="text-xs font-mono font-bold text-slate-500">
+                                  K/D: {kd}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="py-3 pr-4 text-right border-b border-slate-200 relative">
+                            <div className="flex items-center justify-end gap-4">
+                              <span className="font-black text-indigo-600 text-sm">
+                                +{groupedMatches[date].reduce((sum: number, m: any) => sum + (m.earned_points || 0), 0)} ₽
+                              </span>
+                              {expandedDays[date] ? (
+                                <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {/* Matches for the Day */}
+                        {expandedDays[date] && groupedMatches[date].map((m: any) => (
+                          <tr
+                            key={m.id}
+                            onClick={() => router.push(`/clubs/${clubId}/dashfrag/matches/${m.id}`)}
+                            className="hover:bg-slate-100/80 cursor-pointer transition-colors"
+                          >
+                            <td className="py-4 text-slate-500 px-4">
+                              {new Date(m.created_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="py-4 font-black uppercase text-indigo-600">
+                              <div>{m.game_name || "CS2"}</div>
+                              {m.platformTag && (
+                                <span className="inline-block bg-slate-100 text-slate-600 text-[9px] font-bold px-2 py-0.5 rounded-md mt-0.5">
+                                  {m.platformTag}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4">
+                              <div className="font-bold text-slate-900">{m.map_name || "Dust2"}</div>
+                              {m.score && m.score !== "—" && (
+                                <div className="text-[10px] text-slate-400 font-mono">Счёт: {m.score}</div>
+                              )}
+                            </td>
+                            <td className="py-4">
+                              {m.is_win ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-700 font-black uppercase text-[10px] bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
+                                  <CheckCircle2 className="w-3 h-3" /> Победа
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-red-700 font-black uppercase text-[10px] bg-red-50 border border-red-100 px-2.5 py-1 rounded-full">
+                                  <XCircle className="w-3 h-3" /> Поражение
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-4 font-mono font-bold text-slate-900">
+                              {m.kills || 0} / {m.deaths || 0} / {m.assists || 0}
+                            </td>
+                            <td className="py-4 pr-4 text-right font-black text-indigo-600 text-sm">
+                              +{m.earned_points || 0} ₽
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400 font-bold">
+                        Матчи пока не зарегистрированы
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+        </div>
+        )}
+      </div>
+
+      {/* Adjust Points Modal */}
+      {isAdjustModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white border border-slate-200 p-6 rounded-3xl max-w-md w-full space-y-6 shadow-2xl">
+            <h3 className="text-xl font-black uppercase italic text-slate-900">
+              Корректировка бонусного баланса
+            </h3>
+
+            <form onSubmit={handleAdjustPoints} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                  Сумма (+ или -)
+                </label>
+                <input
+                  type="number"
+                  placeholder="Например: 50 или -20"
+                  value={adjustAmount}
+                  onChange={(e) => setAdjustAmount(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                  Причина / Комментарий
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Укажите причину изменений"
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-indigo-600"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAdjustModalOpen(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase py-3 rounded-2xl"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAdjustSubmitting}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase py-3 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+                >
+                  {isAdjustSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Сохранить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Game IDs Modal */}
+      {isIdsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white border border-slate-200 p-6 rounded-3xl max-w-md w-full space-y-6 shadow-2xl">
+            <h3 className="text-xl font-black uppercase italic text-slate-900">
+              Редактирование игровых ID
+            </h3>
+
+            <form onSubmit={handleUpdateIds} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                  Steam ID 64 (CS2)
+                </label>
+                <input
+                  type="text"
+                  placeholder="76561198..."
+                  value={steamId}
+                  onChange={(e) => setSteamId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-indigo-600 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                  Dota 2 ID
+                </label>
+                <input
+                  type="text"
+                  placeholder="Например: 123456789"
+                  value={dotaId}
+                  onChange={(e) => setDotaId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-indigo-600 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">
+                  PUBG Никнейм
+                </label>
+                <input
+                  type="text"
+                  placeholder="Игровой ник в PUBG"
+                  value={pubgNickname}
+                  onChange={(e) => setPubgNickname(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:border-indigo-600 font-mono"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsIdsModalOpen(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase py-3 rounded-2xl"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isIdsSubmitting}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase py-3 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+                >
+                  {isIdsSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Сохранить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

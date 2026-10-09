@@ -20,9 +20,9 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
 } from "@/components/ui/table"
 import { 
-    transferStock, getStockMovements, 
-    Warehouse 
+    transferStock, getStockMovements 
 } from "../actions"
+import type { Warehouse } from "../types"
 import { useParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useUiDialogs } from "./useUiDialogs"

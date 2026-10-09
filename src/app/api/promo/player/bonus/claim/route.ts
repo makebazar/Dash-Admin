@@ -78,7 +78,7 @@ export async function POST(request: Request) {
       const topupRes = await client.query(
         `SELECT COALESCE(SUM((result_data->>'amount')::float), 0) as total
          FROM promo_history
-         WHERE player_id = $1 AND club_id = $2 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)`,
+         WHERE player_id = $1 AND club_id = $2 AND (game_type ILIKE '%topup%' OR game_type = 'pos_sale') AND created_at >= date_trunc('month', CURRENT_DATE)`,
         [playerId, activeClubId],
       );
       const topups = parseFloat(topupRes.rows[0].total);
@@ -169,22 +169,45 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. Deduct balance
+    // 2. Try automatic bonus transfer to SmartShell client account
+    const playerPhoneRes = await client.query(
+      `SELECT phone_number FROM promo_players WHERE id = $1 LIMIT 1`,
+      [playerId],
+    );
+    const phoneNumber = playerPhoneRes.rows[0]?.phone_number;
+
+    let autoClaimed = false;
+    let smartshellClientUuid: string | null = null;
+    let smartshellError: string | null = null;
+
+    if (phoneNumber) {
+      try {
+        const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+        const ssClient = await getSmartShellClientForClub(activeClubId);
+        if (ssClient) {
+          const ssUser = await ssClient.findClientByPhone(phoneNumber);
+          if (ssUser && ssUser.uuid) {
+            smartshellClientUuid = ssUser.uuid;
+            const addRes = await ssClient.addBonusToClient(ssUser.uuid, withdrawAmount);
+            if (addRes.success) {
+              autoClaimed = true;
+            } else {
+              smartshellError = addRes.error || "SmartShell rejected bonus addition";
+            }
+          } else {
+            smartshellError = "Гость не найден в базе SmartShell по номеру телефона";
+          }
+        }
+      } catch (ssErr: any) {
+        console.error("[Auto-Withdraw SmartShell Error]:", ssErr);
+        smartshellError = ssErr.message || "SmartShell connection error";
+      }
+    }
+
+    // 3. Deduct balance from Promo
     await client.query(
       `UPDATE promo_player_balances SET bonus_balance = bonus_balance - $3 WHERE player_id = $1 AND club_id = $2`,
       [playerId, activeClubId, withdrawAmount],
-    );
-
-    // 3. Add to promo_prize_queue for visibility in "Очередь выдачи"
-    await client.query(
-      `INSERT INTO promo_prize_queue (history_id, player_id, club_id, prize_id, status, withdraw_amount)
-       VALUES ($1, $2, $3, NULL, 'pending', $4)`,
-      [
-        null, // history_id is technically required by FK, let's see if we can use the promo_history id later
-        playerId,
-        activeClubId,
-        withdrawAmount,
-      ],
     );
 
     // 4. Log in promo_history
@@ -192,19 +215,37 @@ export async function POST(request: Request) {
       `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
        VALUES ($1, $2, 'WITHDRAW', $3)
        RETURNING id`,
-      [playerId, activeClubId, JSON.stringify({ amount: withdrawAmount })],
+      [
+        playerId,
+        activeClubId,
+        JSON.stringify({
+          amount: withdrawAmount,
+          auto_claimed: autoClaimed,
+          smartshell_client_uuid: smartshellClientUuid,
+          smartshell_error: smartshellError,
+          created_at: new Date().toISOString(),
+        }),
+      ],
     );
     const historyId = historyRes.rows[0].id;
 
-    // Update the queue entry with history_id (since it's a FK)
+    // 5. Add to promo_prize_queue (marked 'claimed' if auto-processed, or 'pending' if requires staff)
     await client.query(
-      `UPDATE promo_prize_queue SET history_id = $1 WHERE history_id IS NULL AND player_id = $2 AND club_id = $3 AND withdraw_amount = $4 AND status = 'pending'`,
-      [historyId, playerId, activeClubId, withdrawAmount],
+      `INSERT INTO promo_prize_queue (history_id, player_id, club_id, prize_id, status, withdraw_amount, claimed_at)
+       VALUES ($1, $2, $3, NULL, $4, $5, $6)`,
+      [
+        historyId,
+        playerId,
+        activeClubId,
+        autoClaimed ? "claimed" : "pending",
+        withdrawAmount,
+        autoClaimed ? new Date().toISOString() : null,
+      ],
     );
 
     await client.query("COMMIT");
 
-    // 5. Notify admin/staff
+    // 6. Notify admin/staff
     try {
       const { notifyInventoryClub } = await import("@/lib/inventory-events");
       notifyInventoryClub(String(activeClubId), {
@@ -219,7 +260,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Запрос отправлен администратору",
+      autoClaimed,
+      message: autoClaimed
+        ? `Успешно! ${Math.floor(withdrawAmount)} бонусов зачислены на ваш аккаунт в клубе.`
+        : "Запрос отправлен администратору на стойку.",
     });
   } catch (error) {
     if (client) await client.query("ROLLBACK");

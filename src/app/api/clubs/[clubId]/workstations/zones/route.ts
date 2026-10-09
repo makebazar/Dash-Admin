@@ -74,6 +74,28 @@ export async function PATCH(
                         [clubId]
                     );
                     const today = formatDateKeyInTimezone(new Date(), clubRes.rows[0]?.timezone || 'Europe/Moscow');
+
+                    const nextShift = await query(
+                        `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
+                         FROM work_schedules 
+                         WHERE club_id = $1 AND user_id = $2 AND date >= $3
+                         ORDER BY date ASC LIMIT 1`,
+                        [clubId, assignedUserId, today]
+                    );
+
+                    const shiftDateStr = (nextShift.rowCount && nextShift.rowCount > 0) 
+                        ? String(nextShift.rows[0].date) 
+                        : today;
+                    
+                    await query(
+                        `UPDATE equipment_maintenance_tasks 
+                         SET due_date = $1
+                         WHERE equipment_id IN (
+                            SELECT id FROM equipment WHERE workstation_id = ANY($2)
+                         ) AND status = 'PENDING' AND assigned_user_id = $3`,
+                        [shiftDateStr, workstationIds, assignedUserId]
+                    );
+
                     try {
                         await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/clubs/${clubId}/equipment/maintenance`, {
                             method: 'POST',

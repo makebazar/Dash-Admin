@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./shifts";
 export * from "./products";
+export { pushStockToSmartShell } from "./products";
 export * from "./warehouses";
 export * from "./categories";
 export * from "./inventories";

@@ -32,6 +32,8 @@ function buildPoolConfig(connectionString: string): PoolConfig {
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     database: url.pathname.replace(/^\//, ""),
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
   };
 
   const sslMode = url.searchParams.get("sslmode");
@@ -59,10 +61,14 @@ const pool =
   global.db_pool ||
   new Pool({
     ...buildPoolConfig(process.env.DATABASE_URL || ""),
-    max: 50,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
+    max: 20,
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 30000,
   });
+
+pool.on("error", (err) => {
+  console.warn("[DB Pool Background Warning]", err.message);
+});
 
 // Patch pool.query to automatically sanitize signed session cookies globally and retry on connection drops/timeouts
 if (!(pool as any).__isPatched) {
@@ -95,11 +101,12 @@ if (!(pool as any).__isPatched) {
             err.message?.includes('terminated') || 
             err.message?.includes('timeout') || 
             err.message?.includes('Connection') ||
+            err.message?.includes('ECONNRESET') ||
             err.message?.includes('idleTimeoutMillis');
             
           if (isConnectionError && i < attempts - 1) {
             console.warn(`[DB Pool Query] Attempt ${i + 1}/${attempts} failed: ${err.message}. Retrying in 1s...`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
             continue;
           }
           throw err;

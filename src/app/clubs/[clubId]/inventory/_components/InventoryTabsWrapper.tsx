@@ -16,6 +16,7 @@ export function InventoryTabsWrapper({
     const getTopLevelTab = (tab: string) => {
         const topLevelTabs = [
             "stock",
+            "combos",
             "sales",
             "tasks",
             "transfers",
@@ -27,7 +28,7 @@ export function InventoryTabsWrapper({
             "settings"
         ]
 
-        const settingsSubTabs = ["general", "categories", "warehouses", "pricetags"]
+        const settingsSubTabs = ["general", "categories", "warehouses", "pricetags", "suppliers"]
 
         if (settingsSubTabs.includes(tab)) return "settings"
         if (topLevelTabs.includes(tab)) return tab

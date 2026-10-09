@@ -137,6 +137,7 @@ export function QuestsTab({
   products,
   categories,
   serviceRules,
+  zones = [],
   settings,
   saveSettings,
 }: {
@@ -144,6 +145,7 @@ export function QuestsTab({
   products: any[];
   categories: any[];
   serviceRules: any[];
+  zones?: any[];
   settings: any;
   saveSettings: (settings: any) => Promise<void>;
 }) {
@@ -152,81 +154,6 @@ export function QuestsTab({
   const [saving, setSaving] = useState(false);
   const [editingQuest, setEditingQuest] = useState<any | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("bar");
-
-  const [localSettings, setLocalSettings] = useState<any>(null);
-  const [savingLoyalty, setSavingLoyalty] = useState(false);
-
-  useEffect(() => {
-    if (settings) {
-      setLocalSettings(settings);
-    }
-  }, [settings]);
-
-  const handleSaveLoyalty = async () => {
-    setSavingLoyalty(true);
-    try {
-      await saveSettings(localSettings);
-      alert("Настройки лояльности успешно сохранены!");
-    } catch (e) {
-      alert("Ошибка при сохранении настроек лояльности");
-    } finally {
-      setSavingLoyalty(false);
-    }
-  };
-
-  const LOYALTY_PROGRAM_TYPES = [
-    { id: "package_accumulation", label: "Накопление пакетов", icon: "📦", desc: "Купи N пакетов, получи приз" },
-    { id: "visit_accumulation", label: "Визиты с покупкой пакета", icon: "🚶", desc: "Каждые N посещений с покупкой выбранного пакета — подарок" },
-    { id: "visit_streak", label: "Серия дней с покупкой", icon: "🔥", desc: "Покупка выбранного пакета N дней подряд — приз" },
-  ];
-
-  const getDefaultProgram = () => ({
-    id: Math.random().toString(36).slice(2),
-    enabled: true,
-    type: "package_accumulation",
-    title: "",
-    target: 5,
-    trigger_product_ids: [] as number[],
-    trigger_service_ids: [] as string[],
-    rewards: {
-      xp: 0,
-      tickets: 0,
-      bonus_balance: 0,
-      free_package: false,
-      free_package_name: "",
-      free_package_quantity: 1,
-      bar_reward_type: "none",
-      bar_product_id: null as number | null,
-      bar_category_id: null as string | null,
-      bar_reward_quantity: 1,
-    },
-  });
-
-  const getLoyaltyPrograms = (): any[] => localSettings?.loyalty_programs || [];
-
-  const updateProgram = (idx: number, updates: any) => {
-    const programs = [...getLoyaltyPrograms()];
-    programs[idx] = { ...programs[idx], ...updates };
-    setLocalSettings({ ...localSettings, loyalty_programs: programs });
-  };
-
-  const updateProgramRewards = (idx: number, rewardUpdates: any) => {
-    const programs = [...getLoyaltyPrograms()];
-    programs[idx] = { ...programs[idx], rewards: { ...(programs[idx].rewards || {}), ...rewardUpdates } };
-    setLocalSettings({ ...localSettings, loyalty_programs: programs });
-  };
-
-  const addProgram = () => {
-    setLocalSettings({
-      ...localSettings,
-      loyalty_programs: [...getLoyaltyPrograms(), getDefaultProgram()],
-    });
-  };
-
-  const removeProgram = (idx: number) => {
-    const programs = getLoyaltyPrograms().filter((_: any, i: number) => i !== idx);
-    setLocalSettings({ ...localSettings, loyalty_programs: programs });
-  };
 
   useEffect(() => {
     fetchQuests();
@@ -752,7 +679,7 @@ export function QuestsTab({
                             value={s.id}
                             disabled={(editingQuest.target_entity_id || "").split(",").includes(String(s.id))}
                           >
-                            {s.name}
+                            {s.name} {s.source === "smartshell" ? "⚡ (SmartShell)" : ""}
                           </option>
                         ))}
                       </select>
@@ -837,6 +764,35 @@ export function QuestsTab({
                         Запрашивать номер места (ПК) у гостя
                       </span>
                     </label>
+                  </div>
+                )}
+
+                {/* Zone Filter (Optional) */}
+                {zones.length > 0 && (
+                  <div className="pt-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                      Зона зала (опционально)
+                    </label>
+                    <select
+                      value={editingQuest.target_zone_id || ""}
+                      onChange={(e) =>
+                        setEditingQuest({
+                          ...editingQuest,
+                          target_zone_id: e.target.value || null,
+                        })
+                      }
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 font-bold text-sm outline-none focus:border-orange-500"
+                    >
+                      <option value="">-- Любая зона зала (по умолчанию) --</option>
+                      {zones.map((z: any) => (
+                        <option key={z.id} value={z.id}>
+                          {z.title}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[9px] text-slate-400 mt-1 italic px-1">
+                      * Если выбрана зона (например, VIP), квест будет засчитываться только за активность в этой зоне.
+                    </p>
                   </div>
                 )}
               </div>
@@ -1458,323 +1414,10 @@ export function QuestsTab({
             </div>
           </div>
         ) : (
-          /* Loyalty & Quests view */
-          <div className="space-y-8">
-            {/* Loyalty settings panel */}
-            {localSettings && (
-              <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-8">
-                {/* Panel Header */}
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/20">
-                      <Award className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-black uppercase italic tracking-tight text-slate-800">
-                        Программа лояльности <span className="text-amber-500">Dash Loyalty</span>
-                      </h3>
-                      <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mt-0.5">
-                        Накопительные скидки, бесплатные часы и вознаграждение за посещения
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleSaveLoyalty}
-                    disabled={savingLoyalty}
-                    className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-6 py-3.5 rounded-2xl font-bold transition-all text-xs tracking-wider uppercase italic shadow-md active:scale-[0.98] shrink-0"
-                  >
-                    {savingLoyalty ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4 text-amber-400" />
-                    )}
-                    Сохранить настройки лояльности
-                  </button>
-                </div>
-
-                <div className="space-y-5">
-                    
-                  {/* Dynamic Loyalty Programs List */}
-                  {getLoyaltyPrograms().map((prog: any, idx: number) => (
-                    <div key={prog.id || idx} className="bg-slate-50 border border-slate-100 p-6 rounded-3xl space-y-5">
-                      {/* Program Header */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shrink-0", prog.enabled ? "bg-amber-500/10" : "bg-slate-200")}>
-                            {LOYALTY_PROGRAM_TYPES.find((t: any) => t.id === prog.type)?.icon || "📦"}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <select
-                              value={prog.type || "package_accumulation"}
-                              onChange={e => updateProgram(idx, { type: e.target.value })}
-                              className="font-black uppercase italic text-sm text-slate-800 bg-transparent border-none outline-none cursor-pointer w-full"
-                            >
-                              {LOYALTY_PROGRAM_TYPES.map((t: any) => (
-                                <option key={t.id} value={t.id}>{t.label}</option>
-                              ))}
-                            </select>
-                            <p className="text-[10px] text-slate-400 font-medium">{LOYALTY_PROGRAM_TYPES.find((t: any) => t.id === prog.type)?.desc}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => updateProgram(idx, { enabled: !prog.enabled })}
-                            className={cn("w-12 h-6 rounded-full relative transition-colors duration-300", prog.enabled ? "bg-amber-500" : "bg-slate-300")}
-                          >
-                            <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-sm", prog.enabled ? "left-7" : "left-1")} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeProgram(idx)}
-                            className="p-1.5 text-slate-300 hover:text-red-500 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {prog.enabled && (
-                        <div className="space-y-5 pt-4 border-t border-slate-200/40">
-
-                          {/* Target & Title */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">
-                                {prog.type === "visit_streak" ? "Дней подряд" : prog.type === "visit_accumulation" ? "Цель (посещений)" : "Цель (пакетов)"}
-                              </label>
-                              <input
-                                type="number" min="1"
-                                value={prog.target ?? 5}
-                                onChange={e => updateProgram(idx, { target: parseInt(e.target.value) || 1 })}
-                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/20 transition-all outline-none"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Название программы</label>
-                              <input
-                                type="text"
-                                value={prog.title || ""}
-                                onChange={e => updateProgram(idx, { title: e.target.value })}
-                                placeholder="Напр. 6-я ночь в подарок"
-                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-amber-500/20 transition-all outline-none"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Per-Program Service/Product Selection */}
-                          {(products.length > 0 || serviceRules.length > 0) && (
-                            <div className="space-y-2">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 block">Учитываемые услуги (оставьте пустым — все)</label>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {products.length > 0 && (
-                                  <div className="bg-white border border-slate-200 rounded-2xl p-3 space-y-2">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">📦 Склад (время)</span>
-                                    <div className="max-h-32 overflow-y-auto space-y-1">
-                                      {products.map((prod: any) => {
-                                        const isChecked = (prog.trigger_product_ids || []).includes(Number(prod.id));
-                                        return (
-                                          <label key={prod.id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
-                                            <input
-                                              type="checkbox" checked={isChecked}
-                                              onChange={() => {
-                                                const ids = prog.trigger_product_ids || [];
-                                                updateProgram(idx, { trigger_product_ids: isChecked ? ids.filter((id: number) => id !== Number(prod.id)) : [...ids, Number(prod.id)] });
-                                              }}
-                                              className="accent-amber-500 w-3.5 h-3.5"
-                                            />
-                                            <div className="min-w-0">
-                                              <div className="text-[10px] font-bold text-slate-700 truncate">{prod.name}</div>
-                                              <div className="text-[9px] text-slate-400">{prod.selling_price} ₽</div>
-                                            </div>
-                                          </label>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                                {serviceRules.length > 0 && (
-                                  <div className="bg-white border border-slate-200 rounded-2xl p-3 space-y-2">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">💼 Пакеты времени</span>
-                                    <div className="max-h-32 overflow-y-auto space-y-1">
-                                      {serviceRules.map((rule: any) => {
-                                        const isChecked = (prog.trigger_service_ids || []).includes(String(rule.id));
-                                        return (
-                                          <label key={rule.id} className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer">
-                                            <input
-                                              type="checkbox" checked={isChecked}
-                                              onChange={() => {
-                                                const ids = prog.trigger_service_ids || [];
-                                                updateProgram(idx, { trigger_service_ids: isChecked ? ids.filter((id: string) => id !== String(rule.id)) : [...ids, String(rule.id)] });
-                                              }}
-                                              className="accent-amber-500 w-3.5 h-3.5"
-                                            />
-                                            <div className="min-w-0">
-                                              <div className="text-[10px] font-bold text-slate-700 truncate">{rule.name}</div>
-                                              <div className="text-[9px] text-slate-400">+{rule.tickets} билетов</div>
-                                            </div>
-                                          </label>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Rewards Section */}
-                          <div className="space-y-3">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 block">Награды за выполнение</label>
-
-                            {/* XP / Tickets / Bonus in a row */}
-                            <div className="grid grid-cols-3 gap-3">
-                              <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3 space-y-1.5">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-orange-500">⚡ Опыт (XP)</span>
-                                <input
-                                  type="number" min="0"
-                                  value={prog.rewards?.xp || 0}
-                                  onChange={e => updateProgramRewards(idx, { xp: parseFloat(e.target.value) || 0 })}
-                                  className="w-full bg-white border border-orange-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-orange-200"
-                                  placeholder="0"
-                                />
-                              </div>
-                              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 space-y-1.5">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-blue-500">🎫 Билеты</span>
-                                <input
-                                  type="number" min="0"
-                                  value={prog.rewards?.tickets || 0}
-                                  onChange={e => updateProgramRewards(idx, { tickets: parseFloat(e.target.value) || 0 })}
-                                  className="w-full bg-white border border-blue-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-200"
-                                  placeholder="0"
-                                />
-                              </div>
-                              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 space-y-1.5">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">💰 Бонус (₽)</span>
-                                <input
-                                  type="number" min="0"
-                                  value={prog.rewards?.bonus_balance || 0}
-                                  onChange={e => updateProgramRewards(idx, { bonus_balance: parseFloat(e.target.value) || 0 })}
-                                  className="w-full bg-white border border-emerald-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-emerald-200"
-                                  placeholder="0"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Free Package */}
-                            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-amber-600">📦 Бесплатный пакет (очередь выдачи)</span>
-                                <button
-                                  type="button"
-                                  onClick={() => updateProgramRewards(idx, { free_package: !prog.rewards?.free_package })}
-                                  className={cn("w-10 h-5 rounded-full relative transition-colors duration-200", prog.rewards?.free_package ? "bg-amber-500" : "bg-slate-200")}
-                                >
-                                  <div className={cn("absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all duration-200 shadow-sm", prog.rewards?.free_package ? "left-5" : "left-0.5")} />
-                                </button>
-                              </div>
-                              {prog.rewards?.free_package && (
-                                <div className="space-y-3">
-                                  <input
-                                    type="text"
-                                    value={prog.rewards?.free_package_name || ""}
-                                    onChange={e => updateProgramRewards(idx, { free_package_name: e.target.value })}
-                                    placeholder="Название приза (напр. 6-я ночь в подарок)"
-                                    className="w-full bg-white border border-amber-200 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-200"
-                                  />
-                                  <div className="space-y-1">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-amber-600 ml-2">
-                                      Количество (шт.)
-                                    </label>
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      value={prog.rewards?.free_package_quantity ?? 1}
-                                      onChange={e => updateProgramRewards(idx, { free_package_quantity: parseInt(e.target.value) || 1 })}
-                                      className="w-full bg-white border border-amber-200 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-200"
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Bar Reward */}
-                            <div className="bg-purple-50 border border-purple-100 rounded-2xl p-3 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-purple-600">🍹 Подарок из бара</span>
-                                <select
-                                  value={prog.rewards?.bar_reward_type || "none"}
-                                  onChange={e => updateProgramRewards(idx, { bar_reward_type: e.target.value })}
-                                  className="text-[10px] font-bold bg-white border border-purple-100 rounded-lg px-2 py-1 outline-none"
-                                >
-                                  <option value="none">Нет</option>
-                                  <option value="product">Конкретный продукт</option>
-                                  <option value="category">Случайный из категории</option>
-                                </select>
-                              </div>
-                              {prog.rewards?.bar_reward_type === "product" && (
-                                <select
-                                  value={prog.rewards?.bar_product_id || ""}
-                                  onChange={e => updateProgramRewards(idx, { bar_product_id: Number(e.target.value) || null })}
-                                  className="w-full bg-white border border-purple-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-200"
-                                >
-                                  <option value="">— Выберите продукт —</option>
-                                  {products.map((p: any) => (
-                                    <option key={p.id} value={p.id}>{p.name} ({p.selling_price} ₽)</option>
-                                  ))}
-                                </select>
-                              )}
-                              {prog.rewards?.bar_reward_type === "category" && (
-                                <select
-                                  value={prog.rewards?.bar_category_id || ""}
-                                  onChange={e => updateProgramRewards(idx, { bar_category_id: e.target.value || null })}
-                                  className="w-full bg-white border border-purple-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-200"
-                                >
-                                  <option value="">— Выберите категорию —</option>
-                                  {categories.map((c: any) => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                  ))}
-                                </select>
-                              )}
-                              {(prog.rewards?.bar_reward_type || "none") !== "none" && (
-                                <div className="space-y-1">
-                                  <label className="text-[9px] font-black uppercase tracking-widest text-purple-600 ml-2">
-                                    Количество (шт.)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={prog.rewards?.bar_reward_quantity ?? 1}
-                                    onChange={e => updateProgramRewards(idx, { bar_reward_quantity: parseInt(e.target.value) || 1 })}
-                                    className="w-full bg-white border border-purple-100 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-200"
-                                  />
-                                </div>
-                              )}
-                              {(prog.rewards?.bar_reward_type || "none") !== "none" && (
-                                <p className="text-[9px] text-purple-400 font-medium">Кассир видит уведомление с призом. Случайный выбор из наличия на момент выдачи.</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {/* Add Program Button */}
-                  <button
-                    type="button"
-                    onClick={addProgram}
-                    className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 hover:border-amber-400 hover:text-amber-500 transition-all font-bold text-sm flex items-center justify-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Добавить программу лояльности
-                  </button>
-                </div>
-              </div>
-            )}
-
+          /* Quests list view */
+          <div className="space-y-6">
             {/* Quests list header */}
-            <div className="flex items-center justify-between pt-6 pb-2 border-t border-slate-100">
+            <div className="flex items-center justify-between pt-2 pb-2">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Список активных квестов ({quests.length})</span>
               </div>

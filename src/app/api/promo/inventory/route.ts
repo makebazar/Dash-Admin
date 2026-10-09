@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   let client;
   try {
-    const { inventoryId } = await request.json();
+    const { inventoryId, hostId } = await request.json();
     const cookieStore = await cookies();
     const playerId = cookieStore.get("promo_player_id")?.value;
     const clubId = cookieStore.get("promo_active_club_id")?.value;
@@ -122,9 +122,6 @@ export async function POST(request: Request) {
       );
 
     } else if (rewardType === "bp_xp") {
-      const { addPlayerXP } = await import("@/lib/promo-quests");
-      await addPlayerXP(client, parseInt(clubId), playerId, Math.floor(rewardValue));
-
       await client.query(
         `UPDATE promo_player_inventory
          SET status = 'claimed', activated_at = NOW(), claimed_at = NOW()
@@ -191,6 +188,69 @@ export async function POST(request: Request) {
         if (prodRes.rows.length > 0) {
           rewardName = prodRes.rows[0].name;
         }
+      }
+
+      // If this is a time/package reward and hostId is provided, try direct session startup in SmartShell
+      let sessionStarted = false;
+      let startedHostAlias = "";
+      if (hostId && (rewardType === "club_time" || rewardType === "club_service" || rewardType === "custom")) {
+        try {
+          const playerPhoneRes = await client.query(
+            `SELECT phone_number FROM promo_players WHERE id = $1 LIMIT 1`,
+            [playerId]
+          );
+          const phone = playerPhoneRes.rows[0]?.phone_number;
+          if (phone) {
+            const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+            const ssClient = await getSmartShellClientForClub(parseInt(clubId));
+            if (ssClient) {
+              const ssUser = await ssClient.findClientByPhone(phone);
+              if (ssUser && ssUser.id) {
+                const startRes = await ssClient.startClientSessionOnHost(ssUser.id, Number(hostId));
+                if (startRes.success) {
+                  sessionStarted = true;
+                  startedHostAlias = `ПК #${hostId}`;
+                }
+              }
+            }
+          }
+        } catch (startErr) {
+          console.warn("[Inventory Route] SmartShell session start error:", startErr);
+        }
+      }
+
+      if (sessionStarted) {
+        // Direct session started — mark item claimed immediately
+        await client.query(
+          `UPDATE promo_player_inventory
+           SET status = 'claimed', activated_at = NOW(), claimed_at = NOW()
+           WHERE id = $1`,
+          [inventoryId]
+        );
+
+        await client.query(
+          `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+           VALUES ($1, $2, 'INVENTORY_USE_SESSION', $3)`,
+          [
+            playerId,
+            parseInt(clubId),
+            JSON.stringify({
+              reward_type: rewardType,
+              name: rewardName,
+              host_id: hostId,
+              session_started: true,
+              inventory_id: inventoryId,
+            }),
+          ]
+        );
+
+        await client.query("COMMIT");
+
+        return NextResponse.json({
+          success: true,
+          sessionStarted: true,
+          message: `Игровая сессия на ${startedHostAlias} успешно запущена!`,
+        });
       }
 
       const histRes = await client.query(

@@ -4,15 +4,17 @@ import { query, getClient } from "@/db";
 import {
   getShiftZoneSnapshotDraft,
   getHandoverSourceCandidates,
-  type ShiftZoneSnapshotType,
-  type HandoverSourceCandidate,
-  type ShiftZoneSnapshotDraftItem,
   applyWarehouseStockDelta,
   logStockMovement,
   syncProductsCurrentStock,
   ensurePreviousShiftClosureCompleted,
   findAcceptedFromShift,
 } from "./actions";
+import type {
+  ShiftZoneSnapshotType,
+  HandoverSourceCandidate,
+  ShiftZoneSnapshotDraftItem,
+} from "./types";
 
 import {
   normalizeInventorySettings,
@@ -681,6 +683,87 @@ export async function saveShiftZoneSnapshotTerminal(
       }
 
       await syncProductsCurrentStock(client, clubId, touchedProductIds);
+
+      // 5. Авто-синхронизация остатков со SmartShell (если интеграция включена)
+      if (touchedProductIds.size > 0) {
+        try {
+          const clubSettingsRes = await client.query(
+            `SELECT inventory_settings FROM clubs WHERE id = $1`,
+            [clubId],
+          );
+          const invSettings = normalizeInventorySettings(
+            clubSettingsRes.rows[0]?.inventory_settings,
+          );
+
+          if (invSettings.smartshell_integration_enabled) {
+            const { getSmartShellClientForClub } = await import(
+              "@/lib/smartshell/shift-sync"
+            );
+            const smartshellClient = await getSmartShellClientForClub(clubId);
+
+            if (smartshellClient) {
+              const cashboxWarehouseIds: number[] = Array.isArray(invSettings.cashbox_warehouse_ids) && invSettings.cashbox_warehouse_ids.length > 0
+                ? invSettings.cashbox_warehouse_ids
+                : (invSettings.cashbox_warehouse_id ? [invSettings.cashbox_warehouse_id] : []);
+
+              let touchedProductsRes;
+              if (cashboxWarehouseIds.length > 0) {
+                touchedProductsRes = await client.query(
+                  `SELECT 
+                     p.id, 
+                     p.name, 
+                     p.barcode, 
+                     COALESCE(SUM(ws.quantity), 0) as cashbox_stock
+                   FROM warehouse_products p
+                   LEFT JOIN warehouse_stock ws ON p.id = ws.product_id AND ws.warehouse_id = ANY($3::int[])
+                   WHERE p.club_id = $1 AND p.id = ANY($2::int[])
+                   GROUP BY p.id, p.name, p.barcode`,
+                  [clubId, Array.from(touchedProductIds), cashboxWarehouseIds],
+                );
+              } else {
+                touchedProductsRes = await client.query(
+                  `SELECT 
+                     p.id, 
+                     p.name, 
+                     p.barcode, 
+                     COALESCE(SUM(ws.quantity), 0) as cashbox_stock
+                   FROM warehouse_products p
+                   LEFT JOIN warehouse_stock ws ON p.id = ws.product_id 
+                   LEFT JOIN warehouses w ON ws.warehouse_id = w.id
+                   WHERE p.club_id = $1 
+                     AND p.id = ANY($2::int[])
+                     AND (w.shift_accountability_enabled = true OR w.type = 'BAR' OR w.is_default = true)
+                   GROUP BY p.id, p.name, p.barcode`,
+                  [clubId, Array.from(touchedProductIds)],
+                );
+              }
+
+              const itemsToSet: { id: number; quantity: number }[] = [];
+              for (const p of touchedProductsRes.rows) {
+                const goodId = await smartshellClient.resolveGoodId({
+                  name: p.name,
+                  barcode: p.barcode,
+                });
+                if (goodId) {
+                  itemsToSet.push({
+                    id: goodId,
+                    quantity: Math.max(0, Number(p.cashbox_stock || 0)),
+                  });
+                }
+              }
+
+              if (itemsToSet.length > 0) {
+                await smartshellClient.setGoodsQuantity(
+                  itemsToSet,
+                  `Подсчёт бара (${snapshotType === "OPEN" ? "приёмка" : "сдача"}) смена #${shiftId} в DashAdmin`,
+                );
+              }
+            }
+          }
+        } catch (ssErr) {
+          console.error("SmartShell saveShiftZoneSnapshotTerminal auto-sync error:", ssErr);
+        }
+      }
 
       await client.query("COMMIT");
       revalidatePath(`/employee/clubs/${clubId}`);

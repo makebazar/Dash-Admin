@@ -12,6 +12,14 @@ export async function GET(
     const { clubId } = await params;
     await requireModuleAccess(clubId, "shifts", "view");
 
+    // Фоновая мягкая авто-синхронизация со SmartShell (TTL 20 сек)
+    try {
+      const { syncSmartShellShifts } = await import("@/lib/smartshell/shift-sync");
+      await syncSmartShellShifts(clubId);
+    } catch (sErr) {
+      console.warn("SmartShell auto shift sync warning:", sErr);
+    }
+
     // Parse date filters from query params
     const url = new URL(request.url);
     const startDate = url.searchParams.get("startDate");

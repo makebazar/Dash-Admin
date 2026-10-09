@@ -10,8 +10,8 @@ export async function POST(
   const { playerId, ruleId } = await request.json();
   let userId;
   try {
-    const { requireClubAccess } = await import("@/lib/club-api-access");
-    userId = await requireClubAccess(clubId);
+    const { requireClubApiAccess } = await import("@/lib/club-api-access");
+    userId = await requireClubApiAccess(clubId);
   } catch (e: any) {
     return NextResponse.json({ error: e.message || "Forbidden" }, { status: e.status || 403 });
   }

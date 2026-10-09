@@ -92,7 +92,7 @@ export async function GET(request: Request) {
       clubName: club_name,
       settings: referralSettings,
       invitedBy,
-      referredFriends: referredFriendsRes.rows.map((row) => ({
+      referredFriends: referredFriendsRes.rows.map((row: any) => ({
         id: row.id,
         fullName: row.full_name,
         status: row.status,
@@ -104,7 +104,7 @@ export async function GET(request: Request) {
         totalTickets: total_tickets,
         friendsCount: referredFriendsRes.rowCount || 0,
       },
-      history: accrualsRes.rows.map((row) => ({
+      history: accrualsRes.rows.map((row: any) => ({
         id: row.id,
         type: row.game_type,
         friendName: row.friend_name || "Друг",

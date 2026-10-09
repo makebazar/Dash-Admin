@@ -108,7 +108,7 @@ export async function GET(request: Request) {
       [playerId, today],
     );
     const purchasedServiceIds = new Set(
-      playerSalesRes.rows.map((r) => String(r.rule_id)),
+      playerSalesRes.rows.map((r: any) => String(r.rule_id)),
     );
 
     for (const q of quests) {
@@ -147,7 +147,7 @@ export async function GET(request: Request) {
         if (q.target_entity_id_type === "category") {
           const categoryId = Number(q.target_entity_id);
           const availableProduct = allProducts.find(
-            (p) =>
+            (p: any) =>
               p.category_id === categoryId &&
               Number(p.stock) > 0 &&
               isEnabledInBar(p.id),
@@ -169,10 +169,10 @@ export async function GET(request: Request) {
             .split(",")
             .map((id) => Number(id.trim()))
             .filter((id) => !isNaN(id));
-          const products = allProducts.filter((p) => targetIds.includes(p.id));
+          const products = allProducts.filter((p: any) => targetIds.includes(p.id));
 
           if (products.length > 0) {
-            const productNames = products.map((p) => p.name).join(" + ");
+            const productNames = products.map((p: any) => p.name).join(" + ");
             q.title = (q.title || "").split("{{product}}").join(productNames);
             q.description = (q.description || "")
               .split("{{product}}")

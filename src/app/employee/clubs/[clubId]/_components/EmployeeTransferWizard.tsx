@@ -12,7 +12,8 @@ import {
     ArrowLeft, ArrowRight, CheckCircle2, ShoppingCart, Warehouse,
     ArrowRightLeft
 } from "lucide-react"
-import { getProducts, createTransferSafe, getProductByBarcode, getWarehouses, type Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/actions"
+import { getProducts, createTransferSafe, getProductByBarcode, getWarehouses } from "@/app/clubs/[clubId]/inventory/actions"
+import type { Warehouse as WarehouseType } from "@/app/clubs/[clubId]/inventory/types"
 import { 
     Table, TableBody, TableCell, TableRow 
 } from "@/components/ui/table"

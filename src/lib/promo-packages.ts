@@ -12,6 +12,7 @@ export interface LoyaltyProgram {
   type: "package_accumulation" | "visit_accumulation" | "visit_streak";
   title: string;
   target: number;
+  target_zone_id?: string | null;
   trigger_product_ids?: number[];
   trigger_service_ids?: string[];
   rewards?: {
@@ -33,64 +34,10 @@ export interface LoyaltyProgram {
  * Supports new array format (loyalty_programs) with backward-compat for old flat fields.
  */
 function getActivePrograms(settings: any): LoyaltyProgram[] {
-  // New format: array of programs
   if (Array.isArray(settings.loyalty_programs) && settings.loyalty_programs.length > 0) {
     return settings.loyalty_programs.filter((p: any) => p.enabled);
   }
-
-  // Backward compat: convert old flat fields to program array
-  const programs: LoyaltyProgram[] = [];
-  if (settings.packages_promo_enabled) {
-    programs.push({
-      id: "legacy_packages",
-      enabled: true,
-      type: "package_accumulation",
-      title: settings.packages_accumulation_reward_name || "Бесплатный пакет",
-      target: settings.packages_accumulation_target || 5,
-      trigger_product_ids: settings.accumulation_product_ids || [],
-      trigger_service_ids: settings.accumulation_service_ids || [],
-      rewards: {
-        free_package: settings.packages_accumulation_reward_type === "free_package",
-        free_package_name: settings.packages_accumulation_reward_name || "",
-        xp: settings.packages_accumulation_reward_type === "xp" ? (settings.packages_accumulation_reward_value || 0) : 0,
-        tickets: settings.packages_accumulation_reward_type === "ticket" ? (settings.packages_accumulation_reward_value || 0) : 0,
-        bonus_balance: settings.packages_accumulation_reward_type === "bonus_balance" ? (settings.packages_accumulation_reward_value || 0) : 0,
-      },
-    });
-  }
-  if (settings.packages_visits_enabled) {
-    programs.push({
-      id: "legacy_visits",
-      enabled: true,
-      type: "visit_accumulation",
-      title: settings.packages_visits_reward_name || "Подарок за посещения",
-      target: settings.packages_visits_target || 10,
-      rewards: {
-        free_package: settings.packages_visits_reward_type === "free_package",
-        free_package_name: settings.packages_visits_reward_name || "",
-        xp: settings.packages_visits_reward_type === "xp" ? (settings.packages_visits_reward_value || 0) : 0,
-        tickets: settings.packages_visits_reward_type === "ticket" ? (settings.packages_visits_reward_value || 0) : 0,
-        bonus_balance: settings.packages_visits_reward_type === "bonus_balance" ? (settings.packages_visits_reward_value || 0) : 0,
-      },
-    });
-  }
-  if (settings.packages_streak_enabled) {
-    programs.push({
-      id: "legacy_streak",
-      enabled: true,
-      type: "visit_streak",
-      title: settings.packages_streak_reward_name || "Приз за стрик",
-      target: settings.packages_streak_target || 2,
-      rewards: {
-        free_package: settings.packages_streak_reward_type === "free_package",
-        free_package_name: settings.packages_streak_reward_name || "",
-        xp: settings.packages_streak_reward_type === "xp" ? (settings.packages_streak_reward_value || 0) : 0,
-        tickets: settings.packages_streak_reward_type === "ticket" ? (settings.packages_streak_reward_value || 0) : 0,
-        bonus_balance: settings.packages_streak_reward_type === "bonus_balance" ? (settings.packages_streak_reward_value || 0) : 0,
-      },
-    });
-  }
-  return programs;
+  return [];
 }
 
 /**
@@ -122,11 +69,7 @@ export async function issueRewards(
   const rewards = program.rewards || {};
   const prizeName = program.title || "Приз за лояльность";
 
-  // XP
-  if ((rewards.xp || 0) > 0) {
-    const { addPlayerXP } = await import("@/lib/promo-quests");
-    await addPlayerXP(client, Number(clubId), playerId, Math.floor(rewards.xp!));
-  }
+
 
   // Tickets
   if ((rewards.tickets || 0) > 0) {
@@ -148,10 +91,35 @@ export async function issueRewards(
     );
   }
 
-  // Free package — add to prize queue for cashier to issue
+  // Free package — add to player inventory and prize queue
   if (rewards.free_package) {
     const freeQty = Math.max(1, rewards.free_package_quantity || 1);
     const freeQtySuffix = freeQty > 1 ? ` (x${freeQty})` : "";
+    const packageTitle = rewards.free_package_name || prizeName;
+    const tariffId = (rewards as any).free_package_tariff_id || null;
+    const zoneId = (rewards as any).free_package_zone_id || null;
+
+    // Create item in player inventory for auto-starting on PC host
+    for (let q = 0; q < freeQty; q++) {
+      await client.query(
+        `INSERT INTO promo_player_inventory (
+          player_id, club_id, reward_type, reward_name, status, service_id, metadata
+        ) VALUES ($1::uuid, $2::int, 'club_time', $3, 'available', $4, $5)`,
+        [
+          playerId,
+          Number(clubId),
+          packageTitle,
+          tariffId ? String(tariffId) : null,
+          JSON.stringify({
+            source: "loyalty_reward",
+            program_id: program.id,
+            tariff_id: tariffId,
+            tariff_name: packageTitle,
+            zone_id: zoneId,
+          }),
+        ]
+      );
+    }
 
     await client.query(
       `INSERT INTO promo_prize_queue (
@@ -161,7 +129,7 @@ export async function issueRewards(
       [
         clubId,
         playerId,
-        `${rewards.free_package_name || prizeName}${freeQtySuffix}`,
+        `${packageTitle}${freeQtySuffix}`,
         program.id,
         freeQty,
       ]
@@ -255,7 +223,8 @@ export async function processPackagePurchase(
   client: PoolClient,
   clubId: number | string,
   playerId: string,
-  items: LoyaltyItem[]
+  items: LoyaltyItem[],
+  zoneId?: string | number
 ) {
   const clubRes = await client.query(
     `SELECT promo_settings, timezone FROM clubs WHERE id = $1`,
@@ -315,6 +284,10 @@ export async function processPackagePurchase(
   });
 
   for (const program of packagePrograms) {
+    if (program.target_zone_id && zoneId && String(program.target_zone_id) !== String(zoneId)) {
+      continue;
+    }
+
     // Filter items matching this program using enhanced items
     const matchingItems = enhancedItems.filter((item) => itemMatchesProgram(item, program));
     if (matchingItems.length === 0) continue;
@@ -367,7 +340,8 @@ export async function processPackagePurchase(
 export async function processPlayerVisit(
   client: PoolClient,
   clubId: number | string,
-  playerId: string
+  playerId: string,
+  zoneId?: string | number
 ) {
   const clubRes = await client.query(
     `SELECT promo_settings, timezone FROM clubs WHERE id = $1`,
@@ -390,6 +364,10 @@ export async function processPlayerVisit(
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: timezone });
 
   for (const program of visitPrograms) {
+    if (program.target_zone_id && zoneId && String(program.target_zone_id) !== String(zoneId)) {
+      continue;
+    }
+
     const progress = await getOrCreateProgramProgress(client, clubId, playerId, program.id);
 
     const lastDateStr = progress.last_event_date

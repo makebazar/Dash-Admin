@@ -141,7 +141,7 @@ export async function POST(
             const updateSql = hasStatus
                 ? `UPDATE equipment SET workstation_id = NULL, status = 'STORAGE' WHERE id = ANY($1::uuid[])`
                 : `UPDATE equipment SET workstation_id = NULL WHERE id = ANY($1::uuid[])`
-            await client.query(updateSql, [toClear.map((row) => row.id)])
+            await client.query(updateSql, [toClear.map((row: { id: string }) => row.id)])
 
             for (const row of toClear) {
                 await client.query(

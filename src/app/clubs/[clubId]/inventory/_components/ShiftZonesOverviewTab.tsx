@@ -4,7 +4,7 @@ import Link from "next/link"
 import { ArrowRight, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
-import type { ShiftZoneOverview } from "../actions"
+import type { ShiftZoneOverview } from "../types"
 
 type ShiftZonesOverviewTabProps = {
     clubId: string

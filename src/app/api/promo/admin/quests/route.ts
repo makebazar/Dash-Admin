@@ -63,9 +63,9 @@ export async function POST(request: Request) {
          is_randomizable, lifetime_minutes, is_active,
          available_days, time_start, time_end,
          action_button_text, action_button_url, requires_photo_verification,
-         reset_period, min_level, target_service_id, image_url, reset_hours, requires_seat_number, combo_triggers
+         reset_period, min_level, target_service_id, image_url, reset_hours, requires_seat_number, combo_triggers, target_zone_id
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
        ) RETURNING *`,
       [
         data.club_id,
@@ -95,6 +95,7 @@ export async function POST(request: Request) {
         data.reset_hours || null,
         data.requires_seat_number || false,
         data.combo_triggers ? JSON.stringify(data.combo_triggers) : null,
+        data.target_zone_id || null,
       ],
     );
     return NextResponse.json({ success: true, quest: res.rows[0] });
@@ -130,8 +131,8 @@ export async function PUT(request: Request) {
          action_button_text = $17, action_button_url = $18, requires_photo_verification = $19,
          reset_period = $20, min_level = $21, target_service_id = $22,
          image_url = $23, reset_hours = $24, requires_seat_number = $25,
-         combo_triggers = $26, updated_at = NOW()
-       WHERE id = $27 AND club_id = $28
+         combo_triggers = $26, target_zone_id = $27, updated_at = NOW()
+       WHERE id = $28 AND club_id = $29
        RETURNING *`,
       [
         data.title,
@@ -160,6 +161,7 @@ export async function PUT(request: Request) {
         data.reset_hours || null,
         data.requires_seat_number || false,
         data.combo_triggers ? JSON.stringify(data.combo_triggers) : null,
+        data.target_zone_id || null,
         data.id,
         data.club_id,
       ],

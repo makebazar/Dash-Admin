@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
-import { cookies } from "next/headers";
+import { requireModuleAccess } from "@/lib/club-api-access";
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +12,13 @@ export async function PUT(
   try {
     const { id: tournamentId } = await params;
     const body = await request.json();
-    const { clubId, title, game, start_date, end_date, min_matches = 5, prizes = [], description = "" } = body;
-    const userId = (await cookies()).get("session_user_id")?.value;
+    const { clubId, title, game, start_date, end_date, min_matches = 5, prizes = [], description = "", status = "active" } = body;
 
-    if (!userId || !clubId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!clubId) {
+      return NextResponse.json({ error: "Club ID is required" }, { status: 400 });
     }
+
+    await requireModuleAccess(clubId, "dashboard", "view");
 
     if (!title || !game || !start_date || !end_date) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -25,8 +26,8 @@ export async function PUT(
 
     const result = await query(
       `UPDATE promo_tournaments
-       SET title = $1, game = $2, start_date = $3, end_date = $4, min_matches = $5, prizes = $6, description = $7
-       WHERE id = $8 AND club_id = $9
+       SET title = $1, game = $2, start_date = $3, end_date = $4, min_matches = $5, prizes = $6, description = $7, status = $8
+       WHERE id = $9 AND club_id = $10
        RETURNING *`,
       [
         title,
@@ -36,6 +37,7 @@ export async function PUT(
         parseInt(min_matches) || 5,
         JSON.stringify(prizes),
         description,
+        status,
         tournamentId,
         clubId,
       ]
@@ -46,7 +48,11 @@ export async function PUT(
     }
 
     return NextResponse.json({ success: true, tournament: result.rows[0] });
-  } catch (error) {
+  } catch (error: any) {
+    const errStatus = error?.status;
+    if (errStatus) {
+      return NextResponse.json({ error: errStatus === 401 ? "Unauthorized" : "Forbidden" }, { status: errStatus });
+    }
     console.error("Update Tournament Error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
@@ -61,16 +67,17 @@ export async function DELETE(
     const { id: tournamentId } = await params;
     const { searchParams } = new URL(request.url);
     const clubId = searchParams.get("clubId");
-    const userId = (await cookies()).get("session_user_id")?.value;
 
-    if (!userId || !clubId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!clubId) {
+      return NextResponse.json({ error: "Club ID is required" }, { status: 400 });
     }
+
+    await requireModuleAccess(clubId, "dashboard", "view");
 
     const result = await query(
       `DELETE FROM promo_tournaments
        WHERE id = $1 AND club_id = $2
-       RETURNING *`,
+       RETURNING id`,
       [tournamentId, clubId]
     );
 
@@ -78,8 +85,12 @@ export async function DELETE(
       return NextResponse.json({ error: "Tournament not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, message: "Tournament deleted successfully" });
-  } catch (error) {
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    const errStatus = error?.status;
+    if (errStatus) {
+      return NextResponse.json({ error: errStatus === 401 ? "Unauthorized" : "Forbidden" }, { status: errStatus });
+    }
     console.error("Delete Tournament Error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }

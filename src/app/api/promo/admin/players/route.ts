@@ -72,7 +72,7 @@ export async function GET(request: Request) {
         COALESCE((
           SELECT SUM((result_data->>'amount')::numeric)
           FROM promo_history
-          WHERE player_id = p.id AND club_id = $1 AND game_type = 'TOPUP' AND created_at >= date_trunc('month', CURRENT_DATE)
+          WHERE player_id = p.id AND club_id = $1 AND (game_type ILIKE '%topup%' OR game_type = 'pos_sale') AND created_at >= date_trunc('month', CURRENT_DATE)
         ), 0) + COALESCE((
           SELECT SUM(total_amount)
           FROM shift_receipts

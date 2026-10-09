@@ -101,18 +101,18 @@ export async function PATCH(
                     [clubId, assignedUserId, today]
                 );
 
-                if (nextShift.rowCount && nextShift.rowCount > 0) {
-                    const shiftDateStr = String(nextShift.rows[0].date);
-                    
-                    await query(
-                        `UPDATE equipment_maintenance_tasks 
-                         SET due_date = $1
-                         WHERE equipment_id IN (
-                            SELECT id FROM equipment WHERE workstation_id = $2
-                         ) AND status = 'PENDING' AND assigned_user_id = $3`,
-                        [shiftDateStr, workstationId, assignedUserId]
-                    );
-                }
+                const shiftDateStr = (nextShift.rowCount && nextShift.rowCount > 0) 
+                    ? String(nextShift.rows[0].date) 
+                    : today;
+                
+                await query(
+                    `UPDATE equipment_maintenance_tasks 
+                     SET due_date = $1
+                     WHERE equipment_id IN (
+                        SELECT id FROM equipment WHERE workstation_id = $2
+                     ) AND status = 'PENDING' AND assigned_user_id = $3`,
+                    [shiftDateStr, workstationId, assignedUserId]
+                );
             }
         }
 

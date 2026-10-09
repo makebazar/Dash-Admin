@@ -31,10 +31,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ token });
 }
 
-export function getPairingData(token: string) {
+function getPairingData(token: string) {
     return pairingTokens.get(token);
 }
 
-export function removePairingToken(token: string) {
+function removePairingToken(token: string) {
     pairingTokens.delete(token);
 }

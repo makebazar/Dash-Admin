@@ -33,7 +33,6 @@ import { PrizesSidebar } from "./components/PrizesSidebar";
 import { LandingView } from "./components/LandingView";
 import { BottomNav } from "./components/BottomNav";
 import { PromoHeader } from "./components/PromoHeader";
-import { BPPlayerWidget } from "./components/BPPlayerWidget";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,112 +43,70 @@ const GAMES = [
   {
     id: "wheel",
     title: "Колесо Фортуны",
-    desc: "Крути легендарное колесо и выигрывай ценные призы: от игрового времени до реальных бонусов.",
+    desc: "Крути колесо и забирай призы: игровое время, билеты и бонусы",
     href: "/promo/wheel",
-    color: "from-orange-500/20 to-red-500/20",
-    borderColor: "border-orange-500/30",
     category: "tickets",
     cost: "1 билет",
+    theme: {
+      gradient: "from-amber-500/15 via-orange-500/5 to-transparent",
+      border: "border-amber-500/25 hover:border-amber-500/50",
+      glow: "bg-amber-500/20",
+      accent: "text-amber-400",
+      hoverTitle: "group-hover:text-amber-300",
+      btn: "bg-amber-500/15 text-amber-400 group-hover:bg-amber-500 group-hover:text-black",
+      badge: "bg-amber-500/10 border-amber-500/30 text-amber-400",
+    },
   },
   {
     id: "safe",
     title: "Взлом Сейфа",
-    desc: "Проверь свою интуицию! Угадай секретный код и сорви куш, который спрятан за стальной дверью.",
+    desc: "Угадай секретный код сейфа и забери клубный джекпот",
     href: "/promo/safe",
-    color: "from-green-500/20 to-emerald-500/20",
-    borderColor: "border-green-500/30",
     category: "tickets",
     cost: "1 билет",
+    theme: {
+      gradient: "from-emerald-500/15 via-teal-500/5 to-transparent",
+      border: "border-emerald-500/25 hover:border-emerald-500/50",
+      glow: "bg-emerald-500/20",
+      accent: "text-emerald-400",
+      hoverTitle: "group-hover:text-emerald-300",
+      btn: "bg-emerald-500/15 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-black",
+      badge: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
+    },
   },
   {
     id: "dice",
     title: "Бросок Удачи",
-    desc: "Классика азарта. Бросай кости и надейся на удачную комбинацию, которая принесет тебе победу.",
+    desc: "Бросай кости и собирай победные числовые комбинации",
     href: "/promo/dice",
-    color: "from-blue-500/20 to-indigo-500/20",
-    borderColor: "border-blue-500/30",
     category: "tickets",
     cost: "1 билет",
+    theme: {
+      gradient: "from-blue-500/15 via-indigo-500/5 to-transparent",
+      border: "border-blue-500/25 hover:border-blue-500/50",
+      glow: "bg-blue-500/20",
+      accent: "text-blue-400",
+      hoverTitle: "group-hover:text-blue-300",
+      btn: "bg-blue-500/15 text-blue-400 group-hover:bg-blue-500 group-hover:text-white",
+      badge: "bg-blue-500/10 border-blue-500/30 text-blue-400",
+    },
   },
   {
     id: "cards",
     title: "Карты",
-    desc: "Три карты, один шанс. Найди ту самую выигрышную комбинацию и удвой свои возможности.",
+    desc: "Выбери выигрышную карту и удвой свои шансы на победу",
     href: "/promo/cards",
-    color: "from-purple-500/20 to-pink-500/20",
-    borderColor: "border-purple-500/30",
     category: "tickets",
     cost: "1 билет",
-  },
-  {
-    id: "flappy",
-    title: "Flappy Dash",
-    desc: "Аркадное испытание для самых ловких. Продержись как можно дольше и заработай максимум бонусов.",
-    href: "/promo/flappy",
-    color: "from-green-500/20 to-emerald-500/20",
-    borderColor: "border-green-500/30",
-    category: "stakes",
-    cost: "Ставка",
-  },
-  {
-    id: "mines",
-    title: "Mines",
-    desc: "Стратегия и риск. Ищи спрятанные сокровища на поле, но будь осторожен — одно неверное движение и всё исчезнет.",
-    href: "/promo/mines",
-    color: "from-orange-500/20 to-yellow-500/20",
-    borderColor: "border-orange-500/30",
-    category: "stakes",
-    cost: "Ставка",
-  },
-  {
-    id: "rocket",
-    title: "Rocket",
-    desc: "Следи за графиком взлета и успей забрать выигрыш до того, как ракета улетит в стратосферу.",
-    href: "/promo/rocket",
-    color: "from-blue-500/20 to-cyan-500/20",
-    borderColor: "border-blue-500/30",
-    category: "stakes",
-    cost: "Ставка",
-  },
-  {
-    id: "plinko",
-    title: "Plinko Dash",
-    desc: "Запусти шарик сквозь неоновые колышки и сорви множитель до x100 в зависимости от того, куда он упадет.",
-    href: "/promo/plinko",
-    color: "from-pink-500/20 to-purple-500/20",
-    borderColor: "border-pink-500/30",
-    category: "stakes",
-    cost: "Ставка",
-  },
-  {
-    id: "coinflip",
-    title: "Coin Flip 3D",
-    desc: "Орёл или Решка? Выбери сторону монеты, удвой ставку или набери серию побед вплоть до рекордных x8!",
-    href: "/promo/coinflip",
-    color: "from-yellow-500/20 to-amber-500/20",
-    borderColor: "border-yellow-500/30",
-    category: "stakes",
-    cost: "Ставка",
-  },
-  {
-    id: "tower",
-    title: "Tower Climb",
-    desc: "Поднимайся по этажам башни, угадывай безопасные неоновые плиты и приумножай баланс с каждым шагом.",
-    href: "/promo/tower",
-    color: "from-blue-500/20 to-indigo-500/20",
-    borderColor: "border-blue-500/30",
-    category: "stakes",
-    cost: "Ставка",
-  },
-  {
-    id: "hilo",
-    title: "Hi-Lo Cards",
-    desc: "Больше или меньше? Угадай значение следующей карты в колоде с динамическими шансами и множителями.",
-    href: "/promo/hilo",
-    color: "from-red-500/20 to-orange-500/20",
-    borderColor: "border-red-500/30",
-    category: "stakes",
-    cost: "Ставка",
+    theme: {
+      gradient: "from-purple-500/15 via-pink-500/5 to-transparent",
+      border: "border-purple-500/25 hover:border-purple-500/50",
+      glow: "bg-purple-500/20",
+      accent: "text-purple-400",
+      hoverTitle: "group-hover:text-purple-300",
+      btn: "bg-purple-500/15 text-purple-400 group-hover:bg-purple-500 group-hover:text-white",
+      badge: "bg-purple-500/10 border-purple-500/30 text-purple-400",
+    },
   },
 ];
 
@@ -839,58 +796,35 @@ export default function PromoLobby() {
         prizes={prizes}
         playerLevel={player?.level?.currentLevel}
       />
-      <main className="max-w-6xl mx-auto p-6 pt-10 pb-32">
+      <main className="max-w-6xl mx-auto p-4 sm:p-6 pt-6 sm:pt-8 pb-48 sm:pb-36">
         {activeTab === "games" && (
           <>
-            {/* Battle Pass Section */}
-            {player?.bp && (
-              <div className="mb-12">
-                <BPPlayerWidget bp={player.bp} />
-              </div>
-            )}
+
 
             {/* Active Boost Banner */}
             {player?.activeBoostPercent > 0 && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="mb-12 bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-yellow-500/10 border border-yellow-500/20 rounded-[2rem] p-6 shadow-[0_8px_32px_rgba(234,179,8,0.05)] relative overflow-hidden group"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 bg-gradient-to-br from-amber-500/15 via-yellow-500/5 to-transparent border border-amber-500/25 hover:border-amber-500/40 rounded-[2rem] p-5 sm:p-6 shadow-lg shadow-black/20 relative overflow-hidden group"
               >
-                {/* Decorative background glow */}
-                <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-yellow-500/10 blur-3xl rounded-full" />
-                <div className="absolute -left-10 -top-10 w-40 h-40 bg-amber-500/5 blur-3xl rounded-full" />
-                
-                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-yellow-500/20 rounded-2xl flex items-center justify-center shrink-0">
-                      <motion.div
-                        animate={{
-                          scale: [1, 1.1, 1],
-                          rotate: [0, -10, 10, -10, 10, 0]
-                        }}
-                        transition={{
-                          repeat: Infinity,
-                          duration: 1.5,
-                          repeatDelay: 3
-                        }}
-                      >
-                        <Zap className="w-6 h-6 text-yellow-500 fill-yellow-500/30" />
-                      </motion.div>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-black uppercase italic tracking-tight text-yellow-500">
-                        Активен буст вывода: +{player.activeBoostPercent}%
-                      </h4>
-                      <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-1 leading-relaxed">
-                        Ваше следующее пополнение счета на кассе увеличит ваш лимит вывода на {player.activeBoostPercent}% от суммы!
-                      </p>
-                    </div>
+                <div className="absolute -top-12 -right-12 w-36 h-36 bg-amber-500/15 rounded-full blur-3xl opacity-30 group-hover:opacity-60 transition-opacity pointer-events-none" />
+
+                <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h4 className="text-base font-black uppercase italic tracking-tight text-amber-400">
+                      Активен буст вывода: +{player.activeBoostPercent}%
+                    </h4>
+                    <p className="text-xs text-gray-300 font-medium leading-relaxed max-w-xl">
+                      Следующее пополнение счета на кассе увеличит ваш лимит вывода на {player.activeBoostPercent}% от суммы
+                    </p>
                   </div>
                   <Link
                     href="/promo/withdraw"
-                    className="flex-none bg-yellow-500 hover:bg-yellow-600 text-black text-xs font-black uppercase tracking-widest px-6 py-3.5 rounded-2xl transition-all active:scale-95 flex items-center gap-2"
+                    className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-400 group-hover:text-amber-300 shrink-0 transition-colors self-start sm:self-center"
                   >
-                    Подробнее <ArrowRight className="w-4 h-4" />
+                    <span>Подробнее</span>
+                    <ArrowRight className="w-4 h-4 translate-x-0 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </div>
               </motion.div>
@@ -900,34 +834,31 @@ export default function PromoLobby() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="relative overflow-hidden group cursor-pointer bg-gradient-to-br from-indigo-950/20 via-slate-900/60 to-purple-950/20 border border-indigo-500/20 hover:border-indigo-500/40 rounded-[2.5rem] p-6 sm:p-8 shadow-[0_0_40px_rgba(99,102,241,0.02)] transition-all hover:scale-[1.005] hover:shadow-[0_0_40px_rgba(99,102,241,0.08)] mb-8"
+              className="relative overflow-hidden group cursor-pointer bg-white/5 border border-white/10 hover:border-white/20 rounded-[2rem] p-5 sm:p-6 transition-all duration-300 mb-8"
               onClick={() => router.push("/promo/frag")}
             >
-              {/* Neon circles */}
-              <div className="absolute -top-16 -right-16 w-44 h-44 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-indigo-500/20 transition-colors" />
-              <div className="absolute -bottom-16 -left-16 w-44 h-44 bg-purple-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/20 transition-colors" />
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider">
-                      Клубная Игровая Зона
-                    </span>
-                    <span className="text-[9px] font-bold text-emerald-400 uppercase flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      frag доступен
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-black uppercase italic leading-tight text-white group-hover:text-indigo-300 transition-colors">
-                    Рейтинг FRAG & Сезоны Наград
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+                <div className="space-y-1.5">
+                  <h3 className="text-base font-black uppercase italic leading-snug text-white group-hover:text-indigo-300 transition-colors">
+                    Рейтинг FRAG
                   </h3>
-                  <p className="text-xs text-gray-400 max-w-md leading-relaxed font-medium">
-                    Играй в CS2 и Dota 2 на клубных ПК, зарабатывай рубли на баланс за каждое убийство/победу в реальном времени и участвуй в автоматических кубках за крутые скины Steam!
+                  <p className="text-xs text-gray-300 font-medium leading-relaxed max-w-xl">
+                    Получай бонусы на баланс, просто играя в CS2, Dota 2 и PUBG на клубных ПК — забирай награды за каждый матч
                   </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400">CS2</span>
+                    <span className="text-gray-600">•</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400">Dota 2</span>
+                    <span className="text-gray-600">•</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400">PUBG</span>
+                    <span className="text-gray-600">•</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-400">Бонусы за фраги и победы</span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-[11px] font-black uppercase italic tracking-wider text-indigo-400 group-hover:text-indigo-300 shrink-0 transition-colors">
-                  Играть и Побеждать <ArrowRight className="w-4 h-4 translate-x-0 group-hover:translate-x-1 transition-transform" />
+                <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-indigo-400 group-hover:text-indigo-300 shrink-0 transition-colors self-start sm:self-center">
+                  <span>Матчи и рейтинг</span>
+                  <ArrowRight className="w-4 h-4 translate-x-0 group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
             </motion.div>
@@ -956,6 +887,8 @@ export default function PromoLobby() {
                     );
 
                     const triggerServices = (program.trigger_service_ids || []).map((id: string) => {
+                      const tariff = (player?.tariffs || []).find((t: any) => String(t.id) === String(id));
+                      if (tariff) return tariff.name;
                       const rule = player?.settings?.service_rules?.find((r: any) => String(r.id) === String(id));
                       return rule ? rule.name : null;
                     }).filter(Boolean);
@@ -965,49 +898,51 @@ export default function PromoLobby() {
                       return prod ? prod.name : null;
                     }).filter(Boolean);
 
+                    const zoneObj = program.target_zone_id
+                      ? (player?.zones || []).find((z: any) => String(z.id) === String(program.target_zone_id))
+                      : null;
+                    const zoneSuffix = zoneObj ? ` • ${zoneObj.title}` : "";
+
                     let triggerText = "";
                     const items = [...triggerServices, ...triggerProducts];
                     if (program.type === "package_accumulation") {
                       if (items.length > 0) {
-                        triggerText = `Покупка: ${items.join(", ")}`;
+                        triggerText = `Покупка: ${items.join(", ")}${zoneSuffix}`;
                       } else {
-                        triggerText = "Покупка любого пакета";
+                        triggerText = `Покупка любого пакета${zoneSuffix}`;
                       }
                     } else if (program.type === "visit_accumulation") {
                       if (items.length > 0) {
-                        triggerText = `Визит с покупкой: ${items.join(", ")}`;
+                        triggerText = `Визит с пакетом: ${items.join(", ")}${zoneSuffix}`;
                       } else {
-                        triggerText = "Визит с покупкой любого пакета";
+                        triggerText = `Посещение клуба (≥ 30 мин)${zoneSuffix}`;
                       }
                     } else if (program.type === "visit_streak") {
                       if (items.length > 0) {
-                        triggerText = `Каждый день покупка: ${items.join(", ")}`;
+                        triggerText = `Серия дней с покупкой: ${items.join(", ")}${zoneSuffix}`;
                       } else {
-                        triggerText = "Каждый день покупка любого пакета";
+                        triggerText = `Серия дней подряд${zoneSuffix}`;
                       }
                     }
 
-                    const rewardItems: { text: string; icon: string; className: string }[] = [];
+                    const rewardItems: { text: string; className: string }[] = [];
                     if (program.rewards) {
                       if (program.rewards.xp > 0) {
                         rewardItems.push({
                           text: `+${program.rewards.xp} XP`,
-                          icon: "⚡",
-                          className: "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                          className: "text-blue-400"
                         });
                       }
                       if (program.rewards.tickets > 0) {
                         rewardItems.push({
                           text: `+${program.rewards.tickets} билета`,
-                          icon: "🎟️",
-                          className: "bg-orange-500/10 border-orange-500/20 text-orange-400"
+                          className: "text-orange-400"
                         });
                       }
                       if (program.rewards.bonus_balance > 0) {
                         rewardItems.push({
                           text: `+${program.rewards.bonus_balance} бонусов`,
-                          icon: "🪙",
-                          className: "bg-yellow-500/10 border-yellow-500/20 text-yellow-500"
+                          className: "text-yellow-400"
                         });
                       }
                       if (program.rewards.free_package || program.rewards.free_package === "true") {
@@ -1015,8 +950,7 @@ export default function PromoLobby() {
                         const freeQtySuffix = freeQty > 1 ? ` (x${freeQty})` : "";
                         rewardItems.push({
                           text: `Пакет: ${program.rewards.free_package_name || "Бесплатный пакет"}${freeQtySuffix}`,
-                          icon: "🎁",
-                          className: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
+                          className: "text-indigo-400"
                         });
                       }
                       const qty = Math.max(1, Number(program.rewards.bar_reward_quantity || 1));
@@ -1025,21 +959,18 @@ export default function PromoLobby() {
                         const rewardProduct = products.find((p: any) => String(p.id) === String(program.rewards.bar_product_id));
                         rewardItems.push({
                           text: rewardProduct ? `Товар: ${rewardProduct.name}${qtySuffix}` : `Товар из бара${qtySuffix}`,
-                          icon: "🍔",
-                          className: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                          className: "text-emerald-400"
                         });
                       } else if (program.rewards.bar_reward_type === "category") {
                         rewardItems.push({
                           text: `Товар из бара${qtySuffix}`,
-                          icon: "🍔",
-                          className: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                          className: "text-emerald-400"
                         });
                       }
                     } else if (program.isLegacy) {
                       rewardItems.push({
                         text: program.title || "Бесплатный пакет",
-                        icon: "🎁",
-                        className: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
+                        className: "text-indigo-400"
                       });
                     }
 
@@ -1050,77 +981,106 @@ export default function PromoLobby() {
                       else rewardName = "Приз за серию дней";
                     }
 
+                    const loyaltyTheme = program.type === "visit_streak"
+                      ? {
+                          gradient: "from-orange-500/15 via-rose-500/5 to-transparent",
+                          border: "border-orange-500/25 hover:border-orange-500/50",
+                          glow: "bg-orange-500/20",
+                          accent: "text-orange-400",
+                          hoverTitle: "group-hover:text-orange-300",
+                          progressBar: "from-orange-500 to-rose-500",
+                          shadow: "shadow-orange-500/20",
+                          watermarkColor: "text-orange-500",
+                          badge: "bg-orange-500/10 border-orange-500/20 text-orange-300",
+                        }
+                      : program.type === "visit_accumulation"
+                      ? {
+                          gradient: "from-amber-500/15 via-yellow-500/5 to-transparent",
+                          border: "border-amber-500/25 hover:border-amber-500/50",
+                          glow: "bg-amber-500/20",
+                          accent: "text-amber-400",
+                          hoverTitle: "group-hover:text-amber-300",
+                          progressBar: "from-amber-500 to-yellow-400",
+                          shadow: "shadow-amber-500/20",
+                          watermarkColor: "text-amber-500",
+                          badge: "bg-amber-500/10 border-amber-500/20 text-amber-300",
+                        }
+                      : {
+                          gradient: "from-indigo-500/15 via-purple-500/5 to-transparent",
+                          border: "border-indigo-500/25 hover:border-indigo-500/50",
+                          glow: "bg-indigo-500/20",
+                          accent: "text-indigo-400",
+                          hoverTitle: "group-hover:text-indigo-300",
+                          progressBar: "from-indigo-500 to-purple-500",
+                          shadow: "shadow-indigo-500/20",
+                          watermarkColor: "text-indigo-500",
+                          badge: "bg-indigo-500/10 border-indigo-500/20 text-indigo-300",
+                        };
+
                     return (
                       <motion.div
                         key={program.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 flex flex-col justify-between min-h-[18rem] relative overflow-hidden group hover:border-white/20 transition-all duration-300"
+                        className={cn(
+                          "rounded-3xl sm:rounded-[2.5rem] p-5 sm:p-6 flex flex-col justify-between min-h-0 sm:min-h-[18rem] relative overflow-hidden group border transition-all duration-300 bg-gradient-to-br shadow-lg shadow-black/20",
+                          loyaltyTheme.gradient,
+                          loyaltyTheme.border
+                        )}
                       >
-                        <div className="absolute -right-4 -top-4 opacity-[0.03] group-hover:opacity-10 transition-opacity pointer-events-none select-none duration-500">
+                        {/* Dynamic Background Glow */}
+                        <div className={cn("absolute -top-12 -right-12 w-36 h-36 rounded-full blur-3xl opacity-30 group-hover:opacity-70 transition-opacity pointer-events-none", loyaltyTheme.glow)} />
+
+                        <div className="absolute -right-4 -top-4 opacity-5 group-hover:opacity-15 transition-opacity pointer-events-none select-none duration-500">
                           {program.type === "visit_streak" ? (
-                            <Flame className="w-24 h-24 text-white animate-pulse" />
+                            <Flame className={cn("w-24 h-24", loyaltyTheme.watermarkColor)} />
                           ) : program.type === "visit_accumulation" ? (
-                            <Award className="w-24 h-24 text-white" />
+                            <Award className={cn("w-24 h-24", loyaltyTheme.watermarkColor)} />
                           ) : (
-                            <Gift className="w-24 h-24 text-white" />
+                            <Gift className={cn("w-24 h-24", loyaltyTheme.watermarkColor)} />
                           )}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-3">
-                            {program.type === "visit_streak" ? (
-                              <Flame className="w-5 h-5 text-orange-500 group-hover:scale-110 transition-transform animate-pulse" />
-                            ) : program.type === "visit_accumulation" ? (
-                              <Award className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" />
-                            ) : (
-                              <Gift className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
-                            )}
-                            <h4 className="font-black uppercase italic text-xs tracking-wider text-gray-400">
-                              {program.type === "package_accumulation"
-                                ? "Накопление"
-                                : program.type === "visit_accumulation"
-                                ? "Посещения"
-                                : "Серия дней"}
-                            </h4>
-                          </div>
-                          
-                          <p className="text-base font-black uppercase text-white tracking-tight leading-snug line-clamp-2">
+
+                        <div className="relative z-10">
+                          <p className={cn("text-base font-black uppercase text-white tracking-tight leading-snug line-clamp-2 transition-colors", loyaltyTheme.hoverTitle)}>
                             {rewardName}
                           </p>
 
                           {/* Trigger condition details */}
-                          <div className="mt-4 space-y-1">
+                          <div className="mt-3 sm:mt-4 space-y-1">
                             <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Условие:</span>
-                            <div className="text-[10px] text-gray-200 font-bold uppercase tracking-wider bg-white/[0.02] border border-white/5 rounded-xl px-3 py-2 leading-relaxed">
+                            <p className="text-[11px] text-gray-200 font-bold uppercase tracking-wide leading-relaxed">
                               {triggerText}
-                            </div>
+                            </p>
                           </div>
 
                           {/* Rewards list display */}
                           {rewardItems.length > 0 && (
-                            <div className="mt-4 space-y-1.5">
+                            <div className="mt-3 sm:mt-4 space-y-1">
                               <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Награда:</span>
-                              <div className="flex flex-wrap gap-1.5">
+                              <div className="text-[11px] font-black uppercase tracking-wide flex flex-wrap items-center gap-x-2 gap-y-1">
                                 {rewardItems.map((r, i) => (
-                                  <span key={i} className={`inline-flex items-center gap-1.5 border text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-xl transition-all duration-300 ${r.className}`}>
-                                    <span className="text-xs">{r.icon}</span>
-                                    <span>{r.text}</span>
-                                  </span>
+                                  <React.Fragment key={i}>
+                                    {i > 0 && <span className="text-gray-600 font-normal">•</span>}
+                                    <span className={r.className}>{r.text}</span>
+                                  </React.Fragment>
                                 ))}
                               </div>
                             </div>
                           )}
                         </div>
 
-                        <div className="space-y-4 mt-4">
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-[10px] font-black uppercase tracking-wider text-gray-500">
+                        <div className="space-y-3 sm:space-y-4 mt-3 sm:mt-4 relative z-10">
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-gray-300">
                               <span>Прогресс</span>
-                              <span className="text-amber-500">{current} / {target}</span>
+                              <span className="font-black text-white">
+                                <span className={loyaltyTheme.accent}>{current}</span> / {target}
+                              </span>
                             </div>
-                            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
+                            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
+                                className={cn("h-full bg-gradient-to-r transition-all duration-500", loyaltyTheme.progressBar)}
                                 style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
                               />
                             </div>
@@ -1139,7 +1099,11 @@ export default function PromoLobby() {
                               <button
                                 onClick={() => handleClaimLoyalty(program.isLegacy ? program.legacyType : program.id, program.isLegacy)}
                                 disabled={claimingLoyalty !== null}
-                                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:scale-[1.02] shadow-lg shadow-orange-500/20 animate-pulse cursor-pointer"
+                                className={cn(
+                                  "w-full py-2.5 text-white rounded-xl font-black uppercase tracking-widest text-[10px] transition-all hover:scale-[1.02] shadow-lg animate-pulse cursor-pointer bg-gradient-to-r",
+                                  loyaltyTheme.progressBar,
+                                  loyaltyTheme.shadow
+                                )}
                               >
                                 {claimingLoyalty === (program.isLegacy ? program.legacyType : program.id) ? (
                                   <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" />
@@ -1149,8 +1113,7 @@ export default function PromoLobby() {
                               </button>
                             )
                           ) : (
-                            <div className="text-[9px] font-black uppercase tracking-wider text-gray-400 text-center py-2 bg-white/3 rounded-xl border border-white/5 flex items-center justify-center gap-1">
-                              {program.type === "visit_streak" && <Flame className="w-3 h-3 text-orange-500 animate-pulse" />}
+                            <div className={cn("text-[9px] font-black uppercase tracking-wider text-center py-2 rounded-xl border flex items-center justify-center gap-1", loyaltyTheme.badge)}>
                               <span>
                                 Осталось: {Math.max(0, target - current)}{" "}
                                 {program.type === "visit_accumulation" ? "раз(а)" : program.type === "visit_streak" ? "дн." : "шт."}
@@ -1204,62 +1167,63 @@ export default function PromoLobby() {
             )}
 
             {/* Tickets Category */}
-            <section className="mb-16">
-              <div className="flex items-center gap-4 mb-6">
-                <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/30 whitespace-nowrap">
-                  Игры за билеты
-                </h3>
-                <div className="h-px w-full bg-white/5" />
-              </div>
+            {(() => {
+              const ticketGames = GAMES.filter(
+                (g) =>
+                  g.category === "tickets" &&
+                  (publicClubInfo?.settings?.enabled_games || []).includes(g.id),
+              );
 
-              {/* Tickets Info Card */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8 relative overflow-hidden group"
-              >
-                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                  <Ticket className="w-20 h-20 text-orange-500" />
-                </div>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-8 h-8 bg-orange-500/20 rounded-xl flex items-center justify-center">
-                    <Ticket className="w-4 h-4 text-orange-500" />
+              if (ticketGames.length === 0) return null;
+
+              return (
+                <section className="mb-16">
+                  <div className="flex items-center gap-4 mb-6">
+                    <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/30 whitespace-nowrap">
+                      Игры за билеты
+                    </h3>
+                    <div className="h-px w-full bg-white/5" />
                   </div>
-                  <h4 className="text-md font-black uppercase italic tracking-tight">
-                    Билеты
-                  </h4>
-                </div>
-                <p className="text-gray-400 text-xs leading-relaxed max-w-2xl">
-                  Используй билеты для участия в призовых играх. Каждый билет — это шанс выиграть реальные подарки: от напитков до игрового времени на баланс.
-                </p>
-              </motion.div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {GAMES.filter(
-                  (g) =>
-                    g.category === "tickets" &&
-                    (publicClubInfo?.settings?.enabled_games || []).includes(
-                      g.id,
-                    ),
-                ).map((game, index) => {
-                  const config =
-                    publicClubInfo?.settings?.game_configs?.[game.id];
-                  const minLevel = config?.min_level || 0;
-                  const playerLevel = player?.level?.currentLevel || 1;
-                  const locked = playerLevel < minLevel;
+                  {/* Tickets Info Card */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8 relative overflow-hidden group"
+                  >
+                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+                      <Ticket className="w-20 h-20 text-orange-500" />
+                    </div>
+                    <h4 className="text-base font-black uppercase italic tracking-tight text-white mb-2 relative z-10">
+                      Билеты
+                    </h4>
+                    <p className="text-gray-400 text-xs leading-relaxed max-w-2xl font-medium relative z-10">
+                      Используй билеты для участия в призовых играх. Каждый билет — это шанс выиграть реальные подарки: от напитков до игрового времени на баланс.
+                    </p>
+                  </motion.div>
 
-                  return (
-                    <GameCard
-                      key={game.id}
-                      game={game}
-                      index={index}
-                      locked={locked}
-                      minLevel={minLevel}
-                    />
-                  );
-                })}
-              </div>
-            </section>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {ticketGames.map((game, index) => {
+                      const config =
+                        publicClubInfo?.settings?.game_configs?.[game.id];
+                      const minLevel = config?.min_level || 0;
+                      const playerLevel = player?.level?.currentLevel || 1;
+                      const locked = playerLevel < minLevel;
+
+                      return (
+                        <GameCard
+                          key={game.id}
+                          game={game}
+                          index={index}
+                          locked={locked}
+                          minLevel={minLevel}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })()}
 
             {/* Accruals Quick Link */}
             <motion.div
@@ -1271,80 +1235,76 @@ export default function PromoLobby() {
                 href="/promo/accruals"
                 className="flex items-center justify-between bg-white/5 border border-white/10 rounded-3xl p-6 hover:bg-white/10 transition-all group"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-orange-500/20 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <Zap className="w-6 h-6 text-orange-500" />
-                  </div>
-                  <div>
-                    <h4 className="font-black uppercase italic tracking-tight">
-                      Как получить билеты?
-                    </h4>
-                    <p className="text-xs text-gray-500 font-medium">
-                      Смотри правила и историю своих начислений
-                    </p>
-                  </div>
+                <div className="space-y-1">
+                  <h4 className="font-black uppercase italic tracking-tight text-white group-hover:text-amber-400 transition-colors">
+                    Как получить билеты?
+                  </h4>
+                  <p className="text-xs text-gray-400 font-medium">
+                    Смотри правила и историю своих начислений
+                  </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-gray-700 group-hover:text-white transition-colors" />
               </Link>
             </motion.div>
 
             {/* Stakes Category */}
-            <section className="mb-16">
-              <div className="flex items-center gap-4 mb-6">
-                <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/30 whitespace-nowrap">
-                  Игры на ставки
-                </h3>
-                <div className="h-px w-full bg-white/5" />
-              </div>
+            {(() => {
+              const stakesGames = GAMES.filter(
+                (g) =>
+                  g.category === "stakes" &&
+                  (publicClubInfo?.settings?.enabled_games || []).includes(g.id),
+              );
 
-              {/* Stakes Info Card */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8 relative overflow-hidden group"
-              >
-                <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                  <Coins className="w-20 h-20 text-yellow-500" />
-                </div>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-8 h-8 bg-yellow-500/20 rounded-xl flex items-center justify-center">
-                    <Coins className="w-4 h-4 text-yellow-500" />
+              if (stakesGames.length === 0) return null;
+
+              return (
+                <section className="mb-16">
+                  <div className="flex items-center gap-4 mb-6">
+                    <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/30 whitespace-nowrap">
+                      Игры на ставки
+                    </h3>
+                    <div className="h-px w-full bg-white/5" />
                   </div>
-                  <h4 className="text-md font-black uppercase italic tracking-tight">
-                    Ставка
-                  </h4>
-                </div>
-                <p className="text-gray-400 text-xs leading-relaxed max-w-2xl">
-                  Играй на свои бонусы! Умножай накопленный баланс в динамичных играх, но будь осторожен — здесь всё зависит от твоей стратегии и удачи.
-                </p>
-              </motion.div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {GAMES.filter(
-                  (g) =>
-                    g.category === "stakes" &&
-                    (publicClubInfo?.settings?.enabled_games || []).includes(
-                      g.id,
-                    ),
-                ).map((game, index) => {
-                  const config =
-                    publicClubInfo?.settings?.game_configs?.[game.id];
-                  const minLevel = config?.min_level || 0;
-                  const playerLevel = player?.level?.currentLevel || 1;
-                  const locked = playerLevel < minLevel;
+                  {/* Stakes Info Card */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white/5 border border-white/10 rounded-[2rem] p-6 mb-8 relative overflow-hidden group"
+                  >
+                    <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+                      <Coins className="w-20 h-20 text-yellow-500" />
+                    </div>
+                    <h4 className="text-base font-black uppercase italic tracking-tight text-white mb-2 relative z-10">
+                      Ставка
+                    </h4>
+                    <p className="text-gray-400 text-xs leading-relaxed max-w-2xl font-medium relative z-10">
+                      Играй на свои бонусы! Умножай накопленный баланс в динамичных играх, но будь осторожен — здесь всё зависит от твоей стратегии и удачи.
+                    </p>
+                  </motion.div>
 
-                  return (
-                    <GameCard
-                      key={game.id}
-                      game={game}
-                      index={index}
-                      locked={locked}
-                      minLevel={minLevel}
-                    />
-                  );
-                })}
-              </div>
-            </section>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {stakesGames.map((game, index) => {
+                      const config =
+                        publicClubInfo?.settings?.game_configs?.[game.id];
+                      const minLevel = config?.min_level || 0;
+                      const playerLevel = player?.level?.currentLevel || 1;
+                      const locked = playerLevel < minLevel;
+
+                      return (
+                        <GameCard
+                          key={game.id}
+                          game={game}
+                          index={index}
+                          locked={locked}
+                          minLevel={minLevel}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })()}
           </>
         )}
 
@@ -1352,26 +1312,29 @@ export default function PromoLobby() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="space-y-12"
+            className="space-y-8"
           >
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div>
-                <h2 className="text-3xl font-black uppercase italic tracking-tight mb-2">
-                  Маркет <span className="text-orange-500">Бонусов</span>
-                </h2>
-                <p className="text-gray-400 text-sm font-medium">
-                  Обменивай накопленные бонусы на реальные товары из нашего бара
-                </p>
+            {/* Banner header */}
+            <div className="relative rounded-3xl sm:rounded-[2rem] bg-gradient-to-br from-amber-500/15 via-orange-500/5 to-transparent border border-amber-500/25 p-5 sm:p-6 overflow-hidden">
+              <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/15 rounded-full blur-3xl opacity-40 pointer-events-none" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+                <div className="space-y-1.5">
+                  <h2 className="text-xl sm:text-2xl font-black uppercase italic tracking-tight text-white leading-snug">
+                    Маркет бонусов
+                  </h2>
+                  <p className="text-gray-300 text-xs sm:text-sm font-medium leading-relaxed max-w-xl">
+                    Обменивай накопленные баллы на напитки, снеки и фирменные товары из бара клуба.
+                  </p>
+                </div>
+                {cart.length > 0 && (
+                  <button
+                    onClick={() => setShowOrderDialog(true)}
+                    className="bg-amber-400 hover:bg-amber-300 text-black font-black uppercase tracking-wider text-xs px-6 py-3.5 rounded-2xl transition-all shadow-lg shadow-amber-400/20 active:scale-[0.98] shrink-0 cursor-pointer"
+                  >
+                    Оформить заказ ({Math.floor(cartTotal)} 🪙)
+                  </button>
+                )}
               </div>
-
-              {cart.length > 0 && (
-                <button
-                  onClick={() => setShowOrderDialog(true)}
-                  className="bg-orange-500 hover:bg-orange-600 text-white font-black uppercase italic px-8 py-4 rounded-3xl transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98]"
-                >
-                  Оформить заказ ({Math.floor(cartTotal)} 🪙)
-                </button>
-              )}
             </div>
 
             {player?.settings?.withdraw_limit_enabled === true && (() => {
@@ -1396,80 +1359,49 @@ export default function PromoLobby() {
 
               return (
                 <div className="space-y-4">
-                  <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div className="flex-1 space-y-2 w-full">
-                      <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
-                        <span>Лимит на покупки за бонусы ({new Date().toLocaleString("ru-RU", { month: "long" })})</span>
+                      <div className="flex justify-between items-center text-xs font-black uppercase tracking-wider text-gray-400">
+                        <span>Лимит на покупки ({new Date().toLocaleString("ru-RU", { month: "long" })})</span>
                         <div className="flex items-center gap-2">
                           {activeGroup && (
-                            <span className="text-[8px] font-black uppercase tracking-widest bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            <span className="text-[9px] font-black uppercase tracking-widest bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-lg border border-emerald-500/20">
                               ✨ {activeGroup.name}
                             </span>
                           )}
                           {player?.hasPremiumBp ? (
-                            <span className="text-[8px] font-black uppercase tracking-widest bg-indigo-500/15 text-indigo-400 px-1.5 py-0.5 rounded border border-indigo-500/20">
+                            <span className="text-[9px] font-black uppercase tracking-widest bg-indigo-500/15 text-indigo-400 px-2 py-0.5 rounded-lg border border-indigo-500/20">
                               🔥 BP {limitPercent}%
                             </span>
                           ) : (
-                            <span className="text-[8px] font-black uppercase tracking-widest bg-yellow-500/10 text-yellow-500 px-1.5 py-0.5 rounded border border-yellow-500/20">
+                            <span className="text-[9px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-lg border border-amber-500/20">
                               {limitPercent}%
                             </span>
                           )}
-                          <span className="text-orange-500">{Math.floor(remainingLimit)} ₽ осталось из {Math.floor(allowedLimit)} ₽</span>
+                          <span className="text-amber-400 font-bold">{Math.floor(remainingLimit)} ₽ осталось из {Math.floor(allowedLimit)} ₽</span>
                         </div>
                       </div>
                       <div className="relative h-2 w-full bg-white/5 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-orange-600 to-orange-400 rounded-full transition-all duration-500"
+                          className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-500"
                           style={{
                             width: `${Math.min(100, progressPercent)}%`,
                           }}
                         />
                       </div>
                     </div>
-                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-relaxed md:max-w-xs shrink-0">
+                    <div className="text-xs font-medium text-gray-400 leading-relaxed md:max-w-xs shrink-0">
                       {remainingLimit <= 0 ? (
                         <>
-                          Лимит исчерпан. <span className="text-orange-500 font-black">Пополните счет</span> или купите в баре за рубли, чтобы увеличить лимит!
+                          Лимит исчерпан. <span className="text-amber-400 font-bold">Пополните счет</span> или купите в баре за рубли, чтобы увеличить лимит!
                         </>
                       ) : (
                         <>
-                          Оплата бонусами расходует ваш ежемесячный лимит на вывод и покупки.
+                          Оплата бонусами расходует ваш ежемесячный лимит на покупки в клубе.
                         </>
                       )}
                     </div>
                   </div>
-
-                  {/* Battle Pass Promo Banner inside Shop */}
-                  {player?.hasPremiumBp ? (
-                    <div className="bg-indigo-500/[0.03] border border-indigo-500/10 rounded-[1.5rem] p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="space-y-0.5">
-                        <div className="text-[9px] font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1">
-                          🌟 PREMIUM BATTLE PASS АКТИВЕН
-                        </div>
-                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                          Ваш лимит на покупки увеличен до <span className="text-indigo-400 font-black">{limitPercent}%</span> благодаря Battle Pass!
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    player?.settings?.bp_enabled !== false && (
-                      <Link
-                        href="/promo"
-                        className="bg-gradient-to-r from-indigo-950/20 to-purple-950/20 border border-indigo-500/15 hover:border-indigo-500/30 transition-all rounded-[1.5rem] p-4 flex items-center justify-between group"
-                      >
-                        <div className="space-y-0.5">
-                          <div className="text-[9px] font-black text-indigo-400 uppercase tracking-wider flex items-center gap-1">
-                            ⚡ УВЕЛИЧИТЬ ЛИМИТ ДО {player?.settings?.withdraw_limit_percent_bp ?? 80}%
-                          </div>
-                          <div className="text-[8px] text-gray-400 font-medium uppercase tracking-wider">
-                            Активируйте Premium Battle Pass для повышенного лимита вывода и покупок!
-                          </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
-                      </Link>
-                    )
-                  )}
                 </div>
               );
             })()}
@@ -1480,32 +1412,21 @@ export default function PromoLobby() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden"
+                  className="overflow-hidden mb-8"
                 >
-                  <div className="bg-orange-500/10 border border-orange-500/20 p-6 rounded-[2.5rem] flex gap-5 items-start">
-                    <div className="w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-orange-500/20">
-                      <Zap className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-sm text-orange-500 uppercase italic mb-1">
-                        Как получить ваш товар?
-                      </h4>
-                      <p className="text-xs text-gray-400 font-medium leading-relaxed">
-                        Подойдите к стойке ресепшен, отсканируйте наш QR-код и в
-                        появившемся меню выберите кнопку{" "}
-                        <span className="text-orange-500 font-black">
-                          "ЗА БОНУСЫ"
-                        </span>
-                        . После этого администратор сразу увидит ваш заказ и
-                        выдаст его вам.
-                      </p>
-                    </div>
+                  <div className="bg-white/5 border border-white/10 p-5 rounded-3xl">
+                    <h4 className="font-black text-xs text-amber-400 uppercase italic mb-1">
+                      Как получить товар?
+                    </h4>
+                    <p className="text-xs text-gray-300 font-medium leading-relaxed">
+                      Подойдите к администратору, покажите профиль и нажмите <span className="text-white font-bold">«За бонусы»</span> для подтверждения выдачи.
+                    </p>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <div className="space-y-12">
+            <div className="space-y-10">
               {(
                 Object.entries(
                   products.reduce(
@@ -1519,7 +1440,7 @@ export default function PromoLobby() {
                   ),
                 ) as [string, any[]][]
               ).map(([category, catProducts]) => (
-                <div key={category} className="space-y-6">
+                <div key={category} className="space-y-4">
                   <div className="flex items-center gap-4">
                     <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/30 whitespace-nowrap">
                       {category}
@@ -1527,7 +1448,7 @@ export default function PromoLobby() {
                     <div className="h-px w-full bg-white/5" />
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
                     {catProducts.map((product) => {
                       const bonusPrice =
                         product.bonus_price ||
@@ -1538,35 +1459,35 @@ export default function PromoLobby() {
                       return (
                         <div
                           key={product.id}
-                          className="bg-white/5 border border-white/10 rounded-[2rem] p-5 flex flex-col group hover:border-orange-500/30 transition-all"
+                          className="bg-white/5 border border-white/10 hover:border-white/20 rounded-3xl p-4 sm:p-5 flex flex-col justify-between group transition-all duration-300"
                         >
-                          <div className="flex-1 space-y-3">
-                            <div className="font-bold text-sm sm:text-base leading-tight">
+                          <div className="space-y-2">
+                            <div className="font-bold text-sm sm:text-base text-white leading-tight line-clamp-2">
                               {product.name}
                             </div>
-                            <div className="flex items-center gap-2 text-yellow-500">
+                            <div className="flex items-center gap-1.5 text-yellow-400">
                               <Coins className="w-4 h-4" />
-                              <span className="font-black text-lg">
+                              <span className="font-black text-base sm:text-lg">
                                 {bonusPrice}
                               </span>
                             </div>
                           </div>
 
-                          <div className="mt-6 flex items-center gap-2">
+                          <div className="mt-4 pt-3 border-t border-white/5">
                             {inCart > 0 ? (
-                              <div className="flex items-center bg-white/5 border border-white/10 rounded-2xl w-full overflow-hidden">
+                              <div className="flex items-center bg-white/5 border border-white/10 rounded-2xl w-full overflow-hidden h-10">
                                 <button
                                   onClick={() => removeFromCart(product.id)}
-                                  className="w-full h-10 flex items-center justify-center hover:bg-white/5 transition-colors"
+                                  className="w-full h-full flex items-center justify-center hover:bg-white/10 transition-colors text-sm font-bold text-gray-300"
                                 >
                                   -
                                 </button>
-                                <span className="w-full text-center font-black text-sm">
+                                <span className="w-full text-center font-black text-xs text-white">
                                   {inCart}
                                 </span>
                                 <button
                                   onClick={() => addToCart(product)}
-                                  className="w-full h-10 flex items-center justify-center hover:bg-white/5 transition-colors"
+                                  className="w-full h-full flex items-center justify-center hover:bg-white/10 transition-colors text-sm font-bold text-gray-300"
                                 >
                                   +
                                 </button>
@@ -1574,7 +1495,7 @@ export default function PromoLobby() {
                             ) : (
                               <button
                                 onClick={() => addToCart(product)}
-                                className="w-full bg-white/5 hover:bg-orange-500/10 border border-white/10 hover:border-orange-500/50 h-12 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all"
+                                className="w-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 h-10 rounded-2xl font-black uppercase text-[10px] tracking-widest text-white transition-all cursor-pointer"
                               >
                                 В корзину
                               </button>
@@ -1614,76 +1535,69 @@ function GameCard({
   locked?: boolean;
   minLevel?: number;
 }) {
+  const theme = game.theme || {
+    gradient: "from-amber-500/15 via-orange-500/5 to-transparent",
+    border: "border-amber-500/25 hover:border-amber-500/50",
+    glow: "bg-amber-500/20",
+    accent: "text-amber-400",
+    hoverTitle: "group-hover:text-amber-300",
+    btn: "bg-amber-500/15 text-amber-400 group-hover:bg-amber-500 group-hover:text-black",
+    badge: "bg-amber-500/10 border-amber-500/30 text-amber-400",
+  };
+
   const content = (
     <div
       className={cn(
-        "h-full relative p-8 rounded-[2.5rem] border-2 transition-all overflow-hidden flex flex-col",
+        "h-full relative p-5 sm:p-7 rounded-3xl sm:rounded-[2.5rem] border transition-all duration-300 overflow-hidden flex flex-col justify-between min-h-0 sm:min-h-[16.5rem]",
         locked
-          ? "border-white/5 bg-white/5"
-          : cn(
-              "bg-linear-to-br group hover:scale-[1.02] active:scale-[0.98] cursor-pointer",
-              game.borderColor,
-              game.color,
-            ),
+          ? "border-white/5 bg-white/[0.02] opacity-60"
+          : cn("bg-gradient-to-br group hover:scale-[1.02] active:scale-[0.98] cursor-pointer shadow-lg shadow-black/20", theme.gradient, theme.border)
       )}
     >
-      {/* Decorative Glow */}
+      {/* Dynamic Background Glow */}
       {!locked && (
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/5 rounded-full blur-2xl group-hover:bg-white/10 transition-colors" />
+        <div className={cn("absolute -top-12 -right-12 w-36 h-36 rounded-full blur-3xl opacity-30 group-hover:opacity-70 transition-opacity pointer-events-none", theme.glow)} />
       )}
 
-      <div className="flex items-center justify-between mb-3 relative z-10">
-        <h3
-          className={cn(
-            "text-2xl font-black uppercase italic tracking-tight transition-colors",
-            !locked ? "group-hover:text-white" : "text-white/40",
-          )}
-        >
-          {game.title}
-        </h3>
-        {locked && (
-          <div className="bg-white/5 px-3 py-1 rounded-lg border border-white/5 flex items-center gap-2">
-            <Lock className="w-3.5 h-3.5 text-white/20" />
-            <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
-              Lvl {minLevel}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <p
-        className={cn(
-          "text-sm leading-relaxed mb-8 line-clamp-3 relative z-10",
-          locked ? "text-gray-600" : "text-gray-400",
-        )}
-      >
-        {game.desc}
-      </p>
-
-      <div className="mt-auto flex items-center justify-between relative z-10">
-        <div
-          className={cn(
-            "px-4 py-1.5 rounded-full border",
-            locked ? "bg-white/5 border-white/5" : "bg-black/30 border-white/5",
-          )}
-        >
-          <span
+      <div className="relative z-10">
+        <div className="mb-1.5 sm:mb-2">
+          <h3
             className={cn(
-              "text-[10px] font-black uppercase tracking-widest",
-              locked ? "text-white/20" : "text-white/60",
+              "text-lg sm:text-xl font-black uppercase italic tracking-tight transition-colors",
+              !locked ? cn("text-white", theme.hoverTitle) : "text-white/40"
             )}
           >
-            {game.cost}
-          </span>
+            {game.title}
+          </h3>
         </div>
 
+        <p
+          className={cn(
+            "text-xs leading-relaxed font-medium mb-3 sm:mb-6",
+            locked ? "text-gray-600" : "text-gray-300"
+          )}
+        >
+          {game.desc}
+        </p>
+      </div>
+
+      <div className="mt-auto flex items-center justify-between pt-3 sm:pt-4 border-t border-white/5 relative z-10">
+        <span
+          className={cn(
+            "text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border",
+            locked ? "text-white/20 bg-white/5 border-white/5" : theme.badge
+          )}
+        >
+          {game.cost}
+        </span>
+
         {locked ? (
-          <div className="text-[10px] font-black text-white/20 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-xl border border-white/5">
+          <span className="text-[9px] font-black text-white/20 uppercase tracking-widest">
             Нужен уровень {minLevel}
-          </div>
+          </span>
         ) : (
-          <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center group-hover:bg-white/20 transition-colors">
-            <ArrowRight className="w-5 h-5" />
+          <div className={cn("w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all duration-300 shadow-md", theme.btn)}>
+            <ArrowRight className="w-4 h-4 translate-x-0 group-hover:translate-x-0.5 transition-transform" />
           </div>
         )}
       </div>
@@ -1692,9 +1606,9 @@ function GameCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.1 }}
+      transition={{ delay: index * 0.08 }}
     >
       {locked ? content : <Link href={game.href}>{content}</Link>}
     </motion.div>

@@ -5,11 +5,17 @@ export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
 
-    // Clear cookies
-    cookieStore.delete("promo_player_id");
-    cookieStore.delete("promo_active_club_id");
+    // Clear cookies explicitly
+    cookieStore.delete({ name: "promo_player_id", path: "/" });
+    cookieStore.delete({ name: "promo_active_club_id", path: "/" });
+    cookieStore.delete({ name: "promo_player_token", path: "/" });
 
-    return NextResponse.json({ success: true });
+    const response = NextResponse.json({ success: true });
+    response.cookies.delete("promo_player_id");
+    response.cookies.delete("promo_active_club_id");
+    response.cookies.delete("promo_player_token");
+
+    return response;
   } catch (error) {
     console.error("Promo Logout Error:", error);
     return NextResponse.json(

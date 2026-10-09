@@ -1,14 +1,17 @@
 "use server";
 
-export type * from "./actions/types";
+import { revalidatePath } from "next/cache";
+
 
 
 
 import { calculateAnalytics as _calculateAnalytics, getAbcAnalysisData as _getAbcAnalysisData, getClubSettings as _getClubSettings, getMetrics as _getMetrics, getSalesAnalytics as _getSalesAnalytics } from "./actions/analytics";
 import { assertSessionUserCanAccessClub as _assertSessionUserCanAccessClub, assertUserCanAccessClub as _assertUserCanAccessClub, assertUserCanUseWarehouses as _assertUserCanUseWarehouses, getInventoryAccessScope as _getInventoryAccessScope, getInventoryPageAccess as _getInventoryPageAccess, getUserRoleInClub as _getUserRoleInClub, normalizeAllowedWarehouseIds as _normalizeAllowedWarehouseIds, requireClubAccess as _requireClubAccess, requireSessionUserId as _requireSessionUserId, resolveEffectiveEmployeeWarehouseIds as _resolveEffectiveEmployeeWarehouseIds } from "./actions/auth";
 import { createCategory as _createCategory, deleteCategory as _deleteCategory, getCategories as _getCategories, updateCategory as _updateCategory } from "./actions/categories";
+import { getCombos as _getCombos, getCombo as _getCombo, createCombo as _createCombo, updateCombo as _updateCombo, deleteCombo as _deleteCombo, importCombosFromSmartShell as _importCombosFromSmartShell, exportSingleComboToSmartShell as _exportSingleComboToSmartShell, exportCombosToSmartShell as _exportCombosToSmartShell } from "./actions/combos";
+import { getExpiringProducts as _getExpiringProducts, writeOffExpiredBatches as _writeOffExpiredBatches } from "./actions/expiration";
 import { addProductToInventory as _addProductToInventory, addProductToInventorySafe as _addProductToInventorySafe, bulkUpdateInventoryItems as _bulkUpdateInventoryItems, bulkUpdateInventoryItemsSafe as _bulkUpdateInventoryItemsSafe, calculateInventoryDelta as _calculateInventoryDelta, cancelInventory as _cancelInventory, closeInventory as _closeInventory, closeInventorySafe as _closeInventorySafe, correctInventoryItem as _correctInventoryItem, createInventory as _createInventory, createInventorySafe as _createInventorySafe, deleteInventory as _deleteInventory, getClubInventorySettingsInternal as _getClubInventorySettingsInternal, getInventories as _getInventories, getInventory as _getInventory, getInventoryItems as _getInventoryItems, getInventoryMovementDuringCount as _getInventoryMovementDuringCount, getInventoryPostCloseCorrections as _getInventoryPostCloseCorrections, getOpenShiftInventory as _getOpenShiftInventory, normalizeInventoryActualStock as _normalizeInventoryActualStock, updateInventoryItem as _updateInventoryItem, updateInventorySettings as _updateInventorySettings } from "./actions/inventories";
-import { archiveProduct as _archiveProduct, assertProductBelongsToClub as _assertProductBelongsToClub, assertProductsBelongToClub as _assertProductsBelongToClub, bulkUpdatePrices as _bulkUpdatePrices, createProduct as _createProduct, deleteProduct as _deleteProduct, getProduct as _getProduct, getProductByBarcode as _getProductByBarcode, getProductDeletionStatus as _getProductDeletionStatus, getProductHistory as _getProductHistory, getProductPriceHistory as _getProductPriceHistory, getProducts as _getProducts, getProductsSafe as _getProductsSafe, restoreProduct as _restoreProduct, updateProduct as _updateProduct } from "./actions/products";
+import { archiveProduct as _archiveProduct, assertProductBelongsToClub as _assertProductBelongsToClub, assertProductsBelongToClub as _assertProductsBelongToClub, bulkUpdatePrices as _bulkUpdatePrices, createProduct as _createProduct, deleteProduct as _deleteProduct, getProduct as _getProduct, getProductByBarcode as _getProductByBarcode, getProductDeletionStatus as _getProductDeletionStatus, getProductHistory as _getProductHistory, getProductPriceHistory as _getProductPriceHistory, getProducts as _getProducts, getProductsSafe as _getProductsSafe, restoreProduct as _restoreProduct, updateProduct as _updateProduct, syncSmartShellCatalog as _syncSmartShellCatalog, pushProductsToSmartShell as _pushProductsToSmartShell, pushStockToSmartShell as _pushStockToSmartShell } from "./actions/products";
 import { buildShiftReceiptsFromRows as _buildShiftReceiptsFromRows, bulkAccruePromoSafe as _bulkAccruePromoSafe, claimPromoItemSafe as _claimPromoItemSafe, confirmPlayerVisitSafe as _confirmPlayerVisitSafe, createManualSale as _createManualSale, createShiftReceipt as _createShiftReceipt, createShiftReceiptSafe as _createShiftReceiptSafe, getActionErrorMessage as _getActionErrorMessage, getClubPromoSettings as _getClubPromoSettings, getInventoryShiftReceipts as _getInventoryShiftReceipts, getPendingQuestVerifications as _getPendingQuestVerifications, getPromoQueue as _getPromoQueue, getRecentPromoAccruals as _getRecentPromoAccruals, getShiftReceipts as _getShiftReceipts, resolvePosWarehouseIdForItems as _resolvePosWarehouseIdForItems, resolvePosWarehousesForItems as _resolvePosWarehousesForItems, returnReceiptItem as _returnReceiptItem, returnReceiptItemSafe as _returnReceiptItemSafe, verifyQuestSafe as _verifyQuestSafe, voidPromoAccrualSafe as _voidPromoAccrualSafe, voidShiftReceipt as _voidShiftReceipt, voidShiftReceiptSafe as _voidShiftReceiptSafe } from "./actions/receipts";
 import { addProductToProcurementList as _addProductToProcurementList, bulkUpdateProcurementItems as _bulkUpdateProcurementItems, calculateSuggestedProcurementQuantity as _calculateSuggestedProcurementQuantity, checkReplenishmentNeeds as _checkReplenishmentNeeds, completeTask as _completeTask, createReplenishmentRule as _createReplenishmentRule, deleteProcurementItem as _deleteProcurementItem, deleteProcurementList as _deleteProcurementList, deleteReplenishmentRule as _deleteReplenishmentRule, generateProcurementList as _generateProcurementList, getClubTasks as _getClubTasks, getProcurementCandidate as _getProcurementCandidate, getProcurementCoverDays as _getProcurementCoverDays, getProcurementListById as _getProcurementListById, getProcurementListItems as _getProcurementListItems, getProcurementLists as _getProcurementLists, getProcurementPriority as _getProcurementPriority, getProcurementReason as _getProcurementReason, getReplenishmentRules as _getReplenishmentRules, getReplenishmentRulesForProduct as _getReplenishmentRulesForProduct, manualTriggerReplenishment as _manualTriggerReplenishment, normalizeProcurementBoxSize as _normalizeProcurementBoxSize, updateProcurementItem as _updateProcurementItem } from "./actions/replenishment";
 import { ensurePreviousShiftClosureCompleted as _ensurePreviousShiftClosureCompleted, findAcceptedFromShift as _findAcceptedFromShift, getActiveShiftsForClub as _getActiveShiftsForClub, getEmployees as _getEmployees, getHandoverSourceCandidates as _getHandoverSourceCandidates, getHandoverSourceCandidatesSafe as _getHandoverSourceCandidatesSafe, getShiftForZoneAccountability as _getShiftForZoneAccountability, getShiftZoneDiscrepancyReport as _getShiftZoneDiscrepancyReport, getShiftZoneDiscrepancyReportInternal as _getShiftZoneDiscrepancyReportInternal, getShiftZoneOverview as _getShiftZoneOverview, getShiftZoneSnapshotDraft as _getShiftZoneSnapshotDraft, getShiftZoneSnapshotDraftSafe as _getShiftZoneSnapshotDraftSafe, hasSavedShiftZoneSnapshot as _hasSavedShiftZoneSnapshot, normalizeShiftZoneKey as _normalizeShiftZoneKey, saveShiftZoneSnapshot as _saveShiftZoneSnapshot, saveShiftZoneSnapshotSafe as _saveShiftZoneSnapshotSafe } from "./actions/shifts";
@@ -630,5 +633,90 @@ export async function getWarehouses(...args: Parameters<typeof _getWarehouses>):
 
 export async function updateWarehouse(...args: Parameters<typeof _updateWarehouse>): Promise<Awaited<ReturnType<typeof _updateWarehouse>>> {
   return (_updateWarehouse as any)(...args);
+}
+
+/**
+ * Покупка товара сотрудником в счёт зарплаты ("В счет ЗП")
+ * Списывает единицы товара в SmartShell (DISPOSAL) с прикрепленным комментарием
+ */
+export async function recordEmployeePayrollPurchase(
+  clubId: string,
+  employeeName: string,
+  goodId: number,
+  quantity: number,
+  comment?: string
+) {
+  const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+  const client = await getSmartShellClientForClub(clubId);
+
+  const fullComment = `В счет ЗП сотрудника: ${employeeName}${comment ? ` (${comment})` : ""}`;
+
+  let success = false;
+  if (client) {
+    try {
+      success = await client.changeGoodsQuantity({
+        items: [{ id: Number(goodId), quantity: Number(quantity) }],
+        operation: "DISPOSAL",
+        comment: fullComment,
+      });
+    } catch (err) {
+      console.error("SmartShell payroll disposal error:", err);
+    }
+  }
+
+  revalidatePath(`/clubs/${clubId}/inventory`);
+  return { success, comment: fullComment };
+}
+
+export async function syncSmartShellCatalog(...args: Parameters<typeof _syncSmartShellCatalog>): Promise<Awaited<ReturnType<typeof _syncSmartShellCatalog>>> {
+  return (_syncSmartShellCatalog as any)(...args);
+}
+
+export async function pushProductsToSmartShell(...args: Parameters<typeof _pushProductsToSmartShell>): Promise<Awaited<ReturnType<typeof _pushProductsToSmartShell>>> {
+  return (_pushProductsToSmartShell as any)(...args);
+}
+
+export async function pushStockToSmartShell(...args: Parameters<typeof _pushStockToSmartShell>): Promise<Awaited<ReturnType<typeof _pushStockToSmartShell>>> {
+  return (_pushStockToSmartShell as any)(...args);
+}
+
+export async function getCombos(...args: Parameters<typeof _getCombos>): Promise<Awaited<ReturnType<typeof _getCombos>>> {
+  return (_getCombos as any)(...args);
+}
+
+export async function getCombo(...args: Parameters<typeof _getCombo>): Promise<Awaited<ReturnType<typeof _getCombo>>> {
+  return (_getCombo as any)(...args);
+}
+
+export async function createCombo(...args: Parameters<typeof _createCombo>): Promise<Awaited<ReturnType<typeof _createCombo>>> {
+  return (_createCombo as any)(...args);
+}
+
+export async function updateCombo(...args: Parameters<typeof _updateCombo>): Promise<Awaited<ReturnType<typeof _updateCombo>>> {
+  return (_updateCombo as any)(...args);
+}
+
+export async function deleteCombo(...args: Parameters<typeof _deleteCombo>): Promise<Awaited<ReturnType<typeof _deleteCombo>>> {
+  return (_deleteCombo as any)(...args);
+}
+
+export async function importCombosFromSmartShell(...args: Parameters<typeof _importCombosFromSmartShell>): Promise<Awaited<ReturnType<typeof _importCombosFromSmartShell>>> {
+  return (_importCombosFromSmartShell as any)(...args);
+}
+
+export async function exportSingleComboToSmartShell(...args: Parameters<typeof _exportSingleComboToSmartShell>): Promise<Awaited<ReturnType<typeof _exportSingleComboToSmartShell>>> {
+  return (_exportSingleComboToSmartShell as any)(...args);
+}
+
+export async function exportCombosToSmartShell(...args: Parameters<typeof _exportCombosToSmartShell>): Promise<Awaited<ReturnType<typeof _exportCombosToSmartShell>>> {
+  return (_exportCombosToSmartShell as any)(...args);
+}
+
+export async function getExpiringProducts(...args: Parameters<typeof _getExpiringProducts>): Promise<Awaited<ReturnType<typeof _getExpiringProducts>>> {
+  return (_getExpiringProducts as any)(...args);
+}
+
+export async function writeOffExpiredBatches(...args: Parameters<typeof _writeOffExpiredBatches>): Promise<Awaited<ReturnType<typeof _writeOffExpiredBatches>>> {
+  return (_writeOffExpiredBatches as any)(...args);
 }
 

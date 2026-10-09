@@ -27,7 +27,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import { BPActivationButton } from "./BPActivationButton";
 import { setPlayerLimitGroupAction } from "../actions";
 
 interface PlayersTabProps {
@@ -78,15 +77,10 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
   const [paginatedLogs, setPaginatedLogs] = useState<any[]>([]);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
 
-  // Helper to change selected player and update URL
   const selectPlayer = (player: any) => {
-    const params = new URLSearchParams(window.location.search);
     if (player) {
-      params.set("playerId", player.id);
-    } else {
-      params.delete("playerId");
+      router.push(`/clubs/${clubId}/players/${player.id}`);
     }
-    router.replace(`?${params.toString()}`);
   };
 
   // Sync selectedPlayer with URL playerId parameter
@@ -905,12 +899,6 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                 </select>
               </div>
             )}
-
-            <BPActivationButton
-              clubId={clubId}
-              playerId={selectedPlayer.id}
-              hasPremium={selectedPlayer.bp_is_premium}
-            />
           </div>
         </div>
 
@@ -1877,11 +1865,6 @@ export function PlayersTab({ clubId, players: initialPlayers, onRefresh, setting
                       </td>
                       <td className="px-8 py-5 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
-                          <BPActivationButton
-                            clubId={clubId}
-                            playerId={player.id}
-                            hasPremium={player.bp_is_premium}
-                          />
                           <button
                             onClick={() => selectPlayer(player)}
                             title="Посмотреть профиль и логи"

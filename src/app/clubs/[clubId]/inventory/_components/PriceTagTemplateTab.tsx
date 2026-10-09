@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { PriceTagTemplate, PriceTagSettings, updateInventorySettings, Product } from "../actions"
+import { updateInventorySettings } from "../actions"
+import type { PriceTagTemplate, PriceTagSettings, Product } from "../types"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"

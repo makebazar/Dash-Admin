@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
-import { cookies } from "next/headers";
+import { requireModuleAccess } from "@/lib/club-api-access";
 
 export const dynamic = "force-dynamic";
 
@@ -8,11 +8,52 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const clubId = searchParams.get("clubId");
-    const userId = (await cookies()).get("session_user_id")?.value;
+    const monthParam = searchParams.get("month"); // 'YYYY-MM' or 'all'
 
-    if (!userId || !clubId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!clubId) {
+      return NextResponse.json({ error: "Club ID is required" }, { status: 400 });
     }
+
+    await requireModuleAccess(clubId, "dashboard", "view");
+
+    // Fetch available months with matches for this club
+    const monthsRes = await query(
+      `SELECT DISTINCT TO_CHAR(played_at, 'YYYY-MM') as month_key
+       FROM promo_frag_matches
+       WHERE club_id = $1 AND played_at IS NOT NULL
+       ORDER BY month_key DESC`,
+      [clubId]
+    );
+
+    const availableMonths: string[] = monthsRes.rows.map((r) => r.month_key).filter(Boolean);
+
+    // Current month string
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    // Selected month logic: if monthParam is passed use it; otherwise default to current month or first available
+    let selectedMonth = monthParam;
+    if (!selectedMonth) {
+      selectedMonth = availableMonths.includes(currentMonthKey) ? currentMonthKey : availableMonths[0] || "all";
+    }
+
+    // Build SQL date filter clause
+    let dateWhereClause = "";
+    const queryParams: any[] = [clubId];
+
+    if (selectedMonth && selectedMonth !== "all" && /^\d{4}-\d{2}$/.test(selectedMonth)) {
+      const [yearStr, monthStr] = selectedMonth.split("-");
+      const year = parseInt(yearStr, 10);
+      const month = parseInt(monthStr, 10);
+
+      const startOfMonth = new Date(Date.UTC(year, month - 1, 1));
+      const startOfNextMonth = new Date(Date.UTC(year, month, 1));
+
+      dateWhereClause = "AND m.played_at >= $2 AND m.played_at < $3";
+      queryParams.push(startOfMonth.toISOString(), startOfNextMonth.toISOString());
+    }
+
+    const mapValidationClause = `AND (m.game != 'CS2' OR (m.map ~* '^(de_mirage|de_dust2|de_inferno|de_nuke|de_anubis|de_ancient|de_vertigo|de_overpass|de_train|de_cache|cs_office|cs_italy)$' AND NOT ((m.score = '0:0' OR m.score IS NULL) AND m.kills > 30)))`;
 
     // 1. Fetch summary statistics
     const summaryRes = await query(
@@ -23,18 +64,19 @@ export async function GET(request: Request) {
         COUNT(CASE WHEN m.game = 'Dota2' OR m.game = 'Dota 2' THEN 1 END)::int as dota_matches,
         COALESCE(SUM(m.earned), 0)::numeric as total_earned
        FROM promo_frag_matches m
-       WHERE m.club_id = $1 AND (m.game != 'CS2' OR m.map ~* '^(de_mirage|de_dust2|de_inferno|de_nuke|de_anubis|de_ancient|de_vertigo|de_overpass|de_train|de_cache|cs_office|cs_italy)$')`,
-      [clubId]
+       WHERE m.club_id = $1 ${dateWhereClause} ${mapValidationClause}`,
+      queryParams
     );
+
     const summary = summaryRes.rows[0] || {
       total_players: 0,
       total_matches: 0,
       cs2_matches: 0,
       dota_matches: 0,
-      total_earned: 0
+      total_earned: 0,
     };
 
-    // 2. Fetch player statistics (aggregated by player and game)
+    // 2. Fetch player statistics (aggregated by player and game for selected month)
     const playerStatsRes = await query(
       `SELECT 
         p.id as player_id,
@@ -51,31 +93,23 @@ export async function GET(request: Request) {
         jsonb_agg(m.events) as all_events
        FROM promo_frag_matches m
        JOIN promo_players p ON m.player_id = p.id
-       WHERE m.club_id = $1 AND (m.game != 'CS2' OR m.map ~* '^(de_mirage|de_dust2|de_inferno|de_nuke|de_anubis|de_ancient|de_vertigo|de_overpass|de_train|de_cache|cs_office|cs_italy)$')
+       WHERE m.club_id = $1 ${dateWhereClause} ${mapValidationClause}
        GROUP BY p.id, p.full_name, p.phone_number, m.game
        ORDER BY total_earned DESC`,
-      [clubId]
+      queryParams
     );
 
-    const playerStats = playerStatsRes.rows.map(row => {
+    const playerStats = playerStatsRes.rows.map((row) => {
       const isCs2 = row.game === "CS2";
       const events: string[] = (row.all_events || []).flat();
-
       const achievements: any = {};
 
       if (isCs2) {
         achievements.hs = row.total_headshots || 0;
-        
-        let knife = 0;
-        let zeus = 0;
-        let mvp = 0;
-        let wins = 0;
-        let doubleKills = 0;
-        let tripleKills = 0;
-        let quadKills = 0;
-        let aces = 0;
+        let knife = 0, zeus = 0, mvp = 0, wins = 0;
+        let doubleKills = 0, tripleKills = 0, quadKills = 0, aces = 0;
 
-        events.forEach(evt => {
+        events.forEach((evt) => {
           if (!evt) return;
           const lower = evt.toLowerCase();
           if (lower.includes("нож") || lower.includes("🔪")) knife++;
@@ -98,15 +132,10 @@ export async function GET(request: Request) {
         achievements.aces = aces;
       } else {
         achievements.lastHits = row.total_last_hits || 0;
+        let denies = 0, networthMilestones = 0, wins = 0;
+        let spree = 0, mega = 0, godlike = 0;
 
-        let denies = 0;
-        let networthMilestones = 0;
-        let wins = 0;
-        let spree = 0;
-        let mega = 0;
-        let godlike = 0;
-
-        events.forEach(evt => {
+        events.forEach((evt) => {
           if (!evt) return;
           const lower = evt.toLowerCase();
           if (lower.includes("союзных") || lower.includes("🛡️")) denies += 5;
@@ -127,11 +156,11 @@ export async function GET(request: Request) {
 
       return {
         ...row,
-        achievements
+        achievements,
       };
     });
 
-    // 3. Fetch recent 50 matches for the club
+    // 3. Fetch recent matches (up to 50) for selected month
     const recentMatchesRes = await query(
       `SELECT 
         m.id,
@@ -151,18 +180,24 @@ export async function GET(request: Request) {
         m.events
        FROM promo_frag_matches m
        JOIN promo_players p ON m.player_id = p.id
-       WHERE m.club_id = $1 AND (m.game != 'CS2' OR m.map ~* '^(de_mirage|de_dust2|de_inferno|de_nuke|de_anubis|de_ancient|de_vertigo|de_overpass|de_train|de_cache|cs_office|cs_italy)$')
+       WHERE m.club_id = $1 ${dateWhereClause} ${mapValidationClause}
        ORDER BY m.played_at DESC
        LIMIT 50`,
-      [clubId]
+      queryParams
     );
 
     return NextResponse.json({
       summary,
       playerStats,
       recentMatches: recentMatchesRes.rows,
+      availableMonths,
+      selectedMonth,
     });
-  } catch (error) {
+  } catch (error: any) {
+    const errStatus = error?.status;
+    if (errStatus) {
+      return NextResponse.json({ error: errStatus === 401 ? "Unauthorized" : "Forbidden" }, { status: errStatus });
+    }
     console.error("Fetch Admin Frag Stats Error:", error);
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }

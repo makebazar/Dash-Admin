@@ -75,7 +75,7 @@ export function GamesTab({
 }: GamesTabProps) {
   const [selectedGame, setSelectedGame] = useState<string>("wheel");
   const [selectedLevel, setSelectedLevel] = useState<number>(1);
-  const [levels, setLevels] = useState<{ level_number: number }[]>([]);
+  const [levels, setLevels] = useState<{ level_number: number }[]>([{ level_number: 1 }]);
   const [isSaving, setIsSaving] = useState(false);
 
   // Local state for game configs to avoid constant parent re-renders while typing
@@ -86,23 +86,6 @@ export function GamesTab({
   useEffect(() => {
     setLocalConfigs(settings?.game_configs || {});
   }, [settings?.game_configs]);
-
-  useEffect(() => {
-    fetch(`/api/promo/admin/levels?clubId=${clubId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.levels && data.levels.length > 0) {
-          const sorted = data.levels.sort(
-            (a: any, b: any) => a.level_number - b.level_number,
-          );
-          setLevels(sorted);
-          setSelectedLevel(sorted[0].level_number);
-        } else {
-          setLevels([{ level_number: 1 }]);
-        }
-      })
-      .catch(console.error);
-  }, [clubId]);
 
   const activeGameObj = GAMES.find((g) => g.id === selectedGame);
   const isGameEnabled = settings?.enabled_games?.includes(selectedGame);

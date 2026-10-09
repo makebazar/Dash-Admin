@@ -25,5 +25,3 @@ export async function PATCH(
   }
 }
 
-// Re-export for internal use
-export const executeShiftClose = executeShiftCloseLib;

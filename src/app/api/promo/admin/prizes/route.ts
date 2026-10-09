@@ -51,13 +51,13 @@ export async function POST(request: Request) {
       `SELECT id FROM promo_prizes WHERE club_id = $1 AND is_active = TRUE`,
       [numericClubId],
     );
-    const existingIds = existingPrizesRes.rows.map((r) => r.id);
+    const existingIds = existingPrizesRes.rows.map((r: any) => r.id);
     const incomingIds = prizes
       .map((p: any) => p.id)
       .filter((id: any) => id !== undefined && id !== null);
 
     // 2. Identify prizes to remove
-    const idsToRemove = existingIds.filter((id) => !incomingIds.includes(id));
+    const idsToRemove = existingIds.filter((id: any) => !incomingIds.includes(id));
 
     if (idsToRemove.length > 0) {
       for (const id of idsToRemove) {

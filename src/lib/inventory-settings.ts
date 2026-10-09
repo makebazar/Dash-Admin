@@ -26,8 +26,13 @@ export type RawInventorySettings = {
   block_desktop_handover?: boolean;
   dashlock_integration_enabled?: boolean;
   dashlock_url?: string;
-  api_key?: string;
   transfer_blocked_routes?: { from_id: number; to_id: number }[];
+  smartshell_integration_enabled?: boolean;
+  smartshell_api_key?: string;
+  smartshell_login?: string;
+  smartshell_password?: string;
+  smartshell_company_id?: number | null;
+  api_key?: string;
 };
 
 export type InventorySettings = Omit<
@@ -53,6 +58,7 @@ export type InventorySettings = Omit<
   block_desktop_handover: boolean;
   dashlock_integration_enabled: boolean;
   transfer_blocked_routes: { from_id: number; to_id: number }[];
+
 };
 
 export function normalizeInventorySettings(
@@ -209,6 +215,11 @@ export function normalizeInventorySettings(
     dashlock_url: source.dashlock_url,
     api_key: source.api_key,
     transfer_blocked_routes: transferBlockedRoutes,
+    smartshell_integration_enabled: source.smartshell_integration_enabled ?? false,
+    smartshell_api_key: source.smartshell_api_key,
+    smartshell_login: source.smartshell_login,
+    smartshell_password: source.smartshell_password,
+    smartshell_company_id: source.smartshell_company_id ? Number(source.smartshell_company_id) : null,
   };
 }
 

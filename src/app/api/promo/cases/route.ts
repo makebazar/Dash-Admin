@@ -100,19 +100,19 @@ export async function POST(request: Request) {
 
     // Fetch product stock levels for all specific bar items (from warehouse_products)
     const productIds = items
-      .filter(item => item.reward_type === 'bar_item' && item.bar_product_id)
-      .map(item => item.bar_product_id);
+      .filter((item: any) => item.reward_type === 'bar_item' && item.bar_product_id)
+      .map((item: any) => item.bar_product_id);
 
     let productStocks: Record<number, number> = {};
     if (productIds.length > 0) {
       const stockRes = await client.query(
         `SELECT id, COALESCE(current_stock, 0) as quantity 
          FROM warehouse_products 
-         WHERE id IN (${productIds.map((_, i) => `$${i + 1}`).join(",")}) 
+         WHERE id IN (${productIds.map((_: any, i: number) => `$${i + 1}`).join(",")}) 
            AND club_id = $${productIds.length + 1} AND deleted_at IS NULL`,
         [...productIds, parseInt(clubId)]
       );
-      productStocks = stockRes.rows.reduce((acc, row) => {
+      productStocks = stockRes.rows.reduce((acc: any, row: any) => {
         acc[row.id] = parseFloat(row.quantity);
         return acc;
       }, {} as Record<number, number>);
@@ -120,8 +120,8 @@ export async function POST(request: Request) {
 
     // Fetch available products for categories (random from warehouse_products)
     const categoryIds = items
-      .filter(item => item.reward_type === 'bar_category' && item.bar_category_id)
-      .map(item => item.bar_category_id);
+      .filter((item: any) => item.reward_type === 'bar_category' && item.bar_category_id)
+      .map((item: any) => item.bar_category_id);
 
     let categoryProducts: Record<number, any[]> = {};
     if (categoryIds.length > 0) {
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
            AND deleted_at IS NULL AND is_active = true`,
         [parseInt(clubId), categoryIds]
       );
-      categoryProducts = catProductsRes.rows.reduce((acc, row) => {
+      categoryProducts = catProductsRes.rows.reduce((acc: any, row: any) => {
         if (!acc[row.category_id]) acc[row.category_id] = [];
         acc[row.category_id].push(row);
         return acc;
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
     }
 
     // Filter items that are in stock
-    const eligibleItems = items.filter(item => {
+    const eligibleItems = items.filter((item: any) => {
       if (item.reward_type === 'bar_item') {
         const stock = productStocks[item.bar_product_id] ?? 0;
         return stock > 0;
@@ -161,7 +161,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Все призы в данном кейсе временно закончились (нет на складе)" }, { status: 400 });
     }
 
-    const totalWeight = eligibleItems.reduce((acc, item) => acc + parseInt(item.weight || 0), 0);
+    const totalWeight = eligibleItems.reduce((acc: number, item: any) => acc + parseInt(item.weight || 0), 0);
     if (totalWeight <= 0) {
       await client.query("ROLLBACK");
       return NextResponse.json({ error: "Case items weight configuration error" }, { status: 400 });

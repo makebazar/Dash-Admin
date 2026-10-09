@@ -179,9 +179,8 @@ export async function POST(request: Request) {
            FROM generate_series(1, $4)`,
           [item.player_id, item.club_id, targetId, Math.floor(parseFloat(item.reward_value))]
         );
-      } else if (item.reward_type === "xp" && parseInt(item.reward_value) > 0) {
-        const { addPlayerXP } = await import("@/lib/promo-quests");
-        await addPlayerXP(client, item.club_id, item.player_id, Math.floor(parseFloat(item.reward_value)));
+      } else if (item.reward_type === "xp") {
+        // XP system removed
       }
     }
 
@@ -194,6 +193,29 @@ export async function POST(request: Request) {
          WHERE id = $1`,
         [item.bar_product_id, qtyToDeduct]
       );
+    }
+
+    // 3c. If claimed and it is a withdrawal — credit to SmartShell bonus account
+    if (action === "claim" && finalWithdrawAmount > 0) {
+      try {
+        const playerPhoneRes = await client.query(
+          `SELECT phone_number FROM promo_players WHERE id = $1 LIMIT 1`,
+          [item.player_id]
+        );
+        const phone = playerPhoneRes.rows[0]?.phone_number;
+        if (phone) {
+          const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+          const ssClient = await getSmartShellClientForClub(item.club_id);
+          if (ssClient) {
+            const ssUser = await ssClient.findClientByPhone(phone);
+            if (ssUser && ssUser.uuid) {
+              await ssClient.addBonusToClient(ssUser.uuid, finalWithdrawAmount);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[Admin Queue Claim] SmartShell bonus sync warning:", err);
+      }
     }
 
     // 4. If canceled and it is a withdrawal, refund player balance

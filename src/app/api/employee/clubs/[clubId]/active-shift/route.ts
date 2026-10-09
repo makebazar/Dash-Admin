@@ -31,7 +31,8 @@ export async function GET(
         check_in,
         EXTRACT(EPOCH FROM (NOW() - check_in)) / 3600 as total_hours
        FROM shifts
-       WHERE user_id = $1 AND club_id = $2 AND check_out IS NULL
+       WHERE user_id = $1 AND club_id = $2 AND status IN ('ACTIVE', 'OPEN') AND check_out IS NULL
+       ORDER BY check_in DESC
        LIMIT 1`,
             [userId, clubId]
         );

@@ -263,6 +263,16 @@ export async function POST(request: Request) {
 
     await client.query("COMMIT");
 
+    // Синхронизация свежих пополнений гостя из SmartShell
+    try {
+      const { syncClientRecentPaymentsOnDemand } = await import("@/lib/promo-smartshell-sync");
+      syncClientRecentPaymentsOnDemand(numericClubId, normalizedPhone).catch(e =>
+        console.warn("[On-Demand Promo Sync error on login]", e)
+      );
+    } catch (e) {
+      console.warn("[On-Demand Promo Sync import error]", e);
+    }
+
     // Set cookies
     const cookieStore = await cookies();
     cookieStore.set("promo_player_id", String(playerId), {

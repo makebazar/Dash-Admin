@@ -60,11 +60,13 @@ import {
   bulkAccruePromoSafe,
   getPromoQueue,
   claimPromoItemSafe,
-  type Product,
-  type SalarySaleCandidate,
-  type ShiftReceipt,
-  type ShiftReceiptPaymentType,
 } from "@/app/clubs/[clubId]/inventory/actions";
+import type {
+  Product,
+  SalarySaleCandidate,
+  ShiftReceipt,
+  ShiftReceiptPaymentType,
+} from "@/app/clubs/[clubId]/inventory/types";
 import { normalizePhone } from "@/lib/phone-utils";
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
@@ -839,6 +841,7 @@ export function EmployeeSalesWizard({
         items: cart.map((i) => ({
           product_id: i.product_id,
           quantity: i.quantity,
+          combo_set_id: (i as any).combo_set_id || undefined,
         })),
         cash_amount: paymentType === "mixed" ? cash : undefined,
         card_amount: paymentType === "mixed" ? card : undefined,

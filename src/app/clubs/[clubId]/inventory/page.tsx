@@ -1,6 +1,7 @@
 import { TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, getSalesAnalytics, getActiveShiftsForClub, getInventoryPageAccess, getShiftZoneOverview } from "./actions"
+import { getProducts, getCategories, getSupplies, getInventories, getWarehouses, getClubTasks, getProcurementLists, getSuppliersForSelect, getClubSettings, getSalesAnalytics, getActiveShiftsForClub, getInventoryPageAccess, getShiftZoneOverview, getCombos } from "./actions"
 import { ProductsTab } from "./_components/ProductsTab"
+import { CombosTab } from "./_components/CombosTab"
 import { SalesTab } from "./_components/SalesTab"
 import { TasksTab } from "./_components/TasksTab"
 import { TransfersTab } from "./_components/TransfersTab"
@@ -46,11 +47,12 @@ export default async function InventoryPage({ params, searchParams }: { params: 
     const inventorySettings = normalizeInventorySettings(clubSettings?.inventory_settings)
     const isSuppliesEnabled = inventorySettings.supplies_enabled
     const isStockEnabled = inventorySettings.stock_enabled
-    const isCashboxEnabled = inventorySettings.cashbox_enabled && (inventorySettings.cashbox_warehouse_ids || []).length > 0
+    const isCashboxEnabled = (inventorySettings.cashbox_enabled && (inventorySettings.cashbox_warehouse_ids || []).length > 0) || Boolean(inventorySettings.smartshell_integration_enabled)
     const isShiftAccountabilityEnabled = inventorySettings.shift_accountability_mode === "WAREHOUSE"
     const settingsSubTabs = ["general", "categories", "warehouses", "pricetags", "suppliers"]
     const availableTabs = [
         "stock",
+        "combos",
         ...(isCashboxEnabled ? ["sales"] : []),
         "tasks",
         ...(isStockEnabled ? ["transfers"] : []),
@@ -68,6 +70,7 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         : "stock"
 
     let products: any[] = []
+    let combos: any[] = []
     let categories: any[] = []
     let supplies: any[] = []
     let inventories: any[] = []
@@ -75,12 +78,22 @@ export default async function InventoryPage({ params, searchParams }: { params: 
     let tasks: any[] = []
     let procurementLists: any[] = []
     let suppliers: any[] = []
-    let sales: any = null
+    let sales: any[] = []
     let shifts: any[] = []
     let shiftZoneOverview: any = null
 
     try {
-        const fetchProducts = ["stock", "sales", "transfers", "supplies", "procurement", "abc-analysis", "settings"].includes(activeTab)
+        if (inventorySettings.smartshell_integration_enabled) {
+            try {
+                const { syncSmartShellShifts } = await import("@/lib/smartshell/shift-sync");
+                await syncSmartShellShifts(clubId);
+            } catch (syncErr) {
+                console.error("SmartShell shift & payments sync error:", syncErr);
+            }
+        }
+
+        const fetchProducts = ["stock", "combos", "sales", "transfers", "supplies", "procurement", "abc-analysis", "settings"].includes(activeTab)
+        const fetchCombos = activeTab === "combos"
         const fetchCategories = ["stock", "inventory", "settings"].includes(activeTab)
         const fetchWarehouses = ["stock", "sales", "transfers", "supplies", "inventory", "settings"].includes(activeTab)
         const fetchSales = activeTab === "sales"
@@ -101,7 +114,8 @@ export default async function InventoryPage({ params, searchParams }: { params: 
             fetchProcurement ? getProcurementLists(clubId) : Promise.resolve([]),
             fetchSales ? getSalesAnalytics(clubId, 500, displayMonth) : Promise.resolve(null),
             fetchSales ? getActiveShiftsForClub(clubId) : Promise.resolve([]),
-            fetchZones ? getShiftZoneOverview(clubId, displayMonth) : Promise.resolve(null)
+            fetchZones ? getShiftZoneOverview(clubId, displayMonth) : Promise.resolve(null),
+            fetchCombos ? getCombos(clubId) : Promise.resolve([])
         ])
 
         products = Array.isArray(results[0]) ? results[0] : []
@@ -112,7 +126,14 @@ export default async function InventoryPage({ params, searchParams }: { params: 
         suppliers = Array.isArray(results[5]) ? results[5] : []
         inventories = Array.isArray(results[6]) ? results[6] : []
         procurementLists = Array.isArray(results[7]) ? results[7] : []
-        sales = results[8]
+        sales = Array.isArray(results[8]) ? results[8] : []
+        shifts = Array.isArray(results[9]) ? results[9] : []
+        shiftZoneOverview = results[10]
+        combos = Array.isArray(results[11]) ? results[11] : []
+        suppliers = Array.isArray(results[5]) ? results[5] : []
+        inventories = Array.isArray(results[6]) ? results[6] : []
+        procurementLists = Array.isArray(results[7]) ? results[7] : []
+        sales = Array.isArray(results[8]) ? results[8] : []
         shifts = Array.isArray(results[9]) ? results[9] : []
         shiftZoneOverview = results[10]
     } catch (error: any) {
@@ -136,6 +157,12 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                             className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
                         >
                             Товары
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="combos" 
+                            className="rounded-none border-b-2 border-transparent text-slate-500 hover:text-slate-800 data-[state=active]:border-black data-[state=active]:text-black data-[state=active]:shadow-none px-1 py-3 bg-transparent font-medium transition-colors"
+                        >
+                            Комбо {(combos?.length || 0) > 0 && <span className="ml-2 bg-slate-100 text-slate-900 px-1.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider">{combos.length}</span>}
                         </TabsTrigger>
                         {isCashboxEnabled && (
                             <TabsTrigger 
@@ -215,6 +242,15 @@ export default async function InventoryPage({ params, searchParams }: { params: 
                         warehouses={warehouses} 
                         currentUserId={userId} 
                         priceTagSettings={clubSettings.inventory_settings?.price_tag_settings}
+                    />
+                </TabsContent>
+
+                <TabsContent value="combos" className="mt-0">
+                    <CombosTab 
+                        clubId={clubId}
+                        combos={combos}
+                        products={products}
+                        smartshellEnabled={Boolean(inventorySettings.smartshell_integration_enabled)}
                     />
                 </TabsContent>
 

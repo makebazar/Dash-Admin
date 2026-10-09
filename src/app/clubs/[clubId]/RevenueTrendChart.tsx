@@ -800,7 +800,7 @@ export default function RevenueTrendChart({
                                             key={sub.key}
                                             onClick={() => {
                                                 setActiveRevenueSubMetric(sub.key)
-                                                if (activeMetric === 'averageCheck') {
+                                                if ((activeMetric as string) === 'averageCheck') {
                                                     setActiveMetric('revenue')
                                                 }
                                             }}

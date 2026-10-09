@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
     // Get player global data + club-specific balance
     let result = await client.query(
-      `SELECT p.id, p.full_name, p.phone_number, p.steam_link, p.faceit_link, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
+      `SELECT p.id, p.full_name, p.nickname, p.avatar_url, p.faceit_avatar, p.faceit_lvl, p.faceit_elo, p.lft_status, p.phone_number, p.steam_id, p.steam_link, p.faceit_link, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
              FROM promo_players p
              JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
              JOIN clubs c ON c.id = b.club_id
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
         // Fetch again
         result = await client.query(
-          `SELECT p.id, p.full_name, p.phone_number, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
+          `SELECT p.id, p.full_name, p.nickname, p.avatar_url, p.faceit_avatar, p.faceit_lvl, p.faceit_elo, p.lft_status, p.phone_number, p.steam_id, p.steam_link, p.faceit_link, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
                  FROM promo_players p
                  JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
                  JOIN clubs c ON c.id = b.club_id
@@ -240,9 +240,14 @@ export async function GET(request: Request) {
       player: {
         id: data.id,
         fullName: data.full_name,
+        nickname: data.nickname || null,
+        avatarUrl: data.avatar_url || data.faceit_avatar || null,
+        faceitLvl: data.faceit_lvl || null,
+        faceitElo: data.faceit_elo || 1000,
+        lftStatus: data.lft_status || "none",
         phoneNumber: data.phone_number,
-          steam_link: data.steam_link,
-          faceit_link: data.faceit_link,
+        steam_link: data.steam_link,
+        faceit_link: data.faceit_link,
         totalXp,
         bonusBalance: parseFloat(data.bonus_balance || 0),
         activeBoostPercent: parseInt(data.active_boost_percent || 0),
