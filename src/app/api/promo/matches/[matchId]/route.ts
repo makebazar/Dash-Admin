@@ -10,7 +10,7 @@ async function getExpectedPlayers(client: any, matchId: number, competitorAId: s
   const addCompetitorPlayers = async (compId: string | null) => {
     if (!compId) return;
     const compRes = await client.query(
-      `SELECT type, team_id, promo_team_id, player_id, display_name FROM tournament_competitors WHERE id = $1`,
+      `SELECT id, type, team_id, promo_team_id, player_id, display_name FROM tournament_competitors WHERE id = $1`,
       [compId]
     );
     if (compRes.rowCount === 0) return;
@@ -19,9 +19,9 @@ async function getExpectedPlayers(client: any, matchId: number, competitorAId: s
     if (comp.type === "TEAM") {
       if (comp.promo_team_id) {
         const membersRes = await client.query(
-          `SELECT p.id as player_id 
+          `SELECT COALESCE(p.id, tm.phone) as player_id 
            FROM promo_team_members tm
-           JOIN promo_players p ON tm.phone = p.phone_number
+           LEFT JOIN promo_players p ON tm.phone = p.phone_number
            WHERE tm.team_id = $1`,
           [comp.promo_team_id]
         );
@@ -37,7 +37,8 @@ async function getExpectedPlayers(client: any, matchId: number, competitorAId: s
           if (r.player_id) playerIds.push(r.player_id);
         });
       }
-    } else if (comp.player_id) {
+    } else {
+      const pid = comp.player_id || comp.id;
       const botCheck = await client.query(
         `SELECT is_bot FROM promo_players WHERE id = $1`,
         [comp.player_id]
@@ -48,10 +49,10 @@ async function getExpectedPlayers(client: any, matchId: number, competitorAId: s
           `INSERT INTO lobby_checkin (match_id, player_id, pc_number, is_ready, updated_at)
            VALUES ($1, $2, 'BOT', true, NOW())
            ON CONFLICT (match_id, player_id) DO UPDATE SET is_ready = true, updated_at = NOW()`,
-          [matchId, comp.player_id]
+          [matchId, pid]
         ).catch(() => {});
       } else {
-        playerIds.push(comp.player_id);
+        playerIds.push(pid);
       }
     }
   };
@@ -235,7 +236,7 @@ async function checkAndProcessAutoVeto(client: any, matchId: number, match: any,
     );
 
     await client.query(
-      `UPDATE tournament_matches SET status = 'live' WHERE id = $1`,
+      `UPDATE tournament_matches SET status = 'starting' WHERE id = $1`,
       [matchId]
     );
 
@@ -428,11 +429,16 @@ export async function GET(
 
     // Accurate server state determination
     let serverStatus: "idle" | "agent_offline" | "starting" | "start_failed" | "ready" | "warmup" | "knife" | "live" | "paused" | "finished" = "idle";
-    const isMatchStarted = ["in_progress", "live", "playing", "finished"].includes(match.status?.toLowerCase());
+    const statusLower = (match.status || "").toLowerCase();
+    const isVetoPhase = statusLower === "veto";
+    const isScheduledPhase = statusLower === "scheduled" || statusLower === "pending";
+    const isMatchStartingOrLive = ["starting", "in_progress", "live", "playing", "finished"].includes(statusLower);
 
-    if (match.status === "FINISHED" || cs2Match?.status === "finished") {
+    if (statusLower === "finished" || cs2Match?.status === "finished") {
       serverStatus = "finished";
-    } else if (isMatchStarted) {
+    } else if (isScheduledPhase || isVetoPhase) {
+      serverStatus = "idle";
+    } else if (isMatchStartingOrLive) {
       if (!isAgentOnline && !cs2Match) {
         serverStatus = "agent_offline";
       } else if (!cs2Match || cs2Match.status === "starting") {
@@ -441,7 +447,7 @@ export async function GET(
         } else {
           const createdAt = cs2Match?.created_at ? new Date(cs2Match.created_at).getTime() : Date.now();
           const elapsedSec = (Date.now() - createdAt) / 1000;
-          if (elapsedSec > 75) {
+          if (elapsedSec > 90) {
             serverStatus = "start_failed";
           } else {
             serverStatus = "starting";
@@ -585,14 +591,15 @@ export async function POST(
       );
 
       // Verify if all players are ready to start veto
+      const hasBothCompetitors = Boolean(match.competitor_a_id && match.competitor_b_id);
       const expectedPlayers = await getExpectedPlayers(client, parsedMatchId, match.competitor_a_id, match.competitor_b_id);
       const readyPlayersRes = await client.query(
         `SELECT player_id FROM lobby_checkin WHERE match_id = $1 AND is_ready = true`,
         [parsedMatchId]
       );
-      const readyPlayerIds = readyPlayersRes.rows.map((r: any) => r.player_id);
+      const readyPlayerIds = new Set(readyPlayersRes.rows.map((r: any) => r.player_id));
 
-      const allReady = expectedPlayers.length === 0 || expectedPlayers.every(id => readyPlayerIds.includes(id));
+      const allReady = hasBothCompetitors && expectedPlayers.length >= 2 && expectedPlayers.every(id => readyPlayerIds.has(id));
 
       if (allReady && (match.status?.toLowerCase() === "scheduled" || match.status?.toLowerCase() === "pending")) {
         // Start VETO phase
@@ -728,7 +735,7 @@ export async function POST(
         );
 
         await client.query(
-          `UPDATE tournament_matches SET status = 'live' WHERE id = $1`,
+          `UPDATE tournament_matches SET status = 'starting' WHERE id = $1`,
           [parsedMatchId]
         );
 

@@ -363,7 +363,7 @@ export default function MatchLobby() {
   const isFinished = statusLower === "finished";
   const isVeto = statusLower === "veto";
   const isScheduled = statusLower === "scheduled" || statusLower === "pending";
-  const isMatchStarted = ["in_progress", "live", "playing", "finished"].includes(statusLower);
+  const isMatchStarted = ["in_progress", "live", "playing", "finished", "starting"].includes(statusLower);
 
   const serverStatus = match.serverStatus || "idle";
   const isServerReady = ["ready", "warmup", "knife", "live", "paused"].includes(serverStatus);
@@ -799,15 +799,23 @@ export default function MatchLobby() {
 
                 {/* SCENARIO B: SERVER STARTING */}
                 {serverStatus === "starting" && (
-                  <div className="bg-[#0e0e12] border border-orange-500/20 rounded-2xl p-6 text-center space-y-3">
-                    <div className="w-8 h-8 border-2 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mx-auto" />
-                    <div className="space-y-0.5">
-                      <h3 className="text-sm font-black uppercase tracking-tight text-white">
-                        Запуск CS2 сервера в клубе...
+                  <div className="bg-[#0e0e12] border border-orange-500/30 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+                    <div className="w-10 h-10 border-2 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mx-auto" />
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
+                        Вето завершено • Выбрана карта {selectedMapInfo.name}
+                      </div>
+                      <h3 className="text-base font-black uppercase tracking-tight text-white">
+                        Запуск игрового CS2 сервера...
                       </h3>
-                      <p className="text-xs text-gray-400 max-w-md mx-auto">
-                        Выделение порта :{match.cs2ServerPort || 27015} и старт карты {selectedMapInfo.name}. Это занимает 10–20 секунд.
+                      <p className="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
+                        Выделение порта :{match.cs2ServerPort || 27015} и компиляция конфигов матча. Пожалуйста, ожидайте — адрес подключения появится здесь автоматически сразу после старта сервера.
                       </p>
+                    </div>
+
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-bold text-gray-300">
+                      <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                      <span>Инициализация MatchZy и CS2</span>
                     </div>
                   </div>
                 )}
