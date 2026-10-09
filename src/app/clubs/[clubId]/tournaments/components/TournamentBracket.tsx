@@ -11,13 +11,15 @@ import {
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 import { Match, Competitor, Tournament, DashMatchAgentInfo, ActiveCs2MatchInfo } from "../types";
 
 interface TournamentBracketProps {
   tournament?: Tournament;
   matches: Match[];
   competitors: Competitor[];
-  onOpenMatchModal: (match: Match) => void;
+  clubId?: string;
+  onOpenMatchModal?: (match: Match) => void;
   onStartTournament?: () => void;
   onOpenRebuildModal?: () => void;
   onSimulateMatches?: () => void;
@@ -30,6 +32,7 @@ export function TournamentBracket({
   tournament,
   matches,
   competitors,
+  clubId,
   onOpenMatchModal,
   onStartTournament,
   onOpenRebuildModal,
@@ -38,6 +41,16 @@ export function TournamentBracket({
   dashmatchAgent,
   activeCs2Matches = [],
 }: TournamentBracketProps) {
+  const router = useRouter();
+
+  const handleMatchClick = (m: Match) => {
+    const cId = clubId || tournament?.club_id;
+    if (cId) {
+      router.push(`/clubs/${cId}/tournaments/matches/${m.id}?tournamentId=${tournament?.id || ""}`);
+    } else if (onOpenMatchModal) {
+      onOpenMatchModal(m);
+    }
+  };
   const groupStageMatches = matches.filter((m) => m.round === 0);
   const groupsMap: Record<string, Match[]> = {};
   groupStageMatches.forEach((m) => {
@@ -192,7 +205,7 @@ export function TournamentBracket({
                         return (
                           <div
                             key={m.id}
-                            onClick={() => onOpenMatchModal(m)}
+                            onClick={() => handleMatchClick(m)}
                             className="flex flex-col gap-2 bg-white border border-slate-200 p-3.5 rounded-2xl text-xs cursor-pointer hover:border-orange-400 transition-all shadow-xs"
                           >
                             <div className="flex justify-between items-center text-[8px] font-black uppercase tracking-wider text-slate-400">
@@ -323,7 +336,7 @@ export function TournamentBracket({
                       return (
                         <div
                           key={m.id}
-                          onClick={() => onOpenMatchModal(m)}
+                          onClick={() => handleMatchClick(m)}
                           className={cn(
                             "bg-white border p-4 rounded-3xl space-y-3 shadow-xs relative transition-all cursor-pointer hover:border-orange-400 hover:shadow-md",
                             statusLower === "finished"
@@ -340,6 +353,11 @@ export function TournamentBracket({
                                   ? `Матч ${m.result.matchNumber}`
                                   : `Матч #${m.id}`}
                               </span>
+                              {(m.result?.isThirdPlace || m.result?.stage === "bronze") && (
+                                <span className="bg-amber-500/10 text-amber-700 border border-amber-300 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
+                                  🥉 За 3-е место
+                                </span>
+                              )}
                               {isServerRunning && (
                                 <span className="bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider animate-pulse">
                                   ● CS2

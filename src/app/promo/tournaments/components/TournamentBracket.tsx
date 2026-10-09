@@ -528,9 +528,16 @@ export function TournamentBracket({
         >
           {/* Match Card Top Header - Pure Typography */}
           <div className="flex items-center justify-between px-4 pt-3.5 pb-2 text-[11px] font-black uppercase tracking-wider">
-            <span className="text-gray-400 font-black">
-              Матч {matchNumber}
-            </span>
+            <div className="flex items-center gap-1.5 truncate pr-1">
+              <span className="text-gray-400 font-black">
+                Матч {matchNumber}
+              </span>
+              {(match.result?.isThirdPlace || match.result?.stage === "bronze") && (
+                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider">
+                  🥉 За 3 место
+                </span>
+              )}
+            </div>
 
             {isLive ? (
               <span className="flex items-center gap-1.5 text-red-400 font-black tracking-wider">

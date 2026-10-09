@@ -738,6 +738,7 @@ export default function AdminTournaments() {
           {/* TAB 1: Сетка и Матчи */}
           {detailTab === "bracket" && (
             <TournamentBracket
+              clubId={clubId}
               tournament={activeTournament}
               matches={matches}
               competitors={competitors}

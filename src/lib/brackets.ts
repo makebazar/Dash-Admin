@@ -169,31 +169,64 @@ export async function generatePlayoffs(
   const baseTime = startsAt ? new Date(startsAt).getTime() : Date.now();
   let globalMatchNum = 1;
 
-  // First pass: create empty slots for all rounds
+  // Calculate rounds structure
+  const roundCounts: number[] = [];
   let currentRoundSize = round1Size;
-  let round = 1;
   while (currentRoundSize >= 1) {
-    for (let i = 1; i <= currentRoundSize; i++) {
-      const matchScheduledTime = new Date(baseTime + (round - 1) * 60 * 60 * 1000 + (i - 1) * 15 * 60 * 1000);
+    roundCounts.push(currentRoundSize);
+    currentRoundSize = Math.floor(currentRoundSize / 2);
+  }
+  const totalRounds = roundCounts.length;
+
+  // First pass: create empty slots for all rounds
+  for (let r = 1; r <= totalRounds; r++) {
+    const rSize = roundCounts[r - 1];
+    const isFinalRound = r === totalRounds;
+
+    for (let i = 1; i <= rSize; i++) {
+      const matchScheduledTime = new Date(baseTime + (r - 1) * 60 * 60 * 1000 + (i - 1) * 15 * 60 * 1000);
+      const stage = isFinalRound 
+        ? 'final' 
+        : (r === totalRounds - 1 ? 'semifinal' : (r === totalRounds - 2 ? 'quarterfinal' : 'playoff'));
+
       await client.query(
         `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status, scheduled_at, result)
          VALUES ($1, $2, $3, NULL, NULL, 'SCHEDULED', $4, $5)`,
         [
           tournamentId,
-          round,
+          r,
           i,
           matchScheduledTime,
           JSON.stringify({
             bracket: 'upper',
             matchNumber: globalMatchNum,
-            stage: currentRoundSize === 1 ? 'final' : 'playoff',
+            stage,
           }),
         ]
       );
       globalMatchNum++;
     }
-    round++;
-    currentRoundSize = Math.floor(currentRoundSize / 2);
+
+    // If this is the Final round and there were semi-finals (totalRounds >= 2), create 3rd Place Match!
+    if (isFinalRound && totalRounds >= 2) {
+      const thirdPlaceTime = new Date(baseTime + (r - 1) * 60 * 60 * 1000 + 30 * 60 * 1000);
+      await client.query(
+        `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status, scheduled_at, result)
+         VALUES ($1, $2, 2, NULL, NULL, 'SCHEDULED', $3, $4)`,
+        [
+          tournamentId,
+          r,
+          thirdPlaceTime,
+          JSON.stringify({
+            bracket: 'upper',
+            matchNumber: globalMatchNum,
+            stage: 'bronze',
+            isThirdPlace: true,
+          }),
+        ]
+      );
+      globalMatchNum++;
+    }
   }
 
   // Populate Round 1 matches and advance BYEs
@@ -424,10 +457,24 @@ export async function advancePlayoffWinner(
 
   if (!isDoubleElim) {
     // ---------------- SINGLE ELIMINATION ----------------
+    // Find max round (Final round)
+    const maxRoundRes = await client.query(
+      `SELECT MAX(round) as max_round FROM tournament_matches WHERE tournament_id = $1`,
+      [tournament_id]
+    );
+    const maxRound = maxRoundRes.rows[0]?.max_round || 1;
+
+    // If the finished match is already in the final round (Grand Final or 3rd place match), nothing to advance
+    if (round >= maxRound) return;
+
     const nextRound = round + 1;
     const nextOrder = Math.ceil(order_in_round / 2);
     const isPositionA = order_in_round % 2 !== 0;
 
+    // Check if this was the Semifinal round (round === maxRound - 1)
+    const isSemiFinal = round === maxRound - 1 && maxRound >= 2;
+
+    // 1. Advance winner to next round (Final or regular playoff match)
     if (isPositionA) {
       await client.query(
         `UPDATE tournament_matches
@@ -442,6 +489,25 @@ export async function advancePlayoffWinner(
          WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
         [winnerCompetitorId, tournament_id, nextRound, nextOrder]
       );
+    }
+
+    // 2. If it was Semifinal, route loser to 3rd Place match (round = maxRound, order_in_round = 2)
+    if (isSemiFinal && loserId) {
+      if (isPositionA) {
+        await client.query(
+          `UPDATE tournament_matches
+           SET competitor_a_id = $1
+           WHERE tournament_id = $2 AND round = $3 AND order_in_round = 2`,
+          [loserId, tournament_id, maxRound]
+        );
+      } else {
+        await client.query(
+          `UPDATE tournament_matches
+           SET competitor_b_id = $1
+           WHERE tournament_id = $2 AND round = $3 AND order_in_round = 2`,
+          [loserId, tournament_id, maxRound]
+        );
+      }
     }
   } else {
     // ---------------- DOUBLE ELIMINATION ----------------
@@ -570,15 +636,16 @@ export function resolveMatchFormat(
 
   const stage = matchResult?.stage;
 
-  if (stage === "final" || stage === "grand_final" || matchRound === 200) {
+  if ((stage === "final" || stage === "grand_final" || matchRound === 200) && !matchResult?.isThirdPlace) {
     return grandFormat;
   }
-  if (stage === "semifinal" || stage === "wb_final" || stage === "lb_final") {
+  if (stage === "semifinal" || stage === "wb_final" || stage === "lb_final" || stage === "bronze" || matchResult?.isThirdPlace) {
     return semiFormat;
   }
 
   if (maxRound && maxRound > 0) {
-    if (matchRound === maxRound) return grandFormat;
+    if (matchRound === maxRound && !matchResult?.isThirdPlace) return grandFormat;
+    if (matchRound === maxRound && matchResult?.isThirdPlace) return semiFormat;
     if (matchRound === maxRound - 1 && maxRound >= 2) return semiFormat;
   }
 
