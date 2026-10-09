@@ -586,6 +586,15 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Resolve playerId to promo_players UUID if needed (e.g. if stored as phone or custom id)
+    const resolvedPlayerRes = await client.query(
+      `SELECT id FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
+      [String(playerId)]
+    );
+    if (resolvedPlayerRes.rowCount && resolvedPlayerRes.rowCount > 0) {
+      playerId = resolvedPlayerRes.rows[0].id;
+    }
+
     const body = await request.json().catch(() => ({}));
     const { action } = body;
 
