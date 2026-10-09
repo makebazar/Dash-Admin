@@ -33,6 +33,13 @@ export async function POST(
 
       // Notify tournament lobby in real time
       const cleanMatchId = String(matchId).replace("dm-tourney-", "").replace("dm-", "");
+      const numMatchId = parseInt(cleanMatchId, 10);
+      if (!isNaN(numMatchId) && ["running", "warmup", "knife", "live", "ready"].includes(String(status).toLowerCase())) {
+        await query(
+          `UPDATE tournament_matches SET status = 'LIVE' WHERE id = $1 AND status != 'FINISHED'`,
+          [numMatchId]
+        ).catch(() => {});
+      }
       await query(`SELECT pg_notify('match_lobby_updates', $1)`, [cleanMatchId]).catch(() => {});
     }
 

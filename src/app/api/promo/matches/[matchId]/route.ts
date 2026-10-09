@@ -197,7 +197,7 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
     // 7. Update tournament_matches
     await client.query(
       `UPDATE tournament_matches 
-       SET cs2_server_id = $1, status = 'LIVE'
+       SET cs2_server_id = $1, status = 'STARTING'
        WHERE id = $2`,
       [dmMatchId, matchId]
     );
@@ -472,7 +472,7 @@ export async function GET(
     } else if (isMatchStartingOrLive) {
       if (!isAgentOnline && !cs2Match) {
         serverStatus = "agent_offline";
-      } else if (!cs2Match || cs2Match.status === "starting") {
+      } else if (!cs2Match || cs2Match.status === "starting" || cs2Match.status === "pending") {
         if (!isAgentOnline) {
           serverStatus = "agent_offline";
         } else {
@@ -484,7 +484,7 @@ export async function GET(
             serverStatus = "starting";
           }
         }
-      } else if (cs2Match.status === "running") {
+      } else if (cs2Match.status === "running" || cs2Match.status === "ready") {
         serverStatus = "ready";
       } else if (cs2Match.status === "warmup" || cs2Match.game_state === "warmup") {
         serverStatus = "warmup";
@@ -495,7 +495,7 @@ export async function GET(
       } else if (cs2Match.status === "stopped") {
         serverStatus = "start_failed";
       } else {
-        serverStatus = "ready";
+        serverStatus = "starting";
       }
     }
 
