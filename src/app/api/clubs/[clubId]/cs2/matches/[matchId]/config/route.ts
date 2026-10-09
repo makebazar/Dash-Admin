@@ -78,13 +78,14 @@ export async function GET(
     }
 
     // 2. Fetch tournament match details
+    const cleanMatchId = String(matchId).replace(/^dm-tourney-/, "").replace(/^dm-/, "");
     const matchRes = await client.query(
       `SELECT m.id, m.tournament_id, m.competitor_a_id, m.competitor_b_id,
               t.name as tournament_name, t.type as tournament_type, t.config as tournament_config
        FROM tournament_matches m
        JOIN club_tournaments t ON m.tournament_id = t.id
-       WHERE m.id = $1 AND t.club_id = $2`,
-      [matchId, parsedClubId]
+       WHERE (m.id::text = $1 OR m.id::text = $2) AND t.club_id = $3`,
+      [matchId, cleanMatchId, parsedClubId]
     );
 
     if (matchRes.rowCount === 0) {

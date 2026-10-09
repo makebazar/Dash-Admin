@@ -640,13 +640,13 @@ export default function MatchControlPage() {
                       <option value="de_train">Train (de_train)</option>
                     </optgroup>
                     <optgroup label="Напарники 2v2 (Wingman)">
-                      <option value="de_lake">Lake (de_lake)</option>
-                      <option value="de_bank">Bank (de_bank)</option>
-                      <option value="de_safehouse">Safehouse (de_safehouse)</option>
-                      <option value="de_boyard">Boyard (de_boyard)</option>
-                      <option value="de_chalice">Chalice (de_chalice)</option>
-                      <option value="de_shortnuke">Short Nuke (de_shortnuke)</option>
-                      <option value="de_shortdust">Short Dust (de_shortdust)</option>
+                      <option value="de_inferno">Inferno (de_inferno)</option>
+                      <option value="de_vertigo">Vertigo (de_vertigo)</option>
+                      <option value="de_nuke">Nuke (de_nuke)</option>
+                      <option value="de_overpass">Overpass (de_overpass)</option>
+                      <option value="de_anubis">Anubis (de_anubis)</option>
+                      <option value="de_dust2">Dust II (de_dust2)</option>
+                      <option value="de_mirage">Mirage (de_mirage)</option>
                     </optgroup>
                     <optgroup label="Дуэли 1v1 (Aim & Duels)">
                       <option value="aim_redline">Aim Redline (aim_redline)</option>

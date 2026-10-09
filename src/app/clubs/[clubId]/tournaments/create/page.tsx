@@ -77,13 +77,13 @@ export const CS2_ALL_MAPS: CS2MapItem[] = [
   { id: "cs_italy", label: "Italy", category: "5v5", badge: "5x5" },
 
   // Wingman (Напарники 2х2)
-  { id: "de_lake", label: "Lake (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_bank", label: "Bank (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_safehouse", label: "Safehouse (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_boyard", label: "Boyard (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_chalice", label: "Chalice (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_shortnuke", label: "Short Nuke (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_shortdust", label: "Short Dust (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_inferno", label: "Inferno (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_vertigo", label: "Vertigo (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_nuke", label: "Nuke (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_overpass", label: "Overpass (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_anubis", label: "Anubis (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_dust2", label: "Dust II (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_mirage", label: "Mirage (Напарники)", category: "wingman", badge: "2x2" },
 
   // 1v1 Aim & Duels
   { id: "aim_redline", label: "Aim Redline (1v1)", category: "1v1", badge: "1x1" },
