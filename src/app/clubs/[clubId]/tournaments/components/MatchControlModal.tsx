@@ -43,6 +43,7 @@ interface MatchControlModalProps {
 }
 
 const DEFAULT_MAP_OPTIONS = [
+  // 5v5 Premier & Classic
   { id: "de_mirage", name: "Mirage" },
   { id: "de_dust2", name: "Dust II" },
   { id: "de_inferno", name: "Inferno" },
@@ -50,6 +51,29 @@ const DEFAULT_MAP_OPTIONS = [
   { id: "de_ancient", name: "Ancient" },
   { id: "de_anubis", name: "Anubis" },
   { id: "de_vertigo", name: "Vertigo" },
+  { id: "de_overpass", name: "Overpass" },
+  { id: "de_train", name: "Train" },
+  { id: "cs_office", name: "Office" },
+  { id: "cs_italy", name: "Italy" },
+
+  // Wingman (Напарники 2х2)
+  { id: "de_lake", name: "Lake (Напарники)" },
+  { id: "de_bank", name: "Bank (Напарники)" },
+  { id: "de_safehouse", name: "Safehouse (Напарники)" },
+  { id: "de_boyard", name: "Boyard (Напарники)" },
+  { id: "de_chalice", name: "Chalice (Напарники)" },
+  { id: "de_shortnuke", name: "Short Nuke (Напарники)" },
+  { id: "de_shortdust", name: "Short Dust (Напарники)" },
+
+  // 1v1 Aim & Duels
+  { id: "aim_redline", name: "Aim Redline (1v1)" },
+  { id: "aim_map", name: "Aim Map (1v1)" },
+  { id: "awp_lego_2", name: "AWP Lego 2 (1v1)" },
+  { id: "aim_ak47", name: "Aim AK47 (1v1)" },
+  { id: "aim_headshot", name: "Aim Headshot (1v1)" },
+  { id: "aim_dust2", name: "Aim Dust2 (1v1)" },
+  { id: "aim_pistol_cs2", name: "Aim Pistol (1v1)" },
+  { id: "aim_aztec", name: "Aim Aztec (1v1)" },
 ];
 
 export function MatchControlModal({

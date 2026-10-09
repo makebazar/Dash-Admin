@@ -37,6 +37,7 @@ interface ChatMessage {
 }
 
 const MAP_PREVIEWS: Record<string, { name: string; image: string; desc: string }> = {
+  // 5v5 Premier & Classic
   de_mirage: {
     name: "Mirage",
     image: "/images/maps/de_mirage.png",
@@ -91,6 +92,85 @@ const MAP_PREVIEWS: Record<string, { name: string; image: string; desc: string }
     name: "Italy",
     image: "/images/maps/cs_italy.png",
     desc: "Итальянские улочки и винные погреба",
+  },
+
+  // Wingman (Напарники 2х2)
+  de_lake: {
+    name: "Lake",
+    image: "/images/maps/de_lake.png",
+    desc: "Загородный дом у озера, ближний бой и крыша",
+  },
+  de_bank: {
+    name: "Bank",
+    image: "/images/maps/de_bank.png",
+    desc: "Ограбление пригородного банка, штурм хранилища",
+  },
+  de_safehouse: {
+    name: "Safehouse",
+    image: "/images/maps/de_safehouse.png",
+    desc: "Лесной коттедж с несколькими этажами",
+  },
+  de_boyard: {
+    name: "Boyard",
+    image: "/images/maps/de_boyard.png",
+    desc: "Морской каменный форт и тесные галереи",
+  },
+  de_chalice: {
+    name: "Chalice",
+    image: "/images/maps/de_chalice.png",
+    desc: "Старинный европейский замок со статуями",
+  },
+  de_shortnuke: {
+    name: "Short Nuke",
+    image: "/images/maps/de_nuke.png",
+    desc: "Напарники: Спуск, рампа и плент B",
+  },
+  de_shortdust: {
+    name: "Short Dust",
+    image: "/images/maps/de_dust2.png",
+    desc: "Напарники: Зигзаг, лонг и плент A",
+  },
+
+  // 1v1 Aim & Duels
+  aim_redline: {
+    name: "Aim Redline",
+    image: "/images/maps/aim_redline.png",
+    desc: "Симметричная арена для чистых дуэлей на винтовках",
+  },
+  aim_map: {
+    name: "Aim Map",
+    image: "/images/maps/aim_map.png",
+    desc: "Легендарная дуэльная арена с симметричными ящиками",
+  },
+  awp_lego_2: {
+    name: "AWP Lego 2",
+    image: "/images/maps/awp_lego_2.png",
+    desc: "Культовая снайперская дуэль из блоков LEGO",
+  },
+  aim_ak47: {
+    name: "Aim AK47",
+    image: "/images/maps/aim_ak47.png",
+    desc: "Дуэльная карта для оттачивания стрельбы с автоматов",
+  },
+  aim_headshot: {
+    name: "Aim Headshot",
+    image: "/images/maps/aim_headshot.png",
+    desc: "Арена с жесткими укрытиями только для хедшотов",
+  },
+  aim_dust2: {
+    name: "Aim Dust2",
+    image: "/images/maps/de_dust2.png",
+    desc: "Компактная дуэльная адаптация мида и лонга Dust II",
+  },
+  aim_pistol_cs2: {
+    name: "Aim Pistol",
+    image: "/images/maps/aim_pistol_cs2.png",
+    desc: "Динамичные пистолетные дуэли 1 на 1",
+  },
+  aim_aztec: {
+    name: "Aim Aztec",
+    image: "/images/maps/aim_aztec.png",
+    desc: "Дуэльная арена в стиле древнего Ацтека",
   },
 };
 

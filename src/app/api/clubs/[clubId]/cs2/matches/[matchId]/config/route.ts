@@ -80,7 +80,7 @@ export async function GET(
     // 2. Fetch tournament match details
     const matchRes = await client.query(
       `SELECT m.id, m.tournament_id, m.competitor_a_id, m.competitor_b_id,
-              t.name as tournament_name, t.config as tournament_config
+              t.name as tournament_name, t.type as tournament_type, t.config as tournament_config
        FROM tournament_matches m
        JOIN club_tournaments t ON m.tournament_id = t.id
        WHERE m.id = $1 AND t.club_id = $2`,
@@ -173,6 +173,21 @@ export async function GET(
     const numMaps = tConfig.numMaps || (mapPool.length > 1 ? mapPool.length : 1);
     const safeNumMaps = Math.max(1, Math.min(numMaps, mapPool.length));
 
+    const isWingman =
+      match.tournament_type === "2vs2" ||
+      match.tournament_type === "mix_2vs2" ||
+      match.tournament_type === "1vs1";
+
+    const defaultPlayersPerTeam =
+      match.tournament_type === "1vs1"
+        ? 1
+        : match.tournament_type === "2vs2" || match.tournament_type === "mix_2vs2"
+        ? 2
+        : 5;
+
+    const rosterCount = Object.keys(team1.players).length;
+    const playersPerTeam = rosterCount > 0 ? rosterCount : defaultPlayersPerTeam;
+
     // Build MatchZy/Get5 compatible match config
     const matchZyConfig = {
       matchid: getNumericMatchId(matchId),
@@ -181,10 +196,11 @@ export async function GET(
       map_sides: Array(safeNumMaps).fill("knife"),
       side_type: "always_knife",
       clinch_series: true,
-      players_per_team: Object.keys(team1.players).length || 5,
-      min_players_to_ready: Object.keys(team1.players).length || 5,
+      players_per_team: playersPerTeam,
+      min_players_to_ready: playersPerTeam,
       min_spectators_to_ready: 0,
       skip_veto: mapPool.length === safeNumMaps,
+      wingman: isWingman,
       team1: {
         name: team1.name,
         players: team1.players,

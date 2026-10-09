@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const CS2_MAP_POOL_DEFAULT = [
+export const CS2_5V5_MAP_POOL = [
   "de_mirage",
   "de_dust2",
   "de_inferno",
@@ -35,18 +35,65 @@ const CS2_MAP_POOL_DEFAULT = [
   "de_vertigo",
 ];
 
-const CS2_ALL_MAPS = [
-  { id: "de_mirage", label: "Mirage" },
-  { id: "de_dust2", label: "Dust II" },
-  { id: "de_inferno", label: "Inferno" },
-  { id: "de_nuke", label: "Nuke" },
-  { id: "de_anubis", label: "Anubis" },
-  { id: "de_ancient", label: "Ancient" },
-  { id: "de_vertigo", label: "Vertigo" },
-  { id: "de_overpass", label: "Overpass" },
-  { id: "de_train", label: "Train" },
-  { id: "cs_office", label: "Office" },
-  { id: "cs_italy", label: "Italy" },
+export const CS2_WINGMAN_MAP_POOL = [
+  "de_inferno",
+  "de_vertigo",
+  "de_nuke",
+  "de_overpass",
+  "de_anubis",
+  "de_mirage",
+  "de_dust2",
+];
+
+export const CS2_AIM_1V1_MAP_POOL = [
+  "aim_redline",
+  "aim_map",
+  "awp_lego_2",
+  "aim_ak47",
+  "aim_headshot",
+  "aim_dust2",
+  "aim_pistol_cs2",
+];
+
+export interface CS2MapItem {
+  id: string;
+  label: string;
+  category: "5v5" | "wingman" | "1v1";
+  badge: string;
+}
+
+export const CS2_ALL_MAPS: CS2MapItem[] = [
+  // 5v5 Premier & Classic
+  { id: "de_mirage", label: "Mirage", category: "5v5", badge: "5x5" },
+  { id: "de_dust2", label: "Dust II", category: "5v5", badge: "5x5" },
+  { id: "de_inferno", label: "Inferno", category: "5v5", badge: "5x5" },
+  { id: "de_nuke", label: "Nuke", category: "5v5", badge: "5x5" },
+  { id: "de_anubis", label: "Anubis", category: "5v5", badge: "5x5" },
+  { id: "de_ancient", label: "Ancient", category: "5v5", badge: "5x5" },
+  { id: "de_vertigo", label: "Vertigo", category: "5v5", badge: "5x5" },
+  { id: "de_overpass", label: "Overpass", category: "5v5", badge: "5x5" },
+  { id: "de_train", label: "Train", category: "5v5", badge: "5x5" },
+  { id: "cs_office", label: "Office", category: "5v5", badge: "5x5" },
+  { id: "cs_italy", label: "Italy", category: "5v5", badge: "5x5" },
+
+  // Wingman (Напарники 2х2)
+  { id: "de_lake", label: "Lake (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_bank", label: "Bank (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_safehouse", label: "Safehouse (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_boyard", label: "Boyard (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_chalice", label: "Chalice (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_shortnuke", label: "Short Nuke (Напарники)", category: "wingman", badge: "2x2" },
+  { id: "de_shortdust", label: "Short Dust (Напарники)", category: "wingman", badge: "2x2" },
+
+  // 1v1 Aim & Duels
+  { id: "aim_redline", label: "Aim Redline (1v1)", category: "1v1", badge: "1x1" },
+  { id: "aim_map", label: "Aim Map (1v1)", category: "1v1", badge: "1x1" },
+  { id: "awp_lego_2", label: "AWP Lego 2 (1v1)", category: "1v1", badge: "1x1" },
+  { id: "aim_ak47", label: "Aim AK47 (1v1)", category: "1v1", badge: "1x1" },
+  { id: "aim_headshot", label: "Aim Headshot (1v1)", category: "1v1", badge: "1x1" },
+  { id: "aim_dust2", label: "Aim Dust2 (1v1)", category: "1v1", badge: "1x1" },
+  { id: "aim_pistol_cs2", label: "Aim Pistol (1v1)", category: "1v1", badge: "1x1" },
+  { id: "aim_aztec", label: "Aim Aztec (1v1)", category: "1v1", badge: "1x1" },
 ];
 
 function getCountFromLabel(label: string): number {
@@ -158,7 +205,13 @@ export default function CreateTournamentPage({
   const [grandFinalFormat, setGrandFinalFormat] = useState<
     "bo1" | "bo3" | "bo5"
   >("bo3");
-  const [mapPool, setMapPool] = useState<string[]>(CS2_MAP_POOL_DEFAULT);
+  const [mapPool, setMapPool] = useState<string[]>(CS2_AIM_1V1_MAP_POOL);
+  const [mapFilter, setMapFilter] = useState<"all" | "5v5" | "wingman" | "1v1">("all");
+
+  const filteredMaps = useMemo(() => {
+    if (mapFilter === "all") return CS2_ALL_MAPS;
+    return CS2_ALL_MAPS.filter((m) => m.category === mapFilter);
+  }, [mapFilter]);
 
   // Placements & Item Pool
   const [placements, setPlacements] = useState<any[]>([
@@ -729,7 +782,21 @@ export default function CreateTournamentPage({
                     <button
                       key={typeItem.id}
                       type="button"
-                      onClick={() => setType(typeItem.id)}
+                      onClick={() => {
+                        setType(typeItem.id);
+                        if (!editTournamentId) {
+                          if (typeItem.id === "1vs1") {
+                            setMapPool(CS2_AIM_1V1_MAP_POOL);
+                          } else if (
+                            typeItem.id === "2vs2" ||
+                            typeItem.id === "mix_2vs2"
+                          ) {
+                            setMapPool(CS2_WINGMAN_MAP_POOL);
+                          } else {
+                            setMapPool(CS2_5V5_MAP_POOL);
+                          }
+                        }
+                      }}
                       className={cn(
                         "py-3.5 px-4 rounded-2xl border font-bold text-xs uppercase tracking-wider transition-all text-center cursor-pointer",
                         type === typeItem.id
@@ -920,21 +987,76 @@ export default function CreateTournamentPage({
               {/* CS2 Map Pool selection */}
               {discipline === "cs2" && (
                 <div className="bg-slate-50 border border-slate-200/80 rounded-3xl p-6 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
-                    <span className="text-xs font-black uppercase tracking-wider text-slate-800">
-                      Пул карт для CS2 Veto ({mapPool.length} выбрано)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setMapPool(CS2_ALL_MAPS.map((m) => m.id))}
-                      className="text-[10px] font-bold text-orange-500 hover:underline uppercase tracking-wider cursor-pointer"
-                    >
-                      Выбрать все
-                    </button>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 pb-4">
+                    <div>
+                      <span className="text-xs font-black uppercase tracking-wider text-slate-800 block">
+                        Пул карт для CS2 Veto ({mapPool.length} выбрано)
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Выберите карты для стадии банов и пиков (Veto) перед началом матча
+                      </span>
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setMapPool(CS2_5V5_MAP_POOL)}
+                        className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
+                      >
+                        5x5 Premier ({CS2_5V5_MAP_POOL.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapPool(CS2_WINGMAN_MAP_POOL)}
+                        className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
+                      >
+                        2x2 Напарники ({CS2_WINGMAN_MAP_POOL.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapPool(CS2_AIM_1V1_MAP_POOL)}
+                        className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
+                      >
+                        1x1 Aim ({CS2_AIM_1V1_MAP_POOL.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMapPool(CS2_ALL_MAPS.map((m) => m.id))}
+                        className="px-2.5 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
+                      >
+                        Все ({CS2_ALL_MAPS.length})
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {CS2_ALL_MAPS.map((mapItem) => {
+                  {/* Filter Tabs */}
+                  <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl w-fit">
+                    {[
+                      { id: "all", label: `Все (${CS2_ALL_MAPS.length})` },
+                      { id: "5v5", label: `5x5 Premier (${CS2_ALL_MAPS.filter((m) => m.category === "5v5").length})` },
+                      { id: "wingman", label: `2x2 Напарники (${CS2_ALL_MAPS.filter((m) => m.category === "wingman").length})` },
+                      { id: "1v1", label: `1x1 Aim (${CS2_ALL_MAPS.filter((m) => m.category === "1v1").length})` },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setMapFilter(tab.id as any)}
+                        className={cn(
+                          "px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer",
+                          mapFilter === tab.id
+                            ? "bg-white text-slate-900 shadow-2xs"
+                            : "text-slate-500 hover:text-slate-900"
+                        )}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Maps Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                    {filteredMaps.map((mapItem) => {
                       const isChecked = mapPool.includes(mapItem.id);
                       return (
                         <button
@@ -956,12 +1078,26 @@ export default function CreateTournamentPage({
                           className={cn(
                             "py-2.5 px-3 rounded-xl border text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-between cursor-pointer",
                             isChecked
-                              ? "bg-orange-50 text-orange-600 border-orange-200"
-                              : "bg-white text-slate-500 border-slate-200 hover:text-slate-800"
+                              ? "bg-orange-50 text-orange-700 border-orange-300 shadow-2xs"
+                              : "bg-white text-slate-500 border-slate-200 hover:text-slate-800 hover:border-slate-300"
                           )}
                         >
-                          <span>{mapItem.label}</span>
-                          <span className="text-[10px] font-bold">
+                          <div className="flex items-center gap-2 truncate">
+                            <span
+                              className={cn(
+                                "text-[9px] font-extrabold px-1.5 py-0.5 rounded",
+                                mapItem.category === "1v1"
+                                  ? "bg-purple-100 text-purple-700"
+                                  : mapItem.category === "wingman"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-amber-100 text-amber-700"
+                              )}
+                            >
+                              {mapItem.badge}
+                            </span>
+                            <span className="truncate">{mapItem.label}</span>
+                          </div>
+                          <span className="text-[11px] font-black ml-2 shrink-0">
                             {isChecked ? "✓" : "+"}
                           </span>
                         </button>
