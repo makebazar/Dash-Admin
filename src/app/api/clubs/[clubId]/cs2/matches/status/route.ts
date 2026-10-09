@@ -30,6 +30,10 @@ export async function POST(
           [status, matchId, parsedClubId]
         );
       }
+
+      // Notify tournament lobby in real time
+      const cleanMatchId = String(matchId).replace("dm-tourney-", "").replace("dm-", "");
+      await query(`SELECT pg_notify('match_lobby_updates', $1)`, [cleanMatchId]).catch(() => {});
     }
 
     return NextResponse.json({ success: true });

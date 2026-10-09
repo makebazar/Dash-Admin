@@ -97,7 +97,8 @@ export async function autobalanceMixTeams(
 export async function generateGroupStage(
   client: PoolClient,
   tournamentId: string,
-  competitorIds: string[]
+  competitorIds: string[],
+  startsAt?: Date | string | null
 ): Promise<void> {
   const N = competitorIds.length;
   let numGroups = 1;
@@ -112,6 +113,9 @@ export async function generateGroupStage(
     groups[i % numGroups].push(shuffled[i]);
   }
 
+  const baseTime = startsAt ? new Date(startsAt).getTime() : Date.now();
+  let globalMatchNum = 1;
+
   // Generate round robin pairings for each group
   for (let g = 0; g < numGroups; g++) {
     const groupLabel = String.fromCharCode(65 + g); // A, B, C, D
@@ -120,12 +124,21 @@ export async function generateGroupStage(
     let order = 1;
     for (let i = 0; i < groupComps.length; i++) {
       for (let j = i + 1; j < groupComps.length; j++) {
+        const matchScheduledTime = new Date(baseTime + Math.floor((order - 1) / 2) * 45 * 60 * 1000);
         await client.query(
-          `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status, result)
-           VALUES ($1, 0, $2, $3, $4, 'SCHEDULED', $5)`,
-          [tournamentId, order, groupComps[i], groupComps[j], JSON.stringify({ group: groupLabel })]
+          `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status, scheduled_at, result)
+           VALUES ($1, 0, $2, $3, $4, 'SCHEDULED', $5, $6)`,
+          [
+            tournamentId,
+            order,
+            groupComps[i],
+            groupComps[j],
+            matchScheduledTime,
+            JSON.stringify({ stage: 'group', group: groupLabel, matchNumber: globalMatchNum }),
+          ]
         );
         order++;
+        globalMatchNum++;
       }
     }
   }
@@ -133,57 +146,247 @@ export async function generateGroupStage(
 
 /**
  * Generates Playoff Bracket matches (round = 1, 2, 3...) for Single Elimination.
+ * Assigns sequential match numbers (1, 2, 3...) and scheduled times.
  */
 export async function generatePlayoffs(
   client: PoolClient,
   tournamentId: string,
-  competitorIds: string[]
+  competitorIds: string[],
+  startsAt?: Date | string | null
 ): Promise<void> {
-  // Shuffle or seed
   const competitors = [...competitorIds].sort(() => Math.random() - 0.5);
   const N = competitors.length;
 
+  if (N < 2) return;
+
   // Find nearest power of 2
-  let power = 1;
+  let power = 2;
   while (power < N) power *= 2;
 
   const numByes = power - N;
   const round1Size = power / 2;
 
+  const baseTime = startsAt ? new Date(startsAt).getTime() : Date.now();
+  let globalMatchNum = 1;
+
+  // First pass: create empty slots for all rounds
+  let currentRoundSize = round1Size;
+  let round = 1;
+  while (currentRoundSize >= 1) {
+    for (let i = 1; i <= currentRoundSize; i++) {
+      const matchScheduledTime = new Date(baseTime + (round - 1) * 60 * 60 * 1000 + (i - 1) * 15 * 60 * 1000);
+      await client.query(
+        `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status, scheduled_at, result)
+         VALUES ($1, $2, $3, NULL, NULL, 'SCHEDULED', $4, $5)`,
+        [
+          tournamentId,
+          round,
+          i,
+          matchScheduledTime,
+          JSON.stringify({
+            bracket: 'upper',
+            matchNumber: globalMatchNum,
+            stage: currentRoundSize === 1 ? 'final' : 'playoff',
+          }),
+        ]
+      );
+      globalMatchNum++;
+    }
+    round++;
+    currentRoundSize = Math.floor(currentRoundSize / 2);
+  }
+
+  // Populate Round 1 matches and advance BYEs
   let compIndex = 0;
   for (let i = 1; i <= round1Size; i++) {
     const compA = competitors[compIndex++] || null;
-    let compB = null;
+    let compB: string | null = null;
 
-    if (numByes >= i) {
-      // This match has a bye: compA advances automatically
-      // We will create the match, but mark it completed immediately
+    if (i <= numByes) {
+      // Bye match: compA advances directly to Round 2 (no fake score)
       await client.query(
-        `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status, winner_competitor_id)
-         VALUES ($1, 1, $2, $3, NULL, 'FINISHED', $3)`,
-        [tournamentId, i, compA]
+        `UPDATE tournament_matches
+         SET competitor_a_id = $1, competitor_b_id = NULL, status = 'FINISHED', winner_competitor_id = $1, score1 = 0, score2 = 0,
+             result = result || '{"isBye": true}'::jsonb
+         WHERE tournament_id = $2 AND round = 1 AND order_in_round = $3`,
+        [compA, tournamentId, i]
       );
+
+      // Advance compA to Round 2 slot immediately
+      const nextOrder = Math.ceil(i / 2);
+      const isPositionA = i % 2 !== 0;
+      if (round1Size > 1) {
+        if (isPositionA) {
+          await client.query(
+            `UPDATE tournament_matches
+             SET competitor_a_id = $1
+             WHERE tournament_id = $2 AND round = 2 AND order_in_round = $3`,
+            [compA, tournamentId, nextOrder]
+          );
+        } else {
+          await client.query(
+            `UPDATE tournament_matches
+             SET competitor_b_id = $1
+             WHERE tournament_id = $2 AND round = 2 AND order_in_round = $3`,
+            [compA, tournamentId, nextOrder]
+          );
+        }
+      }
     } else {
       compB = competitors[compIndex++] || null;
       await client.query(
-        `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status)
-         VALUES ($1, 1, $2, $3, $4, 'SCHEDULED')`,
-        [tournamentId, i, compA, compB]
+        `UPDATE tournament_matches
+         SET competitor_a_id = $1, competitor_b_id = $2, status = 'SCHEDULED'
+         WHERE tournament_id = $3 AND round = 1 AND order_in_round = $4`,
+        [compA, compB, tournamentId, i]
       );
     }
   }
+}
 
-  // Create empty slots for subsequent rounds
+/**
+ * Generates Double Elimination tournament bracket (Upper Bracket, Lower Bracket, Grand Final).
+ * Assigns sequential match numbers (1, 2, 3...) and scheduled times.
+ */
+export async function generateDoubleElimination(
+  client: PoolClient,
+  tournamentId: string,
+  competitorIds: string[],
+  startsAt?: Date | string | null
+): Promise<void> {
+  const competitors = [...competitorIds].sort(() => Math.random() - 0.5);
+  const N = competitors.length;
+
+  if (N < 2) return;
+
+  // Find nearest power of 2
+  let power = 2;
+  let k = 1;
+  while (power < N) {
+    power *= 2;
+    k++;
+  }
+
+  const numByes = power - N;
+  const round1Size = power / 2;
+  const baseTime = startsAt ? new Date(startsAt).getTime() : Date.now();
+  let globalMatchNum = 1;
+
+  // 1. Create Upper Bracket matches (round = 1..k)
   let currentRoundSize = round1Size;
-  let round = 1;
-  while (currentRoundSize > 1) {
-    round++;
-    currentRoundSize /= 2;
+  for (let r = 1; r <= k; r++) {
     for (let i = 1; i <= currentRoundSize; i++) {
+      const matchScheduledTime = new Date(baseTime + (r - 1) * 60 * 60 * 1000 + (i - 1) * 15 * 60 * 1000);
       await client.query(
-        `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status)
-         VALUES ($1, $2, $3, NULL, NULL, 'SCHEDULED')`,
-        [tournamentId, round, i]
+        `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status, scheduled_at, result)
+         VALUES ($1, $2, $3, NULL, NULL, 'SCHEDULED', $4, $5)`,
+        [
+          tournamentId,
+          r,
+          i,
+          matchScheduledTime,
+          JSON.stringify({
+            bracket: 'upper',
+            wbRound: r,
+            matchNumber: globalMatchNum,
+            stage: r === k ? 'wb_final' : 'wb',
+          }),
+        ]
+      );
+      globalMatchNum++;
+    }
+    currentRoundSize = Math.floor(currentRoundSize / 2);
+  }
+
+  // 2. Create Lower Bracket matches (round = 101 .. 100 + 2*(k-1))
+  if (k >= 2) {
+    const totalLbRounds = 2 * (k - 1);
+    for (let lbR = 1; lbR <= totalLbRounds; lbR++) {
+      const step = Math.floor((lbR - 1) / 2);
+      const lbMatchesCount = Math.max(1, Math.floor(round1Size / Math.pow(2, step + 1)));
+
+      for (let i = 1; i <= lbMatchesCount; i++) {
+        const matchScheduledTime = new Date(baseTime + (lbR * 45) * 60 * 1000 + (i - 1) * 15 * 60 * 1000);
+        await client.query(
+          `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status, scheduled_at, result)
+           VALUES ($1, $2, $3, NULL, NULL, 'SCHEDULED', $4, $5)`,
+          [
+            tournamentId,
+            100 + lbR,
+            i,
+            matchScheduledTime,
+            JSON.stringify({
+              bracket: 'lower',
+              lbRound: lbR,
+              matchNumber: globalMatchNum,
+              stage: lbR === totalLbRounds ? 'lb_final' : 'lb',
+            }),
+          ]
+        );
+        globalMatchNum++;
+      }
+    }
+  }
+
+  // 3. Create Grand Final match (round = 200)
+  const grandFinalTime = new Date(baseTime + (k * 75) * 60 * 1000);
+  await client.query(
+    `INSERT INTO tournament_matches (tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, status, scheduled_at, result)
+     VALUES ($1, 200, 1, NULL, NULL, 'SCHEDULED', $2, $3)`,
+    [
+      tournamentId,
+      grandFinalTime,
+      JSON.stringify({
+        bracket: 'grand_final',
+        matchNumber: globalMatchNum,
+        stage: 'grand_final',
+      }),
+    ]
+  );
+
+  // 4. Populate Upper Bracket Round 1 and advance BYEs
+  let compIndex = 0;
+  for (let i = 1; i <= round1Size; i++) {
+    const compA = competitors[compIndex++] || null;
+    let compB: string | null = null;
+
+    if (i <= numByes) {
+      // Bye match: compA advances directly to WB Round 2 (no fake score)
+      await client.query(
+        `UPDATE tournament_matches
+         SET competitor_a_id = $1, competitor_b_id = NULL, status = 'FINISHED', winner_competitor_id = $1, score1 = 0, score2 = 0,
+             result = result || '{"isBye": true}'::jsonb
+         WHERE tournament_id = $2 AND round = 1 AND order_in_round = $3`,
+        [compA, tournamentId, i]
+      );
+
+      // Advance compA to WB Round 2 slot
+      if (k > 1) {
+        const nextOrder = Math.ceil(i / 2);
+        const isPositionA = i % 2 !== 0;
+        if (isPositionA) {
+          await client.query(
+            `UPDATE tournament_matches
+             SET competitor_a_id = $1
+             WHERE tournament_id = $2 AND round = 2 AND order_in_round = $3`,
+            [compA, tournamentId, nextOrder]
+          );
+        } else {
+          await client.query(
+            `UPDATE tournament_matches
+             SET competitor_b_id = $1
+             WHERE tournament_id = $2 AND round = 2 AND order_in_round = $3`,
+            [compA, tournamentId, nextOrder]
+          );
+        }
+      }
+    } else {
+      compB = competitors[compIndex++] || null;
+      await client.query(
+        `UPDATE tournament_matches
+         SET competitor_a_id = $1, competitor_b_id = $2, status = 'SCHEDULED'
+         WHERE tournament_id = $3 AND round = 1 AND order_in_round = $4`,
+        [compA, compB, tournamentId, i]
       );
     }
   }
@@ -191,41 +394,195 @@ export async function generatePlayoffs(
 
 /**
  * Progresses the bracket when a match finishes.
- * If round = 0 (groups), we do nothing automatically (admin resolves group outcomes).
- * If round >= 1, we advance the winner to the next round slot.
+ * Handles Single Elimination, Double Elimination (Upper, Lower, Grand Final), and Group stages.
  */
 export async function advancePlayoffWinner(
   client: PoolClient,
-  matchId: string,
+  matchId: string | number,
   winnerCompetitorId: string
 ): Promise<void> {
   const matchRes = await client.query(
-    `SELECT tournament_id, round, order_in_round FROM tournament_matches WHERE id = $1`,
+    `SELECT tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, result 
+     FROM tournament_matches 
+     WHERE id = $1`,
     [matchId]
   );
   if (matchRes.rowCount === 0) return;
 
-  const { tournament_id, round, order_in_round } = matchRes.rows[0];
-  if (round === 0) return; // Group matches are processed differently
+  const { tournament_id, round, order_in_round, competitor_a_id, competitor_b_id, result } = matchRes.rows[0];
+  if (round === 0) return; // Group matches are handled separately
 
-  const nextRound = round + 1;
-  const nextOrder = Math.ceil(order_in_round / 2);
-  const isPositionA = order_in_round % 2 !== 0;
+  const loserId = String(winnerCompetitorId) === String(competitor_a_id) ? competitor_b_id : competitor_a_id;
+  const bracket = result?.bracket || (round >= 100 && round < 200 ? 'lower' : round === 200 ? 'grand_final' : 'upper');
 
-  // Update next round's slot
-  if (isPositionA) {
-    await client.query(
-      `UPDATE tournament_matches
-       SET competitor_a_id = $1
-       WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
-      [winnerCompetitorId, tournament_id, nextRound, nextOrder]
-    );
+  // Check if tournament is Double Elimination by checking for presence of Lower Bracket matches
+  const lbCheck = await client.query(
+    `SELECT 1 FROM tournament_matches WHERE tournament_id = $1 AND round >= 100 LIMIT 1`,
+    [tournament_id]
+  );
+  const isDoubleElim = (lbCheck.rowCount ?? 0) > 0;
+
+  if (!isDoubleElim) {
+    // ---------------- SINGLE ELIMINATION ----------------
+    const nextRound = round + 1;
+    const nextOrder = Math.ceil(order_in_round / 2);
+    const isPositionA = order_in_round % 2 !== 0;
+
+    if (isPositionA) {
+      await client.query(
+        `UPDATE tournament_matches
+         SET competitor_a_id = $1
+         WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
+        [winnerCompetitorId, tournament_id, nextRound, nextOrder]
+      );
+    } else {
+      await client.query(
+        `UPDATE tournament_matches
+         SET competitor_b_id = $1
+         WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
+        [winnerCompetitorId, tournament_id, nextRound, nextOrder]
+      );
+    }
   } else {
-    await client.query(
-      `UPDATE tournament_matches
-       SET competitor_b_id = $1
-       WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
-      [winnerCompetitorId, tournament_id, nextRound, nextOrder]
+    // ---------------- DOUBLE ELIMINATION ----------------
+    // Get max WB round (WB Final) and max LB round (LB Final)
+    const maxWbRes = await client.query(
+      `SELECT MAX(round) as max_wb FROM tournament_matches WHERE tournament_id = $1 AND round < 100`,
+      [tournament_id]
     );
+    const maxLbRes = await client.query(
+      `SELECT MAX(round) as max_lb FROM tournament_matches WHERE tournament_id = $1 AND round >= 101 AND round < 200`,
+      [tournament_id]
+    );
+
+    const maxWbRound = maxWbRes.rows[0]?.max_wb || 1;
+    const maxLbRound = maxLbRes.rows[0]?.max_lb || 101;
+
+    if (bracket === 'upper' || round < 100) {
+      const wbRound = round;
+      if (wbRound < maxWbRound) {
+        // Winner advances to next Upper Bracket round
+        const nextRound = wbRound + 1;
+        const nextOrder = Math.ceil(order_in_round / 2);
+        const isPositionA = order_in_round % 2 !== 0;
+
+        await client.query(
+          `UPDATE tournament_matches
+           SET ${isPositionA ? 'competitor_a_id' : 'competitor_b_id'} = $1
+           WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
+          [winnerCompetitorId, tournament_id, nextRound, nextOrder]
+        );
+
+        // Loser drops to Lower Bracket
+        if (loserId) {
+          if (wbRound === 1) {
+            // Drops to LB Round 1 (round 101)
+            const lbOrder = Math.ceil(order_in_round / 2);
+            const isLbPosA = order_in_round % 2 !== 0;
+            await client.query(
+              `UPDATE tournament_matches
+               SET ${isLbPosA ? 'competitor_a_id' : 'competitor_b_id'} = $1
+               WHERE tournament_id = $2 AND round = 101 AND order_in_round = $3`,
+              [loserId, tournament_id, lbOrder]
+            );
+          } else {
+            // Drops to LB Major round: 100 + 2*(wbRound - 1)
+            const lbTargetRound = 100 + 2 * (wbRound - 1);
+            await client.query(
+              `UPDATE tournament_matches
+               SET competitor_b_id = $1
+               WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
+              [loserId, tournament_id, lbTargetRound, order_in_round]
+            );
+          }
+        }
+      } else {
+        // WB Final:
+        // Winner goes to Grand Final (Slot A)
+        await client.query(
+          `UPDATE tournament_matches
+           SET competitor_a_id = $1
+           WHERE tournament_id = $2 AND round = 200 AND order_in_round = 1`,
+          [winnerCompetitorId, tournament_id]
+        );
+
+        // Loser drops to LB Final (Slot B)
+        if (loserId) {
+          await client.query(
+            `UPDATE tournament_matches
+             SET competitor_b_id = $1
+             WHERE tournament_id = $2 AND round = $3 AND order_in_round = 1`,
+            [loserId, tournament_id, maxLbRound]
+          );
+        }
+      }
+    } else if (bracket === 'lower' || (round >= 101 && round < 200)) {
+      const lbRound = round - 100;
+      const isLbFinal = round === maxLbRound;
+
+      if (!isLbFinal) {
+        const isMinorRound = lbRound % 2 !== 0; // 1, 3, 5... (intra-LB matches)
+        if (isMinorRound) {
+          // Winner advances to next LB Major round (same order, Slot A)
+          await client.query(
+            `UPDATE tournament_matches
+             SET competitor_a_id = $1
+             WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
+            [winnerCompetitorId, tournament_id, round + 1, order_in_round]
+          );
+        } else {
+          // Winner advances to next LB Minor round (order = ceil(order/2))
+          const nextOrder = Math.ceil(order_in_round / 2);
+          const isPosA = order_in_round % 2 !== 0;
+          await client.query(
+            `UPDATE tournament_matches
+             SET ${isPosA ? 'competitor_a_id' : 'competitor_b_id'} = $1
+             WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
+            [winnerCompetitorId, tournament_id, round + 1, nextOrder]
+          );
+        }
+      } else {
+        // LB Final Winner advances to Grand Final (Slot B)
+        await client.query(
+          `UPDATE tournament_matches
+           SET competitor_b_id = $1
+           WHERE tournament_id = $2 AND round = 200 AND order_in_round = 1`,
+          [winnerCompetitorId, tournament_id]
+        );
+      }
+    }
   }
 }
+
+/**
+ * Resolves whether a specific match should be played in BO1, BO3, or BO5
+ * based on the tournament configuration, round, and stage (semifinal, grand final).
+ */
+export function resolveMatchFormat(
+  tournamentConfig: any,
+  matchRound: number,
+  maxRound?: number,
+  matchResult?: any
+): "bo1" | "bo3" | "bo5" {
+  const baseFormat = (tournamentConfig?.matchFormat || "bo1") as "bo1" | "bo3" | "bo5";
+  const semiFormat = (tournamentConfig?.semiFinalFormat || baseFormat) as "bo1" | "bo3" | "bo5";
+  const grandFormat = (tournamentConfig?.grandFinalFormat || baseFormat) as "bo1" | "bo3" | "bo5";
+
+  const stage = matchResult?.stage;
+
+  if (stage === "final" || stage === "grand_final" || matchRound === 200) {
+    return grandFormat;
+  }
+  if (stage === "semifinal" || stage === "wb_final" || stage === "lb_final") {
+    return semiFormat;
+  }
+
+  if (maxRound && maxRound > 0) {
+    if (matchRound === maxRound) return grandFormat;
+    if (matchRound === maxRound - 1 && maxRound >= 2) return semiFormat;
+  }
+
+  return baseFormat;
+}
+
+

@@ -79,6 +79,7 @@ interface MatchRecord {
   rcon_last_command?: string;
   rcon_last_response?: string;
   game_state?: string;
+  match_stats?: any;
   config_data?: {
     knife_round?: boolean;
     practice_mode?: boolean;
@@ -201,7 +202,7 @@ export default function DashMatchPage() {
   const [copiedConnectId, setCopiedConnectId] = useState<string | null>(null);
 
   // In-match control state per match
-  const [matchControlTab, setMatchControlTab] = useState<Record<string, "quick" | "restore" | "players" | "finish" | "console">>({});
+  const [matchControlTab, setMatchControlTab] = useState<Record<string, "quick" | "restore" | "players" | "finish" | "console" | "stats">>({});
   const [restoreRoundInput, setRestoreRoundInput] = useState<Record<string, string>>({});
   const [addPlayerSteamId, setAddPlayerSteamId] = useState<Record<string, string>>({});
   const [addPlayerTeam, setAddPlayerTeam] = useState<Record<string, "team1" | "team2" | "spec">>({});
@@ -1195,46 +1196,53 @@ export default function DashMatchPage() {
                         </div>
 
                         {/* Connect Bar for Players */}
-                        <div className="flex items-center justify-between bg-slate-900 text-slate-200 rounded-lg p-2.5 text-xs font-mono gap-2 flex-wrap">
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="text-slate-400 select-none text-[11px]">Вход:</span>
-                            <span className="text-emerald-400 font-semibold truncate">{connectCmd}</span>
+                        {m.status === "starting" && (!m.rcon_last_response || m.rcon_last_response.includes("[Ошибка]")) ? (
+                          <div className="flex items-center justify-center bg-amber-900/10 text-amber-600 dark:text-amber-500 rounded-lg p-2.5 text-xs font-mono gap-2 border border-amber-500/20 animate-pulse">
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Запуск сервера... (около 40-50 сек)</span>
                           </div>
+                        ) : (
+                          <div className="flex items-center justify-between bg-slate-900 text-slate-200 rounded-lg p-2.5 text-xs font-mono gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="text-slate-400 select-none text-[11px]">Вход:</span>
+                              <span className="text-emerald-400 font-semibold truncate">{connectCmd}</span>
+                            </div>
 
-                          <div className="flex items-center gap-1.5">
-                            <a
-                              href={steamConnectUrl}
-                              className="inline-flex items-center gap-1 h-6 px-2 text-[10px] rounded bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold cursor-pointer transition-all"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              Зайти в игру
-                            </a>
+                            <div className="flex items-center gap-1.5">
+                              <a
+                                href={steamConnectUrl}
+                                className="inline-flex items-center gap-1 h-6 px-2 text-[10px] rounded bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold cursor-pointer transition-all"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                Зайти в игру
+                              </a>
 
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() =>
-                                copyToClipboard(connectCmd, () => {
-                                  setCopiedConnectId(m.id);
-                                  setTimeout(() => setCopiedConnectId(null), 2000);
-                                })
-                              }
-                              className="h-6 px-2 text-[10px] gap-1 shrink-0 bg-slate-800 hover:bg-slate-700 text-white cursor-pointer"
-                            >
-                              {copiedConnectId === m.id ? (
-                                <>
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                  Скопировано
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3" />
-                                  Копировать
-                                </>
-                              )}
-                            </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  copyToClipboard(connectCmd, () => {
+                                    setCopiedConnectId(m.id);
+                                    setTimeout(() => setCopiedConnectId(null), 2000);
+                                  })
+                                }
+                                className="h-6 px-2 text-[10px] gap-1 shrink-0 bg-slate-800 hover:bg-slate-700 text-white cursor-pointer"
+                              >
+                                {copiedConnectId === m.id ? (
+                                  <>
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                    Скопировано
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" />
+                                    Копировать
+                                  </>
+                                )}
+                              </Button>
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* In-Match Live Controls (MatchZy Controller) */}
                         {isLive && (() => {
@@ -1311,6 +1319,17 @@ export default function DashMatchPage() {
                                     }`}
                                   >
                                     💻 RCON
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMatchControlTab((prev) => ({ ...prev, [m.id]: "stats" }))}
+                                    className={`px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer ${
+                                      activeControlTab === "stats"
+                                        ? "bg-orange-500 text-white shadow-xs"
+                                        : "text-slate-600 dark:text-zinc-400 hover:text-slate-900"
+                                    }`}
+                                  >
+                                    📊 Статистика
                                   </button>
                                 </div>
                               </div>
@@ -2089,6 +2108,89 @@ export default function DashMatchPage() {
                                       {isBusyRcon ? "..." : "Отправить"}
                                     </Button>
                                   </div>
+                                </div>
+                              )}
+
+                              {/* TAB 6: STATS */}
+                              {activeControlTab === "stats" && (
+                                <div className="space-y-3">
+                                  {!m.match_stats ? (
+                                    <div className="text-center text-slate-500 dark:text-zinc-400 text-xs py-4">
+                                      Статистика появится после завершения первого раунда.
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-4">
+                                      {/* Team 1 */}
+                                      {m.match_stats.team1 && (
+                                        <div>
+                                          <div className="text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-2">
+                                            {m.match_stats.team1.name || m.team1_name || "Команда 1"} ({m.match_stats.team1.score || m.score1 || 0})
+                                          </div>
+                                          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+                                            <table className="w-full text-left text-[11px]">
+                                              <thead className="bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400">
+                                                <tr>
+                                                  <th className="px-2 py-1.5 font-medium w-full">Игрок</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center">K</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center">D</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center">A</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center">DMG</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center" title="Headshots">HS</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/50">
+                                                {Object.values(m.match_stats.team1.players || {}).map((p: any, idx: number) => (
+                                                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-zinc-900/50">
+                                                    <td className="px-2 py-1.5 text-slate-700 dark:text-zinc-300 truncate max-w-[120px]">{p.name || "Игрок"}</td>
+                                                    <td className="px-2 py-1.5 text-center font-medium text-emerald-600 dark:text-emerald-400">{p.stats?.kills || 0}</td>
+                                                    <td className="px-2 py-1.5 text-center text-red-500 dark:text-red-400">{p.stats?.deaths || 0}</td>
+                                                    <td className="px-2 py-1.5 text-center text-slate-600 dark:text-zinc-400">{p.stats?.assists || 0}</td>
+                                                    <td className="px-2 py-1.5 text-center text-slate-600 dark:text-zinc-400">{p.stats?.damage || 0}</td>
+                                                    <td className="px-2 py-1.5 text-center text-slate-500 dark:text-zinc-500">{p.stats?.headshot_kills || 0}</td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Team 2 */}
+                                      {m.match_stats.team2 && (
+                                        <div>
+                                          <div className="text-xs font-semibold text-slate-700 dark:text-zinc-300 mb-2">
+                                            {m.match_stats.team2.name || m.team2_name || "Команда 2"} ({m.match_stats.team2.score || m.score2 || 0})
+                                          </div>
+                                          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+                                            <table className="w-full text-left text-[11px]">
+                                              <thead className="bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400">
+                                                <tr>
+                                                  <th className="px-2 py-1.5 font-medium w-full">Игрок</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center">K</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center">D</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center">A</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center">DMG</th>
+                                                  <th className="px-2 py-1.5 font-medium text-center" title="Headshots">HS</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-slate-100 dark:divide-zinc-800/50">
+                                                {Object.values(m.match_stats.team2.players || {}).map((p: any, idx: number) => (
+                                                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-zinc-900/50">
+                                                    <td className="px-2 py-1.5 text-slate-700 dark:text-zinc-300 truncate max-w-[120px]">{p.name || "Игрок"}</td>
+                                                    <td className="px-2 py-1.5 text-center font-medium text-emerald-600 dark:text-emerald-400">{p.stats?.kills || 0}</td>
+                                                    <td className="px-2 py-1.5 text-center text-red-500 dark:text-red-400">{p.stats?.deaths || 0}</td>
+                                                    <td className="px-2 py-1.5 text-center text-slate-600 dark:text-zinc-400">{p.stats?.assists || 0}</td>
+                                                    <td className="px-2 py-1.5 text-center text-slate-600 dark:text-zinc-400">{p.stats?.damage || 0}</td>
+                                                    <td className="px-2 py-1.5 text-center text-slate-500 dark:text-zinc-500">{p.stats?.headshot_kills || 0}</td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               )}
 

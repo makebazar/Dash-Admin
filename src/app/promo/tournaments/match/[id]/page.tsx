@@ -1,9 +1,31 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import Link from "next/link";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-
+import {
+  Trophy,
+  Crown,
+  CheckCircle2,
+  Clock,
+  Copy,
+  Check,
+  Flame,
+  AlertTriangle,
+  MessageSquare,
+  Send,
+  ArrowLeft,
+  ChevronLeft,
+  Server,
+  Play,
+  Pause,
+  RefreshCw,
+  Monitor,
+  CheckCheck,
+  WifiOff,
+  Radio,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatMessage {
@@ -14,25 +36,90 @@ interface ChatMessage {
   created_at: string;
 }
 
+const MAP_PREVIEWS: Record<string, { name: string; image: string; desc: string }> = {
+  de_mirage: {
+    name: "Mirage",
+    image: "/images/maps/de_mirage.png",
+    desc: "Главный соревновательный выбор, открытые пленты и мид",
+  },
+  de_dust2: {
+    name: "Dust II",
+    image: "/images/maps/de_dust2.png",
+    desc: "Золотая классика Counter-Strike, длинные дуэли",
+  },
+  de_inferno: {
+    name: "Inferno",
+    image: "/images/maps/de_inferno.png",
+    desc: "Тактический контроль банана, ковров и апартаментов",
+  },
+  de_nuke: {
+    name: "Nuke",
+    image: "/images/maps/de_nuke.png",
+    desc: "Двухуровневый атомный комплекс, улица и рампа",
+  },
+  de_ancient: {
+    name: "Ancient",
+    image: "/images/maps/de_ancient.png",
+    desc: "Древние руины майя, джунгли и узкие коннекторы",
+  },
+  de_anubis: {
+    name: "Anubis",
+    image: "/images/maps/de_anubis.png",
+    desc: "Песчаные каналы, мост и быстрые размены",
+  },
+  de_vertigo: {
+    name: "Vertigo",
+    image: "/images/maps/de_vertigo.png",
+    desc: "Высотный небоскрёб на этапе строительства",
+  },
+  de_overpass: {
+    name: "Overpass",
+    image: "/images/maps/de_overpass.png",
+    desc: "Берлинский парк, каналы и эстакада",
+  },
+  de_train: {
+    name: "Train",
+    image: "/images/maps/de_train.png",
+    desc: "Железнодорожное депо, поезда и узкие переходы",
+  },
+  cs_office: {
+    name: "Office",
+    image: "/images/maps/cs_office.png",
+    desc: "Зимний офисный комплекс, спасение заложников",
+  },
+  cs_italy: {
+    name: "Italy",
+    image: "/images/maps/cs_italy.png",
+    desc: "Итальянские улочки и винные погреба",
+  },
+};
+
 export default function MatchLobby() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  const matchId = params.id; //params.id as string;
+  const matchId = params.id as string;
   const clubId = searchParams.get("clubId") || "";
 
-  const [loading, setLoading] = React.useState(true);
-  const [player, setPlayer] = React.useState<any>(null);
-  const [match, setMatch] = React.useState<any>(null);
-  const [checkins, setCheckins] = React.useState<any[]>([]);
-  const [veto, setVeto] = React.useState<any>(null);
-  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
-  
+  const [loading, setLoading] = useState(true);
+  const [player, setPlayer] = useState<any>(null);
+  const [match, setMatch] = useState<any>(null);
+  const [checkins, setCheckins] = useState<any[]>([]);
+  const [veto, setVeto] = useState<any>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
   // Form states
-  const [pcNumber, setPcNumber] = React.useState("");
-  const [chatInput, setChatInput] = React.useState("");
-  const [isSendingMsg, setIsSendingMsg] = React.useState(false);
-  const [isSubmittingCheckin, setIsSubmittingCheckin] = React.useState(false);
+  const [pcNumber, setPcNumber] = useState("");
+  const [steamIdInput, setSteamIdInput] = useState("");
+  const [chatInput, setChatInput] = useState("");
+  const [isSendingMsg, setIsSendingMsg] = useState(false);
+  const [isSubmittingCheckin, setIsSubmittingCheckin] = useState(false);
+  const [copiedConnect, setCopiedConnect] = useState(false);
+  const [isRequestingPause, setIsRequestingPause] = useState(false);
+  const [isRestartingServer, setIsRestartingServer] = useState(false);
+  const [vetoCountdown, setVetoCountdown] = useState(45);
+
+  const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const fetchLobbyData = async () => {
     try {
@@ -44,48 +131,74 @@ export default function MatchLobby() {
       setVeto(data.veto);
       setMessages(data.messages || []);
     } catch (err) {
-      console.error(err);
-      router.push(`/promo/tournaments?clubId=${clubId}`);
+      console.error("Error fetching lobby data:", err);
     }
   };
 
   const fetchPlayer = async () => {
     try {
       const res = await fetch("/api/promo/player");
-      if (res.status === 401) {
-        router.push(`/promo/login?clubId=${clubId}`);
-        return;
+      if (res.ok) {
+        const data = await res.json();
+        setPlayer(data.player);
+        const steam = data.player?.steam_id || data.player?.steam_link || "";
+        if (steam) {
+          setSteamIdInput(steam);
+        }
       }
-      const data = await res.json();
-      setPlayer(data.player);
     } catch (err) {
-      console.error(err);
+      console.error("Error fetching player:", err);
     }
   };
 
-  // Real-time SSE listener
-  React.useEffect(() => {
+  // Real-time SSE listener + fallback polling
+  useEffect(() => {
     fetchPlayer();
     fetchLobbyData().then(() => setLoading(false));
 
-    // Open SSE stream
-    const eventSource = new EventSource(`/api/promo/matches/${matchId}/stream`);
+    const sseUrl = `/api/promo/matches/${matchId}/stream${clubId ? `?clubId=${clubId}` : ""}`;
+    const eventSource = new EventSource(sseUrl);
 
     eventSource.addEventListener("update", () => {
-      console.log("[Lobby SSE] Update received, refetching...");
       fetchLobbyData();
     });
 
-    eventSource.addEventListener("ready", (e: any) => {
-      console.log("[Lobby SSE] Ready status:", e.data);
-    });
+    const pollInterval = setInterval(fetchLobbyData, 5000);
 
     return () => {
       eventSource.close();
+      clearInterval(pollInterval);
     };
-  }, [matchId]);
+  }, [matchId, clubId]);
 
-  // Actions
+  // Veto countdown timer (synced with server updated_at timestamp)
+  useEffect(() => {
+    if (match?.status?.toLowerCase() === "veto" && veto?.current_turn_competitor_id) {
+      const calculateRemaining = () => {
+        if (!veto?.updated_at) return 45;
+        const turnStartTime = new Date(veto.updated_at).getTime();
+        const elapsedSeconds = Math.floor((Date.now() - turnStartTime) / 1000);
+        return Math.max(0, 45 - elapsedSeconds);
+      };
+
+      setVetoCountdown(calculateRemaining());
+      const timer = setInterval(() => {
+        const remaining = calculateRemaining();
+        setVetoCountdown(remaining);
+        if (remaining === 0) {
+          fetchLobbyData();
+        }
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [match?.status, veto?.current_turn_competitor_id, veto?.updated_at]);
+
+  // Scroll chat to bottom on new message
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Action Handlers
   const handleCheckin = async () => {
     if (!pcNumber.trim() || isSubmittingCheckin) return;
     setIsSubmittingCheckin(true);
@@ -93,11 +206,15 @@ export default function MatchLobby() {
       const res = await fetch(`/api/promo/matches/${matchId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "checkin", pcNumber: pcNumber.trim() }),
+        body: JSON.stringify({
+          action: "checkin",
+          pcNumber: pcNumber.trim(),
+          steamId: steamIdInput.trim(),
+        }),
       });
       if (res.ok) {
-        setPcNumber("");
         await fetchLobbyData();
+        await fetchPlayer();
       } else {
         const data = await res.json();
         alert(data.error || "Ошибка подтверждения готовности");
@@ -120,10 +237,55 @@ export default function MatchLobby() {
         await fetchLobbyData();
       } else {
         const data = await res.json();
-        alert(data.error || "Невозможно забанить карту");
+        alert(data.error || "Невозможно выбрать эту карту");
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleTacticalPause = async () => {
+    if (isRequestingPause) return;
+    setIsRequestingPause(true);
+    try {
+      const res = await fetch(`/api/promo/matches/${matchId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "tactical_pause" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Тактическая пауза запрошена на сервере!");
+        await fetchLobbyData();
+      } else {
+        alert(data.error || "Не удалось запросить паузу");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRequestingPause(false);
+    }
+  };
+
+  const handleRestartServer = async () => {
+    if (isRestartingServer) return;
+    setIsRestartingServer(true);
+    try {
+      const res = await fetch(`/api/promo/matches/${matchId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restart_server" }),
+      });
+      if (res.ok) {
+        await fetchLobbyData();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Не удалось перезапустить сервер");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRestartingServer(false);
     }
   };
 
@@ -148,328 +310,948 @@ export default function MatchLobby() {
     }
   };
 
+  const handleCopyConnect = () => {
+    if (!match?.connectCommand) return;
+    navigator.clipboard.writeText(match.connectCommand);
+    setCopiedConnect(true);
+    setTimeout(() => setCopiedConnect(false), 2500);
+  };
+
   if (loading || !match) {
     return (
-      <div className="min-h-screen bg-[#070708] flex items-center justify-center">
-        <span>...</span>
+      <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center text-white space-y-4">
+        <div className="w-10 h-10 border-2 border-orange-500/20 border-t-orange-500 rounded-full animate-spin" />
+        <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
+          Загрузка лобби...
+        </p>
       </div>
     );
   }
 
-  // Helper checks
-  const isCheckedIn = checkins.some((c) => c.player_id === player?.id && c.is_ready);
+  // Competitor details
+  const compA = match.competitorA;
+  const compB = match.competitorB;
   const myCheckin = checkins.find((c) => c.player_id === player?.id);
+  const isCheckedIn = Boolean(myCheckin?.is_ready);
 
-  const isMemberOfA = (pId: string) => {
-    if (!match.competitorA) return false;
-    if (match.competitorA.playerId === pId) return true;
-    if (match.competitorA.roster && match.competitorA.roster.some((m: any) => m.id === pId)) return true;
-    return false;
-  };
+  const isSolo = (compA?.roster?.length || 1) <= 1 && (compB?.roster?.length || 1) <= 1;
 
-  const isMemberOfB = (pId: string) => {
-    if (!match.competitorB) return false;
-    if (match.competitorB.playerId === pId) return true;
-    if (match.competitorB.roster && match.competitorB.roster.some((m: any) => m.id === pId)) return true;
-    return false;
-  };
-
-  // Veto turns
-  const activeTurnComp = veto && (
-    veto.current_turn_competitor_id === match.competitorA?.id 
-      ? match.competitorA 
-      : (veto.current_turn_competitor_id === match.competitorB?.id ? match.competitorB : null)
+  const isParticipant = Boolean(
+    player?.id && (
+      compA?.playerId === player.id ||
+      compA?.captainId === player.id ||
+      compA?.roster?.some((p: any) => p.id === player.id || p.player_id === player.id) ||
+      compB?.playerId === player.id ||
+      compB?.captainId === player.id ||
+      compB?.roster?.some((p: any) => p.id === player.id || p.player_id === player.id) ||
+      checkins.some((c: any) => c.player_id === player.id)
+    )
   );
 
-  const isMyTurnToBan = !!(
-    veto && 
-    activeTurnComp && 
-    (activeTurnComp.playerId === player?.id || activeTurnComp.captainId === player?.id)
+  const isMyTurnToBan = Boolean(
+    veto &&
+    veto.current_turn_competitor_id &&
+    ((veto.current_turn_competitor_id === compA?.id && (compA.playerId === player?.id || compA.captainId === player?.id)) ||
+     (veto.current_turn_competitor_id === compB?.id && (compB.playerId === player?.id || compB.captainId === player?.id)))
   );
 
-  const statusLower = match.status?.toLowerCase();
+  const activeTurnName = veto?.current_turn_competitor_id === compA?.id
+    ? compA?.name
+    : (veto?.current_turn_competitor_id === compB?.id ? compB?.name : "Ожидание");
+
+  const statusLower = match.status?.toLowerCase() || "scheduled";
+  const isFinished = statusLower === "finished";
+  const isVeto = statusLower === "veto";
+  const isScheduled = statusLower === "scheduled" || statusLower === "pending";
+  const isMatchStarted = ["in_progress", "live", "playing", "finished"].includes(statusLower);
+
+  const serverStatus = match.serverStatus || "idle";
+  const isServerReady = ["ready", "warmup", "knife", "live", "paused"].includes(serverStatus);
+
+  const isWinnerA = isFinished && match.winnerId === compA?.id;
+  const isWinnerB = isFinished && match.winnerId === compB?.id;
+
+  const selectedMapKey = veto?.selected_map || match.selectedMap || "de_mirage";
+  const selectedMapInfo = MAP_PREVIEWS[selectedMapKey] || {
+    name: selectedMapKey.replace(/^(de_|cs_)/g, "").toUpperCase(),
+    image: `/images/maps/${selectedMapKey}.png`,
+    desc: "Соревновательная карта турнира",
+  };
+
   const format = match.matchFormat || "bo1";
-  const turnIndex = veto?.banned_maps?.length || 0;
-  const isPickTurn = format === "bo3" ? (turnIndex === 2 || turnIndex === 3) : (format === "bo5" ? (turnIndex >= 2 && turnIndex <= 5) : false);
+  const backUrl = `/promo/tournaments?clubId=${clubId}&tournamentId=${match.tournamentId}&tab=bracket`;
+
+  // Total ready count
+  const totalRosterCount = (compA?.roster?.length || 1) + (compB?.roster?.length || 1);
+  const readyCount = checkins.filter((c) => c.is_ready).length;
 
   return (
-    <div className="min-h-screen bg-[#070708] text-white selection:bg-orange-500/20 pb-12">
-      {/* Header */}
-      <header className="border-b border-white/5 bg-[#0c0c0e]/80 backdrop-blur-md sticky top-0 z-40 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center gap-4">
-          <div className="flex items-center gap-3">
-            
-            <div>
-              <h1 className="text-lg font-black uppercase italic tracking-tight">
-                Lobby <span className="text-orange-500">CS2 Match</span>
-              </h1>
-              <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">
-                ID матча: match_{match.id}
-              </p>
-            </div>
+    <div className="min-h-screen bg-[#070709] text-white selection:bg-orange-500/20 pb-10 font-sans">
+      
+      {/* 1. TOP NAVBAR */}
+      <header className="border-b border-white/5 bg-[#0c0c0e]/80 backdrop-blur-md sticky top-0 z-40 px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => router.push(backUrl)}
+              className="group flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gray-400 hover:text-white transition-colors shrink-0"
+            >
+              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform text-orange-500" />
+              <span>Назад к турниру</span>
+            </button>
+
+            {match.tournamentName && (
+              <>
+                <div className="w-px h-4 bg-white/10 hidden sm:block shrink-0" />
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:inline truncate">
+                  {match.tournamentName} • Раунд {match.round}
+                </span>
+              </>
+            )}
           </div>
-          <button
-            onClick={() => router.push(`/promo/tournaments?clubId=${clubId}`)}
-            className="text-xs text-gray-400 hover:text-white font-black uppercase tracking-widest bg-white/5 px-4 py-2 rounded-xl transition-colors border border-white/5"
-          >
-            Выйти
-          </button>
+
+          {/* Right Section: Clean Status without containers */}
+          <div className="shrink-0 flex items-center gap-2 text-xs font-black uppercase tracking-wider">
+            {isFinished ? (
+              <div className="flex items-center gap-2 text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span>Завершен ({match.score1 ?? 0}:{match.score2 ?? 0})</span>
+              </div>
+            ) : isServerReady ? (
+              <div className="flex items-center gap-2 text-red-400">
+                <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />
+                <span>LIVE {match.score1 ?? 0}:{match.score2 ?? 0}</span>
+              </div>
+            ) : serverStatus === "starting" ? (
+              <div className="flex items-center gap-2 text-orange-400">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Запуск CS2...</span>
+              </div>
+            ) : isVeto ? (
+              <div className="flex items-center gap-2 text-amber-400">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span>Выбор карт ({vetoCountdown}с)</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-gray-400">
+                <span className="w-2 h-2 rounded-full bg-orange-400" />
+                <span>Готовность {readyCount}/{totalRosterCount}</span>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* Main Grid */}
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          
-          {/* LEFT SIDE: Team A */}
-          <div className="bg-[#0c0c0e] border border-white/5 rounded-[2rem] p-6 space-y-6">
-            <div className="border-b border-white/5 pb-4">
-              <h3 className="text-sm font-black uppercase tracking-widest text-orange-500 truncate">
-                {match.competitorA?.name || "Команда А"}
-              </h3>
-              <span className="text-[8px] font-black uppercase tracking-widest text-gray-500">
-                Левая сторона
-              </span>
+      {/* 2. EDITORIAL HERO MATCH BANNER */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className="relative rounded-2xl bg-[#0e0e12] border border-white/5 p-5 sm:p-7 overflow-hidden shadow-2xl">
+          {/* Subtle map backdrop */}
+          {selectedMapInfo && (
+            <div
+              className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none filter blur-md transition-all duration-700"
+              style={{ backgroundImage: `url(${selectedMapInfo.image})` }}
+            />
+          )}
+
+          <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+            
+            {/* Team A */}
+            <div className="flex flex-col items-start min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
+                  {compA?.name || "Команда 1"}
+                </h2>
+                {isWinnerA && <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400 shrink-0" />}
+              </div>
+              {!isSolo && (
+                <span className="text-xs text-gray-400 font-medium tracking-wide mt-0.5">
+                  Состав: {compA?.roster?.length || 1} чел.
+                </span>
+              )}
             </div>
 
-            {/* Checkins / seats */}
-            <div className="space-y-4">
-              {checkins
-                .filter((c) => isMemberOfA(c.player_id))
-                .slice(0, 5) // Show top members
-                .map((c) => (
-                  <div key={c.player_id} className="flex justify-between items-center bg-white/5 p-3 rounded-2xl border border-white/5">
-                    <div>
-                      <span className="text-xs font-bold block truncate">{c.full_name}</span>
-                      <span className="text-[9px] text-gray-500">ПК: {c.pc_number || "выбирает..."}</span>
+            {/* Middle Score & Match Meta */}
+            <div className="text-center flex flex-col items-center justify-center">
+              <div className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white flex items-center justify-center gap-3">
+                <span className={cn(isWinnerA ? "text-emerald-400" : "")}>{match.score1 ?? 0}</span>
+                <span className="text-orange-500 font-sans font-light">:</span>
+                <span className={cn(isWinnerB ? "text-emerald-400" : "")}>{match.score2 ?? 0}</span>
+              </div>
+
+              <div className="mt-1 text-xs font-bold tracking-widest uppercase">
+                {veto?.selected_map ? (
+                  <span className="text-emerald-400">{format.toUpperCase()} • {selectedMapInfo.name}</span>
+                ) : isVeto ? (
+                  <span className="text-amber-400">{format.toUpperCase()} • ВЫБОР КАРТ ({vetoCountdown}С)</span>
+                ) : (
+                  <span className="text-gray-400">{format.toUpperCase()} • ПОДТВЕРЖДЕНИЕ ГОТОВНОСТИ</span>
+                )}
+              </div>
+            </div>
+
+            {/* Team B */}
+            <div className="flex flex-col items-start md:items-end min-w-0">
+              <div className="flex items-center gap-2">
+                {isWinnerB && <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400 shrink-0" />}
+                <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
+                  {compB?.name || "Команда 2"}
+                </h2>
+              </div>
+              {!isSolo && (
+                <span className="text-xs text-gray-400 font-medium tracking-wide mt-0.5">
+                  Состав: {compB?.roster?.length || 1} чел.
+                </span>
+              )}
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      {/* 3. MAIN ARENA (12 COLUMNS) */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          
+          {/* LEFT: TEAM A ROSTER (3 Cols) */}
+          <div className="lg:col-span-3">
+            <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-4 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-300 truncate max-w-[140px]">
+                  {isSolo ? "Участник" : (compA?.name || "Команда А")}
+                </h3>
+                <span className="text-[10px] font-bold text-gray-500 uppercase whitespace-nowrap shrink-0">
+                  {isSolo ? "1v1" : `${compA?.roster?.length || 1} ИГР.`}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {(compA?.roster || [{ id: compA?.playerId, full_name: compA?.name, nickname: compA?.name }]).map((p: any) => {
+                  const checkin = checkins.find((c) => c.player_id === p.id);
+                  const isCap = compA?.captainId === p.id || compA?.playerId === p.id;
+                  const playerName = p.nickname || p.full_name || p.name || compA?.name || "Игрок";
+                  const profileUrl = p.id ? `/promo/player/${p.id}${clubId ? `?clubId=${clubId}` : ""}` : null;
+
+                  return (
+                    <div
+                      key={p.id || playerName}
+                      className={cn(
+                        "py-2 px-3 rounded-lg transition-all flex items-center justify-between gap-3",
+                        checkin?.is_ready
+                          ? "bg-emerald-500/[0.04]"
+                          : "bg-white/[0.02]"
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          {profileUrl ? (
+                            <Link
+                              href={profileUrl}
+                              className="text-sm font-bold text-white hover:text-orange-400 transition-colors truncate block"
+                              title="Перейти в профиль игрока"
+                            >
+                              {playerName}
+                            </Link>
+                          ) : (
+                            <span className="text-sm font-bold text-white truncate">
+                              {playerName}
+                            </span>
+                          )}
+                          {isCap && !isSolo && (
+                            <span className="text-[9px] font-black uppercase tracking-wider text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">
+                              КЭП
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                          ПК {checkin?.pc_number ? `#${checkin.pc_number}` : "—"}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        {checkin?.is_ready ? (
+                          <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
+                            Готов
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                            Ожидание
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {c.is_ready ? (
-                      <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/50" />
-                    ) : (
-                      <span className="w-2.5 h-2.5 bg-red-500 rounded-full" />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* CENTER: Map Veto / Ban-Pick */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Veto Info Dashboard */}
-            <div className="bg-white/5 border border-white/5 rounded-[2rem] p-8 space-y-6">
-              {statusLower === "scheduled" && (
-                <div className="text-center space-y-6 py-4">
-                  <div className="w-16 h-16 bg-orange-500/10 rounded-3xl flex items-center justify-center mx-auto border border-orange-500/20">
-                    
-                  </div>
-                  <div className="space-y-2">
-                    <h2 className="text-2xl font-black uppercase italic tracking-tight">
-                      Подтверждение <span className="text-orange-500">Присутствия</span>
-                    </h2>
-                    <p className="text-xs text-gray-400 font-medium leading-relaxed max-w-sm mx-auto">
-                      Укажите номер вашего ПК в игровом зале клуба и нажмите «Я ГОТОВ», чтобы начать стадию выбора карт.
-                    </p>
-                  </div>
+          {/* MIDDLE: ACTION ARENA / THEATER (6 Cols) */}
+          <div className="lg:col-span-6 space-y-4">
 
-                  {!isCheckedIn ? (
-                    <div className="flex flex-col sm:flex-row gap-2 max-w-sm mx-auto">
+            {/* STAGE 1: CHECK-IN PHASE */}
+            {isScheduled && (
+              <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-6 space-y-5 shadow-2xl">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
+                    Этап 1: Готовность к матчу
+                  </div>
+                  <h2 className="text-lg font-black uppercase tracking-tight text-white">
+                    Подтверждение участия за ПК
+                  </h2>
+                  <p className="text-xs text-gray-400">
+                    Укажите номер вашего игрового места в клубе для авторизации на сервере
+                  </p>
+                </div>
+
+                {/* Readiness summary */}
+                <div className="bg-black/40 border border-white/5 rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="text-gray-400">Готовность участников</span>
+                    <span className="text-orange-400">{readyCount} из {totalRosterCount}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-orange-500 to-emerald-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (readyCount / Math.max(1, totalRosterCount)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Form */}
+                {!isCheckedIn ? (
+                  <div className="bg-[#121217] border border-white/10 rounded-xl p-5 space-y-4">
+                    <div>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-gray-300 block mb-1.5">
+                        Номер ПК в зале клуба *
+                      </label>
                       <input
                         type="text"
-                        placeholder="Ваш ПК (например: 12)..."
+                        placeholder="Например: 14 или VIP-2"
                         value={pcNumber}
                         onChange={(e) => setPcNumber(e.target.value)}
-                        className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-5 py-3.5 text-sm font-bold text-white focus:outline-none focus:border-orange-500 transition-colors"
+                        className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-orange-500 transition-all"
                       />
-                      <button
-                        onClick={handleCheckin}
-                        disabled={isSubmittingCheckin || !pcNumber.trim()}
-                        className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest px-6 py-4 rounded-2xl transition-colors shadow-lg shadow-orange-500/20"
+                    </div>
+
+                    {player?.steam_id || player?.steam_link ? (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                            Steam аккаунт
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            Привязан
+                          </span>
+                        </div>
+                        <div className="bg-black/50 border border-white/5 rounded-xl px-3.5 py-2.5 text-xs font-mono text-gray-300 truncate">
+                          {player?.steam_id || player?.steam_link}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-gray-300 block mb-1.5">
+                          Steam ID / Ссылка на профиль *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="76561198000000000 или ссылка"
+                          value={steamIdInput}
+                          onChange={(e) => setSteamIdInput(e.target.value)}
+                          className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-orange-500 transition-all"
+                        />
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleCheckin}
+                      disabled={isSubmittingCheckin || !pcNumber.trim() || !(player?.steam_id || player?.steam_link || steamIdInput.trim())}
+                      className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 active:scale-[0.99] flex items-center justify-center gap-2"
+                    >
+                      {isSubmittingCheckin ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CheckCheck className="w-4 h-4" />
+                      )}
+                      <span>Я готов к матчу</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-[#121217] border border-white/5 rounded-xl p-5 text-center space-y-1.5">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Вы готовы (ПК #{myCheckin?.pc_number})
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Ожидаем готовности остальных игроков...
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STAGE 2: MAP VETO PHASE */}
+            {isVeto && (
+              <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-5 sm:p-6 space-y-5 shadow-2xl">
+                <div className="flex items-center justify-between flex-wrap gap-4 border-b border-white/5 pb-3">
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
+                      Стадия выбора карт ({format.toUpperCase()})
+                    </div>
+                    <h2 className="text-base font-black uppercase tracking-tight text-white mt-0.5">
+                      {isMyTurnToBan ? (
+                        <span className="text-orange-400">Ваш ход: Забаньте карту</span>
+                      ) : (
+                        <span>Ход: <strong className="text-orange-400">{activeTurnName}</strong></span>
+                      )}
+                    </h2>
+                  </div>
+
+                  {/* Timer */}
+                  <div className="text-sm font-black font-mono text-orange-400 bg-orange-500/10 border border-orange-500/20 px-3 py-1 rounded-xl">
+                    {vetoCountdown}s
+                  </div>
+                </div>
+
+                {/* Map Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {(match.mapPool || []).map((map: string) => {
+                    const isBanned = veto?.banned_maps?.includes(map);
+                    const isSelected = veto?.selected_map?.split(",").includes(map);
+                    const preview = MAP_PREVIEWS[map] || {
+                      name: map.replace(/^(de_|cs_)/g, "").toUpperCase(),
+                      image: `/images/maps/${map}.png`,
+                      desc: "Карта турнирного пула",
+                    };
+
+                    return (
+                      <div
+                        key={map}
+                        onClick={() => {
+                          if (isMyTurnToBan && !isBanned && !isSelected) {
+                            handleVetoBan(map);
+                          }
+                        }}
+                        className={cn(
+                          "relative rounded-xl border overflow-hidden aspect-[4/3] flex flex-col justify-end p-3 transition-all duration-300 group select-none",
+                          isBanned
+                            ? "border-red-500/20 grayscale opacity-25 pointer-events-none"
+                            : isSelected
+                            ? "border-emerald-500 ring-2 ring-emerald-500/40 shadow-xl shadow-emerald-500/20"
+                            : isMyTurnToBan
+                            ? "border-white/20 hover:border-orange-500 hover:scale-[1.02] cursor-pointer shadow-lg hover:shadow-orange-500/10"
+                            : "border-white/5 opacity-80 pointer-events-none"
+                        )}
                       >
-                        Я готов
-                      </button>
+                        <div
+                          className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-110"
+                          style={{ backgroundImage: `url(${preview.image})` }}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
+
+                        <div className="relative z-10 space-y-0.5">
+                          {isBanned && (
+                            <span className="text-[9px] font-black uppercase text-red-400 block">
+                              Забанена
+                            </span>
+                          )}
+                          {isSelected && (
+                            <span className="text-[9px] font-black uppercase text-emerald-400 block">
+                              Выбрана
+                            </span>
+                          )}
+                          <h4 className="text-sm font-black uppercase tracking-wider text-white">
+                            {preview.name}
+                          </h4>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* STAGE 3 & 4: SERVER DEPLOYMENT, CONNECT & LIVE */}
+            {isMatchStarted && (
+              <div className="space-y-4">
+
+                {/* SCENARIO A: AGENT OFFLINE */}
+                {serverStatus === "agent_offline" && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5 space-y-3.5">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-black uppercase tracking-wider text-red-400">
+                        Агент DashMatch не запущен на сервере клуба
+                      </h3>
+                      <p className="text-xs text-gray-300 leading-relaxed">
+                        Для автоматического старта сервера запустите приложение <code className="text-orange-400 font-mono font-bold">dashmatch.exe</code> на хосте клуба.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={fetchLobbyData}
+                      className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 border border-white/10 active:scale-95"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Проверить снова</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* SCENARIO B: SERVER STARTING */}
+                {serverStatus === "starting" && (
+                  <div className="bg-[#0e0e12] border border-orange-500/20 rounded-2xl p-6 text-center space-y-3">
+                    <div className="w-8 h-8 border-2 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mx-auto" />
+                    <div className="space-y-0.5">
+                      <h3 className="text-sm font-black uppercase tracking-tight text-white">
+                        Запуск CS2 сервера в клубе...
+                      </h3>
+                      <p className="text-xs text-gray-400 max-w-md mx-auto">
+                        Выделение порта :{match.cs2ServerPort || 27015} и старт карты {selectedMapInfo.name}. Это занимает 10–20 секунд.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* SCENARIO C: SERVER TIMEOUT */}
+                {serverStatus === "start_failed" && (
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-5 space-y-3.5">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-black uppercase tracking-wider text-amber-400">
+                        Превышено время ожидания сервера
+                      </h3>
+                      <p className="text-xs text-gray-300">
+                        Сервер CS2 не сообщил о готовности. Возможно, порт был занят или агент переподключался.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleRestartServer}
+                      disabled={isRestartingServer}
+                      className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 flex items-center gap-2 active:scale-95"
+                    >
+                      {isRestartingServer ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                      )}
+                      <span>Перезапустить CS2</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* SCENARIO D: SERVER READY / LIVE */}
+                {isServerReady && !isFinished && (
+                  <div className="relative rounded-2xl bg-[#0e0e12] border border-emerald-500/30 p-5 space-y-4 shadow-2xl overflow-hidden">
+                    <div
+                      className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none filter blur-md"
+                      style={{ backgroundImage: `url(${selectedMapInfo.image})` }}
+                    />
+
+                    <div className="relative z-10 space-y-4">
+                      <div className="flex items-center justify-between flex-wrap gap-3 border-b border-white/5 pb-3">
+                        <div>
+                          <div className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                            <span>Сервер CS2 запущен</span>
+                          </div>
+                          <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-0.5">
+                            {serverStatus === "warmup" ? "Разминка" : serverStatus === "knife" ? "Ножевой раунд" : "Матч идет"} • Карта {selectedMapInfo.name}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleTacticalPause}
+                          disabled={isRequestingPause}
+                          className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all border border-white/5 flex items-center gap-1.5 active:scale-95"
+                        >
+                          <Pause className="w-3.5 h-3.5 text-orange-400" />
+                          <span>Тактическая пауза</span>
+                        </button>
+                      </div>
+
+                      {/* Connect bar */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                        <button
+                          onClick={handleCopyConnect}
+                          className="sm:col-span-8 py-3 px-3.5 bg-black/60 hover:bg-black/80 border border-white/10 hover:border-orange-500/40 rounded-xl text-xs font-mono font-bold text-gray-200 transition-all flex items-center justify-between gap-3 group"
+                        >
+                          <span className="truncate text-orange-400">
+                            {match.connectCommand || `connect ${match.cs2ServerIp}:${match.cs2ServerPort}`}
+                          </span>
+                          {copiedConnect ? (
+                            <span className="text-emerald-400 text-xs font-bold uppercase shrink-0">
+                              Скопировано
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 group-hover:text-white text-xs font-bold uppercase shrink-0">
+                              Копировать
+                            </span>
+                          )}
+                        </button>
+
+                        <a
+                          href={`steam://connect/${match.cs2ServerIp || "127.0.0.1"}:${match.cs2ServerPort || 27015}`}
+                          className="sm:col-span-4 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-[0.98]"
+                        >
+                          <Play className="w-4 h-4 fill-white" />
+                          <span>Зайти в CS2</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* MATCH STATS SCOREBOARD */}
+                <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-5 space-y-4 shadow-xl">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-white">
+                      Статистика матча
+                    </h3>
+                    <span className="text-xs font-mono font-bold text-gray-400">
+                      {match.score1 ?? 0} : {match.score2 ?? 0}
+                    </span>
+                  </div>
+
+                  {isSolo ? (
+                    /* SOLO 1v1 DUEL TABLE */
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
+                            <th className="py-1.5">Участник</th>
+                            <th className="py-1.5 text-center">K</th>
+                            <th className="py-1.5 text-center">D</th>
+                            <th className="py-1.5 text-center">A</th>
+                            <th className="py-1.5 text-center">ADR</th>
+                            <th className="py-1.5 text-center">HS%</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {/* Player A */}
+                          {(() => {
+                            const p = match.matchStats?.team1?.players?.[0] || {
+                              name: compA?.name || compA?.roster?.[0]?.nickname || "Игрок 1",
+                              kills: 0,
+                              deaths: 0,
+                              assists: 0,
+                              adr: "-",
+                              hs_percent: 0,
+                              mvps: 0,
+                            };
+                            return (
+                              <tr key="player-a" className="hover:bg-white/[0.02]">
+                                <td className="py-2.5 font-bold text-white flex items-center gap-2">
+                                  <span className="text-orange-400 font-black">•</span>
+                                  <span>{p.name}</span>
+                                  {p.mvps > 0 && <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>}
+                                </td>
+                                <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{p.kills ?? 0}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{p.deaths ?? 0}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{p.assists ?? 0}</td>
+                                <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{p.adr ?? p.damage ?? "-"}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                              </tr>
+                            );
+                          })()}
+
+                          {/* Player B */}
+                          {(() => {
+                            const p = match.matchStats?.team2?.players?.[0] || {
+                              name: compB?.name || compB?.roster?.[0]?.nickname || "Игрок 2",
+                              kills: 0,
+                              deaths: 0,
+                              assists: 0,
+                              adr: "-",
+                              hs_percent: 0,
+                              mvps: 0,
+                            };
+                            return (
+                              <tr key="player-b" className="hover:bg-white/[0.02]">
+                                <td className="py-2.5 font-bold text-white flex items-center gap-2">
+                                  <span className="text-blue-400 font-black">•</span>
+                                  <span>{p.name}</span>
+                                  {p.mvps > 0 && <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>}
+                                </td>
+                                <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{p.kills ?? 0}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{p.deaths ?? 0}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{p.assists ?? 0}</td>
+                                <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{p.adr ?? p.damage ?? "-"}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                              </tr>
+                            );
+                          })()}
+                        </tbody>
+                      </table>
                     </div>
                   ) : (
-                    <div className="inline-flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/20 px-4 py-2 rounded-2xl text-emerald-400 text-xs font-bold">
-                      
-                      Вы готовы (ПК: {myCheckin?.pc_number})
+                    /* TEAM MATCH SCOREBOARD */
+                    <div className="space-y-4">
+                      {/* Team 1 Scoreboard */}
+                      <div className="space-y-1.5">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
+                          {compA?.name || "Команда 1"}
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
+                                <th className="py-1">Игрок</th>
+                                <th className="py-1 text-center">K</th>
+                                <th className="py-1 text-center">D</th>
+                                <th className="py-1 text-center">A</th>
+                                <th className="py-1 text-center">ADR</th>
+                                <th className="py-1 text-center">HS%</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {(match.matchStats?.team1?.players?.length
+                                ? match.matchStats.team1.players
+                                : (compA?.roster || [{ id: compA?.playerId, full_name: compA?.name, nickname: compA?.name }]).map((p: any) => ({
+                                    name: p.nickname || p.full_name || p.name || compA?.name || "Игрок",
+                                    steamid: p.steam_id || p.id,
+                                    kills: 0,
+                                    deaths: 0,
+                                    assists: 0,
+                                    adr: "-",
+                                    hs_percent: 0,
+                                    mvps: 0,
+                                  }))
+                              ).map((p: any) => (
+                                <tr key={p.steamid || p.name} className="hover:bg-white/[0.02]">
+                                  <td className="py-1.5 font-bold text-white flex items-center gap-1.5">
+                                    <span>{p.name}</span>
+                                    {p.mvps > 0 && (
+                                      <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>
+                                    )}
+                                  </td>
+                                  <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills ?? 0}</td>
+                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths ?? 0}</td>
+                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.assists ?? 0}</td>
+                                  <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr ?? p.damage ?? "-"}</td>
+                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Team 2 Scoreboard */}
+                      <div className="space-y-1.5 pt-2">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-blue-400">
+                          {compB?.name || "Команда 2"}
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
+                                <th className="py-1">Игрок</th>
+                                <th className="py-1 text-center">K</th>
+                                <th className="py-1 text-center">D</th>
+                                <th className="py-1 text-center">A</th>
+                                <th className="py-1 text-center">ADR</th>
+                                <th className="py-1 text-center">HS%</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {(match.matchStats?.team2?.players?.length
+                                ? match.matchStats.team2.players
+                                : (compB?.roster || [{ id: compB?.playerId, full_name: compB?.name, nickname: compB?.name }]).map((p: any) => ({
+                                    name: p.nickname || p.full_name || p.name || compB?.name || "Игрок",
+                                    steamid: p.steam_id || p.id,
+                                    kills: 0,
+                                    deaths: 0,
+                                    assists: 0,
+                                    adr: "-",
+                                    hs_percent: 0,
+                                    mvps: 0,
+                                  }))
+                              ).map((p: any) => (
+                                <tr key={p.steamid || p.name} className="hover:bg-white/[0.02]">
+                                  <td className="py-1.5 font-bold text-white flex items-center gap-1.5">
+                                    <span>{p.name}</span>
+                                    {p.mvps > 0 && (
+                                      <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>
+                                    )}
+                                  </td>
+                                  <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills ?? 0}</td>
+                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths ?? 0}</td>
+                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.assists ?? 0}</td>
+                                  <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr ?? p.damage ?? "-"}</td>
+                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
-              )}
 
-              {/* VETO MAPS CARDS */}
-              {statusLower === "veto" && veto && (
-                <div className="space-y-6">
-                  <div className="text-center">
-                    <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 block mb-1">
-                      Стадия Выбора Карт ({format.toUpperCase()})
-                    </span>
-                    <h3 className="text-md font-black uppercase italic tracking-tight text-orange-500">
-                      {isMyTurnToBan 
-                        ? (isPickTurn ? "ВАШ ХОД ВЫБИРАТЬ КАРТУ" : "ВАШ ХОД БАНИТЬ КАРТУ") 
-                        : "ОЖИДАНИЕ ХОДА СОПЕРНИКА"}
-                    </h3>
+                {/* SCENARIO E: FINISHED VICTORY BANNER */}
+                {isFinished && (
+                  <div className="bg-[#0e0e12] border border-emerald-500/30 rounded-2xl p-6 text-center space-y-3 shadow-2xl">
+                    <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 mx-auto flex items-center justify-center text-emerald-400">
+                      <Trophy className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                        Матч Завершен
+                      </div>
+                      <h3 className="text-lg font-black uppercase tracking-tight text-white">
+                        Победитель: {isWinnerA ? compA?.name : (isWinnerB ? compB?.name : "Ничья")}
+                      </h3>
+                      <p className="text-xs text-gray-400">
+                        Итоговый счет серии: {match.score1 ?? 0} : {match.score2 ?? 0}
+                      </p>
+                    </div>
+
+                    <div className="pt-1">
+                      <button
+                        onClick={() => router.push(backUrl)}
+                        className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+                      >
+                        Вернуться к сетке
+                      </button>
+                    </div>
                   </div>
+                )}
+              </div>
+            )}
+          </div>
 
-                  {/* Grid of maps */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {match.mapPool.map((map: string) => {
-                      const isBanned = veto.banned_maps?.includes(map);
-                      const isSelected = veto.selected_map?.split(',').includes(map);
+          {/* RIGHT: TEAM B ROSTER (3 Cols) */}
+          <div className="lg:col-span-3">
+            <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-4 space-y-3 shadow-xl">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-300 truncate max-w-[140px]">
+                  {isSolo ? "Участник" : (compB?.name || "Команда Б")}
+                </h3>
+                <span className="text-[10px] font-bold text-gray-500 uppercase whitespace-nowrap shrink-0">
+                  {isSolo ? "1v1" : `${compB?.roster?.length || 1} ИГР.`}
+                </span>
+              </div>
 
-                      return (
-                        <div
-                          key={map}
-                          onClick={() => {
-                            if (isMyTurnToBan && !isBanned && !veto.selected_map) {
-                              handleVetoBan(map);
-                            }
-                          }}
-                          className={cn(
-                            "relative overflow-hidden rounded-2xl border aspect-video flex items-center justify-center cursor-pointer transition-all group",
-                            isBanned
-                              ? "border-white/5 grayscale opacity-20 pointer-events-none"
-                              : isSelected
-                              ? "border-emerald-500 ring-2 ring-emerald-500/20"
-                              : isMyTurnToBan
-                              ? "border-white/10 hover:border-orange-500 shadow-md hover:shadow-orange-500/5"
-                              : "border-white/5 pointer-events-none"
-                          )}
-                        >
-                          {/* Map Image Placeholder or Name */}
-                          <div className="absolute inset-0 bg-[#121214] flex flex-col justify-center items-center p-4">
-                            <span className="font-black text-xs uppercase tracking-widest group-hover:scale-105 transition-transform">
-                              {map.replace("de_", "")}
+              <div className="space-y-2">
+                {(compB?.roster || [{ id: compB?.playerId, full_name: compB?.name, nickname: compB?.name }]).map((p: any) => {
+                  const checkin = checkins.find((c) => c.player_id === p.id);
+                  const isCap = compB?.captainId === p.id || compB?.playerId === p.id;
+                  const playerName = p.nickname || p.full_name || p.name || compB?.name || "Игрок";
+                  const profileUrl = p.id ? `/promo/player/${p.id}${clubId ? `?clubId=${clubId}` : ""}` : null;
+
+                  return (
+                    <div
+                      key={p.id || playerName}
+                      className={cn(
+                        "py-2 px-3 rounded-lg transition-all flex items-center justify-between gap-3",
+                        checkin?.is_ready
+                          ? "bg-emerald-500/[0.04]"
+                          : "bg-white/[0.02]"
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          {profileUrl ? (
+                            <Link
+                              href={profileUrl}
+                              className="text-sm font-bold text-white hover:text-orange-400 transition-colors truncate block"
+                              title="Перейти в профиль игрока"
+                            >
+                              {playerName}
+                            </Link>
+                          ) : (
+                            <span className="text-sm font-bold text-white truncate">
+                              {playerName}
                             </span>
-                            {isBanned && (
-                              <span className="text-[8px] font-black uppercase tracking-widest text-red-500 mt-1">
-                                Забанена
-                              </span>
-                            )}
-                            {isSelected && (
-                              <span className="text-[8px] font-black uppercase tracking-widest text-emerald-400 mt-1">
-                                Выбрана
-                              </span>
-                            )}
-                          </div>
+                          )}
+                          {isCap && !isSolo && (
+                            <span className="text-[9px] font-black uppercase tracking-wider text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                              КЭП
+                            </span>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                        <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                          ПК {checkin?.pc_number ? `#${checkin.pc_number}` : "—"}
+                        </div>
+                      </div>
 
-              {/* LIVE SERVER READY */}
-              {statusLower === "live" && (
-                <div className="text-center space-y-6 py-6">
-                  <div className="w-16 h-16 bg-emerald-500/10 rounded-3xl flex items-center justify-center mx-auto border border-emerald-500/20">
-                    
-                  </div>
-                  <div className="space-y-2">
-                    <h2 className="text-2xl font-black uppercase italic tracking-tight text-emerald-400">
-                      Сервер Запущен!
-                    </h2>
-                    <p className="text-xs text-gray-400 font-medium max-w-xs mx-auto">
-                      {veto?.selected_map?.includes(",") ? (
-                        <>
-                          Карты: <strong className="text-white uppercase">{veto.selected_map.split(",").map((m: string) => m.replace("de_", "")).join(", ")}</strong>.
-                        </>
-                      ) : (
-                        <>
-                          Карта: <strong className="text-white uppercase">{veto?.selected_map?.replace("de_", "")}</strong>.
-                        </>
-                      )} Нажмите кнопку подключения, чтобы войти в игру.
-                    </p>
-                  </div>
-
-                  {/* Connect link */}
-                  <a
-                    href={`steam://connect/${match.cs2ServerIp || "127.0.0.1"}:${match.cs2ServerPort || 27015}`}
-                    className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-sm uppercase tracking-widest px-8 py-5 rounded-3xl transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
-                  >
-                    Зайти на сервер
-                  </a>
-                </div>
-              )}
+                      <div className="shrink-0 text-right">
+                        {checkin?.is_ready ? (
+                          <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
+                            Готов
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                            Ожидание
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* RIGHT SIDE: Team B */}
-          <div className="bg-[#0c0c0e] border border-white/5 rounded-[2rem] p-6 space-y-6">
-            <div className="border-b border-white/5 pb-4 text-right">
-              <h3 className="text-sm font-black uppercase tracking-widest text-orange-500 truncate">
-                {match.competitorB?.name || "Команда Б"}
+        </div>
+
+        {/* FULL-WIDTH MATCH CHAT (Only for match participants) */}
+        {isParticipant && (
+          <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-4 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-white/5 pb-2">
+              <h3 className="text-xs font-black uppercase tracking-wider text-white">
+                Чат матча
               </h3>
-              <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 text-right">
-                Правая сторона
+              <span className="text-[10px] text-gray-500 font-medium">
+                Только для участников лобби
               </span>
             </div>
 
-            {/* Checkins / seats */}
-            <div className="space-y-4">
-              {checkins
-                .filter((c) => isMemberOfB(c.player_id))
-                .slice(0, 5)
-                .map((c) => (
-                  <div key={c.player_id} className="flex justify-between items-center bg-white/5 p-3 rounded-2xl border border-white/5">
-                    {c.is_ready ? (
-                      <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/50" />
-                    ) : (
-                      <span className="w-2.5 h-2.5 bg-red-500 rounded-full" />
-                    )}
-                    <div className="text-right">
-                      <span className="text-xs font-bold block truncate">{c.full_name}</span>
-                      <span className="text-[9px] text-gray-500">ПК: {c.pc_number || "выбирает..."}</span>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
-
-        {/* BOTTOM SECTION: Chat lobby */}
-        <div className="bg-[#0c0c0e] border border-white/5 rounded-[2rem] p-6 space-y-4">
-          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-orange-500 px-1">
-            
-            Чат лобби
-          </div>
-
-          {/* Messages list */}
-          <div className="h-48 overflow-y-auto bg-black/30 p-4 rounded-2xl border border-white/5 space-y-3 custom-scrollbar flex flex-col-reverse">
-            <div className="space-y-3">
-              {messages.map((m) => (
-                <div key={m.id} className="text-xs">
-                  <strong className="text-orange-500 font-bold mr-1.5">{m.sender_name}:</strong>
-                  <span className="text-gray-300">{m.body}</span>
-                  <span className="text-[8px] text-gray-600 ml-2">
-                    {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </span>
+            {/* Message Feed */}
+            <div className="min-h-[40px] max-h-[160px] overflow-y-auto py-1 space-y-1.5 pr-1 text-xs">
+              {messages.length === 0 ? (
+                <div className="py-3 text-[11px] text-gray-500 uppercase tracking-wider text-center">
+                  Сообщений пока нет
                 </div>
-              ))}
-              {messages.length === 0 && (
-                <p className="text-gray-600 text-center py-12">Нет сообщений. Поприветствуйте соперников!</p>
+              ) : (
+                messages.map((m) => (
+                  <div key={m.id} className="flex items-baseline gap-2 py-0.5">
+                    <span className="text-[10px] font-mono text-gray-500 shrink-0">
+                      {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <span className="font-bold text-orange-400 shrink-0 text-xs">
+                      {m.sender_name}:
+                    </span>
+                    <span className="text-gray-200 break-words text-xs">
+                      {m.body}
+                    </span>
+                  </div>
+                ))
               )}
+              <div ref={chatBottomRef} />
             </div>
-          </div>
 
-          {/* Message form */}
-          <form onSubmit={handleSendMessage} className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Введите сообщение в чат матча..."
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-xs font-bold text-white focus:outline-none focus:border-orange-500 transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={isSendingMsg || !chatInput.trim()}
-              className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 p-4 rounded-2xl text-white transition-colors"
-            >
-              
-            </button>
-          </form>
-        </div>
+            {/* Chat Input */}
+            <form onSubmit={handleSendMessage} className="pt-1 flex gap-2">
+              <input
+                type="text"
+                placeholder="Написать сообщение в чат матча..."
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-orange-500 transition-all"
+              />
+              <button
+                type="submit"
+                disabled={isSendingMsg || !chatInput.trim()}
+                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 shrink-0 flex items-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Отправить</span>
+              </button>
+            </form>
+          </div>
+        )}
       </main>
     </div>
   );

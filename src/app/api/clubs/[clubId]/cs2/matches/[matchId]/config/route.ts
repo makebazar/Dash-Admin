@@ -113,7 +113,20 @@ export async function GET(
       const comp = compRes.rows[0];
       const playersMap: Record<string, string> = {};
 
-      if (comp.type === "TEAM" && comp.team_id) {
+      if (comp.type === "TEAM" && comp.promo_team_id) {
+        const membersRes = await client.query(
+          `SELECT p.steam_id, COALESCE(p.nickname, p.full_name, tm.phone) as full_name
+           FROM promo_team_members tm
+           JOIN promo_players p ON tm.phone = p.phone_number
+           WHERE tm.team_id = $1`,
+          [comp.promo_team_id]
+        );
+        for (const m of membersRes.rows) {
+          if (m.steam_id) {
+            playersMap[m.steam_id] = m.full_name;
+          }
+        }
+      } else if (comp.type === "TEAM" && comp.team_id) {
         const membersRes = await client.query(
           `SELECT p.steam_id, p.full_name
            FROM team_members tm
@@ -128,7 +141,7 @@ export async function GET(
         }
       } else if (comp.player_id) {
         const playerRes = await client.query(
-          `SELECT steam_id, full_name FROM promo_players WHERE id = $1`,
+          `SELECT steam_id, COALESCE(nickname, full_name) as full_name FROM promo_players WHERE id = $1`,
           [comp.player_id]
         );
         if (playerRes.rows.length > 0 && playerRes.rows[0].steam_id) {
@@ -145,9 +158,19 @@ export async function GET(
     const team1 = await fetchCompetitorRoster(match.competitor_a_id, "Team 1");
     const team2 = await fetchCompetitorRoster(match.competitor_b_id, "Team 2");
 
+    // Check if veto selected maps exist
+    const vetoRes = await client.query(
+      `SELECT selected_map FROM match_veto WHERE match_id = $1`,
+      [match.id]
+    ).catch(() => ({ rows: [] }));
+    const vetoSelectedMap = vetoRes.rows[0]?.selected_map;
+
     const tConfig = match.tournament_config || {};
-    const mapPool = tConfig.mapPool || ["de_mirage", "de_dust2", "de_inferno"];
-    const numMaps = tConfig.numMaps || 1;
+    let mapPool = tConfig.mapPool || ["de_mirage", "de_dust2", "de_inferno"];
+    if (vetoSelectedMap) {
+      mapPool = vetoSelectedMap.split(",").map((s: string) => s.trim()).filter(Boolean);
+    }
+    const numMaps = tConfig.numMaps || (mapPool.length > 1 ? mapPool.length : 1);
     const safeNumMaps = Math.max(1, Math.min(numMaps, mapPool.length));
 
     // Build MatchZy/Get5 compatible match config

@@ -240,19 +240,10 @@ export function ClubSidebarContent({
       visible: false, // Временно скрыто
     },
     {
-        href: `/clubs/${clubId}/tournaments`,
-        label: "Турниры",
-        icon: (
-          <Trophy className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
-        ),
-        visible:
-          !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
-      },
-      {
-        href: `/clubs/${clubId}/dashmatch`,
-      label: "DashMatch",
+      href: `/clubs/${clubId}/tournaments`,
+      label: "Турниры",
       icon: (
-        <Gamepad2 className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
+        <Trophy className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
       ),
       visible:
         !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
