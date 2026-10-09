@@ -109,33 +109,35 @@ export default function TournamentsPortal() {
   };
 
   const fetchTournaments = async (targetClubId = clubId) => {
-    if (!targetClubId) return;
+    const cid = targetClubId || clubId || "1";
     try {
-      const res = await fetch(`/api/clubs/${targetClubId}/tournaments`);
+      const res = await fetch(`/api/clubs/${cid}/tournaments`);
+      if (!res.ok) return;
       const data = await res.json();
       setTournaments(data.tournaments || []);
     } catch (err) {
-      console.error(err);
+      console.error("fetchTournaments error:", err);
     }
   };
 
   const fetchTournamentDetails = async (id: string | number, targetClubId = clubId) => {
-    if (!targetClubId) return;
+    const cid = targetClubId || clubId || "1";
     try {
-      const res = await fetch(`/api/clubs/${targetClubId}/tournaments?id=${id}`);
+      const res = await fetch(`/api/clubs/${cid}/tournaments?id=${id}`);
+      if (!res.ok) return;
       const data = await res.json();
       setActiveTournament(data.tournament);
       setCompetitors(data.competitors || []);
       setMatches(data.matches || []);
     } catch (err) {
-      console.error(err);
+      console.error("fetchTournamentDetails error:", err);
     }
   };
 
   const fetchLeaderboard = async (discipline: string, targetClubId = clubId) => {
+    const cid = targetClubId || clubId || "1";
     try {
-      if (!targetClubId) return;
-      const boardRes = await fetch(`/api/promo/public/board-data?discipline=${discipline}&clubId=${targetClubId}`);
+      const boardRes = await fetch(`/api/promo/public/board-data?discipline=${discipline}&clubId=${cid}`);
       if (!boardRes.ok) {
         setLeaderboard([]);
         return;
@@ -143,7 +145,7 @@ export default function TournamentsPortal() {
       const boardData = await boardRes.json();
       setLeaderboard(boardData.leaderboard || []);
     } catch (err) {
-      console.error(err);
+      console.error("fetchLeaderboard error:", err);
     }
   };
 
@@ -153,15 +155,13 @@ export default function TournamentsPortal() {
     async function init() {
       setLoading(true);
       const resolvedClubId = await fetchPlayerAndTeam(undefined, urlClubId);
-      const effectiveClub = resolvedClubId || urlClubId;
+      const effectiveClub = resolvedClubId || urlClubId || "1";
 
-      if (effectiveClub) {
-        await fetchTournaments(effectiveClub);
+      await fetchTournaments(effectiveClub);
 
-        // Auto-load tournament if URL has tournamentId
-        if (urlTournamentId) {
-          await fetchTournamentDetails(urlTournamentId, effectiveClub);
-        }
+      // Auto-load tournament if URL has tournamentId
+      if (urlTournamentId) {
+        await fetchTournamentDetails(urlTournamentId, effectiveClub);
       }
 
       // Handle auto-join via invite link
@@ -172,8 +172,8 @@ export default function TournamentsPortal() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "join", joinCode: urlJoinCode.trim().toUpperCase() }),
           });
-          const joinData = await joinRes.json();
           if (joinRes.ok) {
+            const joinData = await joinRes.json();
             alert("Вы успешно вступили в команду по приглашению!");
             await fetchPlayerAndTeam(joinData.teamId, effectiveClub);
             setActiveTab("team");

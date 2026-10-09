@@ -39,8 +39,7 @@ export function middleware(req: NextRequest) {
     // Prevent game domain from accessing admin panels or internal app routes
     const isAllowedPath =
       pathname.startsWith("/promo") ||
-      pathname.startsWith("/api/promo") ||
-      pathname.startsWith("/api/upload") ||
+      pathname.startsWith("/api") ||
       pathname.startsWith("/_next") ||
       pathname.startsWith("/favicon.ico") ||
       pathname.includes(".");
