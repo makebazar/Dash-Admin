@@ -40,7 +40,7 @@ export async function GET(
        FROM promo_players p
        LEFT JOIN promo_player_balances b ON p.id = b.player_id
        LEFT JOIN clubs c ON b.club_id = c.id
-       WHERE p.id = $1
+       WHERE p.id::text = $1 OR p.phone_number = $1
        ORDER BY b.total_xp DESC
        LIMIT 1`,
       [targetPlayerId]

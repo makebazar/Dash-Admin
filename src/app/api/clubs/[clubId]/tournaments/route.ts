@@ -207,16 +207,25 @@ export async function GET(
       // Fetch competitors (including team rosters and solo ELO if applicable)
       const competitorsRes = await client.query(
         `SELECT c.id, c.type, c.display_name, c.team_id, c.promo_team_id, c.player_id, c.meta, e.status as payment_status,
-                COALESCE(solo_elo.elo, 1000) as player_elo,
+                COALESCE(solo_p.faceit_elo, solo_elo.elo, 1000) as player_elo,
+                solo_p.faceit_lvl as player_faceit_lvl,
+                solo_p.faceit_link as player_faceit_link,
+                COALESCE(solo_p.avatar_url, solo_p.faceit_avatar) as player_avatar_url,
+                COALESCE(solo_p.nickname, solo_p.full_name, c.display_name) as player_name,
                 COALESCE(pt.logo_url, t_teams.logo_url) as team_logo,
                 COALESCE(
                   (
                     SELECT json_agg(json_build_object(
                       'id', p.id,
                       'fullName', COALESCE(p.nickname, p.full_name, ptm.phone),
+                      'nickname', p.nickname,
                       'phoneNumber', ptm.phone,
                       'role', ptm.role,
-                      'elo', COALESCE(elo.elo, 1000)
+                      'avatarUrl', COALESCE(p.avatar_url, p.faceit_avatar),
+                      'faceitLink', p.faceit_link,
+                      'faceitLvl', p.faceit_lvl,
+                      'faceitElo', p.faceit_elo,
+                      'elo', COALESCE(p.faceit_elo, elo.elo, 1000)
                     ))
                     FROM promo_team_members ptm
                     LEFT JOIN promo_players p ON ptm.phone = p.phone_number
@@ -226,10 +235,15 @@ export async function GET(
                   (
                     SELECT json_agg(json_build_object(
                       'id', p.id,
-                      'fullName', p.full_name,
+                      'fullName', COALESCE(p.nickname, p.full_name),
+                      'nickname', p.nickname,
                       'phoneNumber', p.phone_number,
                       'role', 'player',
-                      'elo', COALESCE(elo.elo, 1000)
+                      'avatarUrl', COALESCE(p.avatar_url, p.faceit_avatar),
+                      'faceitLink', p.faceit_link,
+                      'faceitLvl', p.faceit_lvl,
+                      'faceitElo', p.faceit_elo,
+                      'elo', COALESCE(p.faceit_elo, elo.elo, 1000)
                     ))
                     FROM team_members tm
                     JOIN promo_players p ON tm.player_id::text = p.id::text
@@ -240,6 +254,7 @@ export async function GET(
          FROM tournament_competitors c
          JOIN tournament_entries e ON c.id = e.competitor_id
          JOIN club_tournaments t ON c.tournament_id = t.id
+         LEFT JOIN promo_players solo_p ON c.player_id::text = solo_p.id::text
          LEFT JOIN teams t_teams ON c.team_id::text = t_teams.id::text
          LEFT JOIN promo_teams pt ON c.promo_team_id = pt.id
          LEFT JOIN discipline_elo solo_elo ON c.player_id::text = solo_elo.player_id::text AND solo_elo.discipline = t.discipline
