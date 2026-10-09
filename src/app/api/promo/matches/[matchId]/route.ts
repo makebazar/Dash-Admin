@@ -619,16 +619,19 @@ export async function POST(
         return NextResponse.json({ error: "Укажите номер ПК" }, { status: 400 });
       }
 
-      await client.query("BEGIN");
-
-      // Update Steam ID if provided
+      // Update Steam ID if provided (run before transaction block so any validation issue doesn't abort transaction)
       if (steamId && typeof steamId === "string" && steamId.trim().length > 0) {
         const cleanSteam = steamId.trim();
         await client.query(
-          `UPDATE promo_players SET steam_id = $1 WHERE id::text = $2 OR phone_number = $2`,
-          [cleanSteam, playerId]
-        ).catch(() => {});
+          `UPDATE promo_players 
+           SET steam_id = $1,
+               steam_link = CASE WHEN $1 LIKE 'http%' THEN $1 ELSE steam_link END
+           WHERE id::text = $2 OR phone_number = $2`,
+          [cleanSteam, String(playerId)]
+        ).catch((err: any) => console.warn("[Checkin steam update note]:", err.message));
       }
+
+      await client.query("BEGIN");
 
       // Save check-in
       await client.query(
