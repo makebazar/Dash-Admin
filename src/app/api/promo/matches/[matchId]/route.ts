@@ -400,7 +400,7 @@ export async function GET(
     const checkinsRes = await client.query(
       `SELECT c.player_id, c.pc_number, c.is_ready, p.full_name, p.nickname, p.avatar_url, p.steam_id
        FROM lobby_checkin c
-       LEFT JOIN promo_players p ON (c.player_id = p.id::text OR c.player_id = p.phone_number)
+       LEFT JOIN promo_players p ON (c.player_id = p.id OR c.player_id::text = p.phone_number)
        WHERE c.match_id = $1`,
       [parsedMatchId]
     );
@@ -424,7 +424,7 @@ export async function GET(
               COALESCE(p.nickname, p.full_name, tc.display_name, 'Участник') as sender_name
        FROM tournament_match_messages m
        LEFT JOIN tournament_competitors tc ON m.sender_competitor_id = tc.id
-       LEFT JOIN promo_players p ON (tc.player_id::text = p.id::text OR tc.player_id = p.phone_number)
+       LEFT JOIN promo_players p ON (tc.player_id = p.id OR tc.player_id::text = p.phone_number)
        WHERE m.match_id = $1
        ORDER BY m.created_at ASC`,
       [parsedMatchId]
