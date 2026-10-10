@@ -405,40 +405,109 @@ export function TournamentsFeedTab({
           </div>
 
           {/* Player Active Match Hero Banner */}
-          {userActiveMatch && (
-            <motion.div
-              initial={{ scale: 0.98, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-gradient-to-r from-orange-500/20 via-[#1a1410] to-orange-500/10 border border-orange-500/40 rounded-2xl p-4 sm:p-5 shadow-[0_0_30px_rgba(249,115,22,0.15)] flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden"
-            >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-orange-500/30">
-                  <Zap className="w-5 h-5 animate-pulse" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-orange-400">
-                      Ваш матч активен
+          {userActiveMatch && (() => {
+            const compA = competitors.find((c) => String(c.id) === String(userActiveMatch.competitor_a_id));
+            const compB = competitors.find((c) => String(c.id) === String(userActiveMatch.competitor_b_id));
+            const isUserCompA = String(userActiveMatch.competitor_a_id) === String(userCompetitor?.id);
+            const opponent = isUserCompA ? compB : compA;
+            const opponentName = opponent?.display_name || "Ожидает соперника";
+
+            const teamSize =
+              activeTournament.type === "2vs2" || activeTournament.type === "mix_2vs2"
+                ? 2
+                : activeTournament.type === "5vs5" || activeTournament.type === "mix_5vs5"
+                ? 5
+                : 1;
+            const rosterCountA = compA?.team_members?.length || (compA ? teamSize : 0);
+            const rosterCountB = compB?.team_members?.length || (compB ? teamSize : 0);
+            const totalRequired = Math.max(teamSize * 2, rosterCountA + rosterCountB);
+            const readyCount = userActiveMatch.ready_count ?? 0;
+            const allReady = readyCount >= totalRequired && totalRequired > 0;
+
+            const isThirdPlace = userActiveMatch.result?.isThirdPlace || userActiveMatch.result?.stage === "bronze";
+            const isFinal = userActiveMatch.result?.stage === "final" || userActiveMatch.round === 200;
+            const stageLabel = isThirdPlace
+              ? "Матч за 3-е место 🥉"
+              : isFinal
+              ? "Гранд-Финал 🏆"
+              : userActiveMatch.round === 0
+              ? "Групповой этап"
+              : userActiveMatch.round === 1
+              ? "1/4 Финала"
+              : userActiveMatch.round === 2
+              ? "1/2 Финала"
+              : `Раунд ${userActiveMatch.round}`;
+
+            const isVetoStage = userActiveMatch.status === "VETO";
+            const isLiveStage = userActiveMatch.status === "LIVE";
+
+            return (
+              <motion.div
+                initial={{ scale: 0.98, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-gradient-to-r from-orange-500/15 via-[#161414] to-orange-500/10 border border-orange-500/30 hover:border-orange-500/50 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 transition-all"
+              >
+                <div className="space-y-1.5 min-w-0 flex-1">
+                  {/* Top line: Stage badge + Opponent */}
+                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                    <span className="px-2 py-0.5 rounded-md bg-orange-500/20 text-orange-400 font-black text-[10px] uppercase tracking-wider border border-orange-500/30">
+                      {stageLabel}
                     </span>
-                    <span className="text-[10px] font-bold text-gray-400">
-                      • Матч #{userActiveMatch.id}
+                    <span className="text-gray-400 font-medium">
+                      Противник: <strong className="text-white font-bold">{opponentName}</strong>
                     </span>
                   </div>
-                  <h4 className="text-sm font-black uppercase tracking-tight text-white mt-0.5 truncate">
-                    Готовность к игре • Лобби матча
-                  </h4>
-                </div>
-              </div>
 
-              <Link
-                href={`/promo/tournaments/match/${userActiveMatch.id}${clubId ? `?clubId=${clubId}` : ""}`}
-                className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase tracking-widest px-6 py-3 rounded-xl transition-all shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2 shrink-0 active:scale-95"
-              >
-                <span>Войти в лобби матча</span>
-                <ExternalLink className="w-4 h-4" />
-              </Link>
-            </motion.div>
-          )}
+                  {/* Main line: Readiness / Stage status */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h4 className="text-base sm:text-lg font-black uppercase tracking-tight text-white flex items-center gap-2">
+                      {isLiveStage ? (
+                        <>
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                          <span className="text-red-400">Матч идет • Счет {userActiveMatch.score1 ?? 0}:{userActiveMatch.score2 ?? 0}</span>
+                        </>
+                      ) : isVetoStage ? (
+                        <>
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                          <span className="text-amber-400">Стадия выбора карт (VETO)</span>
+                        </>
+                      ) : allReady ? (
+                        <>
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-emerald-400">Все игроки готовы ({readyCount} из {totalRequired}) • Запуск CS2</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-2.5 h-2.5 rounded-full bg-orange-400 animate-pulse" />
+                          <span>Готовность: <span className="text-orange-400 font-mono">{readyCount} из {totalRequired}</span> вошли в лобби</span>
+                        </>
+                      )}
+                    </h4>
+                  </div>
+
+                  {/* Subline: helpful status hint */}
+                  <p className="text-xs text-gray-400">
+                    {isLiveStage
+                      ? "Сервер CS2 запущен, подключайтесь к матчу"
+                      : isVetoStage
+                      ? "Капитаны выбирают и банят карты для игры"
+                      : allReady
+                      ? "Все участники подтвердили места за ПК в клубе"
+                      : "Зайдите в лобби и подтвердите номер вашего ПК для старта сервера"}
+                  </p>
+                </div>
+
+                {/* Enter Lobby Button */}
+                <Link
+                  href={`/promo/tournaments/match/${userActiveMatch.id}${clubId ? `?clubId=${clubId}` : ""}`}
+                  className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase tracking-widest px-6 py-3.5 rounded-xl transition-all shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2 shrink-0 active:scale-95 text-center"
+                >
+                  <span>Войти в лобби матча</span>
+                  <ExternalLink className="w-4 h-4" />
+                </Link>
+              </motion.div>
+            );
+          })()}
 
           {/* 3 Metric Stats Row */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-5 border-t border-white/5">

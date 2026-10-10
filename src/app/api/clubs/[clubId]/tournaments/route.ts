@@ -153,6 +153,15 @@ async function ensureTournamentsSchema(client: any) {
         paid_at TIMESTAMPTZ DEFAULT NOW(),
         paid_by_admin_id INTEGER
       );
+
+      CREATE TABLE IF NOT EXISTS lobby_checkin (
+        match_id BIGINT NOT NULL,
+        player_id TEXT NOT NULL,
+        pc_number VARCHAR(50),
+        is_ready BOOLEAN DEFAULT FALSE,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (match_id, player_id)
+      );
     `);
   } catch (migErr) {
     console.warn("Tournaments Schema Auto-Migration note:", migErr);
@@ -264,10 +273,12 @@ export async function GET(
         [tournamentId]
       );
 
-      // Fetch matches
+      // Fetch matches with live ready checkin counts
       const matchesRes = await client.query(
         `SELECT m.id, m.round, m.order_in_round, m.competitor_a_id, m.competitor_b_id, 
-                m.status, m.score1, m.score2, m.cs2_server_id, m.winner_competitor_id, m.scheduled_at, m.result
+                m.status, m.score1, m.score2, m.cs2_server_id, m.winner_competitor_id, m.scheduled_at, m.result,
+                COALESCE((SELECT COUNT(*)::int FROM lobby_checkin lc WHERE (lc.match_id = m.id OR lc.match_id::text = m.id::text) AND lc.is_ready = true), 0) as ready_count,
+                COALESCE((SELECT COUNT(*)::int FROM lobby_checkin lc WHERE (lc.match_id = m.id OR lc.match_id::text = m.id::text)), 0) as checkins_count
           FROM tournament_matches m
           WHERE m.tournament_id = $1
           ORDER BY m.round ASC, m.order_in_round ASC`,
