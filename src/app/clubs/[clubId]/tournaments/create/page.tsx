@@ -215,6 +215,71 @@ export default function CreateTournamentPage({
     Array<{ id: string; name: string; cost: number }>
   >([]);
 
+  // Tournament Nominations & Special Awards
+  const [nominations, setNominations] = useState<
+    Array<{
+      id: string;
+      enabled: boolean;
+      label: string;
+      description: string;
+      icon: string;
+      cashAmount: number;
+      bonusAmount: number;
+      item: string;
+    }>
+  >([
+    {
+      id: "mvp",
+      enabled: false,
+      label: "MVP Турнира",
+      description: "Игрок с наивысшим общим рейтингом Rating 2.0 за весь турнир",
+      icon: "👑",
+      cashAmount: 0,
+      bonusAmount: 500,
+      item: "",
+    },
+    {
+      id: "headshot",
+      enabled: false,
+      label: "Headshot King",
+      description: "Игрок с самым высоким процентом попаданий в голову (% HS)",
+      icon: "🎯",
+      cashAmount: 0,
+      bonusAmount: 300,
+      item: "",
+    },
+    {
+      id: "damage",
+      enabled: false,
+      label: "Damage Leader",
+      description: "Игрок с наибольшим средним уроном за раунд (ADR)",
+      icon: "💣",
+      cashAmount: 0,
+      bonusAmount: 300,
+      item: "",
+    },
+    {
+      id: "clutch",
+      enabled: false,
+      label: "Clutch Master",
+      description: "Игрок, выигравший больше всего клатчей (1vX)",
+      icon: "🛡️",
+      cashAmount: 0,
+      bonusAmount: 300,
+      item: "",
+    },
+    {
+      id: "entry",
+      enabled: false,
+      label: "First Blood King",
+      description: "Игрок с наибольшим количеством открывающих фрагов (First Kills)",
+      icon: "⚡",
+      cashAmount: 0,
+      bonusAmount: 300,
+      item: "",
+    },
+  ]);
+
   // Rules templates
   const [rulesTemplates, setRulesTemplates] = useState<any[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -284,6 +349,9 @@ export default function CreateTournamentPage({
                 }))
               );
               setTotalBonusPool(t.prize_distribution.totalBonusPool || 0);
+            }
+            if (Array.isArray(t.prize_distribution.nominations) && t.prize_distribution.nominations.length > 0) {
+              setNominations(t.prize_distribution.nominations);
             }
           }
         }
@@ -532,6 +600,7 @@ export default function CreateTournamentPage({
           ...p,
           cashPct: p.cashPct / 100,
         })),
+        nominations,
       };
 
       const payload = {
@@ -1595,6 +1664,122 @@ export default function CreateTournamentPage({
                   >
                     + Добавить диапазон
                   </button>
+                </div>
+              </div>
+
+              {/* Tournament Nominations & Special Awards */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-6 space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-3">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                      <Award className="w-4 h-4 text-orange-500" />
+                      <span>Номинации турнира (MVP и спецнаграды)</span>
+                    </span>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Включите дополнительные номинации по итогам турнира и укажите награды за индивидуальное мастерство.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {nominations.map((nom, nIdx) => (
+                    <div
+                      key={nom.id}
+                      className={cn(
+                        "rounded-2xl border p-4 transition-all space-y-3",
+                        nom.enabled
+                          ? "bg-white border-orange-200 shadow-sm"
+                          : "bg-slate-100/60 border-slate-200 opacity-75"
+                      )}
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-xl shrink-0">{nom.icon}</span>
+                          <div>
+                            <span className="text-xs font-black text-slate-900 uppercase block">
+                              {nom.label}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              {nom.description}
+                            </span>
+                          </div>
+                        </div>
+
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <span className="text-[10px] font-bold text-slate-600 uppercase">
+                            {nom.enabled ? "Включена" : "Выключена"}
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={nom.enabled}
+                            onChange={(e) => {
+                              const updated = [...nominations];
+                              updated[nIdx].enabled = e.target.checked;
+                              setNominations(updated);
+                            }}
+                            className="w-4 h-4 text-orange-600 rounded border-slate-300 focus:ring-orange-500 cursor-pointer"
+                          />
+                        </label>
+                      </div>
+
+                      {nom.enabled && (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+                          <div>
+                            <label className="text-[9px] uppercase font-black text-slate-500 block mb-1">
+                              Денежный приз (₽)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="0 ₽"
+                              value={nom.cashAmount || 0}
+                              onChange={(e) => {
+                                const updated = [...nominations];
+                                updated[nIdx].cashAmount = parseInt(e.target.value, 10) || 0;
+                                setNominations(updated);
+                              }}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] uppercase font-black text-slate-500 block mb-1">
+                              Бонусы клуба (Б)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder="0 Б"
+                              value={nom.bonusAmount || 0}
+                              onChange={(e) => {
+                                const updated = [...nominations];
+                                updated[nIdx].bonusAmount = parseInt(e.target.value, 10) || 0;
+                                setNominations(updated);
+                              }}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] uppercase font-black text-slate-500 block mb-1">
+                              Материальный приз / подарок
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Например: Мерч или 5 часов VIP"
+                              value={nom.item || ""}
+                              onChange={(e) => {
+                                const updated = [...nominations];
+                                updated[nIdx].item = e.target.value;
+                                setNominations(updated);
+                              }}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { Trophy, Award, Gift, Sparkles, Coins, Percent, FileText, CheckCircle2 } from "lucide-react";
+import React, { useMemo } from "react";
+import { Trophy, Award, Gift, Sparkles, Coins, Percent, FileText, CheckCircle2, Crown, Target, Zap, Shield, Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TournamentPrizePodiumProps {
@@ -116,6 +116,156 @@ export function TournamentPrizePodium({
   const thirdWinner = thirdStanding
     ? competitors.find((c) => String(c.id) === String(thirdStanding.competitor_id)) || { display_name: thirdStanding.display_name }
     : null;
+
+  // Nominations & Special Awards
+  const activeNominations = useMemo(() => {
+    const rawNoms = tournament.prize_distribution?.nominations || [];
+    return rawNoms.filter((n: any) => n.enabled);
+  }, [tournament.prize_distribution]);
+
+  // Aggregate stats from all tournament matches
+  const nominationWinners = useMemo(() => {
+    if (activeNominations.length === 0) return {};
+
+    const playerAgg: Record<
+      string,
+      {
+        name: string;
+        kills: number;
+        deaths: number;
+        assists: number;
+        damage: number;
+        headshot_kills: number;
+        mvps: number;
+        first_kills: number;
+        clutches: number;
+        rounds: number;
+        maps: number;
+        ratingsSum: number;
+      }
+    > = {};
+
+    matches.forEach((m) => {
+      const stats = m.result?.stats || m.match_stats;
+      if (!stats) return;
+
+      const team1Players = Array.isArray(stats.team1?.players)
+        ? stats.team1.players
+        : typeof stats.team1?.players === "object"
+        ? Object.values(stats.team1.players)
+        : [];
+      const team2Players = Array.isArray(stats.team2?.players)
+        ? stats.team2.players
+        : typeof stats.team2?.players === "object"
+        ? Object.values(stats.team2.players)
+        : [];
+
+      const totalRounds = (m.score1 || 0) + (m.score2 || 0) || 1;
+
+      [...team1Players, ...team2Players].forEach((p: any) => {
+        const key = String(p.steamid || p.steamId || p.name || "");
+        if (!key) return;
+
+        if (!playerAgg[key]) {
+          playerAgg[key] = {
+            name: p.name || p.nickname || "Игрок",
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+            damage: 0,
+            headshot_kills: 0,
+            mvps: 0,
+            first_kills: 0,
+            clutches: 0,
+            rounds: 0,
+            maps: 0,
+            ratingsSum: 0,
+          };
+        }
+
+        const k = Number(p.kills ?? p.stats?.kills ?? 0) || 0;
+        const d = Number(p.deaths ?? p.stats?.deaths ?? 0) || 0;
+        const a = Number(p.assists ?? p.stats?.assists ?? 0) || 0;
+        const dmg = Number(p.damage ?? p.stats?.damage ?? 0) || 0;
+        const hs = Number(p.headshot_kills ?? p.stats?.headshot_kills ?? 0) || 0;
+        const mvp = Number(p.mvps ?? p.stats?.mvps ?? 0) || 0;
+        const fk = Number(p.first_kills ?? p.stats?.first_kills ?? 0) || 0;
+        const cl = Number(p.clutches ?? p.stats?.clutches ?? (p["1v1"] || 0) + (p["1v2"] || 0)) || 0;
+
+        const kpr = k / totalRounds;
+        const dpr = d / totalRounds;
+        const apr = a / totalRounds;
+        const adr = dmg / totalRounds;
+        const impact = 2.13 * kpr + 0.42 * apr - 0.41;
+        const rating = Number(p.rating) || (0.0073 * 70 + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587);
+
+        playerAgg[key].kills += k;
+        playerAgg[key].deaths += d;
+        playerAgg[key].assists += a;
+        playerAgg[key].damage += dmg;
+        playerAgg[key].headshot_kills += hs;
+        playerAgg[key].mvps += mvp;
+        playerAgg[key].first_kills += fk;
+        playerAgg[key].clutches += cl;
+        playerAgg[key].rounds += totalRounds;
+        playerAgg[key].maps += 1;
+        playerAgg[key].ratingsSum += rating;
+      });
+    });
+
+    const playersList = Object.values(playerAgg).filter((p) => p.rounds > 0);
+    if (playersList.length === 0) return {};
+
+    const winners: Record<string, { name: string; statValue: string }> = {};
+
+    // 1. MVP (Highest average Rating 2.0)
+    const mvpLeader = [...playersList].sort((a, b) => (b.ratingsSum / b.maps) - (a.ratingsSum / a.maps))[0];
+    if (mvpLeader) {
+      winners["mvp"] = {
+        name: mvpLeader.name,
+        statValue: `Рейтинг ${(mvpLeader.ratingsSum / mvpLeader.maps).toFixed(2)}`,
+      };
+    }
+
+    // 2. Headshot King (Highest % HS with min 3 kills)
+    const hsLeader = [...playersList].filter((p) => p.kills >= 3).sort((a, b) => (b.headshot_kills / b.kills) - (a.headshot_kills / a.kills))[0] || playersList[0];
+    if (hsLeader) {
+      const pct = hsLeader.kills > 0 ? Math.round((hsLeader.headshot_kills / hsLeader.kills) * 100) : 0;
+      winners["headshot"] = {
+        name: hsLeader.name,
+        statValue: `${pct}% HS (${hsLeader.headshot_kills} в голову)`,
+      };
+    }
+
+    // 3. Damage Leader (Highest ADR)
+    const dmgLeader = [...playersList].sort((a, b) => (b.damage / b.rounds) - (a.damage / a.rounds))[0];
+    if (dmgLeader) {
+      winners["damage"] = {
+        name: dmgLeader.name,
+        statValue: `${(dmgLeader.damage / dmgLeader.rounds).toFixed(1)} ADR`,
+      };
+    }
+
+    // 4. Clutch Master (Most clutches)
+    const clutchLeader = [...playersList].sort((a, b) => b.clutches - a.clutches)[0];
+    if (clutchLeader) {
+      winners["clutch"] = {
+        name: clutchLeader.name,
+        statValue: `${clutchLeader.clutches} клатчей`,
+      };
+    }
+
+    // 5. First Blood King (Most First Kills)
+    const entryLeader = [...playersList].sort((a, b) => b.first_kills - a.first_kills)[0];
+    if (entryLeader) {
+      winners["entry"] = {
+        name: entryLeader.name,
+        statValue: `${entryLeader.first_kills} первых фрагов`,
+      };
+    }
+
+    return winners;
+  }, [activeNominations, matches]);
 
   const getPlacementRank = (p: any, idx: number) => {
     if (p.label.includes("1") || p.id === "1") return 1;
@@ -294,6 +444,108 @@ export function TournamentPrizePodium({
                   <div className="flex items-center gap-3">
                     {cashAmount > 0 && <span className="font-black text-white">{formatCurrency(cashAmount)}</span>}
                     {p.bonus > 0 && <span className="font-bold text-orange-400">+{p.bonus} Б</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Tournament Nominations & Special Awards */}
+      {activeNominations.length > 0 && (
+        <div className="bg-[#0c0c0e]/95 border border-white/5 rounded-[2.5rem] p-7 space-y-6 shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/5 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex items-center justify-between flex-wrap gap-2 border-b border-white/5 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400">
+                <Crown className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider text-white">
+                  Индивидуальные номинации турнира
+                </h3>
+                <p className="text-[11px] text-gray-400 font-medium">
+                  Специальные призы за выдающиеся достижения и статистику по итогам всех сыгранных матчей
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {activeNominations.map((nom: any) => {
+              const winner = nominationWinners[nom.id];
+              return (
+                <div
+                  key={nom.id}
+                  className="bg-white/[0.02] border border-white/5 hover:border-orange-500/30 rounded-3xl p-5 flex flex-col justify-between space-y-4 transition-all"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{nom.icon || "👑"}</span>
+                        <div>
+                          <span className="text-xs font-black uppercase text-white block tracking-wide">
+                            {nom.label}
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-medium line-clamp-1">
+                            {nom.description}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Winner info */}
+                    <div className="bg-black/40 border border-white/5 rounded-2xl p-3 mt-3">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-1">
+                        Лидер номинации:
+                      </span>
+                      {winner ? (
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span className="text-xs font-black text-white uppercase italic truncate">
+                              {winner.name}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-black font-mono text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-lg shrink-0">
+                            {winner.statValue}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-gray-500 italic">
+                          Определится по итогам матчей
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Prize breakdown */}
+                  <div className="pt-3 border-t border-white/5 flex items-center justify-between flex-wrap gap-2 text-xs">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500">
+                      Награда:
+                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {nom.cashAmount > 0 && (
+                        <span className="font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg text-[10px] flex items-center gap-1">
+                          <Coins className="w-3 h-3" />
+                          {formatCurrency(nom.cashAmount)}
+                        </span>
+                      )}
+                      {nom.bonusAmount > 0 && (
+                        <span className="font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-lg text-[10px] flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" />
+                          +{nom.bonusAmount} Б
+                        </span>
+                      )}
+                      {nom.item && (
+                        <span className="font-bold text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-lg text-[10px] flex items-center gap-1 truncate max-w-[130px]">
+                          <Gift className="w-3 h-3 shrink-0" />
+                          {nom.item}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

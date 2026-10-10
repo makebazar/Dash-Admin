@@ -194,12 +194,16 @@ const normalizePlayer = (rawP: any, fallbackName: string, fallbackSteamId: strin
       kills: 0,
       deaths: 0,
       assists: 0,
+      diff: 0,
       damage: 0,
       headshot_kills: 0,
       mvps: 0,
       score: 0,
       adr: "-",
       hs_percent: 0,
+      rating: "0.00",
+      first_kills: 0,
+      clutches: 0,
     };
   }
 
@@ -213,12 +217,32 @@ const normalizePlayer = (rawP: any, fallbackName: string, fallbackSteamId: strin
   const headshotKills = Number(rawP.headshot_kills ?? s.headshot_kills ?? s.hs ?? 0) || 0;
   const mvps = Number(rawP.mvps ?? s.mvps ?? 0) || 0;
   const score = Number(rawP.score ?? s.score ?? 0) || 0;
+  const firstKills = Number(rawP.first_kills ?? s.first_kills ?? s.fk ?? 0) || 0;
+  const clutches = Number(rawP.clutches ?? s.clutches ?? (rawP["1v1"] || 0) + (rawP["1v2"] || 0) + (rawP["1v3"] || 0)) || 0;
 
+  const diff = kills - deaths;
   const safeRounds = Math.max(1, totalRounds);
-  const calculatedAdr = damage > 0 ? (damage / safeRounds).toFixed(1) : "-";
-  const adr = rawP.adr ?? s.adr ?? calculatedAdr;
+  const numAdr = damage > 0 ? parseFloat((damage / safeRounds).toFixed(1)) : 0;
+  const adr = damage > 0 ? numAdr.toFixed(1) : "-";
   const calculatedHsPercent = kills > 0 ? Math.round((headshotKills / kills) * 100) : 0;
   const hs_percent = rawP.hs_percent ?? s.hs_percent ?? calculatedHsPercent;
+
+  // HLTV 2.0 / 1.0 Rating calculation
+  let rating = "1.00";
+  if (rawP.rating && typeof rawP.rating === "number") {
+    rating = rawP.rating.toFixed(2);
+  } else if (rawP.rating && typeof rawP.rating === "string" && !isNaN(parseFloat(rawP.rating))) {
+    rating = parseFloat(rawP.rating).toFixed(2);
+  } else if (totalRounds > 0) {
+    const kpr = kills / safeRounds;
+    const dpr = deaths / safeRounds;
+    const apr = assists / safeRounds;
+    const impact = 2.13 * kpr + 0.42 * apr - 0.41;
+    const kast = rawP.kast ?? s.kast ?? 70;
+    const calculatedRating = 0.0073 * kast + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * numAdr + 0.1587;
+    const boundedRating = Math.max(0.1, Math.min(3.0, calculatedRating));
+    rating = boundedRating.toFixed(2);
+  }
 
   return {
     name,
@@ -226,12 +250,16 @@ const normalizePlayer = (rawP: any, fallbackName: string, fallbackSteamId: strin
     kills,
     deaths,
     assists,
+    diff,
     damage,
     headshot_kills: headshotKills,
     mvps,
     score,
     adr,
     hs_percent,
+    rating,
+    first_kills: firstKills,
+    clutches,
   };
 };
 
@@ -1362,6 +1390,7 @@ export default function MatchLobby() {
                     if (isSolo) {
                       const playerAStat = getCompetitorStats(compA, 0, "team1");
                       const playerBStat = getCompetitorStats(compB, 0, "team2");
+                      const topRating = Math.max(parseFloat(playerAStat.rating) || 0, parseFloat(playerBStat.rating) || 0);
 
                       return (
                         <div className="overflow-x-auto">
@@ -1372,38 +1401,75 @@ export default function MatchLobby() {
                                 <th className="py-1.5 text-center">K</th>
                                 <th className="py-1.5 text-center">D</th>
                                 <th className="py-1.5 text-center">A</th>
+                                <th className="py-1.5 text-center">+/-</th>
                                 <th className="py-1.5 text-center">ADR</th>
                                 <th className="py-1.5 text-center">HS%</th>
+                                <th className="py-1.5 text-center">★ MVP</th>
+                                <th className="py-1.5 text-right pr-2">Rating</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
                               {/* Player A */}
-                              <tr key="player-a" className="hover:bg-white/[0.02]">
-                                <td className="py-2.5 font-bold text-white flex items-center gap-2">
-                                  <span className="text-orange-400 font-black">•</span>
-                                  <span>{playerAStat.name}</span>
-                                  {playerAStat.mvps > 0 && <span className="text-yellow-400 text-[10px]">★{playerAStat.mvps}</span>}
-                                </td>
-                                <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{playerAStat.kills}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.deaths}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.assists}</td>
-                                <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{playerAStat.adr}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.hs_percent ? `${playerAStat.hs_percent}%` : "-"}</td>
-                              </tr>
+                              {(() => {
+                                const isMvp = topRating > 1.0 && (parseFloat(playerAStat.rating) || 0) === topRating && totalPlayedRounds > 0;
+                                const rNum = parseFloat(playerAStat.rating) || 0;
+                                return (
+                                  <tr key="player-a" className="hover:bg-white/[0.02]">
+                                    <td className="py-2.5 font-bold text-white flex items-center gap-2">
+                                      <span className="text-orange-400 font-black">•</span>
+                                      <span>{playerAStat.name}</span>
+                                      {isMvp && (
+                                        <span className="inline-flex items-center gap-1 bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 text-[9px] font-black uppercase px-1.5 py-0.2 rounded-md">
+                                          👑 MVP
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{playerAStat.kills}</td>
+                                    <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.deaths}</td>
+                                    <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.assists}</td>
+                                    <td className={cn("py-2.5 text-center font-mono font-bold text-xs", playerAStat.diff > 0 ? "text-emerald-400" : playerAStat.diff < 0 ? "text-red-400" : "text-gray-400")}>
+                                      {playerAStat.diff > 0 ? `+${playerAStat.diff}` : playerAStat.diff}
+                                    </td>
+                                    <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{playerAStat.adr}</td>
+                                    <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.hs_percent ? `${playerAStat.hs_percent}%` : "-"}</td>
+                                    <td className="py-2.5 text-center font-mono text-yellow-400 font-bold">{playerAStat.mvps > 0 ? `★ ${playerAStat.mvps}` : "-"}</td>
+                                    <td className={cn("py-2.5 text-right pr-2 font-mono font-black", rNum >= 1.2 ? "text-emerald-400" : rNum >= 0.9 ? "text-orange-400" : "text-gray-400")}>
+                                      {playerAStat.rating}
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
 
                               {/* Player B */}
-                              <tr key="player-b" className="hover:bg-white/[0.02]">
-                                <td className="py-2.5 font-bold text-white flex items-center gap-2">
-                                  <span className="text-blue-400 font-black">•</span>
-                                  <span>{playerBStat.name}</span>
-                                  {playerBStat.mvps > 0 && <span className="text-yellow-400 text-[10px]">★{playerBStat.mvps}</span>}
-                                </td>
-                                <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{playerBStat.kills}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.deaths}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.assists}</td>
-                                <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{playerBStat.adr}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.hs_percent ? `${playerBStat.hs_percent}%` : "-"}</td>
-                              </tr>
+                              {(() => {
+                                const isMvp = topRating > 1.0 && (parseFloat(playerBStat.rating) || 0) === topRating && totalPlayedRounds > 0;
+                                const rNum = parseFloat(playerBStat.rating) || 0;
+                                return (
+                                  <tr key="player-b" className="hover:bg-white/[0.02]">
+                                    <td className="py-2.5 font-bold text-white flex items-center gap-2">
+                                      <span className="text-blue-400 font-black">•</span>
+                                      <span>{playerBStat.name}</span>
+                                      {isMvp && (
+                                        <span className="inline-flex items-center gap-1 bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 text-[9px] font-black uppercase px-1.5 py-0.2 rounded-md">
+                                          👑 MVP
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{playerBStat.kills}</td>
+                                    <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.deaths}</td>
+                                    <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.assists}</td>
+                                    <td className={cn("py-2.5 text-center font-mono font-bold text-xs", playerBStat.diff > 0 ? "text-emerald-400" : playerBStat.diff < 0 ? "text-red-400" : "text-gray-400")}>
+                                      {playerBStat.diff > 0 ? `+${playerBStat.diff}` : playerBStat.diff}
+                                    </td>
+                                    <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{playerBStat.adr}</td>
+                                    <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.hs_percent ? `${playerBStat.hs_percent}%` : "-"}</td>
+                                    <td className="py-2.5 text-center font-mono text-yellow-400 font-bold">{playerBStat.mvps > 0 ? `★ ${playerBStat.mvps}` : "-"}</td>
+                                    <td className={cn("py-2.5 text-right pr-2 font-mono font-black", rNum >= 1.2 ? "text-emerald-400" : rNum >= 0.9 ? "text-orange-400" : "text-gray-400")}>
+                                      {playerBStat.rating}
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
                             </tbody>
                           </table>
                         </div>
@@ -1412,84 +1478,69 @@ export default function MatchLobby() {
 
                     const rosterAStats = getTeamRosterStats(compA, "team1");
                     const rosterBStats = getTeamRosterStats(compB, "team2");
+                    const allRoster = [...rosterAStats, ...rosterBStats];
+                    const matchMaxRating = Math.max(...allRoster.map((p: any) => parseFloat(p.rating) || 0), 0);
+
+                    const renderTeamTable = (roster: any[], teamName: string, dotColor: string) => (
+                      <div className="space-y-1.5">
+                        <div className={cn("text-[10px] font-black uppercase tracking-widest", dotColor)}>
+                          {teamName}
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
+                                <th className="py-1">Игрок</th>
+                                <th className="py-1 text-center">K</th>
+                                <th className="py-1 text-center">D</th>
+                                <th className="py-1 text-center">A</th>
+                                <th className="py-1 text-center">+/-</th>
+                                <th className="py-1 text-center">ADR</th>
+                                <th className="py-1 text-center">HS%</th>
+                                <th className="py-1 text-center">★ MVP</th>
+                                <th className="py-1 text-right pr-2">Rating</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {roster.map((p: any) => {
+                                const isMvp = matchMaxRating > 1.0 && (parseFloat(p.rating) || 0) === matchMaxRating && totalPlayedRounds > 0;
+                                const rNum = parseFloat(p.rating) || 0;
+
+                                return (
+                                  <tr key={p.steamid || p.name} className="hover:bg-white/[0.02]">
+                                    <td className="py-1.5 font-bold text-white flex items-center gap-1.5">
+                                      <span>{p.name}</span>
+                                      {isMvp && (
+                                        <span className="inline-flex items-center gap-0.5 bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 text-[8px] font-black uppercase px-1 py-0.2 rounded">
+                                          👑 MVP
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills}</td>
+                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths}</td>
+                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.assists}</td>
+                                    <td className={cn("py-1.5 text-center font-mono font-bold text-xs", p.diff > 0 ? "text-emerald-400" : p.diff < 0 ? "text-red-400" : "text-gray-400")}>
+                                      {p.diff > 0 ? `+${p.diff}` : p.diff}
+                                    </td>
+                                    <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr}</td>
+                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                                    <td className="py-1.5 text-center font-mono text-yellow-400 font-bold">{p.mvps > 0 ? `★ ${p.mvps}` : "-"}</td>
+                                    <td className={cn("py-1.5 text-right pr-2 font-mono font-black", rNum >= 1.2 ? "text-emerald-400" : rNum >= 0.9 ? "text-orange-400" : "text-gray-400")}>
+                                      {p.rating}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
 
                     return (
                       <div className="space-y-4">
-                        {/* Team 1 Scoreboard */}
-                        <div className="space-y-1.5">
-                          <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
-                            {compA?.name || "Команда 1"}
-                          </div>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
-                              <thead>
-                                <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
-                                  <th className="py-1">Игрок</th>
-                                  <th className="py-1 text-center">K</th>
-                                  <th className="py-1 text-center">D</th>
-                                  <th className="py-1 text-center">A</th>
-                                  <th className="py-1 text-center">ADR</th>
-                                  <th className="py-1 text-center">HS%</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-white/5">
-                                {rosterAStats.map((p: any) => (
-                                  <tr key={p.steamid || p.name} className="hover:bg-white/[0.02]">
-                                    <td className="py-1.5 font-bold text-white flex items-center gap-1.5">
-                                      <span>{p.name}</span>
-                                      {p.mvps > 0 && (
-                                        <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>
-                                      )}
-                                    </td>
-                                    <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills}</td>
-                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths}</td>
-                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.assists}</td>
-                                    <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr}</td>
-                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-
-                        {/* Team 2 Scoreboard */}
-                        <div className="space-y-1.5 pt-2">
-                          <div className="text-[10px] font-black uppercase tracking-widest text-blue-400">
-                            {compB?.name || "Команда 2"}
-                          </div>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-left text-xs">
-                              <thead>
-                                <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
-                                  <th className="py-1">Игрок</th>
-                                  <th className="py-1 text-center">K</th>
-                                  <th className="py-1 text-center">D</th>
-                                  <th className="py-1 text-center">A</th>
-                                  <th className="py-1 text-center">ADR</th>
-                                  <th className="py-1 text-center">HS%</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-white/5">
-                                {rosterBStats.map((p: any) => (
-                                  <tr key={p.steamid || p.name} className="hover:bg-white/[0.02]">
-                                    <td className="py-1.5 font-bold text-white flex items-center gap-1.5">
-                                      <span>{p.name}</span>
-                                      {p.mvps > 0 && (
-                                        <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>
-                                      )}
-                                    </td>
-                                    <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills}</td>
-                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths}</td>
-                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.assists}</td>
-                                    <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr}</td>
-                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        {renderTeamTable(rosterAStats, compA?.name || "Команда 1", "text-orange-400")}
+                        {renderTeamTable(rosterBStats, compB?.name || "Команда 2", "text-blue-400")}
                       </div>
                     );
                   })()}
