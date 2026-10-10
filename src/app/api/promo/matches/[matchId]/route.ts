@@ -589,9 +589,10 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const { action } = body;
 
-    // Fetch match
+    // Fetch match with tournament configuration
     const matchRes = await client.query(
-      `SELECT m.competitor_a_id, m.competitor_b_id, m.status, m.tournament_id, t.club_id
+      `SELECT m.id, m.competitor_a_id, m.competitor_b_id, m.status, m.tournament_id, m.round, m.result, m.cs2_server_id,
+              t.club_id, t.type as tournament_type, t.config as tournament_config
        FROM tournament_matches m
        JOIN club_tournaments t ON m.tournament_id = t.id
        WHERE m.id = $1`,

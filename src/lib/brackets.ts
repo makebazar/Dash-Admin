@@ -802,9 +802,18 @@ export function resolveMatchFormat(
   maxRound?: number,
   matchResult?: any
 ): "bo1" | "bo3" | "bo5" {
-  const baseFormat = (tournamentConfig?.matchFormat || "bo1") as "bo1" | "bo3" | "bo5";
-  const semiFormat = (tournamentConfig?.semiFinalFormat || baseFormat) as "bo1" | "bo3" | "bo5";
-  const grandFormat = (tournamentConfig?.grandFinalFormat || baseFormat) as "bo1" | "bo3" | "bo5";
+  const cfg = tournamentConfig?.settings || tournamentConfig || {};
+  const normalize = (val?: string): "bo1" | "bo3" | "bo5" | null => {
+    if (!val) return null;
+    const lower = String(val).toLowerCase();
+    if (lower === "bo3" || lower === "bo5") return lower;
+    if (lower === "bo1") return "bo1";
+    return null;
+  };
+
+  const baseFormat = normalize(cfg.matchFormat) || normalize(cfg.match_format) || normalize(cfg.format) || "bo1";
+  const semiFormat = normalize(cfg.semiFinalFormat) || normalize(cfg.semi_final_format) || normalize(cfg.semiFinal) || baseFormat;
+  const grandFormat = normalize(cfg.grandFinalFormat) || normalize(cfg.grand_final_format) || normalize(cfg.grandFinal) || baseFormat;
 
   const stage = matchResult?.stage;
 

@@ -343,24 +343,24 @@ export default function CreateTournamentPage({
           setMaxParticipants(t.config?.maxParticipants || 16);
           setPrizePoolMode(t.prize_pool_mode || "dynamic");
           setFixedPrizeAmount(parseFloat(t.fixed_prize_amount || 0));
-          setEntryFeeType(t.config?.entryFeeType || "player");
-          setBracketType(t.config?.bracketType || "single_elimination");
+          const cfg = t.config?.settings || t.config || {};
+          setEntryFeeType(cfg.entryFeeType || "player");
+          setBracketType(cfg.bracketType || "single_elimination");
 
           // Formats
-          setMatchFormat(t.config?.matchFormat || "bo1");
+          setMatchFormat(cfg.matchFormat || cfg.match_format || "bo1");
           setSemiFinalFormat(
-            t.config?.semiFinalFormat || t.config?.matchFormat || "bo1"
+            cfg.semiFinalFormat || cfg.semi_final_format || cfg.matchFormat || "bo1"
           );
           setGrandFinalFormat(
-            t.config?.grandFinalFormat ||
-              (t.config?.matchFormat === "bo1" ? "bo3" : "bo3")
+            cfg.grandFinalFormat || cfg.grand_final_format || (cfg.matchFormat === "bo1" ? "bo3" : "bo3")
           );
 
-          if (t.config?.mapPool && Array.isArray(t.config.mapPool)) {
-            setMapPool(t.config.mapPool);
+          if (cfg.mapPool && Array.isArray(cfg.mapPool)) {
+            setMapPool(cfg.mapPool);
           }
-          if (t.config?.itemPool && Array.isArray(t.config.itemPool)) {
-            setItemPool(t.config.itemPool);
+          if (cfg.itemPool && Array.isArray(cfg.itemPool)) {
+            setItemPool(cfg.itemPool);
           }
 
           if (t.starts_at) {
