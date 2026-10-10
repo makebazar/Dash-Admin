@@ -3,6 +3,8 @@
  * Guarantees a valid 17-digit numeric SteamID64 (starts with 7656119...)
  */
 
+const STEAM_API_KEY = process.env.STEAM_WEB_API_KEY || "ADA9E94BE28E94B68AFDE56ED208D6A9";
+
 export async function resolveSteamId64(input: string): Promise<string | null> {
   if (!input) return null;
   const trimmed = input.trim();
@@ -41,11 +43,26 @@ export async function resolveSteamId64(input: string): Promise<string | null> {
   const idUrlMatch = trimmed.match(/\/id\/([^\/\?\#]+)/i);
   if (idUrlMatch) {
     vanityName = idUrlMatch[1];
-  } else if (!trimmed.includes("/") && !trimmed.includes(" ") && !trimmed.includes("http")) {
+  } else if (!trimmed.includes("/") && !trimmed.includes(" ") && !trimmed.includes("http") && !trimmed.includes("@")) {
     vanityName = trimmed;
   }
 
-  if (vanityName) {
+  if (vanityName && vanityName !== "my" && vanityName !== "home" && vanityName !== "profiles") {
+    // 5a. Try official Steam Web API (Fast & highly reliable)
+    try {
+      const apiUrl = `https://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=${STEAM_API_KEY}&vanityurl=${encodeURIComponent(vanityName)}`;
+      const apiRes = await fetch(apiUrl, { next: { revalidate: 3600 } });
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        if (data?.response?.success === 1 && data.response.steamid) {
+          return String(data.response.steamid);
+        }
+      }
+    } catch (apiErr) {
+      console.warn(`[Steam Web API] Error resolving vanity "${vanityName}":`, apiErr);
+    }
+
+    // 5b. Fallback to Steam Community XML
     try {
       const xmlRes = await fetch(`https://steamcommunity.com/id/${encodeURIComponent(vanityName)}/?xml=1`, {
         headers: {
@@ -63,9 +80,10 @@ export async function resolveSteamId64(input: string): Promise<string | null> {
         }
       }
     } catch (err) {
-      console.warn(`[Steam Resolver] Failed to resolve vanity "${vanityName}":`, err);
+      console.warn(`[Steam Resolver] Failed to resolve vanity XML "${vanityName}":`, err);
     }
   }
 
   return null;
 }
+

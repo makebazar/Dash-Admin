@@ -50,7 +50,7 @@ async function fetchCompetitorRoster(
 
   if (comp.promo_team_id) {
     const membersRes = await client.query(
-      `SELECT p.id::text as player_id, p.steam_id, COALESCE(p.nickname, p.full_name, tm.phone) as full_name, tm.phone as phone_number
+      `SELECT p.id::text as player_id, p.steam_id, p.steam_link, COALESCE(p.nickname, p.full_name, tm.phone) as full_name, tm.phone as phone_number
        FROM promo_team_members tm
        LEFT JOIN promo_players p ON (tm.phone = p.phone_number OR tm.phone = p.id::text)
        WHERE tm.team_id = $1`,
@@ -59,8 +59,9 @@ async function fetchCompetitorRoster(
     for (const m of membersRes.rows) {
       if (m.player_id) memberIdentifiers.add(String(m.player_id));
       if (m.phone_number) memberIdentifiers.add(String(m.phone_number));
-      if (m.steam_id) {
-        const steam64 = await sanitizeSteamId64(m.steam_id);
+      const rawSteam = m.steam_id || m.steam_link;
+      if (rawSteam) {
+        const steam64 = await sanitizeSteamId64(rawSteam);
         if (steam64) {
           playersMap[steam64] = m.full_name || `Player_${steam64.slice(-4)}`;
         }
@@ -68,7 +69,7 @@ async function fetchCompetitorRoster(
     }
   } else if (comp.team_id) {
     const membersRes = await client.query(
-      `SELECT p.id::text as player_id, p.steam_id, COALESCE(p.full_name, p.nickname) as full_name, p.phone_number
+      `SELECT p.id::text as player_id, p.steam_id, p.steam_link, COALESCE(p.full_name, p.nickname) as full_name, p.phone_number
        FROM team_members tm
        JOIN promo_players p ON (tm.player_id = p.id OR tm.player_id::text = p.id::text OR tm.player_id::text = p.phone_number)
        WHERE tm.team_id = $1`,
@@ -77,28 +78,38 @@ async function fetchCompetitorRoster(
     for (const m of membersRes.rows) {
       if (m.player_id) memberIdentifiers.add(String(m.player_id));
       if (m.phone_number) memberIdentifiers.add(String(m.phone_number));
-      if (m.steam_id) {
-        const steam64 = await sanitizeSteamId64(m.steam_id);
+      const rawSteam = m.steam_id || m.steam_link;
+      if (rawSteam) {
+        const steam64 = await sanitizeSteamId64(rawSteam);
         if (steam64) {
           playersMap[steam64] = m.full_name || `Player_${steam64.slice(-4)}`;
         }
       }
     }
-  } else if (comp.player_id) {
-    memberIdentifiers.add(String(comp.player_id));
-    const playerRes = await client.query(
-      `SELECT id::text as player_id, steam_id, COALESCE(nickname, full_name) as full_name, phone_number
-       FROM promo_players 
-       WHERE id::text = $1 OR phone_number = $1`,
-      [String(comp.player_id)]
-    );
-    if (playerRes.rows.length > 0) {
-      const p = playerRes.rows[0];
-      if (p.phone_number) memberIdentifiers.add(String(p.phone_number));
-      if (p.steam_id) {
-        const steam64 = await sanitizeSteamId64(p.steam_id);
-        if (steam64) {
-          playersMap[steam64] = p.full_name || `Player_${steam64.slice(-4)}`;
+  } else {
+    // Solo competitor
+    const targetPlayerId = comp.player_id || comp.id;
+    if (targetPlayerId) {
+      memberIdentifiers.add(String(targetPlayerId));
+      if (comp.id) memberIdentifiers.add(String(comp.id));
+      if (comp.player_id) memberIdentifiers.add(String(comp.player_id));
+
+      const playerRes = await client.query(
+        `SELECT id::text as player_id, steam_id, steam_link, COALESCE(nickname, full_name) as full_name, phone_number
+         FROM promo_players 
+         WHERE id::text = $1 OR phone_number = $1`,
+        [String(targetPlayerId)]
+      );
+      if (playerRes.rows.length > 0) {
+        const p = playerRes.rows[0];
+        if (p.player_id) memberIdentifiers.add(String(p.player_id));
+        if (p.phone_number) memberIdentifiers.add(String(p.phone_number));
+        const rawSteam = p.steam_id || p.steam_link;
+        if (rawSteam) {
+          const steam64 = await sanitizeSteamId64(rawSteam);
+          if (steam64) {
+            playersMap[steam64] = p.full_name || `Player_${steam64.slice(-4)}`;
+          }
         }
       }
     }
@@ -108,7 +119,7 @@ async function fetchCompetitorRoster(
   if (matchId) {
     const cleanMatchId = String(matchId).replace(/^dm-tourney-/, "").replace(/^dm-/, "");
     const checkinsRes = await client.query(
-      `SELECT c.player_id, p.steam_id, COALESCE(p.nickname, p.full_name) as full_name, p.phone_number
+      `SELECT c.player_id, p.id as promo_id, p.steam_id, p.steam_link, COALESCE(p.nickname, p.full_name) as full_name, p.phone_number
        FROM lobby_checkin c
        JOIN promo_players p ON (c.player_id = p.id OR c.player_id::text = p.id::text OR c.player_id::text = p.phone_number)
        WHERE (c.match_id::text = $1 OR c.match_id::text = $2) AND c.is_ready = true`,
@@ -117,10 +128,16 @@ async function fetchCompetitorRoster(
 
     for (const chk of checkinsRes.rows) {
       const pId = String(chk.player_id);
+      const promoId = chk.promo_id ? String(chk.promo_id) : "";
       const phone = String(chk.phone_number || "");
-      if (memberIdentifiers.has(pId) || memberIdentifiers.has(phone)) {
-        if (chk.steam_id) {
-          const steam64 = await sanitizeSteamId64(chk.steam_id);
+      if (
+        memberIdentifiers.has(pId) || 
+        (promoId && memberIdentifiers.has(promoId)) || 
+        (phone && memberIdentifiers.has(phone))
+      ) {
+        const rawSteam = chk.steam_id || chk.steam_link;
+        if (rawSteam) {
+          const steam64 = await sanitizeSteamId64(rawSteam);
           if (steam64) {
             playersMap[steam64] = chk.full_name || `Player_${steam64.slice(-4)}`;
           }
@@ -240,7 +257,9 @@ export async function GET(
 
         const rosterCount = Math.max(Object.keys(team1.players).length, Object.keys(team2.players).length);
         const playersPerTeam = rosterCount > 0 ? rosterCount : defaultPlayersPerTeam;
-        const hasPlayers = Object.keys(team1.players).length > 0 || Object.keys(team2.players).length > 0;
+        const team1HasPlayers = Object.keys(team1.players).length > 0;
+        const team2HasPlayers = Object.keys(team2.players).length > 0;
+        const bothTeamsHavePlayers = team1HasPlayers && team2HasPlayers;
         const numericMatchId = qm?.matchzy_id ? parseInt(qm.matchzy_id, 10) : getNumericMatchId(String(tourneyMatchId));
 
         const matchZyConfig = {
@@ -251,7 +270,7 @@ export async function GET(
           side_type: "always_knife",
           clinch_series: true,
           players_per_team: playersPerTeam,
-          min_players_to_ready: playersPerTeam,
+          min_players_to_ready: 1,
           min_spectators_to_ready: 0,
           skip_veto: mapPool.length === safeNumMaps,
           wingman: isWingman,
@@ -273,8 +292,8 @@ export async function GET(
             matchzy_knife_enabled_default: "true",
             matchzy_time_to_start: "0",
             matchzy_kick_when_no_match_loaded: "false",
-            matchzy_whitelist_enabled_default: hasPlayers ? "true" : "false",
-            matchzy_ready_mode: hasPlayers ? "1" : "0",
+            matchzy_whitelist_enabled_default: "false",
+            matchzy_ready_mode: bothTeamsHavePlayers ? "1" : "0",
             matchzy_minimum_ready_required: "1",
             matchzy_allow_force_ready: "true",
             matchzy_join_start_delay: "10",
@@ -285,6 +304,7 @@ export async function GET(
         return NextResponse.json(matchZyConfig);
       }
     }
+
 
     // 3. Quick Match handler (standalone DashMatch)
     if (qm) {
@@ -350,7 +370,7 @@ export async function GET(
           matchzy_allow_force_ready: "true",
           matchzy_ready_mode: hasPlayers ? "1" : "0",
           matchzy_join_start_delay: "10",
-          matchzy_whitelist_enabled_default: hasPlayers ? "true" : "false",
+          matchzy_whitelist_enabled_default: "false",
           matchzy_kick_when_no_match_loaded: "false",
           matchzy_autostart_mode: practiceMode ? "2" : "1",
           matchzy_pause_after_restore: "true",

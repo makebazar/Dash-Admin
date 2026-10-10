@@ -5,6 +5,7 @@ import { broadcastSseCommand } from "@/lib/cs2/sse";
 import { resolveMatchFormat } from "@/lib/brackets";
 import { normalizeCS2Map } from "@/lib/cs2/utils";
 import { verifySessionValue } from "@/lib/session";
+import { resolveSteamId64 } from "@/lib/steam-resolver";
 
 async function ensureMatchLobbyTables(client: any) {
   try {
@@ -641,12 +642,14 @@ export async function POST(
       // Update Steam ID if provided (run before transaction block so any validation issue doesn't abort transaction)
       if (steamId && typeof steamId === "string" && steamId.trim().length > 0) {
         const cleanSteam = steamId.trim();
+        const resolvedSteam64 = await resolveSteamId64(cleanSteam);
+        const finalSteamId = resolvedSteam64 || cleanSteam;
         await client.query(
           `UPDATE promo_players 
            SET steam_id = $1,
-               steam_link = CASE WHEN $1 LIKE 'http%' THEN $1 ELSE steam_link END
-           WHERE id::text = $2 OR phone_number = $2`,
-          [cleanSteam, String(playerId)]
+               steam_link = CASE WHEN $2 LIKE 'http%' THEN $2 ELSE COALESCE(steam_link, CASE WHEN $1 ~ '^7656119\\d{10}$' THEN 'https://steamcommunity.com/profiles/' || $1 ELSE NULL END) END
+           WHERE id::text = $3 OR phone_number = $3`,
+          [finalSteamId, cleanSteam, String(playerId)]
         ).catch((err: any) => console.warn("[Checkin steam update note]:", err.message));
       }
 
