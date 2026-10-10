@@ -97,7 +97,7 @@ export default function MatchControlPage() {
   const [isSubmittingScore, setIsSubmittingScore] = useState(false);
 
   // Launcher state
-  const [selectedMap, setSelectedMap] = useState("de_mirage");
+  const [selectedMap, setSelectedMap] = useState("");
   const [customWorkshopId, setCustomWorkshopId] = useState("");
   const [knifeRound, setKnifeRound] = useState(true);
   const [practiceMode, setPracticeMode] = useState(false);
@@ -135,9 +135,9 @@ export default function MatchControlPage() {
           const pad = (n: number) => n.toString().padStart(2, "0");
           setMatchScheduledAt(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
         }
-        if (matchData.match.selectedMap) {
-          setSelectedMap(matchData.match.selectedMap);
-        }
+        const pool = matchData.match.mapPool || [];
+        const fallbackMap = pool.length > 0 ? pool[0] : (matchData.match.tournament_type === "1vs1" ? "3070549948" : "de_dust2");
+        setSelectedMap(matchData.match.selectedMap || fallbackMap);
       }
 
       // 2. DashMatch agent & live CS2 instances from club API
@@ -231,7 +231,7 @@ export default function MatchControlPage() {
     }
     setIsRestartingServer(true);
     try {
-      const finalMap = customWorkshopId.trim() ? customWorkshopId.trim() : selectedMap;
+      const finalMap = customWorkshopId.trim() ? customWorkshopId.trim() : (activeCs2Match?.map_name || match.selectedMap || selectedMap);
       const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

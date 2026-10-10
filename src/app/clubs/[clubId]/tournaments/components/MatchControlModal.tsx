@@ -150,9 +150,15 @@ export function MatchControlModal({
         setMatchScheduledAt("");
       }
 
-      // Initial map choice from tournament config
-      if (tournament.config?.mapPool && tournament.config.mapPool.length > 0) {
-        setSelectedMap(tournament.config.mapPool[0]);
+      // Initial map choice from tournament config or active match
+      const pool = tournament.config?.settings?.mapPool || tournament.config?.mapPool || [];
+      const defaultMap = pool.length > 0 ? pool[0] : (tournament.type === "1vs1" ? "3070549948" : "de_dust2");
+      if (activeCs2Match?.map_name) {
+        setSelectedMap(activeCs2Match.map_name);
+      } else if (pool.length > 0) {
+        setSelectedMap(pool[0]);
+      } else {
+        setSelectedMap(defaultMap);
       }
 
       // Find match in initial active matches
@@ -261,7 +267,7 @@ export function MatchControlModal({
     }
     setIsRestartingServer(true);
     try {
-      const finalMap = customWorkshopId.trim() ? customWorkshopId.trim() : selectedMap;
+      const finalMap = customWorkshopId.trim() ? customWorkshopId.trim() : (activeCs2Match?.map_name || selectedMap);
       const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

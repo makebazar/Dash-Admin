@@ -8,6 +8,7 @@ import {
   generateDoubleElimination,
   advancePlayoffWinner,
   checkAndFinalizeTournament,
+  resolveMatchFormat,
 } from "@/lib/brackets";
 import { calculateStandardMatchElo } from "@/lib/elo";
 import { broadcastSseCommand } from "@/lib/cs2/sse";
@@ -1527,8 +1528,8 @@ export async function POST(
 
       // 1. Fetch match & tournament details
       const matchRes = await client.query(
-        `SELECT m.id, m.tournament_id, m.competitor_a_id, m.competitor_b_id,
-                t.name as tournament_name, t.config as tournament_config, t.discipline
+        `SELECT m.id, m.tournament_id, m.round, m.result, m.competitor_a_id, m.competitor_b_id,
+                t.name as tournament_name, t.type as tournament_type, t.config as tournament_config, t.discipline
          FROM tournament_matches m
          JOIN club_tournaments t ON m.tournament_id = t.id
          WHERE m.id = $1 AND t.club_id = $2`,
@@ -1541,8 +1542,18 @@ export async function POST(
 
       const match = matchRes.rows[0];
       const tConfig = match.tournament_config || {};
-      const chosenMap = (selectedMap || tConfig.mapPool?.[0] || "de_mirage").trim();
-      const matchFormat = tConfig.matchFormat || "5v5";
+      const tSettings = tConfig.settings || tConfig;
+      const pool = (tSettings.mapPool && tSettings.mapPool.length > 0)
+        ? tSettings.mapPool
+        : (tConfig.mapPool && tConfig.mapPool.length > 0)
+        ? tConfig.mapPool
+        : (match.tournament_type === "1vs1" ? ["3070549948"] : ["de_dust2", "de_mirage"]);
+
+      const vetoRes = await client.query(`SELECT selected_map FROM match_veto WHERE match_id = $1`, [matchId]).catch(() => ({ rows: [] }));
+      const vetoMap = vetoRes.rows[0]?.selected_map;
+
+      const chosenMap = (selectedMap || vetoMap || pool[0] || "de_dust2").trim();
+      const matchFormat = resolveMatchFormat(tConfig, match.round, undefined, match.result);
 
       const launchResult = await launchOrQueueMatchServer(
         client,
@@ -1573,8 +1584,8 @@ export async function POST(
       }
 
       const matchRes = await client.query(
-        `SELECT m.id, m.tournament_id, m.competitor_a_id, m.competitor_b_id, m.cs2_server_id,
-                t.name as tournament_name, t.config as tournament_config
+        `SELECT m.id, m.tournament_id, m.round, m.result, m.competitor_a_id, m.competitor_b_id, m.cs2_server_id,
+                t.name as tournament_name, t.type as tournament_type, t.config as tournament_config
          FROM tournament_matches m
          JOIN club_tournaments t ON m.tournament_id = t.id
          WHERE m.id = $1 AND t.club_id = $2`,
@@ -1585,12 +1596,27 @@ export async function POST(
       }
       const match = matchRes.rows[0];
 
+      // Check active cs2 match record to preserve existing running map if not explicitly overridden
+      const cs2Res = await client.query(
+        `SELECT map_name, match_format FROM club_cs2_matches WHERE id = $1 OR (config_data->>'tournament_match_id') = $2 ORDER BY created_at DESC LIMIT 1`,
+        [match.cs2_server_id || `dm-tourney-${matchId}`, String(matchId)]
+      ).catch(() => ({ rows: [] }));
+      const activeCs2Map = cs2Res.rows[0]?.map_name;
+      const activeCs2Format = cs2Res.rows[0]?.match_format;
+
       // Determine selected map
       const vetoRes = await client.query(`SELECT selected_map FROM match_veto WHERE match_id = $1`, [matchId]).catch(() => ({ rows: [] }));
       const vetoMap = vetoRes.rows[0]?.selected_map;
       const tConfig = match.tournament_config || {};
-      const chosenMap = (body.selectedMap || vetoMap || tConfig.mapPool?.[0] || "de_mirage").trim();
-      const matchFormat = tConfig.matchFormat || "5v5";
+      const tSettings = tConfig.settings || tConfig;
+      const pool = (tSettings.mapPool && tSettings.mapPool.length > 0)
+        ? tSettings.mapPool
+        : (tConfig.mapPool && tConfig.mapPool.length > 0)
+        ? tConfig.mapPool
+        : (match.tournament_type === "1vs1" ? ["3070549948"] : ["de_dust2", "de_mirage"]);
+
+      const chosenMap = (body.selectedMap || activeCs2Map || vetoMap || pool[0] || "de_dust2").trim();
+      const matchFormat = activeCs2Format || resolveMatchFormat(tConfig, match.round, undefined, match.result);
 
       const launchResult = await launchOrQueueMatchServer(
         client,

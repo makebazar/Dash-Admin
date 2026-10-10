@@ -106,10 +106,11 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
 
     // Fetch match details to get format
     const matchRes = await client.query(
-      `SELECT t.config as tournament_config FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
+      `SELECT m.round, m.result, t.config as tournament_config FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
       [matchId]
     ).catch(() => ({ rows: [] }));
-    const matchFormat = matchRes.rows[0]?.tournament_config?.matchFormat || "5v5";
+    const match = matchRes.rows[0];
+    const matchFormat = resolveMatchFormat(match?.tournament_config, match?.round, undefined, match?.result);
 
     await launchOrQueueMatchServer(
       client,
@@ -433,7 +434,15 @@ export async function GET(
     const serverPort = cs2Match?.port || agent?.base_port || 27015;
 
     // Determine selected map
-    const selectedMap = veto?.selected_map || match.tournament_config?.defaultMap || "de_mirage";
+    const tConfig = match.tournament_config || {};
+    const tSettings = tConfig.settings || tConfig;
+    const pool = (tSettings.mapPool && tSettings.mapPool.length > 0)
+      ? tSettings.mapPool
+      : (tConfig.mapPool && tConfig.mapPool.length > 0)
+      ? tConfig.mapPool
+      : (match.tournament_type === "1vs1" ? ["3070549948"] : ["de_dust2", "de_mirage"]);
+    const defaultMapFromPool = pool[0] || "de_dust2";
+    const selectedMap = cs2Match?.map_name || veto?.selected_map || tSettings.defaultMap || defaultMapFromPool;
 
     // Accurate server state determination
     let serverStatus: "idle" | "agent_offline" | "waiting_server" | "starting" | "start_failed" | "ready" | "warmup" | "knife" | "live" | "paused" | "finished" = "idle";
@@ -931,8 +940,25 @@ export async function POST(
 
     // ACTION: RESTART_SERVER
     if (action === "restart_server") {
-      const vetoRes = await client.query(`SELECT selected_map FROM match_veto WHERE match_id = $1`, [parsedMatchId]);
-      const selectedMap = vetoRes.rows[0]?.selected_map || "de_mirage";
+      const cs2Res = await client.query(
+        `SELECT map_name, match_format FROM club_cs2_matches WHERE id = $1 OR (config_data->>'tournament_match_id') = $2 ORDER BY created_at DESC LIMIT 1`,
+        [match.cs2_server_id || `dm-tourney-${parsedMatchId}`, String(parsedMatchId)]
+      ).catch(() => ({ rows: [] }));
+      const activeCs2Map = cs2Res.rows[0]?.map_name;
+
+      const vetoRes = await client.query(`SELECT selected_map FROM match_veto WHERE match_id = $1`, [parsedMatchId]).catch(() => ({ rows: [] }));
+      const vetoMap = vetoRes.rows[0]?.selected_map;
+
+      const tConfig = match.tournament_config || {};
+      const tSettings = tConfig.settings || tConfig;
+      const pool = (tSettings.mapPool && tSettings.mapPool.length > 0)
+        ? tSettings.mapPool
+        : (tConfig.mapPool && tConfig.mapPool.length > 0)
+        ? tConfig.mapPool
+        : (match.tournament_type === "1vs1" ? ["3070549948"] : ["de_dust2", "de_mirage"]);
+      const defaultMap = pool[0] || "de_dust2";
+
+      const selectedMap = (body.selectedMap || activeCs2Map || vetoMap || defaultMap).trim();
       await triggerServerLaunch(String(parsedMatchId), selectedMap, matchClubId);
       await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [matchId]);
       return NextResponse.json({ success: true, message: "Сервер перезапущен" });
