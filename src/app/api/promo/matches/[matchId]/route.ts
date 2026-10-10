@@ -33,6 +33,9 @@ async function ensureMatchLobbyTables(client: any) {
         body TEXT NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+      ALTER TABLE tournament_match_messages ADD COLUMN IF NOT EXISTS sender_player_id TEXT;
+      ALTER TABLE tournament_match_messages ADD COLUMN IF NOT EXISTS sender_name TEXT;
+      ALTER TABLE tournament_match_messages ADD COLUMN IF NOT EXISTS sender_side VARCHAR(20);
     `);
   } catch (e) {
     console.warn("ensureMatchLobbyTables note:", e);
@@ -485,16 +488,24 @@ export async function GET(
       veto = await checkAndProcessAutoVeto(client, parsedMatchId, match, veto, matchClubId);
     }
 
-    // 5. Fetch chat messages
+    // 5. Fetch chat messages with CT/T side attribution
     const messagesRes = await client.query(
-      `SELECT m.id, m.sender_kind, m.sender_competitor_id, m.body, m.created_at, 
-              COALESCE(p.nickname, p.full_name, tc.display_name, 'Участник') as sender_name
+      `SELECT m.id, m.sender_kind, m.sender_competitor_id, m.sender_player_id, m.body, m.created_at, 
+              COALESCE(m.sender_name, p.nickname, p.full_name, tc.display_name, 'Участник') as sender_name,
+              COALESCE(
+                m.sender_side,
+                CASE 
+                  WHEN m.sender_competitor_id::text = $2::text THEN 'CT'
+                  WHEN m.sender_competitor_id::text = $3::text THEN 'T'
+                  ELSE 'SPECTATOR'
+                END
+              ) as sender_side
        FROM tournament_match_messages m
        LEFT JOIN tournament_competitors tc ON m.sender_competitor_id = tc.id
-       LEFT JOIN promo_players p ON (tc.player_id = p.id OR tc.player_id::text = p.phone_number)
+       LEFT JOIN promo_players p ON (m.sender_player_id = p.id::text OR tc.player_id = p.id OR tc.player_id::text = p.phone_number)
        WHERE m.match_id = $1
        ORDER BY m.created_at ASC`,
-      [parsedMatchId]
+      [parsedMatchId, String(match.competitor_a_id || ""), String(match.competitor_b_id || "")]
     );
 
     // 6. Fetch club CS2 agent status
@@ -959,11 +970,11 @@ export async function POST(
 
       // Check player's competitor
       const compARes = await client.query(
-        `SELECT c.id, c.type, c.team_id, c.promo_team_id, c.player_id FROM tournament_competitors c WHERE c.id = $1`,
+        `SELECT c.id, c.type, c.team_id, c.promo_team_id, c.player_id, c.display_name FROM tournament_competitors c WHERE c.id = $1`,
         [match.competitor_a_id]
       );
       const compBRes = await client.query(
-        `SELECT c.id, c.type, c.team_id, c.promo_team_id, c.player_id FROM tournament_competitors c WHERE c.id = $1`,
+        `SELECT c.id, c.type, c.team_id, c.promo_team_id, c.player_id, c.display_name FROM tournament_competitors c WHERE c.id = $1`,
         [match.competitor_b_id]
       );
 
@@ -993,12 +1004,19 @@ export async function POST(
       const isMemberA = await checkInCompetitor(compA);
       const isMemberB = await checkInCompetitor(compB);
 
+      // Resolve sender nickname
+      const playerProfileRes = await client.query(
+        `SELECT COALESCE(nickname, full_name) as name FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
+        [String(playerId)]
+      );
+      const authorName = playerProfileRes.rows[0]?.name || (isMemberA ? (compA?.display_name || "Команда 1") : isMemberB ? (compB?.display_name || "Команда 2") : "Участник");
+      const senderSide = isMemberA ? "CT" : (isMemberB ? "T" : "SPECTATOR");
       const senderCompetitorId = isMemberA ? match.competitor_a_id : (isMemberB ? match.competitor_b_id : null);
 
       await client.query(
-        `INSERT INTO tournament_match_messages (match_id, sender_kind, sender_competitor_id, body)
-         VALUES ($1, 'player', $2, $3)`,
-        [parsedMatchId, senderCompetitorId, message.trim()]
+        `INSERT INTO tournament_match_messages (match_id, sender_kind, sender_competitor_id, sender_player_id, sender_name, sender_side, body)
+         VALUES ($1, 'player', $2, $3, $4, $5, $6)`,
+        [parsedMatchId, senderCompetitorId, String(playerId), authorName, senderSide, message.trim()]
       );
 
       // Notify clients

@@ -16,6 +16,7 @@ import {
   Copy,
   ExternalLink,
   Shield,
+  Flame,
   Zap,
   Users,
   AlertTriangle,
@@ -517,8 +518,9 @@ export default function MatchControlPage() {
           <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
             {/* Team A */}
             <div className="space-y-1">
-              <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
-                Команда 1
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/25 text-sky-400 text-[10px] font-black uppercase tracking-wider mb-0.5">
+                <Shield className="w-3 h-3 text-sky-400" />
+                <span>СПЕЦНАЗ (CT)</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
                 {compA?.name || "Ожидает пару..."}
@@ -530,10 +532,19 @@ export default function MatchControlPage() {
 
             {/* Score & Stage */}
             <div className="text-center flex flex-col items-center justify-center space-y-1">
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider mb-0.5">
+                <span className="px-2 py-0.5 rounded-md border text-sky-400 bg-sky-500/10 border-sky-500/20 font-mono font-bold">
+                  CT
+                </span>
+                <span className="text-gray-600 font-mono text-[10px]">VS</span>
+                <span className="px-2 py-0.5 rounded-md border text-orange-400 bg-orange-500/10 border-orange-500/20 font-mono font-bold">
+                  T
+                </span>
+              </div>
               <div className="text-4xl sm:text-6xl font-black font-mono tracking-tight text-white flex items-center justify-center gap-3">
-                <span className={cn(match.winnerId === compA?.id ? "text-emerald-400" : "")}>{match.score1 ?? 0}</span>
-                <span className="text-orange-500 font-sans font-light">:</span>
-                <span className={cn(match.winnerId === compB?.id ? "text-emerald-400" : "")}>{match.score2 ?? 0}</span>
+                <span className={cn(match.winnerId === compA?.id ? "text-emerald-400" : "text-sky-400")}>{match.score1 ?? 0}</span>
+                <span className="text-gray-500 font-sans font-light">:</span>
+                <span className={cn(match.winnerId === compB?.id ? "text-emerald-400" : "text-orange-400")}>{match.score2 ?? 0}</span>
               </div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 border border-white/10 text-[11px] font-bold uppercase tracking-wider text-gray-300">
                 <span>{match.matchFormat?.toUpperCase() || "BO1"}</span>
@@ -548,8 +559,9 @@ export default function MatchControlPage() {
 
             {/* Team B */}
             <div className="space-y-1 text-left md:text-right">
-              <div className="text-[10px] font-black uppercase tracking-widest text-blue-400">
-                Команда 2
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/25 text-orange-400 text-[10px] font-black uppercase tracking-wider mb-0.5">
+                <Flame className="w-3 h-3 text-orange-400" />
+                <span>ТЕРРОРИСТЫ (T)</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
                 {compB?.name || "Ожидает пару..."}

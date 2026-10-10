@@ -12,6 +12,7 @@ import {
   Copy,
   Check,
   Flame,
+  Shield,
   AlertTriangle,
   MessageSquare,
   Send,
@@ -31,7 +32,10 @@ import { cn } from "@/lib/utils";
 interface ChatMessage {
   id: string;
   sender_kind: string;
+  sender_competitor_id?: number | string;
+  sender_player_id?: string;
   sender_name: string;
+  sender_side?: "CT" | "T" | "ADMIN" | "SPECTATOR" | string;
   body: string;
   created_at: string;
 }
@@ -546,6 +550,62 @@ export default function MatchLobby() {
   const isWinnerA = isFinished && match.winnerId === compA?.id;
   const isWinnerB = isFinished && match.winnerId === compB?.id;
 
+  const isTeam1Ct = useMemo(() => {
+    const liveStatsSide = match?.matchStats?.team1?.side || match?.matchStats?.team1?.team_side;
+    if (liveStatsSide) {
+      return String(liveStatsSide).toLowerCase().includes("ct");
+    }
+    return true; // Default Team A = CT, Team B = T
+  }, [match?.matchStats]);
+
+  const sideA = isTeam1Ct ? "CT" : "T";
+  const sideB = isTeam1Ct ? "T" : "CT";
+
+  const getMessageDetails = (m: ChatMessage) => {
+    const rawSide = (m.sender_side || "").toUpperCase();
+    const isCompA = Boolean(compA?.id && String(m.sender_competitor_id || "") === String(compA.id));
+    const isCompB = Boolean(compB?.id && String(m.sender_competitor_id || "") === String(compB.id));
+    
+    const isRosterA = Boolean(compA?.roster?.some((p: any) => (p.nickname || p.full_name || p.name) === m.sender_name));
+    const isRosterB = Boolean(compB?.roster?.some((p: any) => (p.nickname || p.full_name || p.name) === m.sender_name));
+
+    if (m.sender_kind === "admin" || rawSide === "ADMIN") {
+      return {
+        sideBadge: "АДМИН",
+        sideBadgeClass: "bg-purple-500/15 text-purple-400 border border-purple-500/30",
+        nameClass: "text-purple-400 font-bold",
+        side: "ADMIN",
+      };
+    }
+
+    if (rawSide === "CT" || (!rawSide && (isCompA || isRosterA))) {
+      return {
+        sideBadge: "CT",
+        sideLabel: "Спецназ",
+        sideBadgeClass: "bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm",
+        nameClass: "text-sky-400 font-bold",
+        side: "CT",
+      };
+    }
+
+    if (rawSide === "T" || (!rawSide && (isCompB || isRosterB))) {
+      return {
+        sideBadge: "T",
+        sideLabel: "Террористы",
+        sideBadgeClass: "bg-orange-500/15 text-orange-400 border border-orange-500/30 shadow-sm",
+        nameClass: "text-orange-400 font-bold",
+        side: "T",
+      };
+    }
+
+    return {
+      sideBadge: "ИГРОК",
+      sideBadgeClass: "bg-gray-500/15 text-gray-400 border border-gray-500/30",
+      nameClass: "text-gray-300 font-bold",
+      side: "SPECTATOR",
+    };
+  };
+
   const selectedMapKey = veto?.selected_map || match.selectedMap || "de_mirage";
   const selectedMapInfo = MAP_PREVIEWS[selectedMapKey] || {
     name: selectedMapKey.replace(/^(de_|cs_)/g, "").toUpperCase(),
@@ -638,6 +698,13 @@ export default function MatchLobby() {
             
             {/* Team A */}
             <div className="flex flex-col items-start min-w-0">
+              <div className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-1.5 shadow-sm border",
+                sideA === "CT" ? "bg-sky-500/10 border-sky-500/25 text-sky-400" : "bg-orange-500/10 border-orange-500/25 text-orange-400"
+              )}>
+                {sideA === "CT" ? <Shield className="w-3 h-3 text-sky-400" /> : <Flame className="w-3 h-3 text-orange-400" />}
+                <span>{sideA === "CT" ? "СПЕЦНАЗ (CT)" : "ТЕРРОРИСТЫ (T)"}</span>
+              </div>
               <div className="flex items-center gap-2">
                 <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
                   {compA?.name || "Команда 1"}
@@ -653,13 +720,23 @@ export default function MatchLobby() {
 
             {/* Middle Score & Match Meta */}
             <div className="text-center flex flex-col items-center justify-center">
-              <div className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white flex items-center justify-center gap-3">
-                <span className={cn(isWinnerA ? "text-emerald-400" : "")}>{match.score1 ?? 0}</span>
-                <span className="text-orange-500 font-sans font-light">:</span>
-                <span className={cn(isWinnerB ? "text-emerald-400" : "")}>{match.score2 ?? 0}</span>
+              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider mb-1">
+                <span className={cn("px-2 py-0.5 rounded-md border font-mono font-bold", sideA === "CT" ? "text-sky-400 bg-sky-500/10 border-sky-500/20" : "text-orange-400 bg-orange-500/10 border-orange-500/20")}>
+                  {sideA}
+                </span>
+                <span className="text-gray-600 font-mono text-[10px]">VS</span>
+                <span className={cn("px-2 py-0.5 rounded-md border font-mono font-bold", sideB === "CT" ? "text-sky-400 bg-sky-500/10 border-sky-500/20" : "text-orange-400 bg-orange-500/10 border-orange-500/20")}>
+                  {sideB}
+                </span>
               </div>
 
-              <div className="mt-1 text-xs font-bold tracking-widest uppercase">
+              <div className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white flex items-center justify-center gap-3">
+                <span className={cn(isWinnerA ? "text-emerald-400" : sideA === "CT" ? "text-sky-400" : "text-orange-400")}>{match.score1 ?? 0}</span>
+                <span className="text-gray-500 font-sans font-light">:</span>
+                <span className={cn(isWinnerB ? "text-emerald-400" : sideB === "CT" ? "text-sky-400" : "text-orange-400")}>{match.score2 ?? 0}</span>
+              </div>
+
+              <div className="mt-1.5 text-xs font-bold tracking-widest uppercase">
                 {veto?.selected_map ? (
                   <span className="text-emerald-400">{format.toUpperCase()} • {selectedMapInfo.name}</span>
                 ) : isVeto ? (
@@ -672,6 +749,13 @@ export default function MatchLobby() {
 
             {/* Team B */}
             <div className="flex flex-col items-start md:items-end min-w-0">
+              <div className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-1.5 shadow-sm border",
+                sideB === "T" ? "bg-orange-500/10 border-orange-500/25 text-orange-400" : "bg-sky-500/10 border-sky-500/25 text-sky-400"
+              )}>
+                {sideB === "T" ? <Flame className="w-3 h-3 text-orange-400" /> : <Shield className="w-3 h-3 text-sky-400" />}
+                <span>{sideB === "T" ? "ТЕРРОРИСТЫ (T)" : "СПЕЦНАЗ (CT)"}</span>
+              </div>
               <div className="flex items-center gap-2">
                 {isWinnerB && <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400 shrink-0" />}
                 <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
@@ -697,9 +781,17 @@ export default function MatchLobby() {
           <div className="lg:col-span-3">
             <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-4 space-y-3 shadow-xl">
               <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
-                <h3 className="text-xs font-black uppercase tracking-wider text-gray-300 truncate max-w-[140px]">
-                  {isSolo ? "Участник" : (compA?.name || "Команда А")}
-                </h3>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded text-[9px] font-black tracking-wider uppercase shrink-0 border",
+                    sideA === "CT" ? "bg-sky-500/15 text-sky-400 border-sky-500/30" : "bg-orange-500/15 text-orange-400 border-orange-500/30"
+                  )}>
+                    {sideA}
+                  </span>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-gray-200 truncate">
+                    {isSolo ? "Участник" : (compA?.name || "Команда А")}
+                  </h3>
+                </div>
                 <span className="text-[10px] font-bold text-gray-500 uppercase whitespace-nowrap shrink-0">
                   {isSolo ? "1v1" : `${compA?.roster?.length || 1} ИГР.`}
                 </span>
@@ -727,7 +819,10 @@ export default function MatchLobby() {
                           {profileUrl ? (
                             <Link
                               href={profileUrl}
-                              className="text-sm font-bold text-white hover:text-orange-400 transition-colors truncate block"
+                              className={cn(
+                                "text-sm font-bold text-white transition-colors truncate block",
+                                sideA === "CT" ? "hover:text-sky-400" : "hover:text-orange-400"
+                              )}
                               title="Перейти в профиль игрока"
                             >
                               {playerName}
@@ -738,7 +833,10 @@ export default function MatchLobby() {
                             </span>
                           )}
                           {isCap && !isSolo && (
-                            <span className="text-[9px] font-black uppercase tracking-wider text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">
+                            <span className={cn(
+                              "text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded",
+                              sideA === "CT" ? "text-sky-400 bg-sky-500/10" : "text-orange-400 bg-orange-500/10"
+                            )}>
                               КЭП
                             </span>
                           )}
@@ -748,7 +846,7 @@ export default function MatchLobby() {
                           {p.player_elo && (
                             <>
                               <span className="text-gray-600">•</span>
-                              <span className="text-orange-400 font-bold">{p.player_elo} ELO</span>
+                              <span className={cn("font-bold", sideA === "CT" ? "text-sky-400" : "text-orange-400")}>{p.player_elo} ELO</span>
                             </>
                           )}
                         </div>
@@ -1385,9 +1483,17 @@ export default function MatchLobby() {
           <div className="lg:col-span-3">
             <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-4 space-y-3 shadow-xl">
               <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
-                <h3 className="text-xs font-black uppercase tracking-wider text-gray-300 truncate max-w-[140px]">
-                  {isSolo ? "Участник" : (compB?.name || "Команда Б")}
-                </h3>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded text-[9px] font-black tracking-wider uppercase shrink-0 border",
+                    sideB === "T" ? "bg-orange-500/15 text-orange-400 border-orange-500/30" : "bg-sky-500/15 text-sky-400 border-sky-500/30"
+                  )}>
+                    {sideB}
+                  </span>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-gray-200 truncate">
+                    {isSolo ? "Участник" : (compB?.name || "Команда Б")}
+                  </h3>
+                </div>
                 <span className="text-[10px] font-bold text-gray-500 uppercase whitespace-nowrap shrink-0">
                   {isSolo ? "1v1" : `${compB?.roster?.length || 1} ИГР.`}
                 </span>
@@ -1415,7 +1521,10 @@ export default function MatchLobby() {
                           {profileUrl ? (
                             <Link
                               href={profileUrl}
-                              className="text-sm font-bold text-white hover:text-orange-400 transition-colors truncate block"
+                              className={cn(
+                                "text-sm font-bold text-white transition-colors truncate block",
+                                sideB === "T" ? "hover:text-orange-400" : "hover:text-sky-400"
+                              )}
                               title="Перейти в профиль игрока"
                             >
                               {playerName}
@@ -1426,7 +1535,10 @@ export default function MatchLobby() {
                             </span>
                           )}
                           {isCap && !isSolo && (
-                            <span className="text-[9px] font-black uppercase tracking-wider text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                            <span className={cn(
+                              "text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded",
+                              sideB === "T" ? "text-orange-400 bg-orange-500/10" : "text-sky-400 bg-sky-500/10"
+                            )}>
                               КЭП
                             </span>
                           )}
@@ -1436,7 +1548,7 @@ export default function MatchLobby() {
                           {p.player_elo && (
                             <>
                               <span className="text-gray-600">•</span>
-                              <span className="text-blue-400 font-bold">{p.player_elo} ELO</span>
+                              <span className={cn("font-bold", sideB === "T" ? "text-orange-400" : "text-sky-400")}>{p.player_elo} ELO</span>
                             </>
                           )}
                         </div>
@@ -1465,34 +1577,47 @@ export default function MatchLobby() {
         {/* FULL-WIDTH MATCH CHAT */}
         <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-4 shadow-xl space-y-3">
           <div className="flex items-center justify-between border-b border-white/5 pb-2">
-            <h3 className="text-xs font-black uppercase tracking-wider text-white">
-              Чат матча
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wider text-white">
+                Чат матча
+              </h3>
+              <div className="flex items-center gap-1 text-[9px] font-black uppercase">
+                <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 border border-sky-500/20">{sideA}</span>
+                <span className="text-gray-600">•</span>
+                <span className="px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400 border border-orange-500/20">{sideB}</span>
+              </div>
+            </div>
             <span className="text-[10px] text-gray-500 font-medium">
               {isParticipant ? "Общий чат игроков лобби" : "Режим просмотра чата"}
             </span>
           </div>
 
           {/* Message Feed */}
-          <div className="min-h-[40px] max-h-[160px] overflow-y-auto py-1 space-y-1.5 pr-1 text-xs">
+          <div className="min-h-[50px] max-h-[180px] overflow-y-auto py-1 space-y-1.5 pr-1 text-xs">
             {messages.length === 0 ? (
-              <div className="py-3 text-[11px] text-gray-500 uppercase tracking-wider text-center">
+              <div className="py-4 text-[11px] text-gray-500 uppercase tracking-wider text-center">
                 Сообщений пока нет
               </div>
             ) : (
-              messages.map((m) => (
-                <div key={m.id} className="flex items-baseline gap-2 py-0.5">
-                  <span className="text-[10px] font-mono text-gray-500 shrink-0">
-                    {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                  <span className="font-bold text-orange-400 shrink-0 text-xs">
-                    {m.sender_name}:
-                  </span>
-                  <span className="text-gray-200 break-words text-xs">
-                    {m.body}
-                  </span>
-                </div>
-              ))
+              messages.map((m) => {
+                const details = getMessageDetails(m);
+                return (
+                  <div key={m.id} className="flex items-center gap-2 py-1 px-2 rounded-lg bg-white/[0.015] hover:bg-white/[0.03] transition-colors">
+                    <span className="text-[10px] font-mono text-gray-500 shrink-0">
+                      {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-black tracking-wider shrink-0 uppercase border", details.sideBadgeClass)}>
+                      {details.sideBadge}
+                    </span>
+                    <span className={cn("shrink-0 text-xs", details.nameClass)}>
+                      {m.sender_name}:
+                    </span>
+                    <span className="text-gray-200 break-words text-xs flex-1">
+                      {m.body}
+                    </span>
+                  </div>
+                );
+              })
             )}
             <div ref={chatBottomRef} />
           </div>
