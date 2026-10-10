@@ -6,6 +6,7 @@ import { resolveMatchFormat } from "@/lib/brackets";
 import { normalizeCS2Map } from "@/lib/cs2/utils";
 import { verifySessionValue } from "@/lib/session";
 import { resolveSteamId64 } from "@/lib/steam-resolver";
+import { launchOrQueueMatchServer, processServerQueue } from "@/lib/cs2/server-manager";
 
 async function ensureMatchLobbyTables(client: any) {
   try {
@@ -97,143 +98,30 @@ async function getExpectedPlayers(client: any, matchId: number, competitorAId: s
   return playerIds;
 }
 
-// Background launcher for CS2 server via DashMatch agent
+// Background launcher for CS2 server via DashMatch agent / Server Manager
 async function triggerServerLaunch(matchId: string, selectedMap: string, clubId: number) {
   const client = await getClient();
   try {
-    console.log(`[Lobby API] Launching DashMatch server for match ${matchId} on map ${selectedMap} in club ${clubId}...`);
+    console.log(`[Lobby API] Launching or queuing DashMatch server for match ${matchId} on map ${selectedMap} in club ${clubId}...`);
 
-    // 1. Fetch match and competitor details
+    // Fetch match details to get format
     const matchRes = await client.query(
-      `SELECT m.id, m.competitor_a_id, m.competitor_b_id, t.name as tournament_name, t.config as tournament_config, t.discipline
-       FROM tournament_matches m
-       JOIN club_tournaments t ON m.tournament_id = t.id
-       WHERE m.id = $1`,
+      `SELECT t.config as tournament_config FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
       [matchId]
-    );
-    if (matchRes.rowCount === 0) return;
+    ).catch(() => ({ rows: [] }));
+    const matchFormat = matchRes.rows[0]?.tournament_config?.matchFormat || "5v5";
 
-    const match = matchRes.rows[0];
-    const compARes = await client.query(`SELECT display_name FROM tournament_competitors WHERE id = $1`, [match.competitor_a_id]);
-    const compBRes = await client.query(`SELECT display_name FROM tournament_competitors WHERE id = $1`, [match.competitor_b_id]);
-    const nameA = compARes.rows[0]?.display_name || "Команда А";
-    const nameB = compBRes.rows[0]?.display_name || "Команда Б";
-
-    // 2. Fetch agent info from club_cs2_agents
-    const agentRes = await client.query(
-      `SELECT lan_ip, base_port, max_instances, (last_heartbeat > NOW() - INTERVAL '30 seconds') as is_online
-       FROM club_cs2_agents
-       WHERE club_id = $1`,
-      [clubId]
-    );
-    const agent = agentRes.rows[0];
-    const serverIp = agent?.lan_ip || process.env.GAME_SERVER_IP || "127.0.0.1";
-    const basePort = agent?.base_port || 27015;
-    const maxInstances = agent?.max_instances || 4;
-
-    const dmMatchId = `dm-tourney-${matchId}`;
-
-    // Cancel any stale pending commands for this match
-    await client.query(
-      `UPDATE club_cs2_commands SET status = 'cancelled' WHERE club_id = $1 AND match_id = $2 AND status = 'pending'`,
-      [clubId, dmMatchId]
-    ).catch(() => {});
-
-    // 3. Find lowest available port
-    const usedPortsRes = await client.query(
-      `SELECT port FROM club_cs2_matches WHERE club_id = $1 AND id != $2 AND status NOT IN ('stopped', 'finished')`,
-      [clubId, dmMatchId]
-    );
-    const usedPorts = new Set(usedPortsRes.rows.map((r: any) => r.port));
-    let assignedPort = basePort;
-    for (let i = 0; i < maxInstances; i++) {
-      if (!usedPorts.has(basePort + i)) {
-        assignedPort = basePort + i;
-        break;
+    await launchOrQueueMatchServer(
+      client,
+      clubId,
+      matchId,
+      selectedMap,
+      matchFormat,
+      {
+        knifeRound: true,
+        warmupTime: 60,
       }
-    }
-
-    const matchFormat = match.tournament_config?.matchFormat || "5v5";
-    const matchzyId = parseInt(matchId, 10) || (Math.floor(Date.now() / 1000) % 2000000000 + 1);
-    const normalizedMap = normalizeCS2Map(selectedMap);
-
-    // 4. Create or update record in club_cs2_matches
-    await client.query(
-      `INSERT INTO club_cs2_matches (id, club_id, map_name, match_format, team1_name, team2_name, status, port, server_ip, matchzy_id, config_data, rcon_last_command, rcon_last_response, score1, score2, game_state)
-       VALUES ($1, $2, $3, $4, $5, $6, 'starting', $7, $8, $9, $10::jsonb, NULL, NULL, 0, 0, 'warmup')
-       ON CONFLICT (id) DO UPDATE SET 
-         map_name = $3, 
-         status = 'starting', 
-         port = $7, 
-         server_ip = $8, 
-         matchzy_id = $9, 
-         config_data = $10::jsonb, 
-         rcon_last_command = NULL,
-         rcon_last_response = NULL,
-         score1 = 0,
-         score2 = 0,
-         game_state = 'warmup',
-         updated_at = NOW()`,
-      [
-        dmMatchId,
-        clubId,
-        normalizedMap,
-        matchFormat,
-        nameA,
-        nameB,
-        assignedPort,
-        serverIp,
-        matchzyId,
-        JSON.stringify({
-          knife_round: true,
-          tournament_match_id: matchId,
-          warmup_time: 60,
-        }),
-      ]
     );
-
-    // 5. Enqueue START_MATCH command for the agent
-    const configUrl = `https://mydashadmin.ru/api/clubs/${clubId}/cs2/matches/${matchId}/config`;
-    await client.query(
-      `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
-       VALUES ($1, 'START_MATCH', $2, $3, 'pending')`,
-      [
-        clubId,
-        dmMatchId,
-        JSON.stringify({
-          map_name: normalizedMap,
-          match_format: matchFormat,
-          config_url: configUrl,
-          auth_token: `secret_${matchId}`,
-        }),
-      ]
-    );
-
-    // 6. Broadcast SSE command to connected DashMatch agent
-    broadcastSseCommand(clubId, {
-      type: "START_MATCH",
-      match_id: dmMatchId,
-      map_name: normalizedMap,
-      match_format: matchFormat,
-      config_url: configUrl,
-      auth_token: `secret_${matchId}`,
-    });
-
-    // 7. Update tournament_matches
-    await client.query(
-      `UPDATE tournament_matches 
-       SET cs2_server_id = $1, status = 'STARTING'
-       WHERE id = $2`,
-      [dmMatchId, matchId]
-    );
-
-    // 8. Notify clients
-    await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(matchId)]);
-    const tRes = await client.query(`SELECT tournament_id FROM tournament_matches WHERE id = $1`, [matchId]).catch(() => ({ rows: [] }));
-    if (tRes.rows.length > 0) {
-      await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(tRes.rows[0].tournament_id)]).catch(() => {});
-    }
-    console.log(`[Lobby API] CS2 Server launch command sent for match ${matchId} (Port ${assignedPort})`);
   } catch (err) {
     console.error(`[Lobby API] CS2 Server Launch failed for match ${matchId}:`, err);
   } finally {
@@ -261,6 +149,9 @@ async function triggerServerStop(matchId: string, clubId: number) {
       type: "STOP_MATCH",
       match_id: dmMatchId,
     });
+
+    // Check if any queued matches are waiting for a freed slot
+    await processServerQueue(client, clubId);
   } catch (err) {
     console.warn("[Lobby API] triggerServerStop error:", err);
   } finally {
@@ -537,16 +428,26 @@ export async function GET(
     const selectedMap = veto?.selected_map || match.tournament_config?.defaultMap || "de_mirage";
 
     // Accurate server state determination
-    let serverStatus: "idle" | "agent_offline" | "starting" | "start_failed" | "ready" | "warmup" | "knife" | "live" | "paused" | "finished" = "idle";
+    let serverStatus: "idle" | "agent_offline" | "waiting_server" | "starting" | "start_failed" | "ready" | "warmup" | "knife" | "live" | "paused" | "finished" = "idle";
     const statusLower = (match.status || "").toLowerCase();
     const isVetoPhase = statusLower === "veto";
     const isScheduledPhase = statusLower === "scheduled" || statusLower === "pending";
-    const isMatchStartingOrLive = ["starting", "in_progress", "live", "playing", "finished"].includes(statusLower);
+    const isMatchStartingOrLive = ["starting", "waiting_server", "in_progress", "live", "playing", "finished"].includes(statusLower);
+
+    let queuePosition = 1;
 
     if (statusLower === "finished" || cs2Match?.status === "finished") {
       serverStatus = "finished";
     } else if (isScheduledPhase || isVetoPhase) {
       serverStatus = "idle";
+    } else if (statusLower === "waiting_server" || cs2Match?.status === "waiting_server") {
+      serverStatus = "waiting_server";
+      const qRes = await client.query(
+        `SELECT count(*)::int as pos FROM club_cs2_matches 
+         WHERE club_id = $1 AND status = 'waiting_server' AND updated_at <= $2`,
+        [matchClubId, cs2Match?.updated_at || new Date()]
+      ).catch(() => ({ rows: [{ pos: 1 }] }));
+      queuePosition = qRes.rows[0]?.pos || 1;
     } else if (isMatchStartingOrLive) {
       if (!isAgentOnline && !cs2Match) {
         serverStatus = "agent_offline";
@@ -599,6 +500,7 @@ export async function GET(
         connectCommand: `connect ${serverIp}:${serverPort}`,
         gameState: cs2Match?.game_state || (match.status === "FINISHED" ? "finished" : "live"),
         serverStatus,
+        queuePosition,
         isAgentOnline,
         selectedMap,
         serverStartedAt: cs2Match?.created_at || null,

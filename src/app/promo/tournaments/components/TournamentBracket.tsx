@@ -565,6 +565,16 @@ export function TournamentBracket({
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Завершен
               </span>
+            ) : match.status === "WAITING_SERVER" ? (
+              <span className="text-amber-400 font-black tracking-wider flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                В очереди
+              </span>
+            ) : match.status === "STARTING" ? (
+              <span className="text-orange-400 font-black tracking-wider flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
+                Запуск
+              </span>
             ) : match.scheduled_at ? (
               <span className="text-orange-400 font-bold flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5 text-orange-400" />

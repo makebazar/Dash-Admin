@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { Table, ExternalLink, Shield, Swords, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Table, ExternalLink, Shield, Swords, ChevronRight, CheckCircle2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Match {
@@ -361,6 +361,11 @@ export function TournamentGroupStage({
                             >
                               Лобби ↗
                             </Link>
+                          ) : m.status === "WAITING_SERVER" ? (
+                            <span className="text-[9px] font-bold text-amber-400 uppercase flex items-center gap-1">
+                              <Clock className="w-2.5 h-2.5 animate-pulse" />
+                              В очереди
+                            </span>
                           ) : (
                             <span className="text-[9px] font-bold text-gray-400 uppercase">
                               {m.status === "FINISHED" ? "Завершен" : "Ожидание"}

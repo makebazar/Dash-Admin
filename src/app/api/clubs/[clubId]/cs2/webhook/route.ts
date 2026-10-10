@@ -3,6 +3,7 @@ import { getClient } from "@/db";
 import { calculateCs2MatchElo, EloPlayerInput } from "@/lib/elo";
 import { advancePlayoffWinner, resolveMatchFormat } from "@/lib/brackets";
 import { broadcastSseCommand } from "@/lib/cs2/sse";
+import { processServerQueue } from "@/lib/cs2/server-manager";
 
 export async function POST(
   request: Request,
@@ -124,6 +125,9 @@ export async function POST(
             type: "STOP_MATCH",
             match_id: resolvedCs2Id,
           });
+
+          // Process queued matches waiting for free slot
+          await processServerQueue(client, resolvedClubId);
         }
       }
 

@@ -509,6 +509,14 @@ export default function MatchLobby() {
     const pPhone = String(player.phone_number || "");
     return checkins.find((c) => String(c.player_id) === pId || (pPhone && String(c.player_id) === pPhone));
   }, [player, checkins]);
+
+  const isTeam1Ct = useMemo(() => {
+    const liveStatsSide = match?.matchStats?.team1?.side || match?.matchStats?.team1?.team_side;
+    if (liveStatsSide) {
+      return String(liveStatsSide).toLowerCase().includes("ct");
+    }
+    return true; // Default Team A = CT, Team B = T
+  }, [match?.matchStats]);
   // ----------------------------------------------------------------
 
   if (loading || !match) {
@@ -542,21 +550,13 @@ export default function MatchLobby() {
   const isFinished = statusLower === "finished";
   const isVeto = statusLower === "veto";
   const isScheduled = statusLower === "scheduled" || statusLower === "pending";
-  const isMatchStarted = ["in_progress", "live", "playing", "finished", "starting"].includes(statusLower);
+  const isMatchStarted = ["in_progress", "live", "playing", "finished", "starting", "waiting_server"].includes(statusLower);
 
   const serverStatus = match.serverStatus || "idle";
   const isServerReady = ["ready", "warmup", "knife", "live", "paused"].includes(serverStatus);
 
   const isWinnerA = isFinished && match.winnerId === compA?.id;
   const isWinnerB = isFinished && match.winnerId === compB?.id;
-
-  const isTeam1Ct = useMemo(() => {
-    const liveStatsSide = match?.matchStats?.team1?.side || match?.matchStats?.team1?.team_side;
-    if (liveStatsSide) {
-      return String(liveStatsSide).toLowerCase().includes("ct");
-    }
-    return true; // Default Team A = CT, Team B = T
-  }, [match?.matchStats]);
 
   const sideA = isTeam1Ct ? "CT" : "T";
   const sideB = isTeam1Ct ? "T" : "CT";
@@ -1118,7 +1118,33 @@ export default function MatchLobby() {
                   </div>
                 )}
 
-                {/* SCENARIO B: SERVER STARTING */}
+                {/* SCENARIO B: WAITING IN SERVER QUEUE */}
+                {serverStatus === "waiting_server" && (
+                  <div className="bg-[#0e0e12] border border-amber-500/30 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+                    <div className="relative w-12 h-12 mx-auto flex items-center justify-center">
+                      <div className="absolute inset-0 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+                      <Clock className="w-5 h-5 text-amber-400" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-amber-400">
+                        Вето завершено • Выбрана карта {selectedMapInfo.name}
+                      </div>
+                      <h3 className="text-base font-black uppercase tracking-tight text-white">
+                        В очереди на запуск сервера CS2
+                      </h3>
+                      <p className="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
+                        Все серверные слоты клуба сейчас заняты другими матчами. Ваш выбор карты и чек-ин сохранены. Сервер запустится <strong className="text-amber-400">автоматически</strong> сразу после завершения любой текущей игры!
+                      </p>
+                    </div>
+
+                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-bold text-amber-300">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                      <span>Позиция в очереди: {match.queuePosition || 1}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* SCENARIO C: SERVER STARTING */}
                 {serverStatus === "starting" && (
                   <div className="bg-[#0e0e12] border border-orange-500/30 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
                     <div className="w-10 h-10 border-2 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mx-auto" />
