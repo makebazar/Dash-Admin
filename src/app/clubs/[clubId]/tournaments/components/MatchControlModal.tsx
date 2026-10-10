@@ -506,6 +506,20 @@ export function MatchControlModal({
                       {copiedConnect ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                       {copiedConnect ? "Скопировано" : "Копировать"}
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(connectCommand);
+                        setCopiedConnect(true);
+                        setTimeout(() => setCopiedConnect(false), 2000);
+                        window.location.href = steamConnectUrl;
+                      }}
+                      className="inline-flex items-center gap-1 h-7 px-3 text-[11px] rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold transition-all cursor-pointer"
+                    >
+                      <Play className="w-3 h-3 fill-white" />
+                      <span>Зайти</span>
+                    </button>
                   </div>
                 </div>
 

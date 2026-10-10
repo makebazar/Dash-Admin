@@ -467,7 +467,9 @@ export async function GET(
     ).catch(() => ({ rows: [] }));
 
     const cs2Match = cs2Res.rows[0];
-    const serverIp = cs2Match?.server_ip || agent?.lan_ip || process.env.GAME_SERVER_IP || "127.0.0.1";
+    const serverIp = (cs2Match?.server_ip && cs2Match.server_ip !== "127.0.0.1")
+      ? cs2Match.server_ip
+      : (agent?.lan_ip || cs2Match?.server_ip || process.env.GAME_SERVER_IP || "127.0.0.1");
     const serverPort = cs2Match?.port || agent?.base_port || 27015;
 
     // Determine selected map
@@ -493,7 +495,7 @@ export async function GET(
         } else {
           const createdAt = cs2Match?.created_at ? new Date(cs2Match.created_at).getTime() : Date.now();
           const elapsedSec = (Date.now() - createdAt) / 1000;
-          if (elapsedSec > 90) {
+          if (elapsedSec > 180) {
             serverStatus = "start_failed";
           } else {
             serverStatus = "starting";
@@ -507,7 +509,7 @@ export async function GET(
         serverStatus = "knife";
       } else if (cs2Match.status === "live" || cs2Match.game_state === "live") {
         serverStatus = cs2Match.game_state === "paused" ? "paused" : "live";
-      } else if (cs2Match.status === "stopped") {
+      } else if (cs2Match.status === "stopped" || cs2Match.status === "failed") {
         serverStatus = "start_failed";
       } else {
         serverStatus = "starting";

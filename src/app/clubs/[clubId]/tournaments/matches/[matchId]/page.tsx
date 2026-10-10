@@ -346,6 +346,18 @@ export default function MatchControlPage() {
     setTimeout(() => setCopiedConnect(false), 2000);
   };
 
+  const handleConnectServer = () => {
+    const ip = activeCs2Match?.server_ip || agent?.lan_ip || "127.0.0.1";
+    const port = activeCs2Match?.port || 27015;
+    const cmd = match?.connectCommand || `connect ${ip}:${port}`;
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(cmd).catch(() => {});
+    }
+    setCopiedConnect(true);
+    setTimeout(() => setCopiedConnect(false), 2000);
+    window.location.href = `steam://connect/${ip}:${port}`;
+  };
+
   if (loading || !match) {
     return (
       <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center text-white space-y-4">
@@ -580,13 +592,13 @@ export default function MatchControlPage() {
                   )}
                 </button>
 
-                <a
-                  href={`steam://connect/${serverIp}:${serverPort}`}
-                  className="sm:col-span-4 py-2.5 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 active:scale-95"
+                <button
+                  onClick={handleConnectServer}
+                  className="sm:col-span-4 py-2.5 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
                   <span>Войти в CS2</span>
-                </a>
+                </button>
               </div>
             ) : (
               <div className="text-xs text-gray-400 bg-black/30 p-3 rounded-2xl border border-white/5">

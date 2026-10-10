@@ -401,6 +401,21 @@ export default function MatchLobby() {
     setTimeout(() => setCopiedConnect(false), 2500);
   };
 
+  const handleConnectServer = () => {
+    const ip = match?.cs2ServerIp || "127.0.0.1";
+    const port = match?.cs2ServerPort || 27015;
+    const cmd = match?.connectCommand || `connect ${ip}:${port}`;
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(cmd).catch(() => {});
+    }
+    setCopiedConnect(true);
+    setTimeout(() => setCopiedConnect(false), 3000);
+
+    // Launch Steam connect protocol
+    window.location.href = `steam://connect/${ip}:${port}`;
+  };
+
   // --- Hooks must come before any early return (Rules of Hooks) ---
   const compA = match?.competitorA;
   const compB = match?.competitorB;
@@ -1007,32 +1022,38 @@ export default function MatchLobby() {
                       </div>
 
                       {/* Connect bar */}
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                        <button
-                          onClick={handleCopyConnect}
-                          className="sm:col-span-8 py-3 px-3.5 bg-black/60 hover:bg-black/80 border border-white/10 hover:border-orange-500/40 rounded-xl text-xs font-mono font-bold text-gray-200 transition-all flex items-center justify-between gap-3 group"
-                        >
-                          <span className="truncate text-orange-400">
-                            {match.connectCommand || `connect ${match.cs2ServerIp}:${match.cs2ServerPort}`}
-                          </span>
-                          {copiedConnect ? (
-                            <span className="text-emerald-400 text-xs font-bold uppercase shrink-0">
-                              Скопировано
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                          <button
+                            onClick={handleCopyConnect}
+                            className="sm:col-span-8 py-3 px-3.5 bg-black/60 hover:bg-black/80 border border-white/10 hover:border-orange-500/40 rounded-xl text-xs font-mono font-bold text-gray-200 transition-all flex items-center justify-between gap-3 group cursor-pointer"
+                          >
+                            <span className="truncate text-orange-400 font-mono">
+                              {match.connectCommand || `connect ${match.cs2ServerIp}:${match.cs2ServerPort}`}
                             </span>
-                          ) : (
-                            <span className="text-gray-400 group-hover:text-white text-xs font-bold uppercase shrink-0">
-                              Копировать
-                            </span>
-                          )}
-                        </button>
+                            {copiedConnect ? (
+                              <span className="text-emerald-400 text-xs font-bold uppercase shrink-0">
+                                Скопировано
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 group-hover:text-white text-xs font-bold uppercase shrink-0">
+                                Копировать
+                              </span>
+                            )}
+                          </button>
 
-                        <a
-                          href={`steam://connect/${match.cs2ServerIp || "127.0.0.1"}:${match.cs2ServerPort || 27015}`}
-                          className="sm:col-span-4 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-[0.98]"
-                        >
-                          <Play className="w-4 h-4 fill-white" />
-                          <span>Зайти в CS2</span>
-                        </a>
+                          <button
+                            onClick={handleConnectServer}
+                            className="sm:col-span-4 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                          >
+                            <Play className="w-4 h-4 fill-white" />
+                            <span>Зайти в CS2</span>
+                          </button>
+                        </div>
+
+                        <p className="text-[11px] text-gray-400 leading-relaxed bg-black/30 px-3.5 py-2 rounded-xl border border-white/5">
+                          Команда подключения автоматически копируется. Если CS2 открылся в меню — откройте консоль (<kbd className="bg-white/10 px-1.5 py-0.5 rounded text-orange-400 font-mono font-bold">~</kbd>) и нажмите <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono font-bold">Ctrl+V</kbd> + <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono font-bold">Enter</kbd>.
+                        </p>
                       </div>
                     </div>
                   </div>
