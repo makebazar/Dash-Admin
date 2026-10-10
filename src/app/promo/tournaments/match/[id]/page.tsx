@@ -174,6 +174,63 @@ const MAP_PREVIEWS: Record<string, { name: string; image: string; desc: string }
   },
 };
 
+// Helpers to extract and normalize player stats from MatchZy event payload
+const extractTeamPlayers = (teamObj: any): any[] => {
+  if (!teamObj || !teamObj.players) return [];
+  if (Array.isArray(teamObj.players)) return teamObj.players;
+  if (typeof teamObj.players === "object") return Object.values(teamObj.players);
+  return [];
+};
+
+const normalizePlayer = (rawP: any, fallbackName: string, fallbackSteamId: string, totalRounds: number) => {
+  if (!rawP) {
+    return {
+      name: fallbackName,
+      steamid: fallbackSteamId,
+      kills: 0,
+      deaths: 0,
+      assists: 0,
+      damage: 0,
+      headshot_kills: 0,
+      mvps: 0,
+      score: 0,
+      adr: "-",
+      hs_percent: 0,
+    };
+  }
+
+  const name = rawP.name || rawP.nickname || fallbackName || "Игрок";
+  const steamid = String(rawP.steamid || rawP.steamId || rawP.steam_id || rawP.id || fallbackSteamId || "");
+  const s = rawP.stats || {};
+  const kills = Number(rawP.kills ?? s.kills ?? s.k ?? 0) || 0;
+  const deaths = Number(rawP.deaths ?? s.deaths ?? s.d ?? 0) || 0;
+  const assists = Number(rawP.assists ?? s.assists ?? s.a ?? 0) || 0;
+  const damage = Number(rawP.damage ?? s.damage ?? s.dmg ?? 0) || 0;
+  const headshotKills = Number(rawP.headshot_kills ?? s.headshot_kills ?? s.hs ?? 0) || 0;
+  const mvps = Number(rawP.mvps ?? s.mvps ?? 0) || 0;
+  const score = Number(rawP.score ?? s.score ?? 0) || 0;
+
+  const safeRounds = Math.max(1, totalRounds);
+  const calculatedAdr = damage > 0 ? (damage / safeRounds).toFixed(1) : "-";
+  const adr = rawP.adr ?? s.adr ?? calculatedAdr;
+  const calculatedHsPercent = kills > 0 ? Math.round((headshotKills / kills) * 100) : 0;
+  const hs_percent = rawP.hs_percent ?? s.hs_percent ?? calculatedHsPercent;
+
+  return {
+    name,
+    steamid,
+    kills,
+    deaths,
+    assists,
+    damage,
+    headshot_kills: headshotKills,
+    mvps,
+    score,
+    adr,
+    hs_percent,
+  };
+};
+
 export default function MatchLobby() {
   const router = useRouter();
   const params = useParams();
@@ -243,7 +300,7 @@ export default function MatchLobby() {
       fetchLobbyData();
     });
 
-    const pollInterval = setInterval(fetchLobbyData, 5000);
+    const pollInterval = setInterval(fetchLobbyData, 3000);
 
     return () => {
       eventSource.close();
@@ -1014,10 +1071,21 @@ export default function MatchLobby() {
                         <button
                           onClick={handleTacticalPause}
                           disabled={isRequestingPause}
-                          className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all border border-white/5 flex items-center gap-1.5 active:scale-95"
+                          className={cn(
+                            "px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border flex items-center gap-1.5 active:scale-95 cursor-pointer",
+                            serverStatus === "paused"
+                              ? "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/30 shadow-lg shadow-emerald-500/10"
+                              : "bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border-white/5"
+                          )}
                         >
-                          <Pause className="w-3.5 h-3.5 text-orange-400" />
-                          <span>Тактическая пауза</span>
+                          {isRequestingPause ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : serverStatus === "paused" ? (
+                            <Play className="w-3.5 h-3.5 fill-emerald-400 text-emerald-400" />
+                          ) : (
+                            <Pause className="w-3.5 h-3.5 text-orange-400" />
+                          )}
+                          <span>{serverStatus === "paused" ? "Снять с паузы" : "Тактическая пауза"}</span>
                         </button>
                       </div>
 
@@ -1062,189 +1130,223 @@ export default function MatchLobby() {
                 {/* MATCH STATS SCOREBOARD */}
                 <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-5 space-y-4 shadow-xl">
                   <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-white">
-                      Статистика матча
+                    <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
+                      <span>Статистика матча</span>
+                      {isServerReady && !isFinished && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                          <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-ping" />
+                          LIVE
+                        </span>
+                      )}
                     </h3>
                     <span className="text-xs font-mono font-bold text-gray-400">
                       {match.score1 ?? 0} : {match.score2 ?? 0}
                     </span>
                   </div>
 
-                  {isSolo ? (
-                    /* SOLO 1v1 DUEL TABLE */
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
-                            <th className="py-1.5">Участник</th>
-                            <th className="py-1.5 text-center">K</th>
-                            <th className="py-1.5 text-center">D</th>
-                            <th className="py-1.5 text-center">A</th>
-                            <th className="py-1.5 text-center">ADR</th>
-                            <th className="py-1.5 text-center">HS%</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                          {/* Player A */}
-                          {(() => {
-                            const p = match.matchStats?.team1?.players?.[0] || {
-                              name: compA?.name || compA?.roster?.[0]?.nickname || "Игрок 1",
-                              kills: 0,
-                              deaths: 0,
-                              assists: 0,
-                              adr: "-",
-                              hs_percent: 0,
-                              mvps: 0,
-                            };
-                            return (
+                  {(() => {
+                    const totalPlayedRounds = (match.score1 ?? 0) + (match.score2 ?? 0);
+                    const allStatsPlayers = [
+                      ...extractTeamPlayers(match.matchStats?.team1),
+                      ...extractTeamPlayers(match.matchStats?.team2),
+                    ];
+
+                    const getCompetitorStats = (comp: any, fallbackIdx: number, defaultTeam: "team1" | "team2") => {
+                      const steam = String(comp?.playerId || comp?.captainId || comp?.roster?.[0]?.steam_id || comp?.roster?.[0]?.id || "");
+                      const name = String(comp?.name || comp?.roster?.[0]?.nickname || comp?.roster?.[0]?.full_name || "").toLowerCase();
+
+                      let found = allStatsPlayers.find((p: any) => {
+                        const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "");
+                        return pSteam && steam && (pSteam === steam || pSteam.includes(steam) || steam.includes(pSteam));
+                      });
+
+                      if (!found && name) {
+                        found = allStatsPlayers.find((p: any) => {
+                          const pName = String(p.name || p.nickname || "").toLowerCase();
+                          return pName && (pName === name || pName.includes(name) || name.includes(pName));
+                        });
+                      }
+
+                      if (!found) {
+                        const teamPlayers = extractTeamPlayers(match.matchStats?.[defaultTeam]);
+                        found = teamPlayers[fallbackIdx];
+                      }
+
+                      return normalizePlayer(
+                        found,
+                        comp?.name || comp?.roster?.[0]?.nickname || `Игрок ${fallbackIdx + 1}`,
+                        steam,
+                        totalPlayedRounds
+                      );
+                    };
+
+                    const getTeamRosterStats = (comp: any, defaultTeam: "team1" | "team2") => {
+                      const roster = comp?.roster || [{ id: comp?.playerId, full_name: comp?.name, nickname: comp?.name }];
+                      const teamStatsPlayers = extractTeamPlayers(match.matchStats?.[defaultTeam]);
+
+                      return roster.map((member: any, idx: number) => {
+                        const steam = String(member.steam_id || member.id || "");
+                        const name = String(member.nickname || member.full_name || member.name || "").toLowerCase();
+
+                        let found = allStatsPlayers.find((p: any) => {
+                          const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "");
+                          return pSteam && steam && (pSteam === steam || pSteam.includes(steam) || steam.includes(pSteam));
+                        });
+
+                        if (!found && name) {
+                          found = allStatsPlayers.find((p: any) => {
+                            const pName = String(p.name || p.nickname || "").toLowerCase();
+                            return pName && (pName === name || pName.includes(name) || name.includes(pName));
+                          });
+                        }
+
+                        if (!found) {
+                          found = teamStatsPlayers[idx];
+                        }
+
+                        return normalizePlayer(
+                          found,
+                          member.nickname || member.full_name || member.name || `Игрок ${idx + 1}`,
+                          steam,
+                          totalPlayedRounds
+                        );
+                      });
+                    };
+
+                    if (isSolo) {
+                      const playerAStat = getCompetitorStats(compA, 0, "team1");
+                      const playerBStat = getCompetitorStats(compB, 0, "team2");
+
+                      return (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
+                                <th className="py-1.5">Участник</th>
+                                <th className="py-1.5 text-center">K</th>
+                                <th className="py-1.5 text-center">D</th>
+                                <th className="py-1.5 text-center">A</th>
+                                <th className="py-1.5 text-center">ADR</th>
+                                <th className="py-1.5 text-center">HS%</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {/* Player A */}
                               <tr key="player-a" className="hover:bg-white/[0.02]">
                                 <td className="py-2.5 font-bold text-white flex items-center gap-2">
                                   <span className="text-orange-400 font-black">•</span>
-                                  <span>{p.name}</span>
-                                  {p.mvps > 0 && <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>}
+                                  <span>{playerAStat.name}</span>
+                                  {playerAStat.mvps > 0 && <span className="text-yellow-400 text-[10px]">★{playerAStat.mvps}</span>}
                                 </td>
-                                <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{p.kills ?? 0}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{p.deaths ?? 0}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{p.assists ?? 0}</td>
-                                <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{p.adr ?? p.damage ?? "-"}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                                <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{playerAStat.kills}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.deaths}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.assists}</td>
+                                <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{playerAStat.adr}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.hs_percent ? `${playerAStat.hs_percent}%` : "-"}</td>
                               </tr>
-                            );
-                          })()}
 
-                          {/* Player B */}
-                          {(() => {
-                            const p = match.matchStats?.team2?.players?.[0] || {
-                              name: compB?.name || compB?.roster?.[0]?.nickname || "Игрок 2",
-                              kills: 0,
-                              deaths: 0,
-                              assists: 0,
-                              adr: "-",
-                              hs_percent: 0,
-                              mvps: 0,
-                            };
-                            return (
+                              {/* Player B */}
                               <tr key="player-b" className="hover:bg-white/[0.02]">
                                 <td className="py-2.5 font-bold text-white flex items-center gap-2">
                                   <span className="text-blue-400 font-black">•</span>
-                                  <span>{p.name}</span>
-                                  {p.mvps > 0 && <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>}
+                                  <span>{playerBStat.name}</span>
+                                  {playerBStat.mvps > 0 && <span className="text-yellow-400 text-[10px]">★{playerBStat.mvps}</span>}
                                 </td>
-                                <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{p.kills ?? 0}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{p.deaths ?? 0}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{p.assists ?? 0}</td>
-                                <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{p.adr ?? p.damage ?? "-"}</td>
-                                <td className="py-2.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                                <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{playerBStat.kills}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.deaths}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.assists}</td>
+                                <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{playerBStat.adr}</td>
+                                <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.hs_percent ? `${playerBStat.hs_percent}%` : "-"}</td>
                               </tr>
-                            );
-                          })()}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    /* TEAM MATCH SCOREBOARD */
-                    <div className="space-y-4">
-                      {/* Team 1 Scoreboard */}
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
-                          {compA?.name || "Команда 1"}
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs">
-                            <thead>
-                              <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
-                                <th className="py-1">Игрок</th>
-                                <th className="py-1 text-center">K</th>
-                                <th className="py-1 text-center">D</th>
-                                <th className="py-1 text-center">A</th>
-                                <th className="py-1 text-center">ADR</th>
-                                <th className="py-1 text-center">HS%</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                              {(match.matchStats?.team1?.players?.length
-                                ? match.matchStats.team1.players
-                                : (compA?.roster || [{ id: compA?.playerId, full_name: compA?.name, nickname: compA?.name }]).map((p: any) => ({
-                                    name: p.nickname || p.full_name || p.name || compA?.name || "Игрок",
-                                    steamid: p.steam_id || p.id,
-                                    kills: 0,
-                                    deaths: 0,
-                                    assists: 0,
-                                    adr: "-",
-                                    hs_percent: 0,
-                                    mvps: 0,
-                                  }))
-                              ).map((p: any) => (
-                                <tr key={p.steamid || p.name} className="hover:bg-white/[0.02]">
-                                  <td className="py-1.5 font-bold text-white flex items-center gap-1.5">
-                                    <span>{p.name}</span>
-                                    {p.mvps > 0 && (
-                                      <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>
-                                    )}
-                                  </td>
-                                  <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills ?? 0}</td>
-                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths ?? 0}</td>
-                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.assists ?? 0}</td>
-                                  <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr ?? p.damage ?? "-"}</td>
-                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
-                                </tr>
-                              ))}
                             </tbody>
                           </table>
                         </div>
-                      </div>
+                      );
+                    }
 
-                      {/* Team 2 Scoreboard */}
-                      <div className="space-y-1.5 pt-2">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-blue-400">
-                          {compB?.name || "Команда 2"}
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs">
-                            <thead>
-                              <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
-                                <th className="py-1">Игрок</th>
-                                <th className="py-1 text-center">K</th>
-                                <th className="py-1 text-center">D</th>
-                                <th className="py-1 text-center">A</th>
-                                <th className="py-1 text-center">ADR</th>
-                                <th className="py-1 text-center">HS%</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                              {(match.matchStats?.team2?.players?.length
-                                ? match.matchStats.team2.players
-                                : (compB?.roster || [{ id: compB?.playerId, full_name: compB?.name, nickname: compB?.name }]).map((p: any) => ({
-                                    name: p.nickname || p.full_name || p.name || compB?.name || "Игрок",
-                                    steamid: p.steam_id || p.id,
-                                    kills: 0,
-                                    deaths: 0,
-                                    assists: 0,
-                                    adr: "-",
-                                    hs_percent: 0,
-                                    mvps: 0,
-                                  }))
-                              ).map((p: any) => (
-                                <tr key={p.steamid || p.name} className="hover:bg-white/[0.02]">
-                                  <td className="py-1.5 font-bold text-white flex items-center gap-1.5">
-                                    <span>{p.name}</span>
-                                    {p.mvps > 0 && (
-                                      <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>
-                                    )}
-                                  </td>
-                                  <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills ?? 0}</td>
-                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths ?? 0}</td>
-                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.assists ?? 0}</td>
-                                  <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr ?? p.damage ?? "-"}</td>
-                                  <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                    const rosterAStats = getTeamRosterStats(compA, "team1");
+                    const rosterBStats = getTeamRosterStats(compB, "team2");
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Team 1 Scoreboard */}
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
+                            {compA?.name || "Команда 1"}
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead>
+                                <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
+                                  <th className="py-1">Игрок</th>
+                                  <th className="py-1 text-center">K</th>
+                                  <th className="py-1 text-center">D</th>
+                                  <th className="py-1 text-center">A</th>
+                                  <th className="py-1 text-center">ADR</th>
+                                  <th className="py-1 text-center">HS%</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                {rosterAStats.map((p: any) => (
+                                  <tr key={p.steamid || p.name} className="hover:bg-white/[0.02]">
+                                    <td className="py-1.5 font-bold text-white flex items-center gap-1.5">
+                                      <span>{p.name}</span>
+                                      {p.mvps > 0 && (
+                                        <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills}</td>
+                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths}</td>
+                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.assists}</td>
+                                    <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr}</td>
+                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Team 2 Scoreboard */}
+                        <div className="space-y-1.5 pt-2">
+                          <div className="text-[10px] font-black uppercase tracking-widest text-blue-400">
+                            {compB?.name || "Команда 2"}
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead>
+                                <tr className="border-b border-white/5 text-gray-500 uppercase text-[9px] font-black">
+                                  <th className="py-1">Игрок</th>
+                                  <th className="py-1 text-center">K</th>
+                                  <th className="py-1 text-center">D</th>
+                                  <th className="py-1 text-center">A</th>
+                                  <th className="py-1 text-center">ADR</th>
+                                  <th className="py-1 text-center">HS%</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                {rosterBStats.map((p: any) => (
+                                  <tr key={p.steamid || p.name} className="hover:bg-white/[0.02]">
+                                    <td className="py-1.5 font-bold text-white flex items-center gap-1.5">
+                                      <span>{p.name}</span>
+                                      {p.mvps > 0 && (
+                                        <span className="text-yellow-400 text-[10px]">★{p.mvps}</span>
+                                      )}
+                                    </td>
+                                    <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills}</td>
+                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths}</td>
+                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.assists}</td>
+                                    <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr}</td>
+                                    <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 {/* SCENARIO E: FINISHED VICTORY BANNER */}

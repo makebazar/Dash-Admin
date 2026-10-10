@@ -869,16 +869,16 @@ export default function MatchControlPage() {
               {/* Quick RCON Buttons */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <button
-                  onClick={() => handleSendRcon("css_pause")}
+                  onClick={() => handleSendRcon("css_forcepause")}
                   disabled={isSendingRcon || !isServerRunning}
                   className="p-3 bg-white/5 hover:bg-white/10 disabled:opacity-40 rounded-2xl border border-white/5 text-xs font-bold text-gray-300 hover:text-white transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Pause className="w-4 h-4 text-orange-400" />
-                  <span>Пауза (.pause)</span>
+                  <span>Пауза (.forcepause)</span>
                 </button>
 
                 <button
-                  onClick={() => handleSendRcon("css_unpause")}
+                  onClick={() => handleSendRcon("css_forceunpause")}
                   disabled={isSendingRcon || !isServerRunning}
                   className="p-3 bg-white/5 hover:bg-white/10 disabled:opacity-40 rounded-2xl border border-white/5 text-xs font-bold text-gray-300 hover:text-white transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer"
                 >

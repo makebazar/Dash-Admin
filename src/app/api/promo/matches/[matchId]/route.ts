@@ -904,9 +904,9 @@ export async function POST(
     if (action === "tactical_pause") {
       // Find server instance
       const cs2Res = await client.query(
-        `SELECT id, club_id, port, status FROM club_cs2_matches 
-         WHERE (id = $1 OR (config_data->>'tournament_match_id') = $2) AND status NOT IN ('stopped', 'finished')`,
-        [match.cs2_server_id || `dm-tourney-${parsedMatchId}`, String(parsedMatchId)]
+        `SELECT id, club_id, port, status, game_state FROM club_cs2_matches 
+         WHERE (id = $1 OR (config_data->>'tournament_match_id') = $2 OR matchzy_id = $3) AND status NOT IN ('stopped', 'finished')`,
+        [match.cs2_server_id || `dm-tourney-${parsedMatchId}`, String(parsedMatchId), parsedMatchId]
       );
 
       if (cs2Res.rowCount === 0) {
@@ -914,6 +914,8 @@ export async function POST(
       }
 
       const cs2 = cs2Res.rows[0];
+      const isCurrentlyPaused = cs2.game_state === "paused";
+      const rconCmd = isCurrentlyPaused ? "css_forceunpause" : "css_forcepause";
 
       // Enqueue pause RCON command
       await client.query(
@@ -922,17 +924,30 @@ export async function POST(
         [
           cs2.club_id,
           cs2.id,
-          JSON.stringify({ command: "css_pause" }),
+          JSON.stringify({ command: rconCmd }),
         ]
       );
 
       broadcastSseCommand(cs2.club_id, {
         type: "RCON_COMMAND",
         match_id: cs2.id,
-        command: "css_pause",
+        command: rconCmd,
       });
 
-      return NextResponse.json({ success: true, message: "Тактическая пауза запрошена" });
+      // Update game_state in DB
+      await client.query(
+        `UPDATE club_cs2_matches SET game_state = $1, updated_at = NOW() WHERE id = $2`,
+        [isCurrentlyPaused ? "live" : "paused", cs2.id]
+      );
+
+      // Notify match lobby immediately via SSE
+      await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(parsedMatchId)]);
+
+      return NextResponse.json({
+        success: true,
+        isPaused: !isCurrentlyPaused,
+        message: isCurrentlyPaused ? "Матч возобновлен" : "Тактическая пауза включена",
+      });
     }
 
     // ACTION: SEND_MESSAGE (chat)

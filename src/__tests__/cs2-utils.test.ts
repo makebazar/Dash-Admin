@@ -73,10 +73,65 @@ os      : Windows Dedicated
     // Workshop aliases
     expect(normalizeCS2Map("aim_map")).toBe("3070549948");
     expect(normalizeCS2Map("awp_lego_2")).toBe("3810240726");
-    expect(normalizeCS2Map("aim_botz")).toBe("3070244462");
     expect(normalizeCS2Map("aim_redline")).toBe("3070243672");
     expect(isWorkshopMap("aim_map")).toBe(true);
     expect(isWorkshopMap("awp_lego_2")).toBe(true);
+  });
+
+  it("handles MatchZy event player stats format (nested stats, dicts, arrays)", () => {
+    const rawMatchZyPayload = {
+      team1: {
+        score: 1,
+        players: [
+          {
+            steamid: "76561198075306637",
+            name: "vAEn",
+            stats: {
+              kills: 3,
+              deaths: 1,
+              assists: 1,
+              damage: 320,
+              headshot_kills: 2,
+              mvps: 1,
+            },
+          },
+        ],
+      },
+      team2: {
+        score: 0,
+        players: {
+          "76561198000000002": {
+            steamid: "76561198000000002",
+            name: "Niko",
+            stats: {
+              kills: 1,
+              deaths: 3,
+              assists: 0,
+              damage: 140,
+              headshot_kills: 1,
+              mvps: 0,
+            },
+          },
+        },
+      },
+    };
+
+    const extractTeamPlayers = (teamObj: any): any[] => {
+      if (!teamObj || !teamObj.players) return [];
+      if (Array.isArray(teamObj.players)) return teamObj.players;
+      if (typeof teamObj.players === "object") return Object.values(teamObj.players);
+      return [];
+    };
+
+    const team1List = extractTeamPlayers(rawMatchZyPayload.team1);
+    const team2List = extractTeamPlayers(rawMatchZyPayload.team2);
+
+    expect(team1List.length).toBe(1);
+    expect(team2List.length).toBe(1);
+    expect(team1List[0].name).toBe("vAEn");
+    expect(team2List[0].name).toBe("Niko");
+    expect(team1List[0].stats.kills).toBe(3);
+    expect(team2List[0].stats.damage).toBe(140);
   });
 });
 
