@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { requireClubFullAccess } from "@/lib/club-api-access";
 import { broadcastSseCommand } from "@/lib/cs2/sse";
+import { normalizeCS2Map } from "@/lib/cs2/utils";
 import crypto from "crypto";
 
 export async function POST(
@@ -18,7 +19,7 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}));
-    const mapName = (body.map_name || "de_dust2").trim();
+    const mapName = normalizeCS2Map(body.map_name || "de_dust2");
     const matchFormat = (body.format || "5v5").trim();
     const team1Name = (body.team1_name || "Команда 1").trim();
     const team2Name = (body.team2_name || "Команда 2").trim();

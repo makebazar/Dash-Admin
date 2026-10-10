@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getClient } from "@/db";
-import { getNumericMatchId } from "@/lib/cs2/utils";
+import { getNumericMatchId, normalizeCS2Map } from "@/lib/cs2/utils";
 import { resolveSteamId64 } from "@/lib/steam-resolver";
 
 // Helper to resolve SteamID from raw input or return cleaned SteamID64
@@ -314,9 +314,7 @@ export async function GET(
       const defaultPlayers = qm.match_format === "1v1" ? 1 : qm.match_format === "2v2" ? 2 : 5;
       const rosterCount = Math.max(Object.keys(team1Players).length, Object.keys(team2Players).length);
       const playersPerTeam = rosterCount > 0 ? rosterCount : defaultPlayers;
-
-      const isWorkshop = /^\d+$/.test(qm.map_name || "");
-      const matchMap = isWorkshop ? `workshop/${qm.map_name}` : (qm.map_name || "de_dust2");
+      const matchMap = normalizeCS2Map(qm.map_name);
 
       const matchZyConfig = {
         matchid: numericMatchId,

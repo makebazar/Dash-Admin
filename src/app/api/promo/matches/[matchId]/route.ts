@@ -3,6 +3,7 @@ import { getClient, query } from "@/db";
 import { cookies } from "next/headers";
 import { broadcastSseCommand } from "@/lib/cs2/sse";
 import { resolveMatchFormat } from "@/lib/brackets";
+import { normalizeCS2Map } from "@/lib/cs2/utils";
 import { verifySessionValue } from "@/lib/session";
 
 async function ensureMatchLobbyTables(client: any) {
@@ -143,6 +144,7 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
     const matchFormat = match.tournament_config?.matchFormat || "5v5";
     const matchzyId = parseInt(matchId, 10) || (Math.floor(Date.now() / 1000) % 2000000000 + 1);
     const dmMatchId = `dm-tourney-${matchId}`;
+    const normalizedMap = normalizeCS2Map(selectedMap);
 
     // 4. Create or update record in club_cs2_matches
     await client.query(
@@ -152,7 +154,7 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
       [
         dmMatchId,
         clubId,
-        selectedMap,
+        normalizedMap,
         matchFormat,
         nameA,
         nameB,
@@ -176,7 +178,7 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
         clubId,
         dmMatchId,
         JSON.stringify({
-          map_name: selectedMap,
+          map_name: normalizedMap,
           match_format: matchFormat,
           config_url: configUrl,
           auth_token: `secret_${matchId}`,
@@ -188,7 +190,7 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
     broadcastSseCommand(clubId, {
       type: "START_MATCH",
       match_id: dmMatchId,
-      map_name: selectedMap,
+      map_name: normalizedMap,
       match_format: matchFormat,
       config_url: configUrl,
       auth_token: `secret_${matchId}`,

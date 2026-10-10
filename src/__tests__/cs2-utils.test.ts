@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getNumericMatchId, parseCs2StatusPlayers } from "@/lib/cs2/utils";
+import { getNumericMatchId, parseCs2StatusPlayers, normalizeCS2Map, isWorkshopMap } from "@/lib/cs2/utils";
 import { resolveSteamId64 } from "@/lib/steam-resolver";
 
 describe("CS2 & MatchZy Utils", () => {
@@ -50,6 +50,33 @@ os      : Windows Dedicated
     expect(await resolveSteamId64("[U:1:73936547]")).toBe("76561198034202275");
     // 4. SteamID2
     expect(await resolveSteamId64("STEAM_0:1:36968273")).toBe("76561198034202275");
+  });
+
+  it("normalizeCS2Map and isWorkshopMap correctly process workshop and standard maps", () => {
+    // Standard maps
+    expect(normalizeCS2Map("de_mirage")).toBe("de_mirage");
+    expect(normalizeCS2Map("de_dust2")).toBe("de_dust2");
+    expect(isWorkshopMap("de_mirage")).toBe(false);
+
+    // Pure numeric workshop ID
+    expect(normalizeCS2Map("3070549948")).toBe("3070549948");
+    expect(isWorkshopMap("3070549948")).toBe(true);
+
+    // Workshop prefixes
+    expect(normalizeCS2Map("workshop/3070549948")).toBe("3070549948");
+    expect(normalizeCS2Map("ws:3070549948")).toBe("3070549948");
+    expect(normalizeCS2Map("workshop:3070549948")).toBe("3070549948");
+
+    // Workshop URL
+    expect(normalizeCS2Map("https://steamcommunity.com/sharedfiles/filedetails/?id=3070549948")).toBe("3070549948");
+
+    // Workshop aliases
+    expect(normalizeCS2Map("aim_map")).toBe("3070549948");
+    expect(normalizeCS2Map("awp_lego_2")).toBe("3810240726");
+    expect(normalizeCS2Map("aim_botz")).toBe("3070244462");
+    expect(normalizeCS2Map("aim_redline")).toBe("3070243672");
+    expect(isWorkshopMap("aim_map")).toBe(true);
+    expect(isWorkshopMap("awp_lego_2")).toBe(true);
   });
 });
 

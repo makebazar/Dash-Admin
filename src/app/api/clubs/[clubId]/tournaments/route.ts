@@ -10,6 +10,7 @@ import {
 } from "@/lib/brackets";
 import { calculateStandardMatchElo } from "@/lib/elo";
 import { broadcastSseCommand } from "@/lib/cs2/sse";
+import { normalizeCS2Map } from "@/lib/cs2/utils";
 import GameAgentConnector from "@/lib/game-agent";
 
 async function ensureTournamentsSchema(client: any) {
@@ -1552,7 +1553,8 @@ export async function POST(
       }
 
       const tConfig = match.tournament_config || {};
-      const chosenMap = (selectedMap || tConfig.mapPool?.[0] || "de_mirage").trim();
+      const rawChosenMap = (selectedMap || tConfig.mapPool?.[0] || "de_mirage").trim();
+      const chosenMap = normalizeCS2Map(rawChosenMap);
       const matchFormat = tConfig.matchFormat || "5v5";
       const dmMatchId = `dm-tourney-${matchId}`;
       const matchzyId = parseInt(String(matchId), 10) || (Math.floor(Date.now() / 1000) % 2000000000 + 1);

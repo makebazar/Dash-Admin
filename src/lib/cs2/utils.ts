@@ -139,3 +139,61 @@ export function parseCs2StatusPlayers(rconText?: string): ParsedCs2Player[] {
 
   return players;
 }
+
+/**
+ * Known Steam Workshop map aliases mapping friendly shortnames to Steam Workshop IDs.
+ */
+export const CS2_WORKSHOP_MAP_ALIASES: Record<string, string> = {
+  aim_map: "3070549948",
+  awp_lego_2: "3810240726",
+  awp_lego: "3810240726",
+  aim_botz: "3070244462",
+  aim_redline: "3070243672",
+  aim_ak47: "3070243672",
+  aim_headshot: "3070549948",
+  aim_dust2: "3070549948",
+  aim_pistol_cs2: "3070549948",
+  aim_aztec: "3070549948",
+};
+
+/**
+ * Normalizes map names, strips "workshop/", "ws:", URL params, and resolves workshop aliases to numeric IDs.
+ * MatchZy requires pure numeric IDs for workshop maps in its maplist to execute `host_workshop_map <id>`.
+ */
+export function normalizeCS2Map(rawMap?: string): string {
+  if (!rawMap) return "de_dust2";
+  const trimmed = rawMap.trim();
+  if (!trimmed) return "de_dust2";
+
+  // URL format: steamcommunity.com/sharedfiles/filedetails/?id=3070549948
+  const urlMatch = trimmed.match(/[?&]id=(\d+)/);
+  if (urlMatch) {
+    return urlMatch[1];
+  }
+
+  // Prefix format: workshop/3070549948, ws:3070549948, workshop:3070549948
+  const wsPrefixMatch = trimmed.match(/^(?:workshop\/|ws:|workshop:)?(\d+)$/i);
+  if (wsPrefixMatch) {
+    return wsPrefixMatch[1];
+  }
+
+  // Strip leading workshop/ if non-numeric
+  const stripped = trimmed.replace(/^(?:workshop\/|ws:|workshop:)/i, "").trim();
+
+  // Alias lookup
+  const aliasId = CS2_WORKSHOP_MAP_ALIASES[stripped.toLowerCase()] || CS2_WORKSHOP_MAP_ALIASES[trimmed.toLowerCase()];
+  if (aliasId) {
+    return aliasId;
+  }
+
+  return stripped || "de_dust2";
+}
+
+/**
+ * Returns true if the map is a Steam Workshop map (numeric ID).
+ */
+export function isWorkshopMap(mapName?: string): boolean {
+  const norm = normalizeCS2Map(mapName);
+  return /^\d+$/.test(norm);
+}
+
