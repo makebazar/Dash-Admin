@@ -606,10 +606,14 @@ export default function MatchLobby() {
     };
   };
 
-  const selectedMapKey = veto?.selected_map || match.selectedMap || "de_mirage";
-  const selectedMapInfo = MAP_PREVIEWS[selectedMapKey] || {
-    name: selectedMapKey.replace(/^(de_|cs_)/g, "").toUpperCase(),
-    image: `/images/maps/${selectedMapKey}.png`,
+  const selectedMaps = (veto?.selected_map || match.selectedMap || "de_mirage")
+    .split(",")
+    .map((s: string) => s.trim())
+    .filter(Boolean);
+  const primaryMapKey = selectedMaps[0] || "de_mirage";
+  const selectedMapInfo = MAP_PREVIEWS[primaryMapKey] || {
+    name: primaryMapKey.replace(/^(de_|cs_)/g, "").toUpperCase(),
+    image: `/images/maps/${primaryMapKey}.png`,
     desc: "Соревновательная карта турнира",
   };
 
@@ -738,7 +742,9 @@ export default function MatchLobby() {
 
               <div className="mt-1.5 text-xs font-bold tracking-widest uppercase">
                 {veto?.selected_map ? (
-                  <span className="text-emerald-400">{format.toUpperCase()} • {selectedMapInfo.name}</span>
+                  <span className="text-emerald-400">
+                    {format.toUpperCase()} • {selectedMaps.map((m: string) => MAP_PREVIEWS[m]?.name || m.replace(/^(de_|cs_)/g, "").toUpperCase()).join(" / ")}
+                  </span>
                 ) : isVeto ? (
                   <span className="text-amber-400">{format.toUpperCase()} • ВЫБОР КАРТ ({vetoCountdown}С)</span>
                 ) : (
@@ -1016,12 +1022,28 @@ export default function MatchLobby() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {(match.mapPool || []).map((map: string) => {
                     const isBanned = veto?.banned_maps?.includes(map);
-                    const isSelected = veto?.selected_map?.split(",").includes(map);
+                    const selectedList = (veto?.selected_map || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+                    const mapIdx = selectedList.indexOf(map);
+                    const isSelected = mapIdx >= 0;
                     const preview = MAP_PREVIEWS[map] || {
                       name: map.replace(/^(de_|cs_)/g, "").toUpperCase(),
                       image: `/images/maps/${map}.png`,
                       desc: "Карта турнирного пула",
                     };
+
+                    const selectedBadgeText = isSelected
+                      ? format === "bo3"
+                        ? mapIdx === 0
+                          ? "Выбрана (Карта 1)"
+                          : mapIdx === 1
+                          ? "Выбрана (Карта 2)"
+                          : "Выбрана (Десайдер)"
+                        : format === "bo5"
+                        ? mapIdx === 4
+                          ? "Выбрана (Десайдер)"
+                          : `Выбрана (Карта ${mapIdx + 1})`
+                        : "Выбрана"
+                      : null;
 
                     return (
                       <div
@@ -1056,7 +1078,7 @@ export default function MatchLobby() {
                           )}
                           {isSelected && (
                             <span className="text-[9px] font-black uppercase text-emerald-400 block">
-                              Выбрана
+                              {selectedBadgeText}
                             </span>
                           )}
                           <h4 className="text-sm font-black uppercase tracking-wider text-white">

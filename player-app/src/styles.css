@@ -309,14 +309,14 @@ button {
     border-color: rgba(255, 255, 255, 0.24);
 }
 
-.shell-player:hover .player-overlay::before,
-.shell-player:hover .player-overlay-button,
+.player-overlay.is-visible::before,
+.player-overlay.is-visible .player-overlay-button,
 .shell-player:focus-within .player-overlay::before,
 .shell-player:focus-within .player-overlay-button {
     opacity: 1;
 }
 
-.shell-player:hover .player-overlay-button,
+.player-overlay.is-visible .player-overlay-button,
 .shell-player:focus-within .player-overlay-button {
     transform: translateY(0);
 }

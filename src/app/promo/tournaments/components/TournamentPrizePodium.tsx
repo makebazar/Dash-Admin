@@ -94,11 +94,28 @@ export function TournamentPrizePodium({
   const itemPool = tournament.config?.itemPool || [];
 
   // Determine winners if tournament is finished
+  const standings = tournament.config?.final_standings || [];
   const finalMatch = matches.find((m) => m.round === Math.max(...matches.map((x) => x.round)));
-  const championComp =
+  const championCompFromMatch =
     finalMatch && finalMatch.winner_competitor_id
       ? competitors.find((c) => String(c.id) === String(finalMatch.winner_competitor_id))
       : null;
+
+  const firstStanding = standings.find((s: any) => s.place === 1);
+  const secondStanding = standings.find((s: any) => s.place === 2);
+  const thirdStanding = standings.find((s: any) => s.place === 3);
+
+  const firstWinner = firstStanding
+    ? competitors.find((c) => String(c.id) === String(firstStanding.competitor_id)) || { display_name: firstStanding.display_name }
+    : championCompFromMatch;
+
+  const secondWinner = secondStanding
+    ? competitors.find((c) => String(c.id) === String(secondStanding.competitor_id)) || { display_name: secondStanding.display_name }
+    : null;
+
+  const thirdWinner = thirdStanding
+    ? competitors.find((c) => String(c.id) === String(thirdStanding.competitor_id)) || { display_name: thirdStanding.display_name }
+    : null;
 
   const getPlacementRank = (p: any, idx: number) => {
     if (p.label.includes("1") || p.id === "1") return 1;
@@ -253,9 +270,9 @@ export function TournamentPrizePodium({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 items-end">
-          {renderPodiumCard(secondPlace, 2)}
-          {renderPodiumCard(firstPlace, 1, championComp)}
-          {renderPodiumCard(thirdPlace, 3)}
+          {renderPodiumCard(secondPlace, 2, secondWinner)}
+          {renderPodiumCard(firstPlace, 1, firstWinner)}
+          {renderPodiumCard(thirdPlace, 3, thirdWinner)}
         </div>
       </div>
 

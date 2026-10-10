@@ -10,8 +10,9 @@ const pool = new pg.Pool({
 
 async function runMigration() {
   try {
-    const sql = fs.readFileSync('migrations/20260707_create_promo_frag_matches.sql', 'utf8');
-    console.log('Running migration...');
+    const file = process.argv[2] || 'migrations/20260814_extend_dota2_frag_matches.sql';
+    const sql = fs.readFileSync(file, 'utf8');
+    console.log(`Running migration from ${file}...`);
     await pool.query(sql);
     console.log('Migration completed successfully!');
   } catch (err) {

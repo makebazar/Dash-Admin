@@ -22,6 +22,7 @@ import {
   Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { resolveMatchFormat } from "@/lib/brackets";
 
 interface Match {
   id: string | number;
@@ -507,6 +508,8 @@ export function TournamentBracket({
       return `${d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}, ${timeStr}`;
     };
 
+    const matchFormat = resolveMatchFormat(tournament?.config, match.round, undefined, match.result);
+
     return (
       <div
         key={match.id}
@@ -532,6 +535,11 @@ export function TournamentBracket({
               <span className="text-gray-400 font-black">
                 Матч {matchNumber}
               </span>
+              {matchFormat !== "bo1" && (
+                <span className="bg-orange-500/15 text-orange-400 border border-orange-500/30 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider">
+                  {matchFormat.toUpperCase()}
+                </span>
+              )}
               {(match.result?.isThirdPlace || match.result?.stage === "bronze") && (
                 <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider">
                   🥉 За 3 место
@@ -648,12 +656,19 @@ export function TournamentBracket({
                 href={matchLobbyHref}
                 className={cn(
                   "w-full py-2.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all",
-                  isMyMatch
+                  isFinished
+                    ? "bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white"
+                    : isMyMatch
                     ? "bg-orange-500 hover:bg-orange-600 text-white shadow-md shadow-orange-500/20"
                     : "bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white"
                 )}
               >
-                {isMyMatch ? (
+                {isFinished ? (
+                  <>
+                    <span>Итоги матча</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </>
+                ) : isMyMatch ? (
                   <>
                     <span>Войти в лобби матча</span>
                     <ExternalLink className="w-3.5 h-3.5" />

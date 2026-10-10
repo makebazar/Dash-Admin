@@ -77,6 +77,30 @@ export default function App() {
   const canRenderContent =
     Boolean(bootstrap?.pairedClubId) && Boolean(bootstrap?.fullscreen);
   const shouldRenderContent = canRenderContent && !isSetupVisible;
+  const [isOverlayVisible, setIsOverlayVisible] = useState(true);
+  const overlayTimerRef = useRef<number | null>(null);
+
+  const resetOverlayTimer = useCallback(() => {
+    setIsOverlayVisible(true);
+    if (overlayTimerRef.current !== null) {
+      window.clearTimeout(overlayTimerRef.current);
+    }
+    overlayTimerRef.current = window.setTimeout(() => {
+      setIsOverlayVisible(false);
+    }, 5000);
+  }, []);
+
+  useEffect(() => {
+    if (!shouldRenderContent) return;
+
+    resetOverlayTimer();
+
+    return () => {
+      if (overlayTimerRef.current !== null) {
+        window.clearTimeout(overlayTimerRef.current);
+      }
+    };
+  }, [shouldRenderContent, resetOverlayTimer]);
 
   useEffect(() => {
     let disposed = false;
@@ -215,6 +239,7 @@ export default function App() {
       <main
         className="shell shell-player"
         onDoubleClick={() => void openSetup()}
+        onMouseMove={resetOverlayTimer}
       >
         <div
           className={`player-stage-frame ${isPortrait ? "is-portrait" : ""}`}
@@ -247,7 +272,9 @@ export default function App() {
             onCurrentSlideChangeAction={handleCurrentSlideChange}
           />
         </div>
-        <div className="player-overlay">
+        <div
+          className={`player-overlay ${isOverlayVisible ? "is-visible" : ""}`}
+        >
           <button
             type="button"
             className="player-overlay-button"

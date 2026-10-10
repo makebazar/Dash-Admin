@@ -104,9 +104,9 @@ export async function POST(
           [resolvedCs2Id, resolvedClubId]
         ).catch(() => {});
       } else if (event === "map_result" || event === "series_end") {
-        const isFinished = event === "series_end" || (payload.team1_series_score !== undefined);
+        const isFinished = event === "series_end";
         const status = isFinished ? "finished" : "live";
-        const gameState = isFinished ? "finished" : "map_ended";
+        const gameState = isFinished ? "finished" : "live";
         await client.query(
           `UPDATE club_cs2_matches SET score1 = $1, score2 = $2, match_stats = $3, status = $4, game_state = $5, updated_at = NOW() WHERE id = $6 AND club_id = $7`,
           [team1Score, team2Score, JSON.stringify(matchStats), status, gameState, resolvedCs2Id, resolvedClubId]

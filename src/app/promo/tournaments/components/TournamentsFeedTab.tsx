@@ -16,6 +16,10 @@ import {
   CheckCircle2,
   Clock,
   Zap,
+  Crown,
+  Award,
+  Sparkles,
+  Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TournamentBracket } from "./TournamentBracket";
@@ -318,6 +322,15 @@ export function TournamentsFeedTab({
     const hasGroupMatches = matches.some((m) => m.round === 0);
     const hasPlayoffMatches = matches.some((m) => m.round >= 1);
 
+    const standings: Array<{ place: number; competitor_id: string; display_name: string }> =
+      activeTournament.config?.final_standings || [];
+    const isTournamentFinished = activeTournament.status === "FINISHED" || standings.length > 0;
+    const userStanding = userCompetitor
+      ? standings.find((s) => String(s.competitor_id) === String(userCompetitor.id))
+      : null;
+    const activePrizePool =
+      activeTournament.prize_pool_mode === "dynamic" ? totalCombinedPrizePlanned : totalCombinedPrize;
+
     return (
       <div className="mt-8 space-y-6 animate-fadeIn">
         {/* Back Link */}
@@ -389,9 +402,9 @@ export function TournamentsFeedTab({
                   <span>Регистрация открыта</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-500">
-                  <span className="w-2 h-2 rounded-full bg-gray-500" />
-                  <span>Завершен</span>
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-400">
+                  <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                  <span className="text-yellow-400">Завершен</span>
                 </div>
               )}
 
@@ -508,6 +521,197 @@ export function TournamentsFeedTab({
               </motion.div>
             );
           })()}
+
+          {/* Tournament Champions / Final Standings Banner when tournament is finished */}
+          {isTournamentFinished && (
+            <motion.div
+              initial={{ scale: 0.98, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-gradient-to-b from-yellow-500/10 via-[#141418] to-[#0c0c0e] border border-yellow-500/30 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-5 relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10 border-b border-white/5 pb-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-md bg-yellow-500/20 text-yellow-400 font-black text-[10px] uppercase tracking-wider border border-yellow-500/30 flex items-center gap-1.5">
+                      <Trophy className="w-3.5 h-3.5" />
+                      Турнир завершен
+                    </span>
+                    <span className="text-xs text-gray-400 font-medium">Пьедестал призеров</span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight text-white flex items-center gap-2">
+                    Итоги и победители турнира
+                  </h3>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailTab("prizes");
+                    updateUrlQuery({ detailTab: "prizes" });
+                  }}
+                  className="text-xs font-bold text-yellow-400 hover:text-yellow-300 flex items-center gap-1 transition-colors self-start sm:self-auto"
+                >
+                  <span>Подробные призы и правила</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Personal congratulations for winner */}
+              {userStanding && (
+                <div
+                  className={cn(
+                    "p-4 rounded-2xl border flex items-center gap-3.5 relative z-10",
+                    userStanding.place === 1
+                      ? "bg-yellow-500/15 border-yellow-500/40 text-yellow-300"
+                      : userStanding.place === 2
+                      ? "bg-slate-400/15 border-slate-400/40 text-slate-200"
+                      : userStanding.place === 3
+                      ? "bg-amber-600/15 border-amber-600/40 text-amber-300"
+                      : "bg-white/5 border-white/10 text-white"
+                  )}
+                >
+                  <Crown className="w-7 h-7 text-yellow-400 shrink-0" />
+                  <div className="text-xs leading-relaxed">
+                    <p className="font-black text-sm uppercase">
+                      🎉 Поздравляем! Ваша команда «{userStanding.display_name}» заняла {userStanding.place}-е место!
+                    </p>
+                    <p className="text-gray-300 text-[11px] mt-0.5">
+                      Для получения денежных и клубных призов обратитесь к администратору клуба.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Top 3 Podium Winners Grid */}
+              {standings.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 relative z-10">
+                  {/* 1st Place */}
+                  {(() => {
+                    const s1 = standings.find((s) => s.place === 1);
+                    const p1 = activePlacements.find((p: any) => p.label?.includes("1") || p.id === "1");
+                    const cash1 = p1 ? Math.round((activePrizePool * (p1.cashPct || 0)) / 100) : 0;
+                    return s1 ? (
+                      <div className="bg-gradient-to-b from-yellow-500/20 via-[#18181c] to-[#101014] border border-yellow-500/40 rounded-2xl p-4 space-y-3 relative sm:order-2 shadow-lg shadow-yellow-500/5">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded-md bg-yellow-500/20 text-yellow-400 font-black text-[10px] uppercase tracking-wider border border-yellow-500/30 flex items-center gap-1">
+                            🥇 1-е Место • Чемпион
+                          </span>
+                          <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+                        </div>
+                        <div>
+                          <p className="text-base font-black text-white uppercase italic truncate">
+                            {s1.display_name}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            {cash1 > 0 && (
+                              <span className="text-xs font-black text-yellow-400 font-mono">
+                                {formatCurrency(cash1)}
+                              </span>
+                            )}
+                            {p1?.bonus > 0 && (
+                              <span className="text-[11px] font-black text-orange-400">
+                                +{p1.bonus} Б
+                              </span>
+                            )}
+                            {p1?.item && (
+                              <span className="text-[11px] font-bold text-purple-300 truncate">
+                                {p1.item}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
+                  {/* 2nd Place */}
+                  {(() => {
+                    const s2 = standings.find((s) => s.place === 2);
+                    const p2 = activePlacements.find((p: any) => p.label?.includes("2") || p.id === "2");
+                    const cash2 = p2 ? Math.round((activePrizePool * (p2.cashPct || 0)) / 100) : 0;
+                    return s2 ? (
+                      <div className="bg-gradient-to-b from-slate-400/15 via-[#18181c] to-[#101014] border border-slate-400/30 rounded-2xl p-4 space-y-3 relative sm:order-1 shadow-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-400/20 text-slate-300 font-black text-[10px] uppercase tracking-wider border border-slate-400/30">
+                            🥈 2-е Место • Серебро
+                          </span>
+                          <Award className="w-5 h-5 text-slate-300" />
+                        </div>
+                        <div>
+                          <p className="text-base font-black text-white uppercase italic truncate">
+                            {s2.display_name}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            {cash2 > 0 && (
+                              <span className="text-xs font-black text-white font-mono">
+                                {formatCurrency(cash2)}
+                              </span>
+                            )}
+                            {p2?.bonus > 0 && (
+                              <span className="text-[11px] font-black text-orange-400">
+                                +{p2.bonus} Б
+                              </span>
+                            )}
+                            {p2?.item && (
+                              <span className="text-[11px] font-bold text-purple-300 truncate">
+                                {p2.item}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
+                  {/* 3rd Place */}
+                  {(() => {
+                    const s3 = standings.find((s) => s.place === 3);
+                    const p3 = activePlacements.find((p: any) => p.label?.includes("3") || p.id === "3");
+                    const cash3 = p3 ? Math.round((activePrizePool * (p3.cashPct || 0)) / 100) : 0;
+                    return s3 ? (
+                      <div className="bg-gradient-to-b from-amber-700/15 via-[#18181c] to-[#101014] border border-amber-700/30 rounded-2xl p-4 space-y-3 relative sm:order-3 shadow-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-700/20 text-amber-400 font-black text-[10px] uppercase tracking-wider border border-amber-700/30">
+                            🥉 3-е Место • Бронза
+                          </span>
+                          <Award className="w-5 h-5 text-amber-500" />
+                        </div>
+                        <div>
+                          <p className="text-base font-black text-white uppercase italic truncate">
+                            {s3.display_name}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            {cash3 > 0 && (
+                              <span className="text-xs font-black text-white font-mono">
+                                {formatCurrency(cash3)}
+                              </span>
+                            )}
+                            {p3?.bonus > 0 && (
+                              <span className="text-[11px] font-black text-orange-400">
+                                +{p3.bonus} Б
+                              </span>
+                            )}
+                            {p3?.item && (
+                              <span className="text-[11px] font-bold text-purple-300 truncate">
+                                {p3.item}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-white/5 text-center text-xs text-gray-400 font-medium">
+                  Турнир завершен. Все матчи сыграны.
+                </div>
+              )}
+            </motion.div>
+          )}
 
           {/* 3 Metric Stats Row */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-5 border-t border-white/5">

@@ -7,6 +7,7 @@ import {
   generatePlayoffs,
   generateDoubleElimination,
   advancePlayoffWinner,
+  checkAndFinalizeTournament,
 } from "@/lib/brackets";
 import { calculateStandardMatchElo } from "@/lib/elo";
 import { broadcastSseCommand } from "@/lib/cs2/sse";
@@ -214,7 +215,13 @@ export async function GET(
 
       const tournament = tournamentRes.rows[0];
 
-      // Fetch competitors (including team rosters and solo ELO if applicable)
+      // Auto-finalize if tournament was ACTIVE but all playoff/final matches completed
+      if (tournament.status === "ACTIVE") {
+        const wasFinalized = await checkAndFinalizeTournament(client, tournamentId);
+        if (wasFinalized) {
+          tournament.status = "FINISHED";
+        }
+      }
       const competitorsRes = await client.query(
         `SELECT c.id, c.type, c.display_name, c.team_id, c.promo_team_id, c.player_id, c.meta, e.status as payment_status,
                 COALESCE(solo_p.faceit_elo, solo_elo.elo, 1000) as player_elo,
@@ -1706,13 +1713,11 @@ export async function POST(
 
       const dmMatchId = `dm-tourney-${matchId}`;
 
-      // 1. Send STOP_MATCH first to clean up existing process
+      // 1. Cancel any stale pending commands for this match
       await client.query(
-        `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
-         VALUES ($1, 'STOP_MATCH', $2, '{}'::jsonb, 'pending')`,
+        `UPDATE club_cs2_commands SET status = 'cancelled' WHERE club_id = $1 AND match_id = $2 AND status = 'pending'`,
         [parsedClubId, dmMatchId]
       ).catch(() => {});
-      broadcastSseCommand(parsedClubId, { type: "STOP_MATCH", match_id: dmMatchId });
 
       // 2. Fetch agent info & available port
       const agentRes = await client.query(

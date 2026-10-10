@@ -464,49 +464,49 @@ export async function advancePlayoffWinner(
     );
     const maxRound = maxRoundRes.rows[0]?.max_round || 1;
 
-    // If the finished match is already in the final round (Grand Final or 3rd place match), nothing to advance
-    if (round >= maxRound) return;
+    // Advance if not already the final round
+    if (round < maxRound) {
+      const nextRound = round + 1;
+      const nextOrder = Math.ceil(order_in_round / 2);
+      const isPositionA = order_in_round % 2 !== 0;
 
-    const nextRound = round + 1;
-    const nextOrder = Math.ceil(order_in_round / 2);
-    const isPositionA = order_in_round % 2 !== 0;
+      // Check if this was the Semifinal round (round === maxRound - 1)
+      const isSemiFinal = round === maxRound - 1 && maxRound >= 2;
 
-    // Check if this was the Semifinal round (round === maxRound - 1)
-    const isSemiFinal = round === maxRound - 1 && maxRound >= 2;
-
-    // 1. Advance winner to next round (Final or regular playoff match)
-    if (isPositionA) {
-      await client.query(
-        `UPDATE tournament_matches
-         SET competitor_a_id = $1
-         WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
-        [winnerCompetitorId, tournament_id, nextRound, nextOrder]
-      );
-    } else {
-      await client.query(
-        `UPDATE tournament_matches
-         SET competitor_b_id = $1
-         WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
-        [winnerCompetitorId, tournament_id, nextRound, nextOrder]
-      );
-    }
-
-    // 2. If it was Semifinal, route loser to 3rd Place match (round = maxRound, order_in_round = 2)
-    if (isSemiFinal && loserId) {
+      // 1. Advance winner to next round (Final or regular playoff match)
       if (isPositionA) {
         await client.query(
           `UPDATE tournament_matches
            SET competitor_a_id = $1
-           WHERE tournament_id = $2 AND round = $3 AND order_in_round = 2`,
-          [loserId, tournament_id, maxRound]
+           WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
+          [winnerCompetitorId, tournament_id, nextRound, nextOrder]
         );
       } else {
         await client.query(
           `UPDATE tournament_matches
            SET competitor_b_id = $1
-           WHERE tournament_id = $2 AND round = $3 AND order_in_round = 2`,
-          [loserId, tournament_id, maxRound]
+           WHERE tournament_id = $2 AND round = $3 AND order_in_round = $4`,
+          [winnerCompetitorId, tournament_id, nextRound, nextOrder]
         );
+      }
+
+      // 2. If it was Semifinal, route loser to 3rd Place match (round = maxRound, order_in_round = 2)
+      if (isSemiFinal && loserId) {
+        if (isPositionA) {
+          await client.query(
+            `UPDATE tournament_matches
+             SET competitor_a_id = $1
+             WHERE tournament_id = $2 AND round = $3 AND order_in_round = 2`,
+            [loserId, tournament_id, maxRound]
+          );
+        } else {
+          await client.query(
+            `UPDATE tournament_matches
+             SET competitor_b_id = $1
+             WHERE tournament_id = $2 AND round = $3 AND order_in_round = 2`,
+            [loserId, tournament_id, maxRound]
+          );
+        }
       }
     }
   } else {
@@ -618,6 +618,178 @@ export async function advancePlayoffWinner(
       }
     }
   }
+
+  // Check if all tournament matches are finished and finalize the tournament
+  await checkAndFinalizeTournament(client, tournament_id);
+}
+
+/**
+ * Checks whether all matches in a tournament are completed and, if so,
+ * marks the tournament status as 'FINISHED' and computes final standings.
+ */
+export async function checkAndFinalizeTournament(
+  client: PoolClient,
+  tournamentId: string | number
+): Promise<boolean> {
+  const matchesRes = await client.query(
+    `SELECT id, round, order_in_round, competitor_a_id, competitor_b_id, winner_competitor_id, status, result
+     FROM tournament_matches
+     WHERE tournament_id = $1
+     ORDER BY round ASC, order_in_round ASC`,
+    [tournamentId]
+  );
+  if (matchesRes.rowCount === 0) return false;
+
+  const matches = matchesRes.rows;
+
+  // 1. If any playable match with both competitors is not finished, tournament is still ongoing
+  const uncompletedMatches = matches.filter(
+    (m: any) => m.competitor_a_id && m.competitor_b_id && m.status !== "FINISHED"
+  );
+  if (uncompletedMatches.length > 0) {
+    return false;
+  }
+
+  // Check if Double Elim vs Single Elim vs Round Robin
+  const isDoubleElim = matches.some((m: any) => m.round >= 100);
+  const isRoundRobin = matches.every((m: any) => m.round === 0);
+
+  let firstPlaceId: string | null = null;
+  let secondPlaceId: string | null = null;
+  let thirdPlaceId: string | null = null;
+  let fourthPlaceId: string | null = null;
+
+  if (isRoundRobin) {
+    const allFinished = matches.every((m: any) => m.status === "FINISHED");
+    if (!allFinished) return false;
+
+    const standingsMap: Record<string, { wins: number; scoreDiff: number }> = {};
+    for (const m of matches) {
+      if (m.winner_competitor_id) {
+        const wId = String(m.winner_competitor_id);
+        standingsMap[wId] = standingsMap[wId] || { wins: 0, scoreDiff: 0 };
+        standingsMap[wId].wins += 1;
+      }
+    }
+    const sorted = Object.entries(standingsMap).sort((a, b) => b[1].wins - a[1].wins);
+    firstPlaceId = sorted[0]?.[0] || null;
+    secondPlaceId = sorted[1]?.[0] || null;
+    thirdPlaceId = sorted[2]?.[0] || null;
+  } else if (isDoubleElim) {
+    const grandFinal = matches.find((m: any) => m.round === 200 && m.order_in_round === 1);
+    if (!grandFinal || grandFinal.status !== "FINISHED" || !grandFinal.winner_competitor_id) {
+      return false;
+    }
+    firstPlaceId = String(grandFinal.winner_competitor_id);
+    secondPlaceId =
+      String(grandFinal.winner_competitor_id) === String(grandFinal.competitor_a_id)
+        ? String(grandFinal.competitor_b_id)
+        : String(grandFinal.competitor_a_id);
+
+    const maxLbRound = Math.max(
+      ...matches.filter((m: any) => m.round >= 101 && m.round < 200).map((m: any) => m.round)
+    );
+    const lbFinal = matches.find((m: any) => m.round === maxLbRound);
+    if (lbFinal) {
+      thirdPlaceId =
+        String(lbFinal.winner_competitor_id) === String(lbFinal.competitor_a_id)
+          ? String(lbFinal.competitor_b_id)
+          : String(lbFinal.competitor_a_id);
+    }
+  } else {
+    // Single Elimination
+    const maxRound = Math.max(...matches.map((m: any) => m.round));
+    const finalMatch = matches.find((m: any) => m.round === maxRound && m.order_in_round === 1);
+    if (!finalMatch || finalMatch.status !== "FINISHED" || !finalMatch.winner_competitor_id) {
+      return false;
+    }
+
+    firstPlaceId = String(finalMatch.winner_competitor_id);
+    secondPlaceId =
+      String(finalMatch.winner_competitor_id) === String(finalMatch.competitor_a_id)
+        ? String(finalMatch.competitor_b_id)
+        : String(finalMatch.competitor_a_id);
+
+    const thirdPlaceMatch = matches.find((m: any) => m.round === maxRound && m.order_in_round === 2);
+    if (thirdPlaceMatch) {
+      if (thirdPlaceMatch.status !== "FINISHED") return false;
+      thirdPlaceId = thirdPlaceMatch.winner_competitor_id ? String(thirdPlaceMatch.winner_competitor_id) : null;
+      fourthPlaceId =
+        String(thirdPlaceMatch.winner_competitor_id) === String(thirdPlaceMatch.competitor_a_id)
+          ? String(thirdPlaceMatch.competitor_b_id)
+          : String(thirdPlaceMatch.competitor_a_id);
+    } else {
+      const semiMatches = matches.filter((m: any) => m.round === maxRound - 1 && maxRound >= 2);
+      const semiLosers = semiMatches
+        .map((m: any) =>
+          String(m.winner_competitor_id) === String(m.competitor_a_id) ? m.competitor_b_id : m.competitor_a_id
+        )
+        .filter(Boolean);
+      thirdPlaceId = semiLosers[0] ? String(semiLosers[0]) : null;
+      fourthPlaceId = semiLosers[1] ? String(semiLosers[1]) : null;
+    }
+  }
+
+  // Fetch competitor display names for standings
+  const competitorIds = [firstPlaceId, secondPlaceId, thirdPlaceId, fourthPlaceId].filter(Boolean);
+  let compMap = new Map();
+  if (competitorIds.length > 0) {
+    const compsRes = await client.query(
+      `SELECT id, display_name, player_id, team_id, promo_team_id FROM tournament_competitors WHERE id = ANY($1)`,
+      [competitorIds]
+    );
+    compMap = new Map(compsRes.rows.map((r: any) => [String(r.id), r]));
+  }
+
+  const finalStandings = [
+    firstPlaceId
+      ? {
+          place: 1,
+          competitor_id: firstPlaceId,
+          display_name: compMap.get(firstPlaceId)?.display_name || "1-е место",
+        }
+      : null,
+    secondPlaceId
+      ? {
+          place: 2,
+          competitor_id: secondPlaceId,
+          display_name: compMap.get(secondPlaceId)?.display_name || "2-е место",
+        }
+      : null,
+    thirdPlaceId
+      ? {
+          place: 3,
+          competitor_id: thirdPlaceId,
+          display_name: compMap.get(thirdPlaceId)?.display_name || "3-е место",
+        }
+      : null,
+    fourthPlaceId
+      ? {
+          place: 4,
+          competitor_id: fourthPlaceId,
+          display_name: compMap.get(fourthPlaceId)?.display_name || "4-е место",
+        }
+      : null,
+  ].filter(Boolean);
+
+  // Mark tournament as FINISHED and store standings in config
+  await client.query(
+    `UPDATE club_tournaments
+     SET status = 'FINISHED',
+         finished_at = NOW(),
+         config = jsonb_set(
+           COALESCE(config, '{}'::jsonb),
+           '{final_standings}',
+           $2::jsonb
+         )
+     WHERE id = $1 AND status != 'FINISHED'`,
+    [tournamentId, JSON.stringify(finalStandings)]
+  );
+
+  // Notify clients via SSE
+  await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(tournamentId)]).catch(() => {});
+
+  return true;
 }
 
 /**

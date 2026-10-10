@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { getNumericMatchId, normalizeCS2Map } from "@/lib/cs2/utils";
 import { resolveSteamId64 } from "@/lib/steam-resolver";
+import { resolveMatchFormat } from "@/lib/brackets";
 
 // Helper to resolve SteamID from raw input or return cleaned SteamID64
 async function sanitizeSteamId64(raw?: string | null): Promise<string | null> {
@@ -180,7 +181,7 @@ export async function GET(
     if (isTourney) {
       const tourneyMatchId = qm?.config_data?.tournament_match_id || cleanMatchId;
       const matchRes = await client.query(
-        `SELECT m.id, m.tournament_id, m.competitor_a_id, m.competitor_b_id,
+        `SELECT m.id, m.tournament_id, m.competitor_a_id, m.competitor_b_id, m.round, m.order_in_round, m.result,
                 t.name as tournament_name, t.type as tournament_type, t.config as tournament_config
          FROM tournament_matches m
          JOIN club_tournaments t ON m.tournament_id = t.id
@@ -232,14 +233,30 @@ export async function GET(
             : match.tournament_type === "2vs2" || match.tournament_type === "mix_2vs2" || qm?.match_format === "2v2"
             ? ["de_inferno", "de_vertigo", "de_nuke", "de_overpass", "de_anubis", "de_mirage", "de_dust2"]
             : ["de_mirage", "de_dust2", "de_inferno", "de_nuke", "de_anubis", "de_ancient", "de_vertigo"];
-        let mapPool = (tConfig.mapPool && tConfig.mapPool.length > 0) ? tConfig.mapPool : defaultPool;
+        const fullMapPool = (tConfig.mapPool && tConfig.mapPool.length > 0) ? tConfig.mapPool : defaultPool;
+
+        const resolvedFormat = resolveMatchFormat(tConfig, match.round, undefined, match.result);
+        const requiredMaps = resolvedFormat === "bo5" ? 5 : (resolvedFormat === "bo3" ? 3 : 1);
+
+        let mapList: string[] = [];
         if (vetoSelectedMap) {
-          mapPool = vetoSelectedMap.split(",").map((s: string) => s.trim()).filter(Boolean);
+          mapList = vetoSelectedMap.split(",").map((s: string) => s.trim()).filter(Boolean);
         } else if (qm?.map_name) {
-          mapPool = [qm.map_name];
+          mapList = [qm.map_name];
         }
-        const numMaps = tConfig.numMaps || (mapPool.length > 1 ? mapPool.length : 1);
-        const safeNumMaps = Math.max(1, Math.min(numMaps, mapPool.length));
+
+        // Fill up to requiredMaps from fullMapPool if fewer maps were selected
+        if (mapList.length < requiredMaps) {
+          for (const m of fullMapPool) {
+            if (!mapList.includes(m)) {
+              mapList.push(m);
+            }
+            if (mapList.length >= requiredMaps) break;
+          }
+        }
+
+        const safeNumMaps = Math.max(1, requiredMaps);
+        const finalMapList = mapList.slice(0, safeNumMaps);
 
         const isWingman =
           match.tournament_type === "2vs2" ||
@@ -265,14 +282,14 @@ export async function GET(
         const matchZyConfig = {
           matchid: numericMatchId,
           num_maps: safeNumMaps,
-          maplist: mapPool,
+          maplist: finalMapList,
           map_sides: Array(safeNumMaps).fill("knife"),
           side_type: "always_knife",
           clinch_series: true,
           players_per_team: playersPerTeam,
           min_players_to_ready: 1,
           min_spectators_to_ready: 0,
-          skip_veto: mapPool.length === safeNumMaps,
+          skip_veto: true,
           wingman: isWingman,
           team1: {
             name: team1.name,

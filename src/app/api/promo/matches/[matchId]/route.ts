@@ -133,16 +133,11 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
 
     const dmMatchId = `dm-tourney-${matchId}`;
 
-    // Cleanly stop any existing instance first
+    // Cancel any stale pending commands for this match
     await client.query(
-      `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
-       VALUES ($1, 'STOP_MATCH', $2, '{}'::jsonb, 'pending')`,
+      `UPDATE club_cs2_commands SET status = 'cancelled' WHERE club_id = $1 AND match_id = $2 AND status = 'pending'`,
       [clubId, dmMatchId]
     ).catch(() => {});
-    broadcastSseCommand(clubId, {
-      type: "STOP_MATCH",
-      match_id: dmMatchId,
-    });
 
     // 3. Find lowest available port
     const usedPortsRes = await client.query(
@@ -320,12 +315,15 @@ async function checkAndProcessAutoVeto(client: any, matchId: number, match: any,
   const mapToBan = remainingMaps[0];
   const newBannedMaps = [...bannedMaps, mapToBan];
   const matchFormat = resolveMatchFormat(match.tournament_config, match.round, undefined, match.result);
-  const totalRequiredBans = matchFormat === "bo3" ? Math.max(1, mapPool.length - 3) : (mapPool.length - 1);
-  const isVetoFinished = remainingMaps.length <= 2 || newBannedMaps.length >= totalRequiredBans;
+  const targetMapsCount = matchFormat === "bo5" ? 5 : matchFormat === "bo3" ? 3 : 1;
+  const totalRequiredBans = Math.max(1, mapPool.length - targetMapsCount);
+  const remainingAfterBan = mapPool.filter((m: string) => !newBannedMaps.includes(m));
+  const isVetoFinished = remainingAfterBan.length <= targetMapsCount || newBannedMaps.length >= totalRequiredBans;
 
   if (isVetoFinished) {
     const finalRemaining = mapPool.filter((m: string) => !newBannedMaps.includes(m));
-    const selectedMap = finalRemaining[0] || mapPool[0];
+    const selectedMaps = finalRemaining.length >= targetMapsCount ? finalRemaining.slice(0, targetMapsCount) : finalRemaining;
+    const selectedMap = selectedMaps.join(",");
 
     await client.query(
       `UPDATE match_veto 
@@ -344,7 +342,7 @@ async function checkAndProcessAutoVeto(client: any, matchId: number, match: any,
       await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(match.tournament_id)]).catch(() => {});
     }
 
-    triggerServerLaunch(String(matchId), selectedMap.split(",")[0].trim(), matchClubId);
+    triggerServerLaunch(String(matchId), selectedMaps[0] || mapPool[0], matchClubId);
 
     return {
       ...veto,
@@ -847,25 +845,19 @@ export async function POST(
         ? tRow.config.mapPool
         : defaultPool;
       const matchFormat = resolveMatchFormat(match.tournament_config, match.round, undefined, match.result);
-
+      const targetMapsCount = matchFormat === "bo5" ? 5 : matchFormat === "bo3" ? 3 : 1;
+      const totalRequiredBans = Math.max(1, mapPool.length - targetMapsCount);
       const remainingMaps = mapPool.filter((m: string) => !newBannedMaps.includes(m));
       const nextTurnCompetitorId = veto.current_turn_competitor_id === match.competitor_a_id 
         ? match.competitor_b_id 
         : match.competitor_a_id;
 
-      // BO1: ban until 1 map left (mapPool.length - 1 bans)
-      // BO3: ban, ban, pick, pick, ban, ban -> 1 decider left
-      const totalRequiredBans = matchFormat === "bo3" ? Math.max(1, mapPool.length - 3) : (mapPool.length - 1);
-      const isVetoFinished = remainingMaps.length <= (matchFormat === "bo3" ? 1 : 1) || newBannedMaps.length >= totalRequiredBans;
+      const isVetoFinished = remainingMaps.length <= targetMapsCount || newBannedMaps.length >= totalRequiredBans;
 
       if (isVetoFinished) {
-        let selectedMap = remainingMaps[0] || mapPool[0];
-        if (matchFormat === "bo3" && newBannedMaps.length >= 4) {
-          const pickA = newBannedMaps[2] || remainingMaps[0];
-          const pickB = newBannedMaps[3] || remainingMaps[1];
-          const decider = remainingMaps[0] || remainingMaps[2] || mapPool[0];
-          selectedMap = `${pickA},${pickB},${decider}`;
-        }
+        const finalRemaining = mapPool.filter((m: string) => !newBannedMaps.includes(m));
+        const selectedMaps = finalRemaining.length >= targetMapsCount ? finalRemaining.slice(0, targetMapsCount) : finalRemaining;
+        const selectedMap = selectedMaps.join(",");
 
         await client.query(
           `UPDATE match_veto 
@@ -888,7 +880,7 @@ export async function POST(
         }
 
         // Trigger DashMatch server launch
-        const firstMap = selectedMap.split(",")[0].trim();
+        const firstMap = selectedMaps[0] || mapPool[0];
         triggerServerLaunch(matchId, firstMap, matchClubId);
       } else {
         // Veto continues
