@@ -23,6 +23,28 @@ async function sanitizeSteamId64(raw?: string | null): Promise<string | null> {
   return null;
 }
 
+// Helper to resolve map name into MatchZy compatible map (standard de_ or numeric workshop ID)
+async function resolveMapForMatchZy(
+  client: any,
+  clubId: number,
+  rawMap?: string
+): Promise<string> {
+  if (!rawMap) return "de_dust2";
+  const norm = normalizeCS2Map(rawMap);
+  if (/^\d+$/.test(norm) || norm.startsWith("de_") || norm.startsWith("cs_") || norm.startsWith("ar_")) {
+    return norm;
+  }
+  const customRes = await client.query(
+    `SELECT map_id FROM club_cs2_custom_maps WHERE club_id = $1 AND (name ILIKE $2 OR map_id = $3) LIMIT 1`,
+    [clubId, rawMap.trim(), rawMap.trim()]
+  ).catch(() => ({ rows: [] }));
+
+  if (customRes.rows.length > 0) {
+    return customRes.rows[0].map_id;
+  }
+  return norm;
+}
+
 // Helper to fetch roster for competitor
 async function fetchCompetitorRoster(
   client: any,
@@ -256,7 +278,10 @@ export async function GET(
         }
 
         const safeNumMaps = Math.max(1, requiredMaps);
-        const finalMapList = mapList.slice(0, safeNumMaps);
+        const rawFinalMapList = mapList.slice(0, safeNumMaps);
+        const finalMapList = await Promise.all(
+          rawFinalMapList.map((m) => resolveMapForMatchZy(client, parsedClubId, m))
+        );
 
         const isWingman =
           match.tournament_type === "2vs2" ||
@@ -351,7 +376,7 @@ export async function GET(
       const defaultPlayers = qm.match_format === "1v1" ? 1 : qm.match_format === "2v2" ? 2 : 5;
       const rosterCount = Math.max(Object.keys(team1Players).length, Object.keys(team2Players).length);
       const playersPerTeam = rosterCount > 0 ? rosterCount : defaultPlayers;
-      const matchMap = normalizeCS2Map(qm.map_name);
+      const matchMap = await resolveMapForMatchZy(client, parsedClubId, qm.map_name);
 
       const matchZyConfig = {
         matchid: numericMatchId,

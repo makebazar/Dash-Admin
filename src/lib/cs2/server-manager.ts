@@ -122,7 +122,18 @@ export async function launchOrQueueMatchServer(
   const matchData = matchRes.rows[0] || {};
   const nameA = matchData.name_a || "Команда А";
   const nameB = matchData.name_b || "Команда Б";
-  const normalizedMap = normalizeCS2Map(selectedMap || "de_mirage");
+
+  let normalizedMap = normalizeCS2Map(selectedMap || "de_mirage");
+  if (!/^\d+$/.test(normalizedMap) && !normalizedMap.startsWith("de_") && !normalizedMap.startsWith("cs_")) {
+    const customRes = await client.query(
+      `SELECT map_id FROM club_cs2_custom_maps WHERE club_id = $1 AND (name ILIKE $2 OR map_id = $3) LIMIT 1`,
+      [clubId, (selectedMap || "").trim(), (selectedMap || "").trim()]
+    ).catch(() => ({ rows: [] }));
+    if (customRes.rows.length > 0) {
+      normalizedMap = customRes.rows[0].map_id;
+    }
+  }
+
   const matchzyId = parseInt(cleanMatchId, 10) || (Math.floor(Date.now() / 1000) % 2000000000 + 1);
 
   // Check slot availability

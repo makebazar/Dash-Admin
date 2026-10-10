@@ -60,31 +60,34 @@ export interface CS2MapItem {
   label: string;
   categories: ("5v5" | "wingman" | "1v1")[];
   badge: string;
+  isWorkshop?: boolean;
+  imageUrl?: string | null;
+  description?: string;
 }
 
 export const CS2_ALL_MAPS: CS2MapItem[] = [
   // 5v5 & Wingman Maps (CS2 competitive & wingman rotation)
-  { id: "de_mirage", label: "Mirage", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
-  { id: "de_dust2", label: "Dust II", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
-  { id: "de_inferno", label: "Inferno", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
-  { id: "de_nuke", label: "Nuke", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
-  { id: "de_anubis", label: "Anubis", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
-  { id: "de_vertigo", label: "Vertigo", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
-  { id: "de_overpass", label: "Overpass", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
-  { id: "de_ancient", label: "Ancient", categories: ["5v5"], badge: "5x5" },
-  { id: "de_train", label: "Train", categories: ["5v5"], badge: "5x5" },
-  { id: "cs_office", label: "Office", categories: ["5v5"], badge: "5x5" },
-  { id: "cs_italy", label: "Italy", categories: ["5v5"], badge: "5x5" },
+  { id: "de_mirage", label: "Mirage", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_mirage.png" },
+  { id: "de_dust2", label: "Dust II", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_dust2.png" },
+  { id: "de_inferno", label: "Inferno", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_inferno.png" },
+  { id: "de_nuke", label: "Nuke", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_nuke.png" },
+  { id: "de_anubis", label: "Anubis", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_anubis.png" },
+  { id: "de_vertigo", label: "Vertigo", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_vertigo.png" },
+  { id: "de_overpass", label: "Overpass", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_overpass.png" },
+  { id: "de_ancient", label: "Ancient", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/de_ancient.png" },
+  { id: "de_train", label: "Train", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/de_train.png" },
+  { id: "cs_office", label: "Office", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/cs_office.png" },
+  { id: "cs_italy", label: "Italy", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/cs_italy.png" },
 
   // 1v1 Aim & Duels
-  { id: "aim_redline", label: "Aim Redline", categories: ["1v1"], badge: "1x1" },
-  { id: "aim_map", label: "Aim Map", categories: ["1v1"], badge: "1x1" },
-  { id: "awp_lego_2", label: "AWP Lego 2", categories: ["1v1"], badge: "1x1" },
-  { id: "aim_ak47", label: "Aim AK47", categories: ["1v1"], badge: "1x1" },
-  { id: "aim_headshot", label: "Aim Headshot", categories: ["1v1"], badge: "1x1" },
-  { id: "aim_dust2", label: "Aim Dust2", categories: ["1v1"], badge: "1x1" },
-  { id: "aim_pistol_cs2", label: "Aim Pistol", categories: ["1v1"], badge: "1x1" },
-  { id: "aim_aztec", label: "Aim Aztec", categories: ["1v1"], badge: "1x1" },
+  { id: "aim_redline", label: "Aim Redline", categories: ["1v1"], badge: "1x1", imageUrl: "/images/maps/de_dust2.png" },
+  { id: "aim_map", label: "Aim Map", categories: ["1v1"], badge: "1x1", imageUrl: "/images/maps/de_mirage.png" },
+  { id: "awp_lego_2", label: "AWP Lego 2", categories: ["1v1"], badge: "1x1", imageUrl: "/images/maps/de_dust2.png" },
+  { id: "aim_ak47", label: "Aim AK47", categories: ["1v1"], badge: "1x1", imageUrl: "/images/maps/de_inferno.png" },
+  { id: "aim_headshot", label: "Aim Headshot", categories: ["1v1"], badge: "1x1", imageUrl: "/images/maps/de_nuke.png" },
+  { id: "aim_dust2", label: "Aim Dust2", categories: ["1v1"], badge: "1x1", imageUrl: "/images/maps/de_dust2.png" },
+  { id: "aim_pistol_cs2", label: "Aim Pistol", categories: ["1v1"], badge: "1x1", imageUrl: "/images/maps/de_anubis.png" },
+  { id: "aim_aztec", label: "Aim Aztec", categories: ["1v1"], badge: "1x1", imageUrl: "/images/maps/de_ancient.png" },
 ];
 
 function getCountFromLabel(label: string): number {
@@ -197,12 +200,44 @@ export default function CreateTournamentPage({
     "bo1" | "bo3" | "bo5"
   >("bo3");
   const [mapPool, setMapPool] = useState<string[]>(CS2_5V5_MAP_POOL);
-  const [mapFilter, setMapFilter] = useState<"all" | "5v5" | "wingman" | "1v1">("5v5");
+  const [mapFilter, setMapFilter] = useState<"all" | "5v5" | "wingman" | "1v1" | "workshop">("5v5");
+  const [customClubMaps, setCustomClubMaps] = useState<any[]>([]);
+
+  // Fetch club workshop maps
+  const fetchClubCustomMaps = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/cs2/custom-maps`);
+      if (res.ok) {
+        const data = await res.json();
+        setCustomClubMaps(data.maps || []);
+      }
+    } catch (err) {
+      console.error("Error fetching custom maps:", err);
+    }
+  }, [clubId]);
+
+  useEffect(() => {
+    fetchClubCustomMaps();
+  }, [fetchClubCustomMaps]);
+
+  const allCombinedMaps = useMemo(() => {
+    const customItems: CS2MapItem[] = (customClubMaps || []).map((cm: any) => ({
+      id: cm.map_id,
+      label: cm.name,
+      categories: cm.match_format === "all" ? ["5v5", "wingman", "1v1"] : [cm.match_format],
+      badge: "Workshop",
+      isWorkshop: true,
+      imageUrl: cm.image_url,
+      description: cm.description,
+    }));
+    return [...CS2_ALL_MAPS, ...customItems];
+  }, [customClubMaps]);
 
   const filteredMaps = useMemo(() => {
-    if (mapFilter === "all") return CS2_ALL_MAPS;
-    return CS2_ALL_MAPS.filter((m) => m.categories.includes(mapFilter));
-  }, [mapFilter]);
+    if (mapFilter === "all") return allCombinedMaps;
+    if (mapFilter === "workshop") return allCombinedMaps.filter((m) => m.isWorkshop);
+    return allCombinedMaps.filter((m) => m.categories.includes(mapFilter as any));
+  }, [mapFilter, allCombinedMaps]);
 
   // Placements & Item Pool
   const [placements, setPlacements] = useState<any[]>([
@@ -621,6 +656,7 @@ export default function CreateTournamentPage({
           maxParticipants: maxParticipants > 0 ? maxParticipants : null,
           entryFeeType,
           mapPool,
+          customMaps: customClubMaps,
           itemPool,
           bracketType,
           matchFormat,
@@ -1106,12 +1142,13 @@ export default function CreateTournamentPage({
                   </div>
 
                   {/* Filter Tabs */}
-                  <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl w-fit">
+                  <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl w-fit flex-wrap">
                     {[
-                      { id: "all", label: `Все (${CS2_ALL_MAPS.length})` },
-                      { id: "5v5", label: `5x5 Premier (${CS2_ALL_MAPS.filter((m) => m.categories.includes("5v5")).length})` },
-                      { id: "wingman", label: `2x2 Напарники (${CS2_ALL_MAPS.filter((m) => m.categories.includes("wingman")).length})` },
-                      { id: "1v1", label: `1x1 Aim (${CS2_ALL_MAPS.filter((m) => m.categories.includes("1v1")).length})` },
+                      { id: "all", label: `Все (${allCombinedMaps.length})` },
+                      { id: "5v5", label: `5x5 Premier (${allCombinedMaps.filter((m) => m.categories.includes("5v5")).length})` },
+                      { id: "wingman", label: `2x2 Напарники (${allCombinedMaps.filter((m) => m.categories.includes("wingman")).length})` },
+                      { id: "1v1", label: `1x1 Aim (${allCombinedMaps.filter((m) => m.categories.includes("1v1")).length})` },
+                      { id: "workshop", label: `⭐ Workshop (${customClubMaps.length})` },
                     ].map((tab) => (
                       <button
                         key={tab.id}
@@ -1161,7 +1198,9 @@ export default function CreateTournamentPage({
                             <span
                               className={cn(
                                 "text-[9px] font-extrabold px-1.5 py-0.5 rounded",
-                                mapItem.categories.includes("1v1")
+                                mapItem.isWorkshop
+                                  ? "bg-orange-100 text-orange-800 border border-orange-200"
+                                  : mapItem.categories.includes("1v1")
                                   ? "bg-purple-100 text-purple-700"
                                   : mapItem.categories.includes("wingman") && mapItem.categories.includes("5v5")
                                   ? "bg-blue-100 text-blue-700"

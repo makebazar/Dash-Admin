@@ -409,6 +409,14 @@ export async function GET(
     const agent = agentRes.rows[0];
     const isAgentOnline = Boolean(agent?.is_online);
 
+    // 6.5 Fetch custom workshop maps configured for this club
+    const customMapsRes = await client.query(
+      `SELECT map_id, name, description, match_format, image_url 
+       FROM club_cs2_custom_maps 
+       WHERE club_id = $1 AND is_active = true`,
+      [matchClubId]
+    ).catch(() => ({ rows: [] }));
+
     // 7. Fetch live CS2 instance if exists
     const cs2Res = await client.query(
       `SELECT id, status, game_state, port, server_ip, score1, score2, match_stats, created_at, updated_at
@@ -510,6 +518,7 @@ export async function GET(
         mapPool: (match.tournament_config?.mapPool && match.tournament_config.mapPool.length > 0)
           ? match.tournament_config.mapPool
           : getTournamentDefaultMapPool(match.tournament_type || match.type || match.tournament_config?.type),
+        customMaps: customMapsRes.rows.length > 0 ? customMapsRes.rows : (match.tournament_config?.customMaps || []),
         matchFormat: resolveMatchFormat(match.tournament_config, match.round, undefined, match.result),
         competitorA: compA ? { 
           id: match.competitor_a_id, 

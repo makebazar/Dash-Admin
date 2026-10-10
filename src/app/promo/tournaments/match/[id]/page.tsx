@@ -178,6 +178,55 @@ const MAP_PREVIEWS: Record<string, { name: string; image: string; desc: string }
   },
 };
 
+export const getMapInfo = (mapIdOrName?: string, customMaps: any[] = []) => {
+  if (!mapIdOrName) {
+    return {
+      name: "TBD",
+      image: "/images/maps/de_mirage.png",
+      desc: "Карта турнира",
+      isCustom: false,
+      workshopId: null,
+    };
+  }
+
+  // 1. Check if standard map exists in MAP_PREVIEWS
+  if (MAP_PREVIEWS[mapIdOrName]) {
+    return {
+      ...MAP_PREVIEWS[mapIdOrName],
+      isCustom: false,
+      workshopId: null,
+    };
+  }
+
+  // 2. Check custom maps passed from club / tournament_config
+  const cleanKey = String(mapIdOrName).trim().toLowerCase();
+  const custom = customMaps.find(
+    (cm: any) =>
+      String(cm.map_id) === String(mapIdOrName) ||
+      (cm.name && cm.name.toLowerCase() === cleanKey) ||
+      (cm.name && cm.name.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanKey.replace(/[^a-z0-9]/g, ""))
+  );
+
+  if (custom) {
+    return {
+      name: custom.name,
+      image: custom.image_url || "/images/maps/de_mirage.png",
+      desc: custom.description || "Пользовательская карта из Мастерской Steam",
+      isCustom: true,
+      workshopId: custom.map_id,
+    };
+  }
+
+  // Fallback
+  return {
+    name: mapIdOrName.replace(/^(de_|cs_|ws_|aim_|awp_)/g, "").replace(/_/g, " ").toUpperCase(),
+    image: `/images/maps/${mapIdOrName}.png`,
+    desc: "Карта турнира",
+    isCustom: false,
+    workshopId: null,
+  };
+};
+
 // Helpers to extract and normalize player stats from MatchZy event payload
 const extractTeamPlayers = (teamObj: any): any[] => {
   if (!teamObj || !teamObj.players) return [];
@@ -639,11 +688,7 @@ export default function MatchLobby() {
     .map((s: string) => s.trim())
     .filter(Boolean);
   const primaryMapKey = selectedMaps[0] || "de_mirage";
-  const selectedMapInfo = MAP_PREVIEWS[primaryMapKey] || {
-    name: primaryMapKey.replace(/^(de_|cs_)/g, "").toUpperCase(),
-    image: `/images/maps/${primaryMapKey}.png`,
-    desc: "Соревновательная карта турнира",
-  };
+  const selectedMapInfo = getMapInfo(primaryMapKey, match?.customMaps);
 
   const format = match.matchFormat || "bo1";
   const backUrl = `/promo/tournaments?clubId=${clubId}&tournamentId=${match.tournamentId}&tab=bracket`;
@@ -771,7 +816,7 @@ export default function MatchLobby() {
               <div className="mt-1.5 text-xs font-bold tracking-widest uppercase">
                 {veto?.selected_map ? (
                   <span className="text-emerald-400">
-                    {format.toUpperCase()} • {selectedMaps.map((m: string) => MAP_PREVIEWS[m]?.name || m.replace(/^(de_|cs_)/g, "").toUpperCase()).join(" / ")}
+                    {format.toUpperCase()} • {selectedMaps.map((m: string) => getMapInfo(m, match?.customMaps).name).join(" / ")}
                   </span>
                 ) : isVeto ? (
                   <span className="text-amber-400">{format.toUpperCase()} • ВЫБОР КАРТ ({vetoCountdown}С)</span>
@@ -1053,11 +1098,7 @@ export default function MatchLobby() {
                     const selectedList = (veto?.selected_map || "").split(",").map((s: string) => s.trim()).filter(Boolean);
                     const mapIdx = selectedList.indexOf(map);
                     const isSelected = mapIdx >= 0;
-                    const preview = MAP_PREVIEWS[map] || {
-                      name: map.replace(/^(de_|cs_)/g, "").toUpperCase(),
-                      image: `/images/maps/${map}.png`,
-                      desc: "Карта турнирного пула",
-                    };
+                    const preview = getMapInfo(map, match?.customMaps);
 
                     const selectedBadgeText = isSelected
                       ? format === "bo3"
@@ -1098,6 +1139,14 @@ export default function MatchLobby() {
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
 
+                        {preview.isCustom && (
+                          <div className="absolute top-2 right-2 z-20">
+                            <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase text-purple-300 bg-purple-950/80 px-1.5 py-0.5 rounded border border-purple-500/40 backdrop-blur-sm shadow-sm">
+                              ⭐ Workshop
+                            </span>
+                          </div>
+                        )}
+
                         <div className="relative z-10 space-y-0.5">
                           {isBanned && (
                             <span className="text-[9px] font-black uppercase text-red-400 block">
@@ -1109,7 +1158,7 @@ export default function MatchLobby() {
                               {selectedBadgeText}
                             </span>
                           )}
-                          <h4 className="text-sm font-black uppercase tracking-wider text-white">
+                          <h4 className="text-sm font-black uppercase tracking-wider text-white truncate">
                             {preview.name}
                           </h4>
                         </div>

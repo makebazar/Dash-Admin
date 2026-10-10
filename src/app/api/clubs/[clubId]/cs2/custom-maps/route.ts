@@ -11,8 +11,12 @@ async function ensureTable() {
       name VARCHAR(128) NOT NULL,
       description TEXT,
       match_format VARCHAR(16) DEFAULT 'all',
+      image_url TEXT,
+      is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
+    ALTER TABLE club_cs2_custom_maps ADD COLUMN IF NOT EXISTS image_url TEXT;
+    ALTER TABLE club_cs2_custom_maps ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
     CREATE INDEX IF NOT EXISTS idx_club_cs2_custom_maps_club_id ON club_cs2_custom_maps(club_id);
   `);
 }
@@ -33,7 +37,7 @@ export async function GET(
     await ensureTable();
 
     const res = await query(
-      `SELECT id, map_id, name, description, match_format, created_at 
+      `SELECT id, map_id, name, description, match_format, image_url, is_active, created_at 
        FROM club_cs2_custom_maps 
        WHERE club_id = $1 
        ORDER BY id DESC`,
@@ -61,7 +65,7 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { map_id, name, description, match_format } = body;
+    const { map_id, name, description, match_format, image_url, is_active } = body;
 
     const cleanMapId = String(map_id || "").trim().replace(/[^0-9]/g, "");
     const cleanName = String(name || "").trim();
@@ -77,8 +81,8 @@ export async function POST(
     await ensureTable();
 
     const res = await query(
-      `INSERT INTO club_cs2_custom_maps (club_id, map_id, name, description, match_format)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO club_cs2_custom_maps (club_id, map_id, name, description, match_format, image_url, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
         parsedClubId,
@@ -86,6 +90,8 @@ export async function POST(
         cleanName,
         description ? String(description).trim() : "Карта из Steam Workshop",
         match_format || "all",
+        image_url ? String(image_url).trim() : null,
+        is_active !== undefined ? Boolean(is_active) : true,
       ]
     );
 
