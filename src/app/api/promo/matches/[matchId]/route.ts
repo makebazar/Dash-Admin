@@ -128,10 +128,23 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
     const basePort = agent?.base_port || 27015;
     const maxInstances = agent?.max_instances || 4;
 
+    const dmMatchId = `dm-tourney-${matchId}`;
+
+    // Cleanly stop any existing instance first
+    await client.query(
+      `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+       VALUES ($1, 'STOP_MATCH', $2, '{}'::jsonb, 'pending')`,
+      [clubId, dmMatchId]
+    ).catch(() => {});
+    broadcastSseCommand(clubId, {
+      type: "STOP_MATCH",
+      match_id: dmMatchId,
+    });
+
     // 3. Find lowest available port
     const usedPortsRes = await client.query(
-      `SELECT port FROM club_cs2_matches WHERE club_id = $1 AND status NOT IN ('stopped', 'finished')`,
-      [clubId]
+      `SELECT port FROM club_cs2_matches WHERE club_id = $1 AND id != $2 AND status NOT IN ('stopped', 'finished')`,
+      [clubId, dmMatchId]
     );
     const usedPorts = new Set(usedPortsRes.rows.map((r: any) => r.port));
     let assignedPort = basePort;
@@ -144,14 +157,25 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
 
     const matchFormat = match.tournament_config?.matchFormat || "5v5";
     const matchzyId = parseInt(matchId, 10) || (Math.floor(Date.now() / 1000) % 2000000000 + 1);
-    const dmMatchId = `dm-tourney-${matchId}`;
     const normalizedMap = normalizeCS2Map(selectedMap);
 
     // 4. Create or update record in club_cs2_matches
     await client.query(
-      `INSERT INTO club_cs2_matches (id, club_id, map_name, match_format, team1_name, team2_name, status, port, server_ip, matchzy_id, config_data)
-       VALUES ($1, $2, $3, $4, $5, $6, 'starting', $7, $8, $9, $10::jsonb)
-       ON CONFLICT (id) DO UPDATE SET map_name = $3, status = 'starting', port = $7, server_ip = $8, matchzy_id = $9, config_data = $10::jsonb, updated_at = NOW()`,
+      `INSERT INTO club_cs2_matches (id, club_id, map_name, match_format, team1_name, team2_name, status, port, server_ip, matchzy_id, config_data, rcon_last_command, rcon_last_response, score1, score2, game_state)
+       VALUES ($1, $2, $3, $4, $5, $6, 'starting', $7, $8, $9, $10::jsonb, NULL, NULL, 0, 0, 'warmup')
+       ON CONFLICT (id) DO UPDATE SET 
+         map_name = $3, 
+         status = 'starting', 
+         port = $7, 
+         server_ip = $8, 
+         matchzy_id = $9, 
+         config_data = $10::jsonb, 
+         rcon_last_command = NULL,
+         rcon_last_response = NULL,
+         score1 = 0,
+         score2 = 0,
+         game_state = 'warmup',
+         updated_at = NOW()`,
       [
         dmMatchId,
         clubId,
@@ -214,6 +238,33 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
     console.log(`[Lobby API] CS2 Server launch command sent for match ${matchId} (Port ${assignedPort})`);
   } catch (err) {
     console.error(`[Lobby API] CS2 Server Launch failed for match ${matchId}:`, err);
+  } finally {
+    client.release();
+  }
+}
+
+// Background stopper for CS2 server
+async function triggerServerStop(matchId: string, clubId: number) {
+  const client = await getClient();
+  try {
+    const dmMatchId = `dm-tourney-${matchId}`;
+    await client.query(
+      `UPDATE club_cs2_matches SET status = 'stopped', updated_at = NOW() WHERE (id = $1 OR id = $2) AND club_id = $3`,
+      [dmMatchId, matchId, clubId]
+    ).catch(() => {});
+
+    await client.query(
+      `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+       VALUES ($1, 'STOP_MATCH', $2, '{}'::jsonb, 'pending')`,
+      [clubId, dmMatchId]
+    ).catch(() => {});
+
+    broadcastSseCommand(clubId, {
+      type: "STOP_MATCH",
+      match_id: dmMatchId,
+    });
+  } catch (err) {
+    console.warn("[Lobby API] triggerServerStop error:", err);
   } finally {
     client.release();
   }
@@ -490,13 +541,13 @@ export async function GET(
     } else if (isMatchStartingOrLive) {
       if (!isAgentOnline && !cs2Match) {
         serverStatus = "agent_offline";
-      } else if (!cs2Match || cs2Match.status === "starting" || cs2Match.status === "pending") {
+      } else if (statusLower === "starting" || !cs2Match || cs2Match.status === "starting" || cs2Match.status === "pending") {
         if (!isAgentOnline) {
           serverStatus = "agent_offline";
         } else {
-          const createdAt = cs2Match?.created_at ? new Date(cs2Match.created_at).getTime() : Date.now();
-          const elapsedSec = (Date.now() - createdAt) / 1000;
-          if (elapsedSec > 180) {
+          const timestamp = cs2Match?.updated_at ? new Date(cs2Match.updated_at).getTime() : (cs2Match?.created_at ? new Date(cs2Match.created_at).getTime() : Date.now());
+          const elapsedSec = (Date.now() - timestamp) / 1000;
+          if (elapsedSec > 180 && cs2Match?.status !== "starting") {
             serverStatus = "start_failed";
           } else {
             serverStatus = "starting";
@@ -948,6 +999,27 @@ export async function POST(
       await triggerServerLaunch(String(parsedMatchId), selectedMap, matchClubId);
       await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [matchId]);
       return NextResponse.json({ success: true, message: "Сервер перезапущен" });
+    }
+
+    // ACTION: RESET_LOBBY
+    if (action === "reset_lobby") {
+      const { resetCheckin } = body;
+      await triggerServerStop(String(parsedMatchId), matchClubId);
+      await client.query(`DELETE FROM match_veto WHERE match_id = $1`, [parsedMatchId]).catch(() => {});
+      if (resetCheckin) {
+        await client.query(`DELETE FROM lobby_checkin WHERE match_id = $1`, [parsedMatchId]).catch(() => {});
+      }
+      await client.query(
+        `UPDATE tournament_matches 
+         SET cs2_server_id = NULL, status = 'PENDING', score1 = 0, score2 = 0, winner_competitor_id = NULL 
+         WHERE id = $1`,
+        [parsedMatchId]
+      );
+      await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [matchId]);
+      if (match.tournament_id) {
+        await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(match.tournament_id)]).catch(() => {});
+      }
+      return NextResponse.json({ success: true, message: "Лобби сброшено" });
     }
 
     return NextResponse.json({ error: "Неверное действие" }, { status: 400 });

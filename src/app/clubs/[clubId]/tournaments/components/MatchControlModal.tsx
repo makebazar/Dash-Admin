@@ -102,6 +102,8 @@ export function MatchControlModal({
   const [practiceMode, setPracticeMode] = useState(false);
   const [isLaunchingServer, setIsLaunchingServer] = useState(false);
   const [isStoppingServer, setIsStoppingServer] = useState(false);
+  const [isRestartingServer, setIsRestartingServer] = useState(false);
+  const [isResettingLobby, setIsResettingLobby] = useState(false);
   const [isSendingRcon, setIsSendingRcon] = useState(false);
   const [copiedConnect, setCopiedConnect] = useState(false);
   const [matchControlTab, setMatchControlTab] = useState<"quick" | "restore" | "players" | "manual">("quick");
@@ -250,6 +252,72 @@ export function MatchControlModal({
       alert("Ошибка сети при запуске сервера");
     } finally {
       setIsLaunchingServer(false);
+    }
+  };
+
+  const handleRestartServer = async () => {
+    if (!confirm("Перезапустить сервер CS2 на ПК клуба? Текущий процесс будет перезапущен, а выбранная карта и участники сохранятся.")) {
+      return;
+    }
+    setIsRestartingServer(true);
+    try {
+      const finalMap = customWorkshopId.trim() ? customWorkshopId.trim() : selectedMap;
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "restart_match_server",
+          matchId: match.id,
+          selectedMap: finalMap,
+          knifeRound,
+          practiceMode,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchDashMatchStatus();
+        await onRefreshTournament();
+      } else {
+        alert(data.error || "Не удалось перезапустить сервер CS2");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети при перезапуске сервера");
+    } finally {
+      setIsRestartingServer(false);
+    }
+  };
+
+  const handleResetLobby = async () => {
+    if (!confirm("Сбросить лобби матча? Игровой сервер будет остановлен, стадия вето очищена, а матч вернется в статус ожидания.")) {
+      return;
+    }
+    const resetCheckin = confirm("Сбросить также готовность (чек-ин) игроков?");
+    setIsResettingLobby(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reset_match_lobby",
+          matchId: match.id,
+          resetCheckin,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setActiveCs2Match(null);
+        await onRefreshTournament();
+        await fetchDashMatchStatus();
+        alert("Лобби матча успешно сброшено");
+      } else {
+        alert(data.error || "Не удалось сбросить лобби");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети при сбросе лобби");
+    } finally {
+      setIsResettingLobby(false);
     }
   };
 
@@ -631,33 +699,58 @@ export function MatchControlModal({
                       </button>
                     </div>
 
-                    <div className="flex items-center justify-between pt-2">
-                      <button
-                        type="button"
-                        disabled={isStoppingServer}
-                        onClick={handleStopServer}
-                        className="px-3 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 text-rose-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <Square className="w-3.5 h-3.5 fill-rose-300" />
-                        Остановить сервер и освободить ПК
-                      </button>
+                    <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={isRestartingServer || isStoppingServer}
+                          onClick={handleRestartServer}
+                          className="px-3 py-2 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <RefreshCw className={cn("w-3.5 h-3.5", isRestartingServer && "animate-spin")} />
+                          Перезапустить CS2
+                        </button>
 
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await fetch(`/api/clubs/${clubId}/tournaments`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "sync_match_stats", matchId: match.id }),
-                          });
-                          await onRefreshTournament();
-                          onClose();
-                        }}
-                        className="px-3 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Синхронизировать финал
-                      </button>
+                        <button
+                          type="button"
+                          disabled={isStoppingServer || isRestartingServer}
+                          onClick={handleStopServer}
+                          className="px-3 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 text-rose-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Square className="w-3.5 h-3.5 fill-rose-300" />
+                          Остановить
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={isResettingLobby}
+                          onClick={handleResetLobby}
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                          title="Сбросить лобби и стадию вето"
+                        >
+                          <RotateCcw className={cn("w-3.5 h-3.5", isResettingLobby && "animate-spin")} />
+                          Сбросить лобби
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await fetch(`/api/clubs/${clubId}/tournaments`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "sync_match_stats", matchId: match.id }),
+                            });
+                            await onRefreshTournament();
+                            onClose();
+                          }}
+                          className="px-3 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Синхронизировать финал
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -842,25 +935,40 @@ export function MatchControlModal({
                   </label>
                 </div>
 
-                {/* Launch Button */}
-                <button
-                  type="button"
-                  onClick={handleLaunchServer}
-                  disabled={isLaunchingServer || !isAgentOnline}
-                  className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md shadow-orange-500/10 flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {isLaunchingServer ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Запуск сервера CS2 на ПК...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4 fill-white" />
-                      Запустить сервер CS2 на ПК клуба
-                    </>
-                  )}
-                </button>
+                {/* Launch & Reset Buttons */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleLaunchServer}
+                      disabled={isLaunchingServer || !isAgentOnline}
+                      className="flex-1 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider py-3 rounded-xl transition-all shadow-md shadow-orange-500/10 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {isLaunchingServer ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Запуск сервера CS2...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 fill-white" />
+                          Запустить сервер CS2 на ПК клуба
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isResettingLobby}
+                      onClick={handleResetLobby}
+                      className="px-3.5 py-3 rounded-xl bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Сбросить лобби и стадию вето"
+                    >
+                      <RotateCcw className={cn("w-3.5 h-3.5", isResettingLobby && "animate-spin")} />
+                      <span>Сброс</span>
+                    </button>
+                  </div>
+                </div>
 
                 {!isAgentOnline && (
                   <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">

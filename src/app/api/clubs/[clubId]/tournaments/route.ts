@@ -1668,6 +1668,210 @@ export async function POST(
       });
     }
 
+    // Action: RESTART MATCH SERVER (DashMatch)
+    if (action === "restart_match_server") {
+      const { matchId } = body;
+      if (!matchId) {
+        return NextResponse.json({ error: "ID матча обязателен" }, { status: 400 });
+      }
+
+      const matchRes = await client.query(
+        `SELECT m.id, m.tournament_id, m.competitor_a_id, m.competitor_b_id, m.cs2_server_id,
+                t.name as tournament_name, t.config as tournament_config
+         FROM tournament_matches m
+         JOIN club_tournaments t ON m.tournament_id = t.id
+         WHERE m.id = $1 AND t.club_id = $2`,
+        [matchId, parsedClubId]
+      );
+      if (matchRes.rowCount === 0) {
+        return NextResponse.json({ error: "Матч не найден" }, { status: 404 });
+      }
+      const match = matchRes.rows[0];
+
+      const compARes = await client.query(`SELECT display_name FROM tournament_competitors WHERE id = $1`, [match.competitor_a_id]);
+      const compBRes = await client.query(`SELECT display_name FROM tournament_competitors WHERE id = $1`, [match.competitor_b_id]);
+      const nameA = compARes.rows[0]?.display_name || "Команда А";
+      const nameB = compBRes.rows[0]?.display_name || "Команда Б";
+
+      const dmMatchId = `dm-tourney-${matchId}`;
+
+      // 1. Send STOP_MATCH first to clean up existing process
+      await client.query(
+        `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+         VALUES ($1, 'STOP_MATCH', $2, '{}'::jsonb, 'pending')`,
+        [parsedClubId, dmMatchId]
+      ).catch(() => {});
+      broadcastSseCommand(parsedClubId, { type: "STOP_MATCH", match_id: dmMatchId });
+
+      // 2. Fetch agent info & available port
+      const agentRes = await client.query(
+        `SELECT lan_ip, base_port, max_instances, (last_heartbeat > NOW() - INTERVAL '30 seconds') as is_online
+         FROM club_cs2_agents
+         WHERE club_id = $1`,
+        [parsedClubId]
+      );
+      const agent = agentRes.rows[0];
+      const serverIp = agent?.lan_ip || process.env.GAME_SERVER_IP || "127.0.0.1";
+      const basePort = agent?.base_port || 27015;
+      const maxInstances = agent?.max_instances || 4;
+
+      const usedPortsRes = await client.query(
+        `SELECT port FROM club_cs2_matches WHERE club_id = $1 AND id != $2 AND status NOT IN ('stopped', 'finished')`,
+        [parsedClubId, dmMatchId]
+      );
+      const usedPorts = new Set(usedPortsRes.rows.map((r: any) => r.port));
+      let assignedPort = basePort;
+      for (let i = 0; i < maxInstances; i++) {
+        if (!usedPorts.has(basePort + i)) {
+          assignedPort = basePort + i;
+          break;
+        }
+      }
+
+      // 3. Determine selected map
+      const vetoRes = await client.query(`SELECT selected_map FROM match_veto WHERE match_id = $1`, [matchId]).catch(() => ({ rows: [] }));
+      const vetoMap = vetoRes.rows[0]?.selected_map;
+      const tConfig = match.tournament_config || {};
+      const rawChosenMap = (body.selectedMap || vetoMap || tConfig.mapPool?.[0] || "de_mirage").trim();
+      const chosenMap = normalizeCS2Map(rawChosenMap);
+      const matchFormat = tConfig.matchFormat || "5v5";
+      const matchzyId = parseInt(String(matchId), 10) || (Math.floor(Date.now() / 1000) % 2000000000 + 1);
+
+      // 4. Update club_cs2_matches
+      await client.query(
+        `INSERT INTO club_cs2_matches (id, club_id, map_name, match_format, team1_name, team2_name, status, port, server_ip, matchzy_id, config_data, rcon_last_command, rcon_last_response, score1, score2, game_state)
+         VALUES ($1, $2, $3, $4, $5, $6, 'starting', $7, $8, $9, $10::jsonb, NULL, NULL, 0, 0, 'warmup')
+         ON CONFLICT (id) DO UPDATE SET
+           map_name = $3,
+           status = 'starting',
+           port = $7,
+           server_ip = $8,
+           matchzy_id = $9,
+           config_data = $10::jsonb,
+           rcon_last_command = NULL,
+           rcon_last_response = NULL,
+           score1 = 0,
+           score2 = 0,
+           game_state = 'warmup',
+           updated_at = NOW()`,
+        [
+          dmMatchId,
+          parsedClubId,
+          chosenMap,
+          matchFormat,
+          nameA,
+          nameB,
+          assignedPort,
+          serverIp,
+          matchzyId,
+          JSON.stringify({
+            knife_round: body.knifeRound !== undefined ? Boolean(body.knifeRound) : true,
+            practice_mode: body.practiceMode !== undefined ? Boolean(body.practiceMode) : false,
+            tournament_match_id: matchId,
+            warmup_time: 60,
+          }),
+        ]
+      );
+
+      // 5. Update tournament match record
+      await client.query(
+        `UPDATE tournament_matches
+         SET cs2_server_id = $1, status = 'STARTING'
+         WHERE id = $2`,
+        [dmMatchId, matchId]
+      );
+
+      // 6. Enqueue START_MATCH command
+      const configUrl = `https://mydashadmin.ru/api/clubs/${parsedClubId}/cs2/matches/${matchId}/config`;
+      await client.query(
+        `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+         VALUES ($1, 'START_MATCH', $2, $3, 'pending')`,
+        [
+          parsedClubId,
+          dmMatchId,
+          JSON.stringify({
+            map_name: chosenMap,
+            match_format: matchFormat,
+            config_url: configUrl,
+            auth_token: `secret_${matchId}`,
+          }),
+        ]
+      );
+
+      broadcastSseCommand(parsedClubId, {
+        type: "START_MATCH",
+        match_id: dmMatchId,
+        map_name: chosenMap,
+        match_format: matchFormat,
+        config_url: configUrl,
+        auth_token: `secret_${matchId}`,
+      });
+
+      await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(matchId)]).catch(() => {});
+      await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(match.tournament_id)]).catch(() => {});
+
+      return NextResponse.json({
+        success: true,
+        match_id: dmMatchId,
+        server_ip: serverIp,
+        port: assignedPort,
+        connect_command: `connect ${serverIp}:${assignedPort}`,
+        message: "Сервер CS2 перезапускается на ПК клуба!",
+      });
+    }
+
+    // Action: RESET MATCH LOBBY (Reset Lobby & Veto)
+    if (action === "reset_match_lobby") {
+      const { matchId, resetCheckin } = body;
+      if (!matchId) {
+        return NextResponse.json({ error: "ID матча обязателен" }, { status: 400 });
+      }
+
+      const dmMatchId = `dm-tourney-${matchId}`;
+
+      // 1. Stop CS2 server
+      await client.query(
+        `UPDATE club_cs2_matches SET status = 'stopped', updated_at = NOW() WHERE (id = $1 OR id = $2) AND club_id = $3`,
+        [dmMatchId, matchId, parsedClubId]
+      ).catch(() => {});
+
+      await client.query(
+        `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+         VALUES ($1, 'STOP_MATCH', $2, '{}'::jsonb, 'pending')`,
+        [parsedClubId, dmMatchId]
+      ).catch(() => {});
+      broadcastSseCommand(parsedClubId, { type: "STOP_MATCH", match_id: dmMatchId });
+
+      // 2. Delete veto state
+      await client.query(`DELETE FROM match_veto WHERE match_id = $1`, [matchId]).catch(() => {});
+
+      // 3. Reset checkins if requested
+      if (resetCheckin) {
+        await client.query(`DELETE FROM lobby_checkin WHERE match_id::text = $1 OR match_id::text = $2`, [String(matchId), dmMatchId]).catch(() => {});
+      }
+
+      // 4. Reset tournament match status
+      await client.query(
+        `UPDATE tournament_matches
+         SET cs2_server_id = NULL, status = 'PENDING', score1 = 0, score2 = 0, winner_competitor_id = NULL
+         WHERE id = $1`,
+        [matchId]
+      );
+
+      const tRes = await client.query(`SELECT tournament_id FROM tournament_matches WHERE id = $1`, [matchId]).catch(() => ({ rows: [] }));
+      const tournamentId = tRes.rows[0]?.tournament_id;
+
+      await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(matchId)]).catch(() => {});
+      if (tournamentId) {
+        await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(tournamentId)]).catch(() => {});
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Лобби матча и стадия вето успешно сброшены!",
+      });
+    }
+
     // Action: STOP MATCH SERVER (DashMatch)
     if (action === "stop_match_server") {
       const { matchId } = body;
