@@ -38,6 +38,15 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "dashlock",
+    "player-app",
+    "scratch",
+    "tools",
+    ".electron-app",
+    ".electron-data-debug",
+    "dist-electron",
+    "dist-electron-mac-safe",
+    "dist-electron-win-safe"
   ]
 }

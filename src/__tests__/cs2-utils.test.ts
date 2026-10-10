@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getNumericMatchId, parseCs2StatusPlayers } from "@/lib/cs2/utils";
+import { resolveSteamId64 } from "@/lib/steam-resolver";
 
 describe("CS2 & MatchZy Utils", () => {
   it("getNumericMatchId returns valid positive 31-bit integers", () => {
@@ -39,4 +40,16 @@ os      : Windows Dedicated
     expect(players[2].steamId).toBe("[U:1:83789437]");
     expect(players[2].isBot).toBe(false);
   });
+
+  it("resolveSteamId64 handles all common Steam ID formats", async () => {
+    // 1. Direct SteamID64
+    expect(await resolveSteamId64("76561198034202275")).toBe("76561198034202275");
+    // 2. Profile URL
+    expect(await resolveSteamId64("https://steamcommunity.com/profiles/76561198034202275/")).toBe("76561198034202275");
+    // 3. SteamID3
+    expect(await resolveSteamId64("[U:1:73936547]")).toBe("76561198034202275");
+    // 4. SteamID2
+    expect(await resolveSteamId64("STEAM_0:1:36968273")).toBe("76561198034202275");
+  });
 });
+

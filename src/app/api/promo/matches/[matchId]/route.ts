@@ -216,6 +216,16 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
   }
 }
 
+function getTournamentDefaultMapPool(type?: string): string[] {
+  if (type === "1vs1") {
+    return ["aim_redline", "aim_map", "awp_lego_2", "aim_ak47", "aim_headshot", "aim_dust2", "aim_pistol_cs2"];
+  }
+  if (type === "2vs2" || type === "mix_2vs2") {
+    return ["de_inferno", "de_vertigo", "de_nuke", "de_overpass", "de_anubis", "de_mirage", "de_dust2"];
+  }
+  return ["de_mirage", "de_dust2", "de_inferno", "de_nuke", "de_anubis", "de_ancient", "de_vertigo"];
+}
+
 async function checkAndProcessAutoVeto(client: any, matchId: number, match: any, veto: any, matchClubId: number) {
   if (!veto || !veto.current_turn_competitor_id || match.status?.toLowerCase() !== "veto") return veto;
 
@@ -241,7 +251,10 @@ async function checkAndProcessAutoVeto(client: any, matchId: number, match: any,
     return veto;
   }
 
-  const mapPool = match.tournament_config?.mapPool || ["de_mirage", "de_dust2", "de_inferno", "de_nuke", "de_anubis", "de_ancient", "de_vertigo"];
+  const defaultPool = getTournamentDefaultMapPool(match.tournament_type || match.type || match.tournament_config?.type);
+  const mapPool = (match.tournament_config?.mapPool && match.tournament_config.mapPool.length > 0)
+    ? match.tournament_config.mapPool
+    : defaultPool;
   const bannedMaps = veto.banned_maps || [];
   const remainingMaps = mapPool.filter((m: string) => !bannedMaps.includes(m));
 
@@ -527,7 +540,9 @@ export async function GET(
         matchStats,
         scheduledAt: match.scheduled_at,
         winnerId: match.winner_competitor_id,
-        mapPool: match.tournament_config?.mapPool || ["de_mirage", "de_dust2", "de_inferno", "de_nuke", "de_anubis", "de_ancient", "de_vertigo"],
+        mapPool: (match.tournament_config?.mapPool && match.tournament_config.mapPool.length > 0)
+          ? match.tournament_config.mapPool
+          : getTournamentDefaultMapPool(match.tournament_type || match.type || match.tournament_config?.type),
         matchFormat: resolveMatchFormat(match.tournament_config, match.round, undefined, match.result),
         competitorA: compA ? { 
           id: match.competitor_a_id, 
@@ -752,12 +767,16 @@ export async function POST(
 
       // Fetch tournament settings for map pool
       const tourneyConfigRes = await client.query(
-        `SELECT t.config FROM club_tournaments t 
+        `SELECT t.config, t.type FROM club_tournaments t 
          JOIN tournament_matches m ON t.id = m.tournament_id
          WHERE m.id = $1`,
         [parsedMatchId]
       );
-      const mapPool = tourneyConfigRes.rows[0]?.config?.mapPool || ["de_mirage", "de_dust2", "de_inferno", "de_nuke", "de_anubis", "de_ancient", "de_vertigo"];
+      const tRow = tourneyConfigRes.rows[0];
+      const defaultPool = getTournamentDefaultMapPool(tRow?.type || match.tournament_type || match.type || match.tournament_config?.type);
+      const mapPool = (tRow?.config?.mapPool && tRow.config.mapPool.length > 0)
+        ? tRow.config.mapPool
+        : defaultPool;
       const matchFormat = resolveMatchFormat(match.tournament_config, match.round, undefined, match.result);
 
       const remainingMaps = mapPool.filter((m: string) => !newBannedMaps.includes(m));

@@ -58,42 +58,33 @@ export const CS2_AIM_1V1_MAP_POOL = [
 export interface CS2MapItem {
   id: string;
   label: string;
-  category: "5v5" | "wingman" | "1v1";
+  categories: ("5v5" | "wingman" | "1v1")[];
   badge: string;
 }
 
 export const CS2_ALL_MAPS: CS2MapItem[] = [
-  // 5v5 Premier & Classic
-  { id: "de_mirage", label: "Mirage", category: "5v5", badge: "5x5" },
-  { id: "de_dust2", label: "Dust II", category: "5v5", badge: "5x5" },
-  { id: "de_inferno", label: "Inferno", category: "5v5", badge: "5x5" },
-  { id: "de_nuke", label: "Nuke", category: "5v5", badge: "5x5" },
-  { id: "de_anubis", label: "Anubis", category: "5v5", badge: "5x5" },
-  { id: "de_ancient", label: "Ancient", category: "5v5", badge: "5x5" },
-  { id: "de_vertigo", label: "Vertigo", category: "5v5", badge: "5x5" },
-  { id: "de_overpass", label: "Overpass", category: "5v5", badge: "5x5" },
-  { id: "de_train", label: "Train", category: "5v5", badge: "5x5" },
-  { id: "cs_office", label: "Office", category: "5v5", badge: "5x5" },
-  { id: "cs_italy", label: "Italy", category: "5v5", badge: "5x5" },
-
-  // Wingman (Напарники 2х2)
-  { id: "de_inferno", label: "Inferno (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_vertigo", label: "Vertigo (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_nuke", label: "Nuke (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_overpass", label: "Overpass (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_anubis", label: "Anubis (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_dust2", label: "Dust II (Напарники)", category: "wingman", badge: "2x2" },
-  { id: "de_mirage", label: "Mirage (Напарники)", category: "wingman", badge: "2x2" },
+  // 5v5 & Wingman Maps (CS2 competitive & wingman rotation)
+  { id: "de_mirage", label: "Mirage", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
+  { id: "de_dust2", label: "Dust II", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
+  { id: "de_inferno", label: "Inferno", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
+  { id: "de_nuke", label: "Nuke", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
+  { id: "de_anubis", label: "Anubis", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
+  { id: "de_vertigo", label: "Vertigo", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
+  { id: "de_overpass", label: "Overpass", categories: ["5v5", "wingman"], badge: "5x5 / 2x2" },
+  { id: "de_ancient", label: "Ancient", categories: ["5v5"], badge: "5x5" },
+  { id: "de_train", label: "Train", categories: ["5v5"], badge: "5x5" },
+  { id: "cs_office", label: "Office", categories: ["5v5"], badge: "5x5" },
+  { id: "cs_italy", label: "Italy", categories: ["5v5"], badge: "5x5" },
 
   // 1v1 Aim & Duels
-  { id: "aim_redline", label: "Aim Redline (1v1)", category: "1v1", badge: "1x1" },
-  { id: "aim_map", label: "Aim Map (1v1)", category: "1v1", badge: "1x1" },
-  { id: "awp_lego_2", label: "AWP Lego 2 (1v1)", category: "1v1", badge: "1x1" },
-  { id: "aim_ak47", label: "Aim AK47 (1v1)", category: "1v1", badge: "1x1" },
-  { id: "aim_headshot", label: "Aim Headshot (1v1)", category: "1v1", badge: "1x1" },
-  { id: "aim_dust2", label: "Aim Dust2 (1v1)", category: "1v1", badge: "1x1" },
-  { id: "aim_pistol_cs2", label: "Aim Pistol (1v1)", category: "1v1", badge: "1x1" },
-  { id: "aim_aztec", label: "Aim Aztec (1v1)", category: "1v1", badge: "1x1" },
+  { id: "aim_redline", label: "Aim Redline", categories: ["1v1"], badge: "1x1" },
+  { id: "aim_map", label: "Aim Map", categories: ["1v1"], badge: "1x1" },
+  { id: "awp_lego_2", label: "AWP Lego 2", categories: ["1v1"], badge: "1x1" },
+  { id: "aim_ak47", label: "Aim AK47", categories: ["1v1"], badge: "1x1" },
+  { id: "aim_headshot", label: "Aim Headshot", categories: ["1v1"], badge: "1x1" },
+  { id: "aim_dust2", label: "Aim Dust2", categories: ["1v1"], badge: "1x1" },
+  { id: "aim_pistol_cs2", label: "Aim Pistol", categories: ["1v1"], badge: "1x1" },
+  { id: "aim_aztec", label: "Aim Aztec", categories: ["1v1"], badge: "1x1" },
 ];
 
 function getCountFromLabel(label: string): number {
@@ -205,12 +196,12 @@ export default function CreateTournamentPage({
   const [grandFinalFormat, setGrandFinalFormat] = useState<
     "bo1" | "bo3" | "bo5"
   >("bo3");
-  const [mapPool, setMapPool] = useState<string[]>(CS2_AIM_1V1_MAP_POOL);
-  const [mapFilter, setMapFilter] = useState<"all" | "5v5" | "wingman" | "1v1">("all");
+  const [mapPool, setMapPool] = useState<string[]>(CS2_5V5_MAP_POOL);
+  const [mapFilter, setMapFilter] = useState<"all" | "5v5" | "wingman" | "1v1">("5v5");
 
   const filteredMaps = useMemo(() => {
     if (mapFilter === "all") return CS2_ALL_MAPS;
-    return CS2_ALL_MAPS.filter((m) => m.category === mapFilter);
+    return CS2_ALL_MAPS.filter((m) => m.categories.includes(mapFilter));
   }, [mapFilter]);
 
   // Placements & Item Pool
@@ -787,13 +778,16 @@ export default function CreateTournamentPage({
                         if (!editTournamentId) {
                           if (typeItem.id === "1vs1") {
                             setMapPool(CS2_AIM_1V1_MAP_POOL);
+                            setMapFilter("1v1");
                           } else if (
                             typeItem.id === "2vs2" ||
                             typeItem.id === "mix_2vs2"
                           ) {
                             setMapPool(CS2_WINGMAN_MAP_POOL);
+                            setMapFilter("wingman");
                           } else {
                             setMapPool(CS2_5V5_MAP_POOL);
+                            setMapFilter("5v5");
                           }
                         }
                       }}
@@ -1001,28 +995,40 @@ export default function CreateTournamentPage({
                     <div className="flex flex-wrap items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setMapPool(CS2_5V5_MAP_POOL)}
+                        onClick={() => {
+                          setMapPool(CS2_5V5_MAP_POOL);
+                          setMapFilter("5v5");
+                        }}
                         className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
                       >
                         5x5 Premier ({CS2_5V5_MAP_POOL.length})
                       </button>
                       <button
                         type="button"
-                        onClick={() => setMapPool(CS2_WINGMAN_MAP_POOL)}
+                        onClick={() => {
+                          setMapPool(CS2_WINGMAN_MAP_POOL);
+                          setMapFilter("wingman");
+                        }}
                         className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
                       >
                         2x2 Напарники ({CS2_WINGMAN_MAP_POOL.length})
                       </button>
                       <button
                         type="button"
-                        onClick={() => setMapPool(CS2_AIM_1V1_MAP_POOL)}
+                        onClick={() => {
+                          setMapPool(CS2_AIM_1V1_MAP_POOL);
+                          setMapFilter("1v1");
+                        }}
                         className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
                       >
                         1x1 Aim ({CS2_AIM_1V1_MAP_POOL.length})
                       </button>
                       <button
                         type="button"
-                        onClick={() => setMapPool(CS2_ALL_MAPS.map((m) => m.id))}
+                        onClick={() => {
+                          setMapPool(CS2_ALL_MAPS.map((m) => m.id));
+                          setMapFilter("all");
+                        }}
                         className="px-2.5 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer"
                       >
                         Все ({CS2_ALL_MAPS.length})
@@ -1034,9 +1040,9 @@ export default function CreateTournamentPage({
                   <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl w-fit">
                     {[
                       { id: "all", label: `Все (${CS2_ALL_MAPS.length})` },
-                      { id: "5v5", label: `5x5 Premier (${CS2_ALL_MAPS.filter((m) => m.category === "5v5").length})` },
-                      { id: "wingman", label: `2x2 Напарники (${CS2_ALL_MAPS.filter((m) => m.category === "wingman").length})` },
-                      { id: "1v1", label: `1x1 Aim (${CS2_ALL_MAPS.filter((m) => m.category === "1v1").length})` },
+                      { id: "5v5", label: `5x5 Premier (${CS2_ALL_MAPS.filter((m) => m.categories.includes("5v5")).length})` },
+                      { id: "wingman", label: `2x2 Напарники (${CS2_ALL_MAPS.filter((m) => m.categories.includes("wingman")).length})` },
+                      { id: "1v1", label: `1x1 Aim (${CS2_ALL_MAPS.filter((m) => m.categories.includes("1v1")).length})` },
                     ].map((tab) => (
                       <button
                         key={tab.id}
@@ -1086,10 +1092,12 @@ export default function CreateTournamentPage({
                             <span
                               className={cn(
                                 "text-[9px] font-extrabold px-1.5 py-0.5 rounded",
-                                mapItem.category === "1v1"
+                                mapItem.categories.includes("1v1")
                                   ? "bg-purple-100 text-purple-700"
-                                  : mapItem.category === "wingman"
+                                  : mapItem.categories.includes("wingman") && mapItem.categories.includes("5v5")
                                   ? "bg-blue-100 text-blue-700"
+                                  : mapItem.categories.includes("wingman")
+                                  ? "bg-indigo-100 text-indigo-700"
                                   : "bg-amber-100 text-amber-700"
                               )}
                             >
