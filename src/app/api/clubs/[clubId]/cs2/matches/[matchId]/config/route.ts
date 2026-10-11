@@ -326,6 +326,9 @@ export async function GET(
           },
           cvars: {
             hostname: `DashAdmin: ${team1.name} vs ${team2.name}`,
+            game_type: "0",
+            game_mode: isWingman ? "2" : "1",
+            ...(isWingman ? { sv_skirmish_id: "2" } : {}),
             mp_friendlyfire: "0",
             mp_warmuptime: "60",
             matchzy_chat_prefix: "[{LightBlue}DashMatch{Default}]",
@@ -400,6 +403,9 @@ export async function GET(
         },
         cvars: {
           hostname: `DashMatch: ${qm.team1_name || "Команда 1"} vs ${qm.team2_name || "Команда 2"}`,
+          game_type: "0",
+          game_mode: isWingman ? "2" : "1",
+          ...(isWingman ? { sv_skirmish_id: "2" } : {}),
           mp_friendlyfire: friendlyFire ? "1" : "0",
           mp_warmuptime: warmupTime > 0 ? String(warmupTime) : "9999",
           mp_warmup_pausetimer: warmupTime === 0 ? "1" : "0",

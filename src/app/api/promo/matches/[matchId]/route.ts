@@ -106,18 +106,23 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
 
     // Fetch match details to get format
     const matchRes = await client.query(
-      `SELECT m.round, m.result, t.config as tournament_config FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
+      `SELECT m.round, m.result, t.type as tournament_type, t.config as tournament_config FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
       [matchId]
     ).catch(() => ({ rows: [] }));
     const match = matchRes.rows[0];
-    const matchFormat = resolveMatchFormat(match?.tournament_config, match?.round, undefined, match?.result);
+    const tType = String(match?.tournament_type || "").toLowerCase();
+    const gameFormat = (tType === "2vs2" || tType === "mix_2vs2")
+      ? "2v2"
+      : (tType === "1vs1" || tType === "aim_1v1")
+      ? "1v1"
+      : "5v5";
 
     await launchOrQueueMatchServer(
       client,
       clubId,
       matchId,
       selectedMap,
-      matchFormat,
+      gameFormat,
       {
         knifeRound: true,
         warmupTime: 60,

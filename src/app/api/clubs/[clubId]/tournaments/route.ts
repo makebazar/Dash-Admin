@@ -1553,14 +1553,19 @@ export async function POST(
       const vetoMap = vetoRes.rows[0]?.selected_map;
 
       const chosenMap = (selectedMap || vetoMap || pool[0] || "de_dust2").trim();
-      const matchFormat = resolveMatchFormat(tConfig, match.round, undefined, match.result);
+      const tType = String(match.tournament_type || "").toLowerCase();
+      const gameFormat = (tType === "2vs2" || tType === "mix_2vs2")
+        ? "2v2"
+        : (tType === "1vs1" || tType === "aim_1v1")
+        ? "1v1"
+        : "5v5";
 
       const launchResult = await launchOrQueueMatchServer(
         client,
         parsedClubId,
         matchId,
         chosenMap,
-        matchFormat,
+        gameFormat,
         {
           knifeRound: Boolean(knifeRound),
           practiceMode: Boolean(practiceMode),
@@ -1616,14 +1621,21 @@ export async function POST(
         : (match.tournament_type === "1vs1" ? ["3070549948"] : ["de_dust2", "de_mirage"]);
 
       const chosenMap = (body.selectedMap || activeCs2Map || vetoMap || pool[0] || "de_dust2").trim();
-      const matchFormat = activeCs2Format || resolveMatchFormat(tConfig, match.round, undefined, match.result);
+      const tType = String(match.tournament_type || "").toLowerCase();
+      const gameFormat = (tType === "2vs2" || tType === "mix_2vs2")
+        ? "2v2"
+        : (tType === "1vs1" || tType === "aim_1v1")
+        ? "1v1"
+        : (activeCs2Format === "2v2" || activeCs2Format === "1v1")
+        ? activeCs2Format
+        : "5v5";
 
       const launchResult = await launchOrQueueMatchServer(
         client,
         parsedClubId,
         matchId,
         chosenMap,
-        matchFormat,
+        gameFormat,
         {
           knifeRound: body.knifeRound !== undefined ? Boolean(body.knifeRound) : true,
           practiceMode: body.practiceMode !== undefined ? Boolean(body.practiceMode) : false,

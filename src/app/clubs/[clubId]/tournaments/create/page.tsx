@@ -40,9 +40,6 @@ export const CS2_WINGMAN_MAP_POOL = [
   "de_vertigo",
   "de_nuke",
   "de_overpass",
-  "de_anubis",
-  "de_mirage",
-  "de_dust2",
 ];
 
 export const CS2_AIM_1V1_MAP_POOL = [
@@ -66,12 +63,12 @@ export interface CS2MapItem {
 }
 
 export const CS2_ALL_MAPS: CS2MapItem[] = [
-  // 5v5 & Wingman Maps (CS2 competitive & wingman rotation)
-  { id: "de_mirage", label: "Mirage", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_mirage.png" },
-  { id: "de_dust2", label: "Dust II", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_dust2.png" },
+  // 5v5 Competitive Maps & Genuine CS2 Wingman Maps
+  { id: "de_mirage", label: "Mirage", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/de_mirage.png" },
+  { id: "de_dust2", label: "Dust II", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/de_dust2.png" },
   { id: "de_inferno", label: "Inferno", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_inferno.png" },
   { id: "de_nuke", label: "Nuke", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_nuke.png" },
-  { id: "de_anubis", label: "Anubis", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_anubis.png" },
+  { id: "de_anubis", label: "Anubis", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/de_anubis.png" },
   { id: "de_vertigo", label: "Vertigo", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_vertigo.png" },
   { id: "de_overpass", label: "Overpass", categories: ["5v5", "wingman"], badge: "5x5 / 2x2", imageUrl: "/images/maps/de_overpass.png" },
   { id: "de_ancient", label: "Ancient", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/de_ancient.png" },

@@ -57,13 +57,10 @@ const DEFAULT_MAP_OPTIONS = [
   { id: "cs_italy", name: "Italy" },
 
   // Wingman (Напарники 2х2)
-  { id: "de_inferno", name: "Inferno (Напарники)" },
-  { id: "de_vertigo", name: "Vertigo (Напарники)" },
-  { id: "de_nuke", name: "Nuke (Напарники)" },
-  { id: "de_overpass", name: "Overpass (Напарники)" },
-  { id: "de_anubis", name: "Anubis (Напарники)" },
-  { id: "de_dust2", name: "Dust II (Напарники)" },
-  { id: "de_mirage", name: "Mirage (Напарники)" },
+  { id: "de_inferno", name: "Inferno — Плент B (Напарники)" },
+  { id: "de_vertigo", name: "Vertigo — Плент B (Напарники)" },
+  { id: "de_nuke", name: "Nuke — Плент B (Напарники)" },
+  { id: "de_overpass", name: "Overpass — Плент B (Напарники)" },
 
   // 1v1 Aim & Duels
   { id: "aim_redline", name: "Aim Redline (1v1)" },

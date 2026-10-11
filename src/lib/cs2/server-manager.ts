@@ -108,11 +108,13 @@ export async function launchOrQueueMatchServer(
     [clubId, dmMatchId]
   ).catch(() => {});
 
-  // Fetch match details to retrieve team names
+  // Fetch match details to retrieve team names and tournament type
   const matchRes = await client.query(
     `SELECT m.id, m.competitor_a_id, m.competitor_b_id, m.tournament_id,
+            t.type as tournament_type,
             ca.display_name as name_a, cb.display_name as name_b
      FROM tournament_matches m
+     LEFT JOIN club_tournaments t ON m.tournament_id = t.id
      LEFT JOIN tournament_competitors ca ON m.competitor_a_id = ca.id
      LEFT JOIN tournament_competitors cb ON m.competitor_b_id = cb.id
      WHERE m.id = $1`,
@@ -122,6 +124,35 @@ export async function launchOrQueueMatchServer(
   const matchData = matchRes.rows[0] || {};
   const nameA = matchData.name_a || "Команда А";
   const nameB = matchData.name_b || "Команда Б";
+
+  // Normalize game format: ensure 2v2 for Wingman tournaments rather than BO1/BO3 series formats
+  const tourneyType = String(matchData.tournament_type || "").toLowerCase();
+  let resolvedFormat = matchFormat;
+  if (
+    tourneyType === "2vs2" ||
+    tourneyType === "mix_2vs2" ||
+    resolvedFormat === "2vs2" ||
+    resolvedFormat === "mix_2vs2" ||
+    resolvedFormat === "wingman" ||
+    resolvedFormat === "2v2"
+  ) {
+    resolvedFormat = "2v2";
+  } else if (
+    tourneyType === "1vs1" ||
+    tourneyType === "aim_1v1" ||
+    resolvedFormat === "1vs1" ||
+    resolvedFormat === "aim_1v1" ||
+    resolvedFormat === "1v1"
+  ) {
+    resolvedFormat = "1v1";
+  } else if (
+    resolvedFormat === "bo1" ||
+    resolvedFormat === "bo3" ||
+    resolvedFormat === "bo5" ||
+    !resolvedFormat
+  ) {
+    resolvedFormat = "5v5";
+  }
 
   let normalizedMap = normalizeCS2Map(selectedMap || "de_mirage");
   if (!/^\d+$/.test(normalizedMap) && !normalizedMap.startsWith("de_") && !normalizedMap.startsWith("cs_")) {
@@ -169,7 +200,7 @@ export async function launchOrQueueMatchServer(
         dmMatchId,
         clubId,
         normalizedMap,
-        matchFormat,
+        resolvedFormat,
         nameA,
         nameB,
         allocation.port,
@@ -203,7 +234,7 @@ export async function launchOrQueueMatchServer(
         dmMatchId,
         JSON.stringify({
           map_name: normalizedMap,
-          match_format: matchFormat,
+          match_format: resolvedFormat,
           config_url: configUrl,
           auth_token: `secret_${cleanMatchId}`,
           agent_id: allocation.agentId,
@@ -215,7 +246,7 @@ export async function launchOrQueueMatchServer(
       type: "START_MATCH",
       match_id: dmMatchId,
       map_name: normalizedMap,
-      match_format: matchFormat,
+      match_format: resolvedFormat,
       config_url: configUrl,
       auth_token: `secret_${cleanMatchId}`,
       agent_id: allocation.agentId,
@@ -254,7 +285,7 @@ export async function launchOrQueueMatchServer(
         dmMatchId,
         clubId,
         normalizedMap,
-        matchFormat,
+        resolvedFormat,
         nameA,
         nameB,
         matchzyId,

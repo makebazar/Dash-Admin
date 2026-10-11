@@ -142,8 +142,6 @@ const MAP_CATALOG: Record<string, MapOption[]> = {
     { id: "de_nuke", name: "Nuke (Плент B)", desc: "Напарники: Спуск, рампа и плент B", badge: "Wingman" },
     { id: "de_vertigo", name: "Vertigo (Плент B)", desc: "Напарники: Рампа и открытый плент B", badge: "Wingman" },
     { id: "de_overpass", name: "Overpass (Плент B)", desc: "Напарники: Монстр, токсик, шорт и B", badge: "Wingman" },
-    { id: "de_dust2", name: "Dust II (Шорт & A)", desc: "Напарники: Зигзаг, лонг и плент A", badge: "Wingman" },
-    { id: "de_anubis", name: "Anubis (Плент B)", desc: "Напарники: Водный канал и плент B", badge: "Wingman" },
     { id: "workshop", name: "Разовый ID из Мастерской", desc: "Ввести произвольный ID из Steam", badge: "Workshop" },
   ],
   "1v1": [
