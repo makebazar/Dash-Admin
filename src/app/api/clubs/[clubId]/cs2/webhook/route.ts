@@ -156,16 +156,28 @@ export async function POST(
               },
             };
 
-            const seriesScore1 = numMaps > 1
-              ? (payload.team1_series_score ?? payload.team1?.series_score ?? tm.score1 ?? 0)
-              : mapScore1;
-            const seriesScore2 = numMaps > 1
-              ? (payload.team2_series_score ?? payload.team2?.series_score ?? tm.score2 ?? 0)
-              : mapScore2;
+            let seriesScore1 = mapScore1;
+            let seriesScore2 = mapScore2;
+            if (numMaps > 1) {
+              let w1 = 0;
+              let w2 = 0;
+              for (const m of Object.values(updatedMaps) as any[]) {
+                if (m.finished) {
+                  if (m.winner === "team1" || m.score1 > m.score2) w1++;
+                  else if (m.winner === "team2" || m.score2 > m.score1) w2++;
+                }
+              }
+              const pSeries1 = payload.team1_series_score ?? (payload.team1?.series_score > 0 ? payload.team1.series_score : undefined);
+              const pSeries2 = payload.team2_series_score ?? (payload.team2?.series_score > 0 ? payload.team2.series_score : undefined);
+              seriesScore1 = pSeries1 ?? Math.max(w1, tm.score1 ?? 0);
+              seriesScore2 = pSeries2 ?? Math.max(w2, tm.score2 ?? 0);
+            }
 
             const updatedResult = {
               ...(tm.result || {}),
               format: resolvedFormat,
+              series_score1: seriesScore1,
+              series_score2: seriesScore2,
               current_map_number: mapNum,
               current_map_score1: mapScore1,
               current_map_score2: mapScore2,

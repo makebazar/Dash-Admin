@@ -228,12 +228,59 @@ const getMapInfo = (mapIdOrName?: string, customMaps: any[] = []) => {
   };
 };
 
-// Helpers to extract and normalize player stats from MatchZy event payload
+// Helpers to extract and normalize player stats from MatchZy event payload with deduplication
+const mergePlayerStats = (base: any, add: any) => {
+  const bStats = base.stats || {};
+  const aStats = add.stats || {};
+  return {
+    ...base,
+    name: base.name || add.name,
+    steamid: base.steamid || base.steamId || add.steamid || add.steamId,
+    stats: {
+      ...bStats,
+      kills: (bStats.kills ?? 0) + (aStats.kills ?? 0),
+      deaths: (bStats.deaths ?? 0) + (aStats.deaths ?? 0),
+      assists: (bStats.assists ?? 0) + (aStats.assists ?? 0),
+      damage: (bStats.damage ?? 0) + (aStats.damage ?? 0),
+      headshot_kills: (bStats.headshot_kills ?? 0) + (aStats.headshot_kills ?? 0),
+      mvp: (bStats.mvp ?? bStats.mvps ?? 0) + (aStats.mvp ?? aStats.mvps ?? 0),
+      score: (bStats.score ?? 0) + (aStats.score ?? 0),
+      rounds_played: Math.max(bStats.rounds_played ?? 0, aStats.rounds_played ?? 0),
+    },
+    kills: (base.kills ?? bStats.kills ?? 0) + (add.kills ?? aStats.kills ?? 0),
+    deaths: (base.deaths ?? bStats.deaths ?? 0) + (add.deaths ?? aStats.deaths ?? 0),
+    assists: (base.assists ?? bStats.assists ?? 0) + (add.assists ?? aStats.assists ?? 0),
+    damage: (base.damage ?? bStats.damage ?? 0) + (add.damage ?? aStats.damage ?? 0),
+    headshot_kills: (base.headshot_kills ?? bStats.headshot_kills ?? 0) + (add.headshot_kills ?? aStats.headshot_kills ?? 0),
+    mvp: (base.mvp ?? base.mvps ?? bStats.mvp ?? 0) + (add.mvp ?? add.mvps ?? aStats.mvp ?? 0),
+    score: (base.score ?? bStats.score ?? 0) + (add.score ?? aStats.score ?? 0),
+  };
+};
+
 const extractTeamPlayers = (teamObj: any): any[] => {
   if (!teamObj || !teamObj.players) return [];
-  if (Array.isArray(teamObj.players)) return teamObj.players;
-  if (typeof teamObj.players === "object") return Object.values(teamObj.players);
-  return [];
+  const rawList: any[] = Array.isArray(teamObj.players)
+    ? teamObj.players
+    : typeof teamObj.players === "object"
+    ? Object.values(teamObj.players)
+    : [];
+
+  const mergedMap = new Map<string, any>();
+  for (const p of rawList) {
+    if (!p) continue;
+    const rawSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "").trim();
+    const cleanSteam = /^\d{17}$/.test(rawSteam) ? rawSteam : "";
+    const rawName = String(p.name || p.nickname || "").trim().toLowerCase();
+    const key = cleanSteam || rawName || Math.random().toString();
+
+    if (mergedMap.has(key)) {
+      const existing = mergedMap.get(key);
+      mergedMap.set(key, mergePlayerStats(existing, p));
+    } else {
+      mergedMap.set(key, { ...p });
+    }
+  }
+  return Array.from(mergedMap.values());
 };
 
 const normalizePlayer = (rawP: any, fallbackName: string, fallbackSteamId: string, totalRounds: number) => {
@@ -245,6 +292,7 @@ const normalizePlayer = (rawP: any, fallbackName: string, fallbackSteamId: strin
       deaths: 0,
       assists: 0,
       diff: 0,
+      kd: "0.00",
       damage: 0,
       headshot_kills: 0,
       mvps: 0,
@@ -265,12 +313,13 @@ const normalizePlayer = (rawP: any, fallbackName: string, fallbackSteamId: strin
   const assists = Number(rawP.assists ?? s.assists ?? s.a ?? 0) || 0;
   const damage = Number(rawP.damage ?? s.damage ?? s.dmg ?? 0) || 0;
   const headshotKills = Number(rawP.headshot_kills ?? s.headshot_kills ?? s.hs ?? 0) || 0;
-  const mvps = Number(rawP.mvps ?? s.mvps ?? 0) || 0;
+  const mvps = Number(rawP.mvp ?? rawP.mvps ?? s.mvp ?? s.mvps ?? 0) || 0;
   const score = Number(rawP.score ?? s.score ?? 0) || 0;
   const firstKills = Number(rawP.first_kills ?? s.first_kills ?? s.fk ?? 0) || 0;
   const clutches = Number(rawP.clutches ?? s.clutches ?? (rawP["1v1"] || 0) + (rawP["1v2"] || 0) + (rawP["1v3"] || 0)) || 0;
 
   const diff = kills - deaths;
+  const kd = deaths > 0 ? (kills / deaths).toFixed(2) : kills > 0 ? kills.toFixed(2) : "0.00";
   const safeRounds = Math.max(1, totalRounds);
   const numAdr = damage > 0 ? parseFloat((damage / safeRounds).toFixed(1)) : 0;
   const adr = damage > 0 ? numAdr.toFixed(1) : "-";
@@ -301,6 +350,7 @@ const normalizePlayer = (rawP: any, fallbackName: string, fallbackSteamId: strin
     deaths,
     assists,
     diff,
+    kd,
     damage,
     headshot_kills: headshotKills,
     mvps,
@@ -805,6 +855,12 @@ export default function MatchLobby() {
   const selectedMapInfo = getMapInfo(primaryMapKey, match?.customMaps);
 
   const format = match.matchFormat || "bo1";
+  const isMultiMap = format === "bo3" || format === "bo5";
+  const seriesScore1 = match.seriesScore1 ?? match.score1 ?? 0;
+  const seriesScore2 = match.seriesScore2 ?? match.score2 ?? 0;
+  const currentMapScore1 = match.currentMapScore1 ?? 0;
+  const currentMapScore2 = match.currentMapScore2 ?? 0;
+  const currentRoundNum = match.currentRoundNumber || (currentMapScore1 + currentMapScore2 + 1);
   const backUrl = `/promo/tournaments?clubId=${clubId}&tournamentId=${match.tournamentId}&tab=bracket`;
 
   // Total ready count
@@ -830,7 +886,7 @@ export default function MatchLobby() {
               <>
                 <div className="w-px h-4 bg-white/10 hidden sm:block shrink-0" />
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:inline truncate">
-                  {match.tournamentName} • Раунд {match.round}
+                  {match.tournamentName} • Сетка: Раунд {match.round} {isMultiMap ? `(${format.toUpperCase()})` : "(BO1)"}
                 </span>
               </>
             )}
@@ -847,12 +903,14 @@ export default function MatchLobby() {
             {isFinished ? (
               <div className="flex items-center gap-2 text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span>Завершен ({match.score1 ?? 0}:{match.score2 ?? 0})</span>
+                <span>Завершен {isMultiMap ? `(${seriesScore1}:${seriesScore2} по картам)` : `(${match.score1 ?? 0}:${match.score2 ?? 0})`}</span>
               </div>
             ) : isServerReady ? (
               <div className="flex items-center gap-2 text-red-400">
                 <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />
-                <span>LIVE {match.score1 ?? 0}:{match.score2 ?? 0}</span>
+                <span>
+                  LIVE {isMultiMap ? `• Карта ${currentMapIndex + 1} (${currentMapScore1}:${currentMapScore2}) • Раунд ${currentRoundNum}` : `• Раунд ${currentRoundNum} (${match.score1 ?? 0}:${match.score2 ?? 0})`}
+                </span>
               </div>
             ) : serverStatus === "starting" ? (
               <div className="flex items-center gap-2 text-orange-400">
@@ -921,18 +979,82 @@ export default function MatchLobby() {
                 </span>
               </div>
 
-              <div className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white flex items-center justify-center gap-3">
-                <span className={cn(isWinnerA ? "text-emerald-400" : sideA === "CT" ? "text-sky-400" : "text-orange-400")}>{match.score1 ?? 0}</span>
-                <span className="text-gray-500 font-sans font-light">:</span>
-                <span className={cn(isWinnerB ? "text-emerald-400" : sideB === "CT" ? "text-sky-400" : "text-orange-400")}>{match.score2 ?? 0}</span>
+              {/* Big Score: in BO3/BO5 this is SERIES SCORE (Maps Won) */}
+              <div className="flex flex-col items-center">
+                {isMultiMap && (
+                  <span className="text-[10px] font-black tracking-widest text-amber-400 uppercase bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full mb-1">
+                    Счёт по картам • {format.toUpperCase()}
+                  </span>
+                )}
+                <div className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white flex items-center justify-center gap-3">
+                  <span className={cn(isWinnerA ? "text-emerald-400" : sideA === "CT" ? "text-sky-400" : "text-orange-400")}>
+                    {isMultiMap ? seriesScore1 : (match.score1 ?? 0)}
+                  </span>
+                  <span className="text-gray-500 font-sans font-light">:</span>
+                  <span className={cn(isWinnerB ? "text-emerald-400" : sideB === "CT" ? "text-sky-400" : "text-orange-400")}>
+                    {isMultiMap ? seriesScore2 : (match.score2 ?? 0)}
+                  </span>
+                </div>
               </div>
 
-              {(format === "bo3" || format === "bo5") && isMatchStarted && (
-                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-mono font-bold text-gray-300 bg-white/5 px-2.5 py-0.5 rounded-full border border-white/5">
-                  <span className="text-gray-400">Карта {currentMapIndex + 1} ({selectedMapInfo.name}):</span>
-                  <span className={cn(sideA === "CT" ? "text-sky-400" : "text-orange-400")}>{match.currentMapScore1 ?? 0}</span>
-                  <span className="text-gray-500">:</span>
-                  <span className={cn(sideB === "CT" ? "text-sky-400" : "text-orange-400")}>{match.currentMapScore2 ?? 0}</span>
+              {/* Active Map & Live Round Details for BO3 / BO5 */}
+              {isMultiMap ? (
+                <div className="mt-2.5 flex flex-col items-center gap-1.5 w-full max-w-sm">
+                  {/* Current Active Map Banner */}
+                  <div className="flex items-center justify-between w-full bg-white/[0.04] border border-white/10 px-3 py-1.5 rounded-xl shadow-inner text-xs font-mono">
+                    <div className="flex items-center gap-1.5 font-bold text-gray-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                      <span>Карта {currentMapIndex + 1}: {selectedMapInfo.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-gray-400 font-sans font-medium">
+                        Раунд {currentRoundNum}:
+                      </span>
+                      <span className="font-black">
+                        <span className={sideA === "CT" ? "text-sky-400" : "text-orange-400"}>{currentMapScore1}</span>
+                        <span className="text-gray-500 mx-0.5">:</span>
+                        <span className={sideB === "CT" ? "text-sky-400" : "text-orange-400"}>{currentMapScore2}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Multi-Map Progress Trackers */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-0.5">
+                    {selectedMaps.map((mapKey: string, idx: number) => {
+                      const mInfo = getMapInfo(mapKey, match?.customMaps);
+                      const mHist = match?.mapsHistory?.[String(idx)];
+                      const isCur = idx === currentMapIndex;
+                      return (
+                        <div
+                          key={mapKey + idx}
+                          className={cn(
+                            "px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono tracking-wider border flex items-center gap-1",
+                            mHist?.finished
+                              ? "bg-white/5 border-white/10 text-gray-300"
+                              : isCur
+                              ? "bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-sm"
+                              : "bg-black/20 border-white/5 text-gray-600"
+                          )}
+                        >
+                          <span className="uppercase">{mInfo.name}</span>
+                          {mHist ? (
+                            <span className="font-mono opacity-90 text-[9px] font-black">
+                              ({mHist.score1}:{mHist.score2})
+                            </span>
+                          ) : isCur ? (
+                            <span className="font-mono text-[9px] font-black text-orange-400">
+                              ({currentMapScore1}:{currentMapScore2})
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : isMatchStarted && (
+                /* BO1 Round Banner */
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-mono font-bold text-gray-400 bg-white/5 px-2.5 py-0.5 rounded-full border border-white/5">
+                  <span>{selectedMapInfo.name} • Раунд {currentRoundNum}</span>
                 </div>
               )}
 
@@ -1632,12 +1754,16 @@ export default function MatchLobby() {
                     </h3>
                     <span className="text-xs font-mono font-bold text-gray-400">
                       {selectedStatsTab === "all" ? (
-                        <span>{match.score1 ?? 0} : {match.score2 ?? 0}</span>
+                        isMultiMap ? (
+                          <span>Серия: {seriesScore1} : {seriesScore2}</span>
+                        ) : (
+                          <span>{match.score1 ?? 0} : {match.score2 ?? 0}</span>
+                        )
                       ) : (
                         <span>
                           {match.mapsHistory?.[selectedStatsTab]
-                            ? `${match.mapsHistory[selectedStatsTab].score1} : ${match.mapsHistory[selectedStatsTab].score2}`
-                            : `${match.currentMapScore1 ?? 0} : ${match.currentMapScore2 ?? 0}`}
+                            ? `Карта: ${match.mapsHistory[selectedStatsTab].score1} : ${match.mapsHistory[selectedStatsTab].score2}`
+                            : `Карта ${currentMapIndex + 1}: ${currentMapScore1} : ${currentMapScore2} (Раунд ${currentRoundNum})`}
                         </span>
                       )}
                     </span>
@@ -1722,12 +1848,15 @@ export default function MatchLobby() {
                             ...extractTeamPlayers(m.stats?.team2),
                           ];
                           for (const p of mPlayers) {
-                            const key = String(p.steamid || p.steamId || p.steam_id || p.name || p.nickname || "");
+                            const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "").trim();
+                            const cleanSteam = /^\d{17}$/.test(pSteam) ? pSteam : "";
+                            const pName = String(p.name || p.nickname || "").trim().toLowerCase();
+                            const key = cleanSteam || pName;
                             if (!key) continue;
                             if (!playerAgg[key]) {
                               playerAgg[key] = {
                                 name: p.name || p.nickname || "Игрок",
-                                steamid: p.steamid || p.steamId || p.steam_id,
+                                steamid: cleanSteam || p.steamid || p.steamId || p.steam_id,
                                 kills: 0,
                                 deaths: 0,
                                 assists: 0,
@@ -1742,7 +1871,7 @@ export default function MatchLobby() {
                             playerAgg[key].assists += Number(p.assists ?? p.stats?.assists ?? 0) || 0;
                             playerAgg[key].damage += Number(p.damage ?? p.stats?.damage ?? 0) || 0;
                             playerAgg[key].headshot_kills += Number(p.headshot_kills ?? p.stats?.headshot_kills ?? 0) || 0;
-                            playerAgg[key].mvps += Number(p.mvps ?? p.stats?.mvps ?? 0) || 0;
+                            playerAgg[key].mvps += Number(p.mvp ?? p.mvps ?? p.stats?.mvp ?? p.stats?.mvps ?? 0) || 0;
                             playerAgg[key].score += Number(p.score ?? p.stats?.score ?? 0) || 0;
                           }
                         }
@@ -1760,18 +1889,18 @@ export default function MatchLobby() {
                     }
 
                     const getCompetitorStats = (comp: any, fallbackIdx: number, defaultTeam: "team1" | "team2") => {
-                      const steam = String(comp?.playerId || comp?.captainId || comp?.roster?.[0]?.steam_id || comp?.roster?.[0]?.id || "");
-                      const name = String(comp?.name || comp?.roster?.[0]?.nickname || comp?.roster?.[0]?.full_name || "").toLowerCase();
+                      const steam = String(comp?.playerId || comp?.captainId || comp?.roster?.[0]?.steam_id || comp?.roster?.[0]?.id || "").trim();
+                      const name = String(comp?.name || comp?.roster?.[0]?.nickname || comp?.roster?.[0]?.full_name || "").toLowerCase().trim();
 
                       let found = allStatsPlayers.find((p: any) => {
-                        const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "");
-                        return pSteam && steam && (pSteam === steam || pSteam.includes(steam) || steam.includes(pSteam));
+                        const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "").trim();
+                        return Boolean(pSteam && steam && (pSteam === steam || pSteam.includes(steam) || steam.includes(pSteam)));
                       });
 
                       if (!found && name) {
                         found = allStatsPlayers.find((p: any) => {
-                          const pName = String(p.name || p.nickname || "").toLowerCase();
-                          return pName && (pName === name || pName.includes(name) || name.includes(pName));
+                          const pName = String(p.name || p.nickname || "").toLowerCase().trim();
+                          return Boolean(pName && (pName === name || pName.includes(name) || name.includes(pName)));
                         });
                       }
 
@@ -1789,22 +1918,35 @@ export default function MatchLobby() {
                     };
 
                     const getTeamRosterStats = (comp: any, defaultTeam: "team1" | "team2") => {
-                      const roster = comp?.roster || [{ id: comp?.playerId, full_name: comp?.name, nickname: comp?.name }];
+                      const rawRoster = comp?.roster || [{ id: comp?.playerId, full_name: comp?.name, nickname: comp?.name }];
+                      
+                      // 1. Deduplicate raw roster so each player appears only once
+                      const rosterMap = new Map<string, any>();
+                      for (const m of rawRoster) {
+                        const mSteam = String(m.steam_id || "").trim();
+                        const mId = String(m.id || "").trim();
+                        const mName = String(m.nickname || m.full_name || m.name || "").trim().toLowerCase();
+                        const rKey = (/^\d{17}$/.test(mSteam) ? mSteam : "") || mId || mName;
+                        if (!rosterMap.has(rKey)) {
+                          rosterMap.set(rKey, m);
+                        }
+                      }
+                      const roster = Array.from(rosterMap.values());
                       const teamStatsPlayers = extractTeamPlayers(targetStats?.[defaultTeam]);
 
                       return roster.map((member: any, idx: number) => {
-                        const steam = String(member.steam_id || member.id || "");
-                        const name = String(member.nickname || member.full_name || member.name || "").toLowerCase();
+                        const steam = String(member.steam_id || member.id || "").trim();
+                        const name = String(member.nickname || member.full_name || member.name || "").trim().toLowerCase();
 
                         let found = allStatsPlayers.find((p: any) => {
-                          const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "");
-                          return pSteam && steam && (pSteam === steam || pSteam.includes(steam) || steam.includes(pSteam));
+                          const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "").trim();
+                          return Boolean(pSteam && steam && (pSteam === steam || pSteam.includes(steam) || steam.includes(pSteam)));
                         });
 
                         if (!found && name) {
                           found = allStatsPlayers.find((p: any) => {
-                            const pName = String(p.name || p.nickname || "").toLowerCase();
-                            return pName && (pName === name || pName.includes(name) || name.includes(pName));
+                            const pName = String(p.name || p.nickname || "").trim().toLowerCase();
+                            return Boolean(pName && (pName === name || pName.includes(name) || name.includes(pName)));
                           });
                         }
 
@@ -1835,7 +1977,8 @@ export default function MatchLobby() {
                                 <th className="py-1.5 text-center">K</th>
                                 <th className="py-1.5 text-center">D</th>
                                 <th className="py-1.5 text-center">A</th>
-                                <th className="py-1.5 text-center">+/-</th>
+                                <th className="py-1.5 text-center">K/D</th>
+                                <th className="py-1.5 text-center">Урон</th>
                                 <th className="py-1.5 text-center">ADR</th>
                                 <th className="py-1.5 text-center">HS%</th>
                                 <th className="py-1.5 text-center">★ MVP</th>
@@ -1861,8 +2004,11 @@ export default function MatchLobby() {
                                     <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{playerAStat.kills}</td>
                                     <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.deaths}</td>
                                     <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.assists}</td>
-                                    <td className={cn("py-2.5 text-center font-mono font-bold text-xs", playerAStat.diff > 0 ? "text-emerald-400" : playerAStat.diff < 0 ? "text-red-400" : "text-gray-400")}>
-                                      {playerAStat.diff > 0 ? `+${playerAStat.diff}` : playerAStat.diff}
+                                    <td className={cn("py-2.5 text-center font-mono font-bold text-xs", parseFloat(playerAStat.kd) >= 1.0 ? "text-emerald-400" : "text-orange-400")}>
+                                      {playerAStat.kd}
+                                    </td>
+                                    <td className="py-2.5 text-center font-mono font-bold text-white">
+                                      {playerAStat.damage > 0 ? playerAStat.damage.toLocaleString() : "-"}
                                     </td>
                                     <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{playerAStat.adr}</td>
                                     <td className="py-2.5 text-center font-mono text-gray-400">{playerAStat.hs_percent ? `${playerAStat.hs_percent}%` : "-"}</td>
@@ -1892,8 +2038,11 @@ export default function MatchLobby() {
                                     <td className="py-2.5 text-center font-mono font-bold text-emerald-400">{playerBStat.kills}</td>
                                     <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.deaths}</td>
                                     <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.assists}</td>
-                                    <td className={cn("py-2.5 text-center font-mono font-bold text-xs", playerBStat.diff > 0 ? "text-emerald-400" : playerBStat.diff < 0 ? "text-red-400" : "text-gray-400")}>
-                                      {playerBStat.diff > 0 ? `+${playerBStat.diff}` : playerBStat.diff}
+                                    <td className={cn("py-2.5 text-center font-mono font-bold text-xs", parseFloat(playerBStat.kd) >= 1.0 ? "text-emerald-400" : "text-orange-400")}>
+                                      {playerBStat.kd}
+                                    </td>
+                                    <td className="py-2.5 text-center font-mono font-bold text-white">
+                                      {playerBStat.damage > 0 ? playerBStat.damage.toLocaleString() : "-"}
                                     </td>
                                     <td className="py-2.5 text-center font-mono text-orange-400 font-bold">{playerBStat.adr}</td>
                                     <td className="py-2.5 text-center font-mono text-gray-400">{playerBStat.hs_percent ? `${playerBStat.hs_percent}%` : "-"}</td>
@@ -1928,7 +2077,8 @@ export default function MatchLobby() {
                                 <th className="py-1 text-center">K</th>
                                 <th className="py-1 text-center">D</th>
                                 <th className="py-1 text-center">A</th>
-                                <th className="py-1 text-center">+/-</th>
+                                <th className="py-1 text-center">K/D</th>
+                                <th className="py-1 text-center">Урон</th>
                                 <th className="py-1 text-center">ADR</th>
                                 <th className="py-1 text-center">HS%</th>
                                 <th className="py-1 text-center">★ MVP</th>
@@ -1953,8 +2103,11 @@ export default function MatchLobby() {
                                     <td className="py-1.5 text-center font-mono font-bold text-emerald-400">{p.kills}</td>
                                     <td className="py-1.5 text-center font-mono text-gray-400">{p.deaths}</td>
                                     <td className="py-1.5 text-center font-mono text-gray-400">{p.assists}</td>
-                                    <td className={cn("py-1.5 text-center font-mono font-bold text-xs", p.diff > 0 ? "text-emerald-400" : p.diff < 0 ? "text-red-400" : "text-gray-400")}>
-                                      {p.diff > 0 ? `+${p.diff}` : p.diff}
+                                    <td className={cn("py-1.5 text-center font-mono font-bold text-xs", parseFloat(p.kd) >= 1.0 ? "text-emerald-400" : "text-orange-400")}>
+                                      {p.kd}
+                                    </td>
+                                    <td className="py-1.5 text-center font-mono font-bold text-white">
+                                      {p.damage > 0 ? p.damage.toLocaleString() : "-"}
                                     </td>
                                     <td className="py-1.5 text-center font-mono text-orange-400 font-bold">{p.adr}</td>
                                     <td className="py-1.5 text-center font-mono text-gray-400">{p.hs_percent ? `${p.hs_percent}%` : "-"}</td>

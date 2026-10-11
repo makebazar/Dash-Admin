@@ -503,15 +503,36 @@ export async function GET(
     // Combined live score and multi-map metadata
     const resolvedFormat = resolveMatchFormat(match.tournament_config, match.round, undefined, match.result);
     const numMaps = resolvedFormat === "bo5" ? 5 : (resolvedFormat === "bo3" ? 3 : 1);
+    const mapsHistory = match.result?.maps || {};
     const currentMapNumber = cs2Match?.match_stats?.map_number ?? match.result?.current_map_number ?? 0;
-    const currentMapScore1 = match.result?.current_map_score1 ?? (cs2Match?.match_stats?.team1?.score ?? (numMaps > 1 ? 0 : (match.score1 ?? 0)));
-    const currentMapScore2 = match.result?.current_map_score2 ?? (cs2Match?.match_stats?.team2?.score ?? (numMaps > 1 ? 0 : (match.score2 ?? 0)));
+
+    // Live rounds for the current active map
+    const currentMapScore1 = cs2Match ? cs2Match.score1 : (match.result?.current_map_score1 ?? 0);
+    const currentMapScore2 = cs2Match ? cs2Match.score2 : (match.result?.current_map_score2 ?? 0);
+    const currentRoundNumber = (currentMapScore1 + currentMapScore2) + 1;
+
+    // Series score (number of maps won in BO3/BO5)
+    let seriesScore1 = match.result?.series_score1 ?? match.score1 ?? 0;
+    let seriesScore2 = match.result?.series_score2 ?? match.score2 ?? 0;
+    if (numMaps > 1) {
+      let w1 = 0;
+      let w2 = 0;
+      for (const m of Object.values(mapsHistory) as any[]) {
+        if (m.finished) {
+          if (m.winner === "team1" || m.score1 > m.score2) w1++;
+          else if (m.winner === "team2" || m.score2 > m.score1) w2++;
+        }
+      }
+      seriesScore1 = Math.max(w1, seriesScore1);
+      seriesScore2 = Math.max(w2, seriesScore2);
+    }
+
+    // In BO3/BO5, score1/score2 is the series score (maps won). In BO1, it is map rounds!
+    const effectiveScore1 = numMaps > 1 ? seriesScore1 : (cs2Match ? cs2Match.score1 : (match.score1 ?? 0));
+    const effectiveScore2 = numMaps > 1 ? seriesScore2 : (cs2Match ? cs2Match.score2 : (match.score2 ?? 0));
+
     const team1Side = cs2Match?.match_stats?.team1_side ?? match.result?.team1_side ?? "CT";
     const team2Side = cs2Match?.match_stats?.team2_side ?? match.result?.team2_side ?? (team1Side === "CT" ? "T" : "CT");
-    const mapsHistory = match.result?.maps || {};
-
-    const liveScore1 = cs2Match ? cs2Match.score1 : (match.score1 ?? 0);
-    const liveScore2 = cs2Match ? cs2Match.score2 : (match.score2 ?? 0);
     const matchStats = cs2Match?.match_stats || match.result?.stats || null;
 
     return NextResponse.json({
@@ -523,11 +544,15 @@ export async function GET(
         orderInRound: match.order_in_round,
         status: match.status,
         discipline: match.discipline || "cs2",
-        score1: liveScore1,
-        score2: liveScore2,
+        score1: effectiveScore1,
+        score2: effectiveScore2,
+        seriesScore1,
+        seriesScore2,
         currentMapIndex: currentMapNumber,
         currentMapScore1,
         currentMapScore2,
+        currentRoundNumber,
+        numMaps,
         team1Side,
         team2Side,
         mapsHistory,
