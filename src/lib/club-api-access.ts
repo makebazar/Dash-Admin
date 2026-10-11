@@ -247,7 +247,7 @@ export const getClubApiAccess = cache(
     is_full_access: isFullAccess,
     employee_only: !isFullAccess && !!rawPerms.employee_only,
     modules: isFullAccess
-      ? {
+      ? ({
           dashboard: "edit",
           shifts: "edit",
           schedule: "edit",
@@ -265,7 +265,7 @@ export const getClubApiAccess = cache(
           settings_salary: "edit",
           settings_reports: "edit",
           settings_checklists: "edit",
-        }
+        } as Record<ModuleAccessKey, AccessLevel>)
       : modules,
     // Legacy flags for compatibility where they are directly used
     can_view_reports: isFullAccess || !!rawPerms.can_view_reports,

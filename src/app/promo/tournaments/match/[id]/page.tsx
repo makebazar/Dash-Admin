@@ -26,6 +26,7 @@ import {
   CheckCheck,
   WifiOff,
   Radio,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -178,7 +179,7 @@ const MAP_PREVIEWS: Record<string, { name: string; image: string; desc: string }
   },
 };
 
-export const getMapInfo = (mapIdOrName?: string, customMaps: any[] = []) => {
+const getMapInfo = (mapIdOrName?: string, customMaps: any[] = []) => {
   if (!mapIdOrName) {
     return {
       name: "TBD",
@@ -325,10 +326,12 @@ export default function MatchLobby() {
   const [checkins, setCheckins] = useState<any[]>([]);
   const [veto, setVeto] = useState<any>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [viewer, setViewer] = useState<any>(null);
 
   // Form states
   const [pcNumber, setPcNumber] = useState("");
   const [steamIdInput, setSteamIdInput] = useState("");
+  const [isEditingSteam, setIsEditingSteam] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [isSendingMsg, setIsSendingMsg] = useState(false);
   const [isSubmittingCheckin, setIsSubmittingCheckin] = useState(false);
@@ -338,7 +341,37 @@ export default function MatchLobby() {
   const [vetoCountdown, setVetoCountdown] = useState(45);
   const [selectedStatsTab, setSelectedStatsTab] = useState<string>("all");
 
-  const chatBottomRef = useRef<HTMLDivElement>(null);
+  // Spectator states
+  const [isJoiningSpec, setIsJoiningSpec] = useState(false);
+  const [showSpecModal, setShowSpecModal] = useState(false);
+  const [specSteamInput, setSpecSteamInput] = useState("");
+
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const lastMsgCountRef = useRef(0);
+
+  const isSteamId64 = (val?: string | null) => Boolean(val && /^\d{17}$/.test(String(val).trim()));
+  const hasValidSavedSteam = isSteamId64(player?.steam_id);
+
+  const getSteamInputWarning = (input: string) => {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+    const lower = trimmed.toLowerCase();
+    if (lower.includes("/my/") || lower.endsWith("/my")) {
+      return "Ссылка steamcommunity.com/my не подходит. Это общая ссылка в Steam, открывающая профиль того, кто по ней кликнул. Укажите ссылку на ваш профиль (например: https://steamcommunity.com/id/... или https://steamcommunity.com/profiles/7656119...)";
+    }
+    if (
+      lower === "https://steamcommunity.com" ||
+      lower === "http://steamcommunity.com" ||
+      lower === "steamcommunity.com" ||
+      lower === "steamcommunity.com/"
+    ) {
+      return "Вы указали главную страницу Steam. Укажите ссылку на ваш профиль игрока.";
+    }
+    if (/^\d+$/.test(trimmed) && trimmed.length !== 17) {
+      return `SteamID должен содержать ровно 17 цифр (сейчас ${trimmed.length}). Например: 76561198000000000`;
+    }
+    return null;
+  };
 
   const fetchLobbyData = async () => {
     try {
@@ -349,6 +382,9 @@ export default function MatchLobby() {
       setCheckins(data.checkins || []);
       setVeto(data.veto);
       setMessages(data.messages || []);
+      if (data.viewer) {
+        setViewer(data.viewer);
+      }
     } catch (err) {
       console.error("Error fetching lobby data:", err);
     }
@@ -356,12 +392,12 @@ export default function MatchLobby() {
 
   const fetchPlayer = async () => {
     try {
-      const res = await fetch("/api/promo/player");
+      const res = await fetch(`/api/promo/player${clubId ? `?clubId=${clubId}` : ""}`);
       if (res.ok) {
         const data = await res.json();
         setPlayer(data.player);
         const steam = data.player?.steam_id || data.player?.steam_link || "";
-        if (steam) {
+        if (steam && !steam.includes("/my")) {
           setSteamIdInput(steam);
         }
       }
@@ -416,14 +452,32 @@ export default function MatchLobby() {
     }
   }, [match?.status, veto?.current_turn_competitor_id, veto?.updated_at]);
 
-  // Scroll chat to bottom on new message
+  // Scroll chat to bottom ONLY when new message arrives, inside chat container without jumping page!
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > lastMsgCountRef.current) {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+      lastMsgCountRef.current = messages.length;
+    }
   }, [messages]);
 
   // Action Handlers
   const handleCheckin = async () => {
     if (!pcNumber.trim() || isSubmittingCheckin) return;
+
+    if (!hasValidSavedSteam || isEditingSteam) {
+      const warning = getSteamInputWarning(steamIdInput);
+      if (warning) {
+        alert(warning);
+        return;
+      }
+      if (!steamIdInput.trim()) {
+        alert("Пожалуйста, укажите ваш Steam ID или ссылку на профиль");
+        return;
+      }
+    }
+
     setIsSubmittingCheckin(true);
     try {
       const res = await fetch(`/api/promo/matches/${matchId}`, {
@@ -432,10 +486,11 @@ export default function MatchLobby() {
         body: JSON.stringify({
           action: "checkin",
           pcNumber: pcNumber.trim(),
-          steamId: steamIdInput.trim(),
+          steamId: isEditingSteam || !hasValidSavedSteam ? steamIdInput.trim() : (player?.steam_id || steamIdInput.trim()),
         }),
       });
       if (res.ok) {
+        setIsEditingSteam(false);
         await fetchLobbyData();
         await fetchPlayer();
       } else {
@@ -446,6 +501,47 @@ export default function MatchLobby() {
       console.error(err);
     } finally {
       setIsSubmittingCheckin(false);
+    }
+  };
+
+  const handleJoinSpectator = async (customSteam?: string) => {
+    const steamToUse = (customSteam !== undefined ? customSteam : (player?.steam_id || viewer?.steamId || specSteamInput)).trim();
+
+    if (!steamToUse || getSteamInputWarning(steamToUse)) {
+      setSpecSteamInput(steamToUse);
+      setShowSpecModal(true);
+      return;
+    }
+
+    setIsJoiningSpec(true);
+    try {
+      const res = await fetch(`/api/promo/matches/${matchId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "join_spectator",
+          steamId: steamToUse,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setShowSpecModal(false);
+        if (navigator?.clipboard?.writeText && data.connectCommand) {
+          navigator.clipboard.writeText(data.connectCommand).catch(() => {});
+        }
+        alert("✅ Вы успешно добавлены как наблюдатель (Spectator) на сервер!\n\nКоманда для консоли CS2 скопирована в буфер обмена. CS2 запускается...");
+        if (data.steamConnectUrl) {
+          window.location.href = data.steamConnectUrl;
+        }
+        await fetchLobbyData();
+      } else {
+        alert(data.error || "Не удалось подключиться в качестве наблюдателя");
+      }
+    } catch (err) {
+      console.error("Error joining spectator:", err);
+      alert("Ошибка сети при подключении наблюдателя");
+    } finally {
+      setIsJoiningSpec(false);
     }
   };
 
@@ -588,6 +684,10 @@ export default function MatchLobby() {
     return checkins.find((c) => String(c.player_id) === pId || (pPhone && String(c.player_id) === pPhone));
   }, [player, checkins]);
 
+  const canWriteChat = useMemo(() => {
+    return isParticipant || Boolean(viewer?.isAdmin) || Boolean(viewer?.isSpectator);
+  }, [isParticipant, viewer]);
+
   const isTeam1Ct = useMemo(() => {
     if (match?.team1Side) {
       return String(match.team1Side).toUpperCase().includes("CT");
@@ -653,9 +753,18 @@ export default function MatchLobby() {
     if (m.sender_kind === "admin" || rawSide === "ADMIN") {
       return {
         sideBadge: "АДМИН",
-        sideBadgeClass: "bg-purple-500/15 text-purple-400 border border-purple-500/30",
-        nameClass: "text-purple-400 font-bold",
+        sideBadgeClass: "bg-red-500/20 text-red-400 border border-red-500/30 font-black",
+        nameClass: "text-red-400 font-bold",
         side: "ADMIN",
+      };
+    }
+
+    if (m.sender_kind === "spectator" || rawSide === "SPECTATOR" || rawSide === "SPEC") {
+      return {
+        sideBadge: "SPEC",
+        sideBadgeClass: "bg-amber-500/15 text-amber-400 border border-amber-500/30 font-black",
+        nameClass: "text-amber-400 font-bold",
+        side: "SPECTATOR",
       };
     }
 
@@ -1014,40 +1123,95 @@ export default function MatchLobby() {
                         />
                       </div>
 
-                      {player?.steam_id || player?.steam_link ? (
+                      {/* Steam Account Section */}
+                      {hasValidSavedSteam && !isEditingSteam ? (
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
                               Steam аккаунт
                             </span>
-                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                              Привязан
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                Привязан
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsEditingSteam(true);
+                                  setSteamIdInput(player?.steam_id || "");
+                                }}
+                                className="text-[11px] font-bold text-orange-400 hover:text-orange-300 underline underline-offset-2 transition-colors cursor-pointer"
+                              >
+                                Изменить
+                              </button>
+                            </div>
                           </div>
                           <div className="bg-black/50 border border-white/5 rounded-xl px-3.5 py-2.5 text-xs font-mono text-gray-300 truncate">
-                            {player?.steam_id || player?.steam_link}
+                            {player?.steam_id}
                           </div>
                         </div>
                       ) : (
-                        <div>
-                          <label className="text-[11px] font-bold uppercase tracking-wider text-gray-300 block mb-1.5">
-                            Steam ID / Ссылка на профиль *
-                          </label>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-gray-300 block">
+                              Steam ID / Ссылка на профиль *
+                            </label>
+                            {hasValidSavedSteam && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsEditingSteam(false);
+                                  setSteamIdInput(player?.steam_id || "");
+                                }}
+                                className="text-[10px] text-gray-400 hover:text-white transition-colors cursor-pointer"
+                              >
+                                Отмена
+                              </button>
+                            )}
+                          </div>
+
+                          {((player?.steam_id && !isSteamId64(player.steam_id)) || (player?.steam_link && player.steam_link.includes("/my"))) && (
+                            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] leading-relaxed">
+                              ⚠️ Ранее была указана некорректная ссылка Steam (общая ссылка /my/). Пожалуйста, укажите прямую ссылку на ваш профиль или 17-значный Steam ID ниже.
+                            </div>
+                          )}
+
                           <input
                             type="text"
-                            placeholder="76561198000000000 или ссылка"
+                            placeholder="https://steamcommunity.com/id/... или 7656119..."
                             value={steamIdInput}
                             onChange={(e) => setSteamIdInput(e.target.value)}
-                            className="w-full bg-black/60 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs font-bold text-white placeholder:text-gray-600 focus:outline-none focus:border-orange-500 transition-all"
+                            className={cn(
+                              "w-full bg-black/60 border rounded-xl px-3.5 py-2.5 text-xs font-bold text-white placeholder:text-gray-600 focus:outline-none transition-all",
+                              getSteamInputWarning(steamIdInput)
+                                ? "border-red-500/50 focus:border-red-500"
+                                : "border-white/10 focus:border-orange-500"
+                            )}
                           />
+
+                          {getSteamInputWarning(steamIdInput) ? (
+                            <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-[11px] leading-relaxed">
+                              {getSteamInputWarning(steamIdInput)}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-gray-500">
+                              Прямая ссылка на ваш профиль (не общая /my/) или 17-значный SteamID64 (начинается с 7656...).
+                            </p>
+                          )}
                         </div>
                       )}
 
                       <button
                         onClick={handleCheckin}
-                        disabled={isSubmittingCheckin || !pcNumber.trim() || !(player?.steam_id || player?.steam_link || steamIdInput.trim())}
-                        className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 active:scale-[0.99] flex items-center justify-center gap-2"
+                        disabled={
+                          isSubmittingCheckin ||
+                          !pcNumber.trim() ||
+                          (!hasValidSavedSteam && !steamIdInput.trim()) ||
+                          (!hasValidSavedSteam && Boolean(getSteamInputWarning(steamIdInput))) ||
+                          (isEditingSteam && (!steamIdInput.trim() || Boolean(getSteamInputWarning(steamIdInput))))
+                        }
+                        className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
                       >
                         {isSubmittingCheckin ? (
                           <RefreshCw className="w-4 h-4 animate-spin" />
@@ -1331,7 +1495,7 @@ export default function MatchLobby() {
                         <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
                           <button
                             onClick={handleCopyConnect}
-                            className="sm:col-span-8 py-3 px-3.5 bg-black/60 hover:bg-black/80 border border-white/10 hover:border-orange-500/40 rounded-xl text-xs font-mono font-bold text-gray-200 transition-all flex items-center justify-between gap-3 group cursor-pointer"
+                            className="sm:col-span-6 py-3 px-3.5 bg-black/60 hover:bg-black/80 border border-white/10 hover:border-orange-500/40 rounded-xl text-xs font-mono font-bold text-gray-200 transition-all flex items-center justify-between gap-3 group cursor-pointer"
                           >
                             <span className="truncate text-orange-400 font-mono">
                               {match.connectCommand || `connect ${match.cs2ServerIp}:${match.cs2ServerPort}`}
@@ -1349,12 +1513,102 @@ export default function MatchLobby() {
 
                           <button
                             onClick={handleConnectServer}
-                            className="sm:col-span-4 py-3 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                            className="sm:col-span-3 py-3 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
                           >
                             <Play className="w-4 h-4 fill-white" />
                             <span>Зайти в CS2</span>
                           </button>
+
+                          <button
+                            onClick={() => handleJoinSpectator()}
+                            disabled={isJoiningSpec}
+                            className="sm:col-span-3 py-3 px-3 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-white/15 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                            title="Подключиться к серверу в режиме наблюдателя (Spectator)"
+                          >
+                            <Eye className="w-4 h-4 text-amber-400" />
+                            <span>{isJoiningSpec ? "Вход..." : "Наблюдатель"}</span>
+                          </button>
                         </div>
+
+                        {/* SPECTATOR MODAL */}
+                        <AnimatePresence>
+                          {showSpecModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="w-full max-w-md bg-[#0c0c10] border border-white/10 rounded-2xl p-6 space-y-4 shadow-2xl"
+                              >
+                                <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                                      <Eye className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                      <h3 className="text-sm font-black uppercase tracking-wider text-white">
+                                        Вход в игру как наблюдатель
+                                      </h3>
+                                      <p className="text-[11px] text-gray-400">
+                                        Режим зрителя MatchZy (Spectator)
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => setShowSpecModal(false)}
+                                    className="text-gray-500 hover:text-white transition-colors text-xs font-bold p-1 cursor-pointer"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <label className="text-[11px] font-bold uppercase tracking-wider text-gray-300 block">
+                                    Steam ID / Ссылка на профиль *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="https://steamcommunity.com/id/... или 7656119..."
+                                    value={specSteamInput}
+                                    onChange={(e) => setSpecSteamInput(e.target.value)}
+                                    className={cn(
+                                      "w-full bg-black/60 border rounded-xl px-3.5 py-2.5 text-xs font-bold text-white placeholder:text-gray-600 focus:outline-none transition-all",
+                                      getSteamInputWarning(specSteamInput)
+                                        ? "border-red-500/50 focus:border-red-500"
+                                        : "border-white/10 focus:border-orange-500"
+                                    )}
+                                  />
+                                  {getSteamInputWarning(specSteamInput) ? (
+                                    <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-[11px] leading-relaxed">
+                                      {getSteamInputWarning(specSteamInput)}
+                                    </div>
+                                  ) : (
+                                    <p className="text-[10px] text-gray-400 leading-relaxed">
+                                      Сервер MatchZy добавит этот Steam ID в список доверенных наблюдателей (<code className="font-mono text-amber-400">matchzy_addplayer spec</code>) и не будет кикать при подключении.
+                                    </p>
+                                  )}
+                                </div>
+
+                                <div className="flex gap-2.5 pt-2 border-t border-white/5">
+                                  <button
+                                    onClick={() => setShowSpecModal(false)}
+                                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                                  >
+                                    Отмена
+                                  </button>
+                                  <button
+                                    onClick={() => handleJoinSpectator(specSteamInput)}
+                                    disabled={isJoiningSpec || !specSteamInput.trim() || Boolean(getSteamInputWarning(specSteamInput))}
+                                    className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-black font-black uppercase text-xs tracking-wider rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                    <span>{isJoiningSpec ? "Подключение..." : "Подключиться"}</span>
+                                  </button>
+                                </div>
+                              </motion.div>
+                            </div>
+                          )}
+                        </AnimatePresence>
 
                         <p className="text-[11px] text-gray-400 leading-relaxed bg-black/30 px-3.5 py-2 rounded-xl border border-white/5">
                           Команда подключения автоматически копируется. Если CS2 открылся в меню — откройте консоль (<kbd className="bg-white/10 px-1.5 py-0.5 rounded text-orange-400 font-mono font-bold">~</kbd>) и нажмите <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono font-bold">Ctrl+V</kbd> + <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono font-bold">Enter</kbd>.
@@ -1867,12 +2121,12 @@ export default function MatchLobby() {
               </div>
             </div>
             <span className="text-[10px] text-gray-500 font-medium">
-              {isParticipant ? "Общий чат игроков лобби" : "Режим просмотра чата"}
+              {canWriteChat ? (viewer?.isAdmin && !isParticipant ? "Чат матча (Администратор)" : "Общий чат игроков лобби") : "Режим просмотра чата"}
             </span>
           </div>
 
-          {/* Message Feed */}
-          <div className="min-h-[50px] max-h-[180px] overflow-y-auto py-1 space-y-1.5 pr-1 text-xs">
+          {/* Message Feed - scroll strictly isolated to chatContainerRef, no window jumps */}
+          <div ref={chatContainerRef} className="min-h-[50px] max-h-[180px] overflow-y-auto py-1 space-y-1.5 pr-1 text-xs">
             {messages.length === 0 ? (
               <div className="py-4 text-[11px] text-gray-500 uppercase tracking-wider text-center">
                 Сообщений пока нет
@@ -1898,15 +2152,18 @@ export default function MatchLobby() {
                 );
               })
             )}
-            <div ref={chatBottomRef} />
           </div>
 
           {/* Chat Input */}
-          {isParticipant ? (
+          {canWriteChat ? (
             <form onSubmit={handleSendMessage} className="pt-1 flex gap-2">
               <input
                 type="text"
-                placeholder="Написать сообщение в чат матча..."
+                placeholder={
+                  viewer?.isAdmin && !isParticipant
+                    ? "Написать в чат матча как Администратор..."
+                    : "Написать сообщение в чат матча..."
+                }
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-orange-500 transition-all"
@@ -1914,7 +2171,7 @@ export default function MatchLobby() {
               <button
                 type="submit"
                 disabled={isSendingMsg || !chatInput.trim()}
-                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 shrink-0 flex items-center gap-1.5"
+                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all active:scale-95 shrink-0 flex items-center gap-1.5 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Отправить</span>
@@ -1922,7 +2179,7 @@ export default function MatchLobby() {
             </form>
           ) : (
             <div className="text-[11px] text-gray-500 text-center py-1">
-              Отправка сообщений доступна участникам матча
+              Отправка сообщений доступна участникам и администраторам матча
             </div>
           )}
         </div>

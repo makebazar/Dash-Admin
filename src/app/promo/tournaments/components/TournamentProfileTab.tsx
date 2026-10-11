@@ -933,11 +933,25 @@ export function TournamentProfileTab({
                 </label>
                 <input
                   type="text"
-                  placeholder="https://steamcommunity.com/id/..."
+                  placeholder="https://steamcommunity.com/id/... или 7656119..."
                   value={editSteamLink}
                   onChange={(e) => setEditSteamLink(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-xs text-white focus:outline-none focus:border-orange-500 transition-colors"
+                  className={cn(
+                    "w-full bg-black/40 border rounded-2xl px-4 py-3 text-xs text-white focus:outline-none transition-colors",
+                    (editSteamLink.includes("/my/") || editSteamLink.toLowerCase().endsWith("/my"))
+                      ? "border-red-500/50 focus:border-red-500"
+                      : "border-white/10 focus:border-orange-500"
+                  )}
                 />
+                {(editSteamLink.includes("/my/") || editSteamLink.toLowerCase().endsWith("/my")) ? (
+                  <p className="text-[10px] text-red-400 leading-relaxed bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl">
+                    ⚠️ Ссылка steamcommunity.com/my не подходит. Это общая ссылка, которая открывает профиль любого открывшего её человека. Укажите прямую ссылку на ваш профиль (например: https://steamcommunity.com/id/... или https://steamcommunity.com/profiles/7656119...)
+                  </p>
+                ) : (
+                  <p className="text-[9px] text-gray-500 font-medium">
+                    Укажите прямую ссылку на профиль или 17-значный SteamID64 (необходим игровому серверу CS2).
+                  </p>
+                )}
               </div>
 
               {/* Faceit Link Section (NO MANUAL STATS) */}

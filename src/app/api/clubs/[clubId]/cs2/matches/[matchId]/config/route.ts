@@ -304,6 +304,14 @@ export async function GET(
         const bothTeamsHavePlayers = team1HasPlayers && team2HasPlayers;
         const numericMatchId = qm?.matchzy_id ? parseInt(qm.matchzy_id, 10) : getNumericMatchId(String(tourneyMatchId));
 
+        const tourneySpectators: Record<string, string> = {};
+        if (qm?.config_data?.spectators) {
+          for (const [rawSteam, name] of Object.entries(qm.config_data.spectators)) {
+            const steam64 = await sanitizeSteamId64(rawSteam);
+            if (steam64) tourneySpectators[steam64] = String(name);
+          }
+        }
+
         const matchZyConfig = {
           matchid: numericMatchId,
           num_maps: safeNumMaps,
@@ -323,6 +331,10 @@ export async function GET(
           team2: {
             name: team2.name,
             players: team2.players,
+          },
+          spectators: {
+            name: "Spectators",
+            players: tourneySpectators,
           },
           cvars: {
             hostname: `DashAdmin: ${team1.name} vs ${team2.name}`,
@@ -381,6 +393,14 @@ export async function GET(
       const playersPerTeam = rosterCount > 0 ? rosterCount : defaultPlayers;
       const matchMap = await resolveMapForMatchZy(client, parsedClubId, qm.map_name);
 
+      const qmSpectators: Record<string, string> = {};
+      if (cfg.spectators) {
+        for (const [rawSteam, name] of Object.entries(cfg.spectators)) {
+          const steam64 = await sanitizeSteamId64(rawSteam);
+          if (steam64) qmSpectators[steam64] = String(name);
+        }
+      }
+
       const matchZyConfig = {
         matchid: numericMatchId,
         num_maps: 1,
@@ -400,6 +420,10 @@ export async function GET(
         team2: {
           name: qm.team2_name || "Команда 2",
           players: team2Players,
+        },
+        spectators: {
+          name: "Spectators",
+          players: qmSpectators,
         },
         cvars: {
           hostname: `DashMatch: ${qm.team1_name || "Команда 1"} vs ${qm.team2_name || "Команда 2"}`,

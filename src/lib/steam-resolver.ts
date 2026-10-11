@@ -87,3 +87,69 @@ export async function resolveSteamId64(input: string): Promise<string | null> {
   return null;
 }
 
+export interface SteamValidationResult {
+  valid: boolean;
+  error?: string;
+  steamId64?: string;
+}
+
+/**
+ * Checks for common user mistakes like copying relative links (e.g. steamcommunity.com/my)
+ */
+export function checkSteamInputFormat(input: string): { isFoolError: boolean; message?: string } {
+  const trimmed = input.trim().toLowerCase();
+  if (
+    trimmed.includes("steamcommunity.com/my") ||
+    trimmed.includes("/my/") ||
+    trimmed.endsWith("/my")
+  ) {
+    return {
+      isFoolError: true,
+      message:
+        "Ссылка 'steamcommunity.com/my' открывает профиль любого авторизованного пользователя и не содержит вашего личного ID. Откройте ваш профиль в Steam, скопируйте персональную ссылку (например: https://steamcommunity.com/id/никнейм или https://steamcommunity.com/profiles/7656119...) или введите сам 17-значный SteamID64.",
+    };
+  }
+  if (trimmed === "https://steamcommunity.com" || trimmed === "https://steamcommunity.com/" || trimmed === "steamcommunity.com") {
+    return {
+      isFoolError: true,
+      message:
+        "Укажите полную ссылку на ваш профиль в Steam (например: https://steamcommunity.com/id/никнейм или https://steamcommunity.com/profiles/7656119...).",
+    };
+  }
+  if (trimmed.includes("steamcommunity.com/id/") && trimmed.replace(/.*steamcommunity\.com\/id\/?/, "").length === 0) {
+    return {
+      isFoolError: true,
+      message: "Ссылка на профиль не содержит никнейма после /id/.",
+    };
+  }
+  if (trimmed.includes("steamcommunity.com/profiles/") && trimmed.replace(/.*steamcommunity\.com\/profiles\/?/, "").length === 0) {
+    return {
+      isFoolError: true,
+      message: "Ссылка на профиль не содержит цифрового ID после /profiles/.",
+    };
+  }
+  return { isFoolError: false };
+}
+
+/**
+ * Fool-proof validator that runs format checks and attempts full resolution to SteamID64
+ */
+export async function validateSteamInput(input: string): Promise<SteamValidationResult> {
+  if (!input || !input.trim()) {
+    return { valid: false, error: "Укажите ссылку на Steam профиль или SteamID64" };
+  }
+  const check = checkSteamInputFormat(input);
+  if (check.isFoolError) {
+    return { valid: false, error: check.message };
+  }
+  const steamId64 = await resolveSteamId64(input);
+  if (!steamId64 || !/^\d{17}$/.test(steamId64)) {
+    return {
+      valid: false,
+      error:
+        "Не удалось определить SteamID. Укажите прямую ссылку на профиль (например: https://steamcommunity.com/id/никнейм или https://steamcommunity.com/profiles/7656119...) или 17-значный SteamID64.",
+    };
+  }
+  return { valid: true, steamId64 };
+}
+

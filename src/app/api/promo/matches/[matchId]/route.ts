@@ -5,7 +5,7 @@ import { broadcastSseCommand } from "@/lib/cs2/sse";
 import { resolveMatchFormat } from "@/lib/brackets";
 import { normalizeCS2Map } from "@/lib/cs2/utils";
 import { verifySessionValue } from "@/lib/session";
-import { resolveSteamId64 } from "@/lib/steam-resolver";
+import { resolveSteamId64, validateSteamInput } from "@/lib/steam-resolver";
 import { launchOrQueueMatchServer, processServerQueue } from "@/lib/cs2/server-manager";
 
 async function ensureMatchLobbyTables(client: any) {
@@ -571,6 +571,56 @@ export async function GET(
       checkins: checkinsRes.rows,
       veto: vetoRes.rows[0] || null,
       messages: messagesRes.rows,
+      viewer: await (async () => {
+        try {
+          const cookieStore = await cookies();
+          const promoPlayerId = cookieStore.get("promo_player_id")?.value;
+          const rawSessionUser = cookieStore.get("session_user_id")?.value;
+          const adminUserId = rawSessionUser ? await verifySessionValue(rawSessionUser) : null;
+
+          let v: any = null;
+          if (adminUserId) {
+            const adminRes = await client.query(
+              `SELECT id, name, role FROM users WHERE id::text = $1`,
+              [adminUserId]
+            ).catch(() => ({ rows: [] }));
+            const adminUser = adminRes.rows[0];
+            v = {
+              id: adminUserId,
+              name: adminUser?.name || "Администратор",
+              role: adminUser?.role || "admin",
+              isAdmin: true,
+              isSpectator: true,
+              steamId: null,
+            };
+          }
+
+          if (promoPlayerId) {
+            const pRes = await client.query(
+              `SELECT id, full_name, nickname, steam_id FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
+              [promoPlayerId]
+            ).catch(() => ({ rows: [] }));
+            if (pRes.rows.length > 0) {
+              const p = pRes.rows[0];
+              if (!v) {
+                v = {
+                  id: p.id,
+                  name: p.nickname || p.full_name || "Игрок",
+                  role: "player",
+                  isAdmin: false,
+                  isSpectator: false,
+                  steamId: p.steam_id,
+                };
+              } else {
+                v.steamId = p.steam_id || v.steamId;
+              }
+            }
+          }
+          return v;
+        } catch {
+          return null;
+        }
+      })(),
     });
   } catch (error) {
     console.error("Match GET Error:", error);
@@ -595,17 +645,19 @@ export async function POST(
     let playerId = cookieStore.get("promo_player_id")?.value;
     const activeClubId = cookieStore.get("promo_active_club_id")?.value;
 
-    if (!playerId) {
-      const sessionUser = await verifySessionValue(cookieStore.get("session_user_id")?.value);
-      if (sessionUser) {
-        playerId = sessionUser;
-      }
+    const rawSessionUser = cookieStore.get("session_user_id")?.value;
+    const adminUserId = rawSessionUser ? await verifySessionValue(rawSessionUser) : null;
+    const isAdmin = Boolean(adminUserId);
+
+    if (!playerId && adminUserId) {
+      playerId = adminUserId;
     }
 
     if (!playerId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    let isPromoPlayer = false;
     // Resolve playerId to promo_players UUID if needed (e.g. if stored as phone or custom id)
     const resolvedPlayerRes = await client.query(
       `SELECT id FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
@@ -613,6 +665,7 @@ export async function POST(
     );
     if (resolvedPlayerRes.rowCount && resolvedPlayerRes.rowCount > 0) {
       playerId = resolvedPlayerRes.rows[0].id;
+      isPromoPlayer = true;
     }
 
     const body = await request.json().catch(() => ({}));
@@ -640,18 +693,35 @@ export async function POST(
         return NextResponse.json({ error: "Укажите номер ПК" }, { status: 400 });
       }
 
-      // Update Steam ID if provided (run before transaction block so any validation issue doesn't abort transaction)
+      // Update and validate Steam ID if provided
       if (steamId && typeof steamId === "string" && steamId.trim().length > 0) {
         const cleanSteam = steamId.trim();
-        const resolvedSteam64 = await resolveSteamId64(cleanSteam);
-        const finalSteamId = resolvedSteam64 || cleanSteam;
+        const steamVal = await validateSteamInput(cleanSteam);
+        if (!steamVal.valid || !steamVal.steamId64) {
+          return NextResponse.json({
+            error: steamVal.error || "Не удалось определить SteamID. Укажите прямую ссылку на профиль или 17-значный SteamID64."
+          }, { status: 400 });
+        }
+        const finalSteamId = steamVal.steamId64;
         await client.query(
           `UPDATE promo_players 
            SET steam_id = $1,
-               steam_link = CASE WHEN $2 LIKE 'http%' THEN $2 ELSE COALESCE(steam_link, CASE WHEN $1 ~ '^7656119\\d{10}$' THEN 'https://steamcommunity.com/profiles/' || $1 ELSE NULL END) END
+               steam_link = CASE WHEN $2 LIKE 'http%' THEN $2 ELSE 'https://steamcommunity.com/profiles/' || $1 END
            WHERE id::text = $3 OR phone_number = $3`,
           [finalSteamId, cleanSteam, String(playerId)]
         ).catch((err: any) => console.warn("[Checkin steam update note]:", err.message));
+      } else {
+        // If steamId was not sent with checkin, verify that player already has a valid 17-digit steam_id in DB!
+        const checkExisting = await client.query(
+          `SELECT steam_id, steam_link FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
+          [String(playerId)]
+        );
+        const existingSteam = checkExisting.rows[0]?.steam_id;
+        if (!existingSteam || !/^\d{17}$/.test(existingSteam)) {
+          return NextResponse.json({
+            error: "Для участия в матче необходимо привязать корректный Steam профиль (17-значный SteamID64 или ссылку на профиль)."
+          }, { status: 400 });
+        }
       }
 
       await client.query("BEGIN");
@@ -894,6 +964,117 @@ export async function POST(
       });
     }
 
+    // ACTION: JOIN_SPECTATOR
+    if (action === "join_spectator") {
+      const { steamId } = body;
+      
+      let spectatorSteam = (steamId || "").trim();
+      let spectatorName = "Spectator";
+
+      if (isAdmin) {
+        const adminRes = await client.query(
+          `SELECT name FROM users WHERE id::text = $1`,
+          [String(adminUserId)]
+        ).catch(() => ({ rows: [] }));
+        spectatorName = adminRes.rows[0]?.name ? `Admin_${adminRes.rows[0].name.replace(/\s+/g, "_")}` : "Admin";
+      }
+
+      if (!spectatorSteam && isPromoPlayer) {
+        const pRes = await client.query(
+          `SELECT full_name, nickname, steam_id FROM promo_players WHERE id::text = $1`,
+          [String(playerId)]
+        ).catch(() => ({ rows: [] }));
+        if (pRes.rows[0]?.steam_id) {
+          spectatorSteam = pRes.rows[0].steam_id;
+          if (!isAdmin) {
+            spectatorName = pRes.rows[0].nickname || pRes.rows[0].full_name || "Spectator";
+          }
+        }
+      }
+
+      if (!spectatorSteam) {
+        return NextResponse.json({
+          error: "Пожалуйста, укажите ваш Steam ID или ссылку на профиль для входа в качестве наблюдателя."
+        }, { status: 400 });
+      }
+
+      const steamVal = await validateSteamInput(spectatorSteam);
+      if (!steamVal.valid || !steamVal.steamId64) {
+        return NextResponse.json({
+          error: steamVal.error || "Некорректный Steam ID. Укажите прямую ссылку на профиль или 17-значный SteamID64."
+        }, { status: 400 });
+      }
+
+      const finalSteam64 = steamVal.steamId64;
+
+      if (isPromoPlayer) {
+        await client.query(
+          `UPDATE promo_players 
+           SET steam_id = $1, steam_link = CASE WHEN $2 LIKE 'http%' THEN $2 ELSE 'https://steamcommunity.com/profiles/' || $1 END
+           WHERE id::text = $3`,
+          [finalSteam64, spectatorSteam, String(playerId)]
+        ).catch(() => {});
+      }
+
+      // Find active CS2 match
+      const cs2Res = await client.query(
+        `SELECT id, club_id, port, server_ip, status, game_state, config_data 
+         FROM club_cs2_matches 
+         WHERE (id = $1 OR (config_data->>'tournament_match_id') = $2 OR matchzy_id = $3) 
+           AND status NOT IN ('stopped', 'failed')
+         ORDER BY created_at DESC LIMIT 1`,
+        [match.cs2_server_id || `dm-tourney-${parsedMatchId}`, String(parsedMatchId), parsedMatchId]
+      );
+
+      const agentRes = await client.query(
+        `SELECT lan_ip, base_port FROM club_cs2_agents WHERE club_id = $1`,
+        [matchClubId]
+      ).catch(() => ({ rows: [] }));
+      const agent = agentRes.rows[0];
+
+      const cs2 = cs2Res.rows[0];
+      const serverIp = (cs2?.server_ip && cs2.server_ip !== "127.0.0.1")
+        ? cs2.server_ip
+        : (agent?.lan_ip || process.env.GAME_SERVER_IP || "127.0.0.1");
+      const serverPort = cs2?.port || agent?.base_port || 27015;
+
+      if (cs2) {
+        // Server exists - add player to spectators live via MatchZy RCON!
+        const rconCmd = `matchzy_addplayer ${finalSteam64} spec "${spectatorName}"`;
+        
+        await client.query(
+          `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+           VALUES ($1, 'RCON_COMMAND', $2, $3, 'pending')`,
+          [cs2.club_id, cs2.id, JSON.stringify({ command: rconCmd })]
+        ).catch(() => {});
+
+        broadcastSseCommand(cs2.club_id, {
+          type: "RCON_COMMAND",
+          match_id: cs2.id,
+          command: rconCmd,
+        });
+
+        // Also update config_data.spectators in the match record
+        const cfgData = cs2.config_data || {};
+        const currentSpecs = cfgData.spectators || {};
+        currentSpecs[finalSteam64] = spectatorName;
+        cfgData.spectators = currentSpecs;
+
+        await client.query(
+          `UPDATE club_cs2_matches SET config_data = $1 WHERE id = $2`,
+          [JSON.stringify(cfgData), cs2.id]
+        ).catch(() => {});
+      }
+
+      return NextResponse.json({
+        success: true,
+        steamId64: finalSteam64,
+        connectCommand: `connect ${serverIp}:${serverPort}`,
+        steamConnectUrl: `steam://connect/${serverIp}:${serverPort}`,
+        message: "Вы добавлены в список наблюдателей сервера!",
+      });
+    }
+
     // ACTION: SEND_MESSAGE (chat)
     if (action === "send_message") {
       const { message } = body;
@@ -937,19 +1118,49 @@ export async function POST(
       const isMemberA = await checkInCompetitor(compA);
       const isMemberB = await checkInCompetitor(compB);
 
-      // Resolve sender nickname
-      const playerProfileRes = await client.query(
-        `SELECT COALESCE(nickname, full_name) as name FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
-        [String(playerId)]
-      );
-      const authorName = playerProfileRes.rows[0]?.name || (isMemberA ? (compA?.display_name || "Команда 1") : isMemberB ? (compB?.display_name || "Команда 2") : "Участник");
-      const senderSide = isMemberA ? "CT" : (isMemberB ? "T" : "SPECTATOR");
-      const senderCompetitorId = isMemberA ? match.competitor_a_id : (isMemberB ? match.competitor_b_id : null);
+      let authorName = "Участник";
+      let senderSide: "CT" | "T" | "ADMIN" | "SPECTATOR" = "SPECTATOR";
+      let senderKind = "player";
+      let senderCompetitorId: any = null;
+
+      if (isMemberA) {
+        senderSide = "CT";
+        senderCompetitorId = match.competitor_a_id;
+        const playerProfileRes = await client.query(
+          `SELECT COALESCE(nickname, full_name) as name FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
+          [String(playerId)]
+        );
+        authorName = playerProfileRes.rows[0]?.name || compA?.display_name || "Команда 1";
+      } else if (isMemberB) {
+        senderSide = "T";
+        senderCompetitorId = match.competitor_b_id;
+        const playerProfileRes = await client.query(
+          `SELECT COALESCE(nickname, full_name) as name FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
+          [String(playerId)]
+        );
+        authorName = playerProfileRes.rows[0]?.name || compB?.display_name || "Команда 2";
+      } else if (isAdmin) {
+        senderSide = "ADMIN";
+        senderKind = "admin";
+        const adminRes = await client.query(
+          `SELECT name FROM users WHERE id::text = $1`,
+          [String(adminUserId)]
+        ).catch(() => ({ rows: [] }));
+        authorName = adminRes.rows[0]?.name || "Администратор";
+      } else {
+        senderSide = "SPECTATOR";
+        senderKind = "spectator";
+        const playerProfileRes = await client.query(
+          `SELECT COALESCE(nickname, full_name) as name FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
+          [String(playerId)]
+        );
+        authorName = playerProfileRes.rows[0]?.name || "Наблюдатель";
+      }
 
       await client.query(
         `INSERT INTO tournament_match_messages (match_id, sender_kind, sender_competitor_id, sender_player_id, sender_name, sender_side, body)
-         VALUES ($1, 'player', $2, $3, $4, $5, $6)`,
-        [parsedMatchId, senderCompetitorId, String(playerId), authorName, senderSide, message.trim()]
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [parsedMatchId, senderKind, senderCompetitorId, String(playerId), authorName, senderSide, message.trim()]
       );
 
       // Notify clients

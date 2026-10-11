@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { cookies } from "next/headers";
 import { fetchFaceitStats } from "@/lib/faceit-service";
-import { resolveSteamId64 } from "@/lib/steam-resolver";
+import { resolveSteamId64, validateSteamInput } from "@/lib/steam-resolver";
 
 export async function POST(request: Request) {
   const client = await getClient();
@@ -54,8 +54,16 @@ export async function POST(request: Request) {
     // Parse SteamID64 accurately (handles profiles, vanity urls, SteamID2/3, raw ID64)
     let steamId: string | null = null;
     let resolvedSteamLink = steamLink;
-    if (steamLink) {
-      steamId = await resolveSteamId64(steamLink);
+    if (steamLink && typeof steamLink === "string" && steamLink.trim().length > 0) {
+      const steamVal = await validateSteamInput(steamLink.trim());
+      if (!steamVal.valid || !steamVal.steamId64) {
+        return NextResponse.json(
+          { error: steamVal.error || "Некорректная ссылка на Steam профиль. Укажите прямую ссылку на профиль или 17-значный SteamID64." },
+          { status: 400 }
+        );
+      }
+      steamId = steamVal.steamId64;
+      resolvedSteamLink = steamLink.trim();
     }
     // Fallback to Faceit linked SteamID if user didn't provide direct steam link
     if (!steamId && faceitStats?.steamId64) {

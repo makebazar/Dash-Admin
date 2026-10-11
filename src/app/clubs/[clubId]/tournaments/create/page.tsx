@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const CS2_5V5_MAP_POOL = [
+const CS2_5V5_MAP_POOL = [
   "de_mirage",
   "de_dust2",
   "de_inferno",
@@ -35,14 +35,14 @@ export const CS2_5V5_MAP_POOL = [
   "de_vertigo",
 ];
 
-export const CS2_WINGMAN_MAP_POOL = [
+const CS2_WINGMAN_MAP_POOL = [
   "de_inferno",
   "de_vertigo",
   "de_nuke",
   "de_overpass",
 ];
 
-export const CS2_AIM_1V1_MAP_POOL = [
+const CS2_AIM_1V1_MAP_POOL = [
   "aim_redline",
   "aim_map",
   "awp_lego_2",
@@ -52,7 +52,7 @@ export const CS2_AIM_1V1_MAP_POOL = [
   "aim_pistol_cs2",
 ];
 
-export interface CS2MapItem {
+interface CS2MapItem {
   id: string;
   label: string;
   categories: ("5v5" | "wingman" | "1v1")[];
@@ -62,7 +62,7 @@ export interface CS2MapItem {
   description?: string;
 }
 
-export const CS2_ALL_MAPS: CS2MapItem[] = [
+const CS2_ALL_MAPS: CS2MapItem[] = [
   // 5v5 Competitive Maps & Genuine CS2 Wingman Maps
   { id: "de_mirage", label: "Mirage", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/de_mirage.png" },
   { id: "de_dust2", label: "Dust II", categories: ["5v5"], badge: "5x5", imageUrl: "/images/maps/de_dust2.png" },
