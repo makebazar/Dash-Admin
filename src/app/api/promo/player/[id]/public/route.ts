@@ -128,14 +128,16 @@ export async function GET(
     try {
       const tourneyRes = await client.query(
         `SELECT DISTINCT 
-            t.id, t.name, t.discipline, t.type, t.status, t.created_at, t.finished_at, t.config, t.prize_pool,
+            t.id, t.name, t.discipline, t.type, t.status, t.created_at, t.finished_at, t.config,
+            t.fixed_prize_amount, t.prize_distribution,
             c.id as competitor_id, c.display_name as competitor_name
          FROM club_tournaments t
          JOIN tournament_competitors c ON c.tournament_id = t.id
          LEFT JOIN promo_team_members tm ON c.promo_team_id = tm.team_id
+         LEFT JOIN team_members cl_tm ON c.team_id::text = cl_tm.team_id::text
          WHERE c.player_id::text = $1 
             OR (tm.phone IS NOT NULL AND tm.phone = $2)
-            OR (tm.player_id IS NOT NULL AND tm.player_id::text = $1)
+            OR (cl_tm.player_id IS NOT NULL AND cl_tm.player_id::text = $1)
          ORDER BY t.created_at DESC
          LIMIT 20`,
         [String(row.id), playerPhone || ""]
@@ -223,7 +225,12 @@ export async function GET(
           wins,
           losses,
           totalMatches: matchRes.rowCount || 0,
-          prizePool: t.prize_pool,
+          prizePool:
+            parseFloat(t.fixed_prize_amount || "0") > 0
+              ? `${Number(t.fixed_prize_amount).toLocaleString("ru-RU")} ₽`
+              : t.prize_distribution?.totalBonusPool
+              ? `+${t.prize_distribution.totalBonusPool} Б`
+              : null,
         });
       }
     } catch (e) {
