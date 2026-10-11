@@ -134,17 +134,22 @@ export function TournamentPrizePodium({
   const secondStanding = standings.find((s: any) => s.place === 2);
   const thirdStanding = standings.find((s: any) => s.place === 3);
 
-  const firstWinner = firstStanding
-    ? competitors.find((c) => String(c.id) === String(firstStanding.competitor_id)) || { display_name: firstStanding.display_name }
-    : championCompFromMatch;
+  const resolveCompetitor = (standing: any, fallbackComp: any) => {
+    if (!standing && !fallbackComp) return null;
+    const compId = standing?.competitor_id || fallbackComp?.id;
+    const name = standing?.display_name || fallbackComp?.display_name;
+    const found = competitors.find(
+      (c) =>
+        (compId && String(c.id) === String(compId)) ||
+        (name && c.display_name && c.display_name.trim().toLowerCase() === name.trim().toLowerCase())
+    );
+    if (found) return found;
+    return standing || fallbackComp;
+  };
 
-  const secondWinner = secondStanding
-    ? competitors.find((c) => String(c.id) === String(secondStanding.competitor_id)) || { display_name: secondStanding.display_name }
-    : runnerUpFromMatch;
-
-  const thirdWinner = thirdStanding
-    ? competitors.find((c) => String(c.id) === String(thirdStanding.competitor_id)) || { display_name: thirdStanding.display_name }
-    : null;
+  const firstWinner = resolveCompetitor(firstStanding, championCompFromMatch);
+  const secondWinner = resolveCompetitor(secondStanding, runnerUpFromMatch);
+  const thirdWinner = resolveCompetitor(thirdStanding, null);
 
   // 3rd place existence logic:
   // 1. If finished: only if place 3 was recorded in standings or thirdWinner exists.
@@ -495,22 +500,46 @@ export function TournamentPrizePodium({
 
           {/* Winner details */}
           {winnerComp ? (
-            <div className="mt-4 p-3.5 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center gap-3">
-              <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 border", rankConfig.avatarBg)}>
-                {winnerComp.display_name?.slice(0, 2) || "🏆"}
-              </div>
-              <div className="min-w-0 flex-1">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">
-                  Победитель
-                </span>
-                <div className="flex items-center gap-1.5 truncate">
-                  <span className="text-base font-black text-white uppercase italic tracking-tight truncate">
-                    {winnerComp.display_name}
-                  </span>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            (() => {
+              const avatarUrl =
+                winnerComp?.player_avatar_url ||
+                winnerComp?.avatar_url ||
+                winnerComp?.faceit_avatar ||
+                winnerComp?.team_logo ||
+                winnerComp?.logo_url ||
+                (Array.isArray(winnerComp?.team_members) && winnerComp.team_members[0]?.avatarUrl);
+              return (
+                <div className="mt-4 p-3.5 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center gap-3">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={winnerComp.display_name}
+                      className="w-9 h-9 rounded-xl object-cover shrink-0 border border-white/10 shadow-sm"
+                    />
+                  ) : (
+                    <div
+                      className={cn(
+                        "w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 border",
+                        rankConfig.avatarBg
+                      )}
+                    >
+                      {winnerComp.display_name?.slice(0, 2) || "🏆"}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">
+                      Победитель
+                    </span>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="text-base font-black text-white uppercase italic tracking-tight truncate">
+                        {winnerComp.display_name}
+                      </span>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()
           ) : (
             <div className="mt-4 p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center gap-2.5 text-gray-500 text-xs">
               <Clock className="w-4 h-4 text-gray-600 shrink-0" />
@@ -523,8 +552,7 @@ export function TournamentPrizePodium({
         <div className="space-y-2 pt-4 border-t border-white/5 mt-4">
           {cashAmount > 0 && (
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
                 Призовые:
               </span>
               <span className="text-base font-black text-white font-mono">
@@ -535,8 +563,7 @@ export function TournamentPrizePodium({
 
           {p.bonus > 0 && (
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
                 Баланс клуба:
               </span>
               <span className="text-sm font-black text-orange-400 font-mono">
@@ -806,23 +833,13 @@ export function TournamentPrizePodium({
       <div className="bg-[#0c0c0e]/95 border border-white/5 rounded-[2.5rem] p-7 space-y-5 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/5 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-orange-500/10 border border-orange-500/20 text-orange-400">
-              <Layers className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white flex items-center gap-2">
-                <span>Соревновательный пул карт (Map Pool)</span>
-                <span className="text-xs font-mono font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-lg border border-orange-500/20">
-                  {resolvedMaps.length} {resolvedMaps.length === 1 ? "карта" : resolvedMaps.length < 5 ? "карты" : "карт"}
-                </span>
-              </h3>
-              <p className="text-[11px] text-gray-400 font-medium">
-                Карты турнира для процедуры вето: баны и выбор локации перед каждым матчем
-              </p>
-            </div>
-          </div>
+        <div className="border-b border-white/5 pb-4 space-y-1">
+          <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white">
+            Соревновательный пул карт (Map Pool)
+          </h3>
+          <p className="text-[11px] text-gray-400 font-medium">
+            Карты турнира для процедуры вето: баны и выбор локации перед каждым матчем
+          </p>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -838,11 +855,8 @@ export function TournamentPrizePodium({
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
 
-              <div className="relative z-10 space-y-0.5">
-                <span className="text-[9px] font-black uppercase tracking-wider text-orange-400/90 block">
-                  {map.badgeLabel}
-                </span>
-                <span className="text-xs font-black uppercase tracking-tight text-white block truncate">
+              <div className="relative z-10">
+                <span className="text-xs font-black uppercase tracking-wider text-white block truncate">
                   {map.name}
                 </span>
               </div>
@@ -850,11 +864,8 @@ export function TournamentPrizePodium({
           ))}
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-gray-400 font-medium bg-black/40 px-4 py-2.5 rounded-2xl border border-white/5">
-          <Target className="w-4 h-4 text-orange-400 shrink-0" />
-          <span>
-            В сериях BO1 команды по очереди банят карты до 1 решающей. В сериях BO3 выбирают по карте и играют десайдер.
-          </span>
+        <div className="text-[11px] text-gray-400 font-medium bg-black/40 px-4 py-2.5 rounded-2xl border border-white/5">
+          В сериях BO1 команды по очереди банят карты до 1 решающей. В сериях BO3 выбирают по карте и играют десайдер.
         </div>
       </div>
     </div>

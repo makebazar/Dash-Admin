@@ -602,6 +602,13 @@ export function TournamentsFeedTab({
                       {/* 1st Place */}
                       {(() => {
                         const s1 = standings.find((s) => s.place === 1);
+                        const comp1 = competitors.find((c: any) => String(c.id) === String(s1?.competitor_id) || (s1?.display_name && c.display_name?.toLowerCase() === s1.display_name?.toLowerCase()));
+                        const avatar1 =
+                          comp1?.player_avatar_url ||
+                          comp1?.avatar_url ||
+                          comp1?.faceit_avatar ||
+                          comp1?.team_logo ||
+                          (Array.isArray(comp1?.team_members) && comp1.team_members[0]?.avatarUrl);
                         const p1 = activePlacements.find((p: any) => p.label?.includes("1") || p.id === "1");
                         const cash1 = p1 ? Math.round((activePrizePool * (p1.cashPct || 0)) / 100) : 0;
                         return s1 ? (
@@ -618,9 +625,18 @@ export function TournamentsFeedTab({
                               <Crown className="w-5 h-5 text-amber-400 fill-amber-400/20" />
                             </div>
                             <div>
-                              <p className="text-base font-black text-white uppercase italic truncate">
-                                {s1.display_name}
-                              </p>
+                              <div className="flex items-center gap-2.5">
+                                {avatar1 ? (
+                                  <img
+                                    src={avatar1}
+                                    alt={s1.display_name}
+                                    className="w-8 h-8 rounded-lg object-cover shrink-0 border border-white/10"
+                                  />
+                                ) : null}
+                                <p className="text-base font-black text-white uppercase italic truncate">
+                                  {s1.display_name}
+                                </p>
+                              </div>
                               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                                 {cash1 > 0 && (
                                   <span className="text-xs font-black text-amber-400 font-mono">
@@ -646,6 +662,13 @@ export function TournamentsFeedTab({
                       {/* 2nd Place */}
                       {(() => {
                         const s2 = standings.find((s) => s.place === 2);
+                        const comp2 = competitors.find((c: any) => String(c.id) === String(s2?.competitor_id) || (s2?.display_name && c.display_name?.toLowerCase() === s2.display_name?.toLowerCase()));
+                        const avatar2 =
+                          comp2?.player_avatar_url ||
+                          comp2?.avatar_url ||
+                          comp2?.faceit_avatar ||
+                          comp2?.team_logo ||
+                          (Array.isArray(comp2?.team_members) && comp2.team_members[0]?.avatarUrl);
                         const p2 = activePlacements.find((p: any) => p.label?.includes("2") || p.id === "2");
                         const cash2 = p2 ? Math.round((activePrizePool * (p2.cashPct || 0)) / 100) : 0;
                         return s2 ? (
@@ -662,9 +685,18 @@ export function TournamentsFeedTab({
                               <Award className="w-5 h-5 text-slate-300" />
                             </div>
                             <div>
-                              <p className="text-base font-black text-white uppercase italic truncate">
-                                {s2.display_name}
-                              </p>
+                              <div className="flex items-center gap-2.5">
+                                {avatar2 ? (
+                                  <img
+                                    src={avatar2}
+                                    alt={s2.display_name}
+                                    className="w-8 h-8 rounded-lg object-cover shrink-0 border border-white/10"
+                                  />
+                                ) : null}
+                                <p className="text-base font-black text-white uppercase italic truncate">
+                                  {s2.display_name}
+                                </p>
+                              </div>
                               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                                 {cash2 > 0 && (
                                   <span className="text-xs font-black text-white font-mono">
@@ -690,6 +722,13 @@ export function TournamentsFeedTab({
                       {/* 3rd Place */}
                       {(() => {
                         const s3 = standings.find((s) => s.place === 3);
+                        const comp3 = competitors.find((c: any) => String(c.id) === String(s3?.competitor_id) || (s3?.display_name && c.display_name?.toLowerCase() === s3.display_name?.toLowerCase()));
+                        const avatar3 =
+                          comp3?.player_avatar_url ||
+                          comp3?.avatar_url ||
+                          comp3?.faceit_avatar ||
+                          comp3?.team_logo ||
+                          (Array.isArray(comp3?.team_members) && comp3.team_members[0]?.avatarUrl);
                         const p3 = activePlacements.find((p: any) => p.label?.includes("3") || p.id === "3");
                         const cash3 = p3 ? Math.round((activePrizePool * (p3.cashPct || 0)) / 100) : 0;
                         return s3 ? (
@@ -701,9 +740,18 @@ export function TournamentsFeedTab({
                               <Award className="w-5 h-5 text-amber-500" />
                             </div>
                             <div>
-                              <p className="text-base font-black text-white uppercase italic truncate">
-                                {s3.display_name}
-                              </p>
+                              <div className="flex items-center gap-2.5">
+                                {avatar3 ? (
+                                  <img
+                                    src={avatar3}
+                                    alt={s3.display_name}
+                                    className="w-8 h-8 rounded-lg object-cover shrink-0 border border-white/10"
+                                  />
+                                ) : null}
+                                <p className="text-base font-black text-white uppercase italic truncate">
+                                  {s3.display_name}
+                                </p>
+                              </div>
                               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                                 {cash3 > 0 && (
                                   <span className="text-xs font-black text-white font-mono">
