@@ -281,30 +281,24 @@ export function TournamentPrizePodium({
       }
     > = {};
 
-    matches.forEach((m) => {
-      const stats = m.result?.stats || m.match_stats;
-      if (!stats) return;
+    const extractTeamPlayers = (teamObj: any) => {
+      if (!teamObj?.players) return [];
+      if (Array.isArray(teamObj.players)) return teamObj.players;
+      if (typeof teamObj.players === "object") return Object.values(teamObj.players);
+      return [];
+    };
 
-      const team1Players = Array.isArray(stats.team1?.players)
-        ? stats.team1.players
-        : typeof stats.team1?.players === "object"
-        ? Object.values(stats.team1.players)
-        : [];
-      const team2Players = Array.isArray(stats.team2?.players)
-        ? stats.team2.players
-        : typeof stats.team2?.players === "object"
-        ? Object.values(stats.team2.players)
-        : [];
-
-      const totalRounds = (m.score1 || 0) + (m.score2 || 0) || 1;
-
+    const processMapPlayers = (team1Players: any[], team2Players: any[], mapRounds: number) => {
       [...team1Players, ...team2Players].forEach((p: any) => {
-        const key = String(p.steamid || p.steamId || p.name || "");
+        const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "").trim();
+        const cleanSteam = /^\d{17}$/.test(pSteam) ? pSteam : "";
+        const pName = String(p.name || p.nickname || "").trim();
+        const key = cleanSteam || pName.toLowerCase();
         if (!key) return;
 
         if (!playerAgg[key]) {
           playerAgg[key] = {
-            name: p.name || p.nickname || "Игрок",
+            name: pName || "Игрок",
             kills: 0,
             deaths: 0,
             assists: 0,
@@ -317,23 +311,37 @@ export function TournamentPrizePodium({
             maps: 0,
             ratingsSum: 0,
           };
+        } else if (pName && playerAgg[key].name === "Игрок") {
+          playerAgg[key].name = pName;
         }
 
-        const k = Number(p.kills ?? p.stats?.kills ?? 0) || 0;
-        const d = Number(p.deaths ?? p.stats?.deaths ?? 0) || 0;
-        const a = Number(p.assists ?? p.stats?.assists ?? 0) || 0;
-        const dmg = Number(p.damage ?? p.stats?.damage ?? 0) || 0;
-        const hs = Number(p.headshot_kills ?? p.stats?.headshot_kills ?? 0) || 0;
-        const mvp = Number(p.mvps ?? p.stats?.mvps ?? 0) || 0;
-        const fk = Number(p.first_kills ?? p.stats?.first_kills ?? 0) || 0;
-        const cl = Number(p.clutches ?? p.stats?.clutches ?? (p["1v1"] || 0) + (p["1v2"] || 0)) || 0;
+        const k = Number(p.kills ?? p.stats?.kills ?? p.stats?.k ?? 0) || 0;
+        const d = Number(p.deaths ?? p.stats?.deaths ?? p.stats?.d ?? 0) || 0;
+        const a = Number(p.assists ?? p.stats?.assists ?? p.stats?.a ?? 0) || 0;
+        const dmg = Number(p.damage ?? p.stats?.damage ?? p.stats?.dmg ?? 0) || 0;
+        const hs = Number(p.headshot_kills ?? p.stats?.headshot_kills ?? p.stats?.hs ?? 0) || 0;
+        const mvp = Number(p.mvps ?? p.mvp ?? p.stats?.mvp ?? p.stats?.mvps ?? 0) || 0;
+        const fk = Number(
+          p.first_kills ??
+          p.stats?.first_kills ??
+          ((p.stats?.first_kills_t || 0) + (p.stats?.first_kills_ct || 0))
+        ) || 0;
+        const cl = Number(
+          p.clutches ??
+          p.stats?.clutches ??
+          ((p["1v1"] || 0) + (p["1v2"] || 0) + (p["1v3"] || 0)) +
+          ((p.stats?.["1v1"] || 0) + (p.stats?.["1v2"] || 0) + (p.stats?.["1v3"] || 0))
+        ) || 0;
 
-        const kpr = k / totalRounds;
-        const dpr = d / totalRounds;
-        const apr = a / totalRounds;
-        const adr = dmg / totalRounds;
+        const safeRounds = Math.max(1, mapRounds);
+        const kpr = k / safeRounds;
+        const dpr = d / safeRounds;
+        const apr = a / safeRounds;
+        const adr = dmg / safeRounds;
         const impact = 2.13 * kpr + 0.42 * apr - 0.41;
-        const rating = Number(p.rating) || (0.0073 * 70 + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587);
+        const kastVal = Number(p.kast ?? p.stats?.kast ?? 70) || 70;
+        const calculatedRating = 0.0073 * (kastVal > 0 ? kastVal : 70) + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587;
+        const rating = Number(p.rating) || calculatedRating;
 
         playerAgg[key].kills += k;
         playerAgg[key].deaths += d;
@@ -343,10 +351,38 @@ export function TournamentPrizePodium({
         playerAgg[key].mvps += mvp;
         playerAgg[key].first_kills += fk;
         playerAgg[key].clutches += cl;
-        playerAgg[key].rounds += totalRounds;
+        playerAgg[key].rounds += safeRounds;
         playerAgg[key].maps += 1;
-        playerAgg[key].ratingsSum += rating;
+        playerAgg[key].ratingsSum += Math.max(0.1, Math.min(3.0, rating));
       });
+    };
+
+    matches.forEach((m) => {
+      // 1. Check if match has maps in result.maps, maps_history, or mapsHistory
+      const rawMaps = m.result?.maps || m.maps_history || m.mapsHistory;
+      const mapEntries = (rawMaps && typeof rawMaps === "object") ? Object.values(rawMaps) : [];
+
+      if (mapEntries.length > 0) {
+        // Multi-map series (BO3 / BO5): process each individual map separately
+        mapEntries.forEach((mapData: any) => {
+          const stats = mapData.stats;
+          if (!stats) return;
+          const t1 = extractTeamPlayers(stats.team1);
+          const t2 = extractTeamPlayers(stats.team2);
+          const mapRounds = (mapData.score1 ?? 0) + (mapData.score2 ?? 0);
+          const totalKills = [...t1, ...t2].reduce((sum: number, p: any) => sum + (Number(p.kills ?? p.stats?.kills ?? 0) || 0), 0);
+          if (mapRounds === 0 && totalKills === 0) return;
+          processMapPlayers(t1, t2, mapRounds);
+        });
+      } else {
+        // Single map fallback (BO1)
+        const stats = m.result?.stats || m.match_stats;
+        if (!stats) return;
+        const t1 = extractTeamPlayers(stats.team1);
+        const t2 = extractTeamPlayers(stats.team2);
+        const totalRounds = (m.score1 || 0) + (m.score2 || 0) || 1;
+        processMapPlayers(t1, t2, totalRounds);
+      }
     });
 
     const playersList = Object.values(playerAgg).filter((p) => p.rounds > 0);
@@ -358,7 +394,7 @@ export function TournamentPrizePodium({
     if (mvpLeader) {
       winners["mvp"] = {
         name: mvpLeader.name,
-        statValue: `Рейтинг ${(mvpLeader.ratingsSum / mvpLeader.maps).toFixed(2)}`,
+        statValue: `Рейтинг ${(mvpLeader.ratingsSum / mvpLeader.maps).toFixed(2)} (${mvpLeader.kills} фрагов)`,
       };
     }
 
@@ -375,7 +411,7 @@ export function TournamentPrizePodium({
     if (dmgLeader) {
       winners["damage"] = {
         name: dmgLeader.name,
-        statValue: `${(dmgLeader.damage / dmgLeader.rounds).toFixed(1)} ADR`,
+        statValue: `${(dmgLeader.damage / dmgLeader.rounds).toFixed(1)} ADR (${dmgLeader.damage.toLocaleString()} урона)`,
       };
     }
 
@@ -393,6 +429,25 @@ export function TournamentPrizePodium({
         name: entryLeader.name,
         statValue: `${entryLeader.first_kills} первых фрагов`,
       };
+    }
+
+    // Additional common awards aliases
+    const fragsLeader = [...playersList].sort((a, b) => b.kills - a.kills)[0];
+    if (fragsLeader) {
+      winners["frags"] = {
+        name: fragsLeader.name,
+        statValue: `${fragsLeader.kills} фрагов`,
+      };
+      winners["kills"] = winners["frags"];
+    }
+
+    const assistsLeader = [...playersList].sort((a, b) => b.assists - a.assists)[0];
+    if (assistsLeader) {
+      winners["assists"] = {
+        name: assistsLeader.name,
+        statValue: `${assistsLeader.assists} ассистов`,
+      };
+      winners["support"] = winners["assists"];
     }
 
     return winners;

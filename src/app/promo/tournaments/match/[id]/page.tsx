@@ -1837,12 +1837,13 @@ export default function MatchLobby() {
                       ];
                     } else {
                       const historyEntries = Object.values(match.mapsHistory || {}) as any[];
-                      if (historyEntries.length > 1) {
+                      if (historyEntries.length > 0) {
                         const playerAgg: Record<string, any> = {};
                         let roundsSum = 0;
 
                         for (const m of historyEntries) {
-                          roundsSum += (m.score1 ?? 0) + (m.score2 ?? 0);
+                          const mapRounds = (m.score1 ?? 0) + (m.score2 ?? 0) || 1;
+                          roundsSum += mapRounds;
                           const mPlayers = [
                             ...extractTeamPlayers(m.stats?.team1),
                             ...extractTeamPlayers(m.stats?.team2),
@@ -1850,12 +1851,12 @@ export default function MatchLobby() {
                           for (const p of mPlayers) {
                             const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "").trim();
                             const cleanSteam = /^\d{17}$/.test(pSteam) ? pSteam : "";
-                            const pName = String(p.name || p.nickname || "").trim().toLowerCase();
-                            const key = cleanSteam || pName;
+                            const pName = String(p.name || p.nickname || "").trim();
+                            const key = cleanSteam || pName.toLowerCase();
                             if (!key) continue;
                             if (!playerAgg[key]) {
                               playerAgg[key] = {
-                                name: p.name || p.nickname || "Игрок",
+                                name: pName || "Игрок",
                                 steamid: cleanSteam || p.steamid || p.steamId || p.steam_id,
                                 kills: 0,
                                 deaths: 0,
@@ -1864,17 +1865,62 @@ export default function MatchLobby() {
                                 headshot_kills: 0,
                                 mvps: 0,
                                 score: 0,
+                                first_kills: 0,
+                                clutches: 0,
+                                ratingsSum: 0,
+                                mapsCount: 0,
                               };
+                            } else if (pName && playerAgg[key].name === "Игрок") {
+                              playerAgg[key].name = pName;
                             }
-                            playerAgg[key].kills += Number(p.kills ?? p.stats?.kills ?? 0) || 0;
-                            playerAgg[key].deaths += Number(p.deaths ?? p.stats?.deaths ?? 0) || 0;
-                            playerAgg[key].assists += Number(p.assists ?? p.stats?.assists ?? 0) || 0;
-                            playerAgg[key].damage += Number(p.damage ?? p.stats?.damage ?? 0) || 0;
-                            playerAgg[key].headshot_kills += Number(p.headshot_kills ?? p.stats?.headshot_kills ?? 0) || 0;
-                            playerAgg[key].mvps += Number(p.mvp ?? p.mvps ?? p.stats?.mvp ?? p.stats?.mvps ?? 0) || 0;
-                            playerAgg[key].score += Number(p.score ?? p.stats?.score ?? 0) || 0;
+
+                            const k = Number(p.kills ?? p.stats?.kills ?? p.stats?.k ?? 0) || 0;
+                            const d = Number(p.deaths ?? p.stats?.deaths ?? p.stats?.d ?? 0) || 0;
+                            const a = Number(p.assists ?? p.stats?.assists ?? p.stats?.a ?? 0) || 0;
+                            const dmg = Number(p.damage ?? p.stats?.damage ?? p.stats?.dmg ?? 0) || 0;
+                            const hs = Number(p.headshot_kills ?? p.stats?.headshot_kills ?? p.stats?.hs ?? 0) || 0;
+                            const mvp = Number(p.mvp ?? p.mvps ?? p.stats?.mvp ?? p.stats?.mvps ?? 0) || 0;
+                            const score = Number(p.score ?? p.stats?.score ?? 0) || 0;
+                            const fk = Number(
+                              p.first_kills ??
+                              p.stats?.first_kills ??
+                              ((p.stats?.first_kills_t || 0) + (p.stats?.first_kills_ct || 0))
+                            ) || 0;
+                            const cl = Number(
+                              (p.clutches ?? p.stats?.clutches ?? 0) +
+                              (p["1v1"] || 0) + (p["1v2"] || 0) + (p["1v3"] || 0) +
+                              (p.stats?.["1v1"] || 0) + (p.stats?.["1v2"] || 0) + (p.stats?.["1v3"] || 0)
+                            ) || 0;
+
+                            const kpr = k / mapRounds;
+                            const dpr = d / mapRounds;
+                            const apr = a / mapRounds;
+                            const adr = dmg / mapRounds;
+                            const impact = 2.13 * kpr + 0.42 * apr - 0.41;
+                            const kastVal = Number(p.kast ?? p.stats?.kast ?? 70) || 70;
+                            const mapRating = 0.0073 * (kastVal > 0 ? kastVal : 70) + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587;
+
+                            playerAgg[key].kills += k;
+                            playerAgg[key].deaths += d;
+                            playerAgg[key].assists += a;
+                            playerAgg[key].damage += dmg;
+                            playerAgg[key].headshot_kills += hs;
+                            playerAgg[key].mvps += mvp;
+                            playerAgg[key].score += score;
+                            playerAgg[key].first_kills += fk;
+                            playerAgg[key].clutches += cl;
+                            playerAgg[key].ratingsSum += Math.max(0.1, Math.min(3.0, mapRating));
+                            playerAgg[key].mapsCount += 1;
                           }
                         }
+
+                        // Compute multi-map average rating
+                        for (const p of Object.values(playerAgg)) {
+                          if (p.mapsCount > 0) {
+                            p.rating = (p.ratingsSum / p.mapsCount).toFixed(2);
+                          }
+                        }
+
                         totalPlayedRounds = roundsSum;
                         allStatsPlayers = Object.values(playerAgg);
                       } else {
@@ -2150,6 +2196,181 @@ export default function MatchLobby() {
                         Итоговый счет серии: {match.score1 ?? 0} : {match.score2 ?? 0}
                       </p>
                     </div>
+
+                    {/* Series Nominations across all maps */}
+                    {(() => {
+                      const rawMaps = match.mapsHistory || match.result?.maps;
+                      const entries = (rawMaps && typeof rawMaps === "object") ? Object.values(rawMaps) : [];
+                      const playerAgg: Record<string, any> = {};
+
+                      if (entries.length > 0) {
+                        for (const m of entries as any[]) {
+                          const mRounds = (m.score1 ?? 0) + (m.score2 ?? 0) || 1;
+                          const mPlayers = [
+                            ...extractTeamPlayers(m.stats?.team1),
+                            ...extractTeamPlayers(m.stats?.team2),
+                          ];
+                          for (const p of mPlayers) {
+                            const pSteam = String(p.steamid || p.steamId || p.steam_id || p.id || "").trim();
+                            const cleanSteam = /^\d{17}$/.test(pSteam) ? pSteam : "";
+                            const pName = String(p.name || p.nickname || "").trim();
+                            const key = cleanSteam || pName.toLowerCase();
+                            if (!key) continue;
+
+                            if (!playerAgg[key]) {
+                              playerAgg[key] = {
+                                name: pName || "Игрок",
+                                kills: 0,
+                                deaths: 0,
+                                assists: 0,
+                                damage: 0,
+                                headshot_kills: 0,
+                                mvps: 0,
+                                first_kills: 0,
+                                clutches: 0,
+                                rounds: 0,
+                                maps: 0,
+                                ratingsSum: 0,
+                              };
+                            } else if (pName && playerAgg[key].name === "Игрок") {
+                              playerAgg[key].name = pName;
+                            }
+
+                            const k = Number(p.kills ?? p.stats?.kills ?? p.stats?.k ?? 0) || 0;
+                            const d = Number(p.deaths ?? p.stats?.deaths ?? p.stats?.d ?? 0) || 0;
+                            const a = Number(p.assists ?? p.stats?.assists ?? p.stats?.a ?? 0) || 0;
+                            const dmg = Number(p.damage ?? p.stats?.damage ?? p.stats?.dmg ?? 0) || 0;
+                            const hs = Number(p.headshot_kills ?? p.stats?.headshot_kills ?? p.stats?.hs ?? 0) || 0;
+                            const mvp = Number(p.mvp ?? p.mvps ?? p.stats?.mvp ?? p.stats?.mvps ?? 0) || 0;
+                            const fk = Number(p.first_kills ?? p.stats?.first_kills ?? ((p.stats?.first_kills_t || 0) + (p.stats?.first_kills_ct || 0))) || 0;
+                            const cl = Number(
+                              (p.clutches ?? p.stats?.clutches ?? 0) +
+                              (p["1v1"] || 0) + (p["1v2"] || 0) + (p["1v3"] || 0) +
+                              (p.stats?.["1v1"] || 0) + (p.stats?.["1v2"] || 0) + (p.stats?.["1v3"] || 0)
+                            ) || 0;
+
+                            const kpr = k / mRounds;
+                            const dpr = d / mRounds;
+                            const apr = a / mRounds;
+                            const adr = dmg / mRounds;
+                            const impact = 2.13 * kpr + 0.42 * apr - 0.41;
+                            const kastVal = Number(p.kast ?? p.stats?.kast ?? 70) || 70;
+                            const mapRating = 0.0073 * (kastVal > 0 ? kastVal : 70) + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587;
+
+                            playerAgg[key].kills += k;
+                            playerAgg[key].deaths += d;
+                            playerAgg[key].assists += a;
+                            playerAgg[key].damage += dmg;
+                            playerAgg[key].headshot_kills += hs;
+                            playerAgg[key].mvps += mvp;
+                            playerAgg[key].first_kills += fk;
+                            playerAgg[key].clutches += cl;
+                            playerAgg[key].rounds += mRounds;
+                            playerAgg[key].maps += 1;
+                            playerAgg[key].ratingsSum += Math.max(0.1, Math.min(3.0, mapRating));
+                          }
+                        }
+                      } else {
+                        const stats = match.matchStats || match.result?.stats;
+                        if (stats) {
+                          const mPlayers = [
+                            ...extractTeamPlayers(stats.team1),
+                            ...extractTeamPlayers(stats.team2),
+                          ];
+                          const totalR = (match.score1 ?? 0) + (match.score2 ?? 0) || 1;
+                          for (const p of mPlayers) {
+                            const pName = String(p.name || p.nickname || "Игрок").trim();
+                            const key = String(p.steamid || p.steamId || pName).trim().toLowerCase();
+                            const k = Number(p.kills ?? p.stats?.kills ?? 0) || 0;
+                            const d = Number(p.deaths ?? p.stats?.deaths ?? 0) || 0;
+                            const a = Number(p.assists ?? p.stats?.assists ?? 0) || 0;
+                            const dmg = Number(p.damage ?? p.stats?.damage ?? 0) || 0;
+                            const hs = Number(p.headshot_kills ?? p.stats?.headshot_kills ?? 0) || 0;
+                            const mvp = Number(p.mvp ?? p.mvps ?? p.stats?.mvp ?? p.stats?.mvps ?? 0) || 0;
+                            const fk = Number(p.first_kills ?? p.stats?.first_kills ?? ((p.stats?.first_kills_t || 0) + (p.stats?.first_kills_ct || 0))) || 0;
+                            const cl = Number(
+                              (p.clutches ?? p.stats?.clutches ?? 0) +
+                              (p["1v1"] || 0) + (p["1v2"] || 0) + (p["1v3"] || 0) +
+                              (p.stats?.["1v1"] || 0) + (p.stats?.["1v2"] || 0) + (p.stats?.["1v3"] || 0)
+                            ) || 0;
+                            const kpr = k / totalR;
+                            const dpr = d / totalR;
+                            const apr = a / totalR;
+                            const adr = dmg / totalR;
+                            const impact = 2.13 * kpr + 0.42 * apr - 0.41;
+                            const kastVal = Number(p.kast ?? p.stats?.kast ?? 70) || 70;
+                            const mapRating = 0.0073 * (kastVal > 0 ? kastVal : 70) + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adr + 0.1587;
+                            playerAgg[key] = {
+                              name: pName,
+                              kills: k,
+                              deaths: d,
+                              assists: a,
+                              damage: dmg,
+                              headshot_kills: hs,
+                              mvps: mvp,
+                              first_kills: fk,
+                              clutches: cl,
+                              rounds: totalR,
+                              maps: 1,
+                              ratingsSum: Math.max(0.1, Math.min(3.0, mapRating)),
+                            };
+                          }
+                        }
+                      }
+
+                      const pList = Object.values(playerAgg).filter((p) => p.rounds > 0);
+                      if (pList.length === 0) return null;
+
+                      const mvpLeader = [...pList].sort((a, b) => (b.ratingsSum / b.maps) - (a.ratingsSum / a.maps))[0];
+                      const hsLeader = [...pList].filter((p) => p.kills >= 3).sort((a, b) => (b.headshot_kills / b.kills) - (a.headshot_kills / a.kills))[0] || pList[0];
+                      const dmgLeader = [...pList].sort((a, b) => (b.damage / b.rounds) - (a.damage / a.rounds))[0];
+                      const clutchLeader = [...pList].sort((a, b) => b.clutches - a.clutches)[0];
+
+                      return (
+                        <div className="pt-3 border-t border-white/5 space-y-2">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-yellow-400 flex items-center justify-center gap-1.5">
+                            <span>👑</span>
+                            <span>Номинации матча (по итогам всех карт серии)</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-left">
+                            {mvpLeader && (
+                              <div className="bg-white/[0.03] border border-yellow-500/20 rounded-xl p-2.5 space-y-1">
+                                <span className="text-[9px] font-black uppercase text-yellow-400 block tracking-wider">👑 MVP Матча</span>
+                                <span className="text-xs font-bold text-white block truncate">{mvpLeader.name}</span>
+                                <span className="text-[10px] font-mono text-gray-400">Rating {(mvpLeader.ratingsSum / mvpLeader.maps).toFixed(2)}</span>
+                              </div>
+                            )}
+                            {dmgLeader && (
+                              <div className="bg-white/[0.03] border border-orange-500/20 rounded-xl p-2.5 space-y-1">
+                                <span className="text-[9px] font-black uppercase text-orange-400 block tracking-wider">💣 Топ по урону</span>
+                                <span className="text-xs font-bold text-white block truncate">{dmgLeader.name}</span>
+                                <span className="text-[10px] font-mono text-gray-400">{(dmgLeader.damage / dmgLeader.rounds).toFixed(1)} ADR</span>
+                              </div>
+                            )}
+                            {hsLeader && (
+                              <div className="bg-white/[0.03] border border-red-500/20 rounded-xl p-2.5 space-y-1">
+                                <span className="text-[9px] font-black uppercase text-red-400 block tracking-wider">🎯 Снайпер HS</span>
+                                <span className="text-xs font-bold text-white block truncate">{hsLeader.name}</span>
+                                <span className="text-[10px] font-mono text-gray-400">{hsLeader.kills > 0 ? Math.round((hsLeader.headshot_kills / hsLeader.kills) * 100) : 0}% HS ({hsLeader.headshot_kills})</span>
+                              </div>
+                            )}
+                            {clutchLeader && clutchLeader.clutches > 0 ? (
+                              <div className="bg-white/[0.03] border border-sky-500/20 rounded-xl p-2.5 space-y-1">
+                                <span className="text-[9px] font-black uppercase text-sky-400 block tracking-wider">🛡️ Клатч-мастер</span>
+                                <span className="text-xs font-bold text-white block truncate">{clutchLeader.name}</span>
+                                <span className="text-[10px] font-mono text-gray-400">{clutchLeader.clutches} клатчей</span>
+                              </div>
+                            ) : (
+                              <div className="bg-white/[0.03] border border-emerald-500/20 rounded-xl p-2.5 space-y-1">
+                                <span className="text-[9px] font-black uppercase text-emerald-400 block tracking-wider">⚡ Топ фрагов</span>
+                                <span className="text-xs font-bold text-white block truncate">{[...pList].sort((a,b) => b.kills - a.kills)[0]?.name}</span>
+                                <span className="text-[10px] font-mono text-gray-400">{[...pList].sort((a,b) => b.kills - a.kills)[0]?.kills} убийств</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     <div className="pt-1">
                       <button
