@@ -116,23 +116,148 @@ export async function GET(
       console.warn("[Public Player API] Frag stats query skipped/empty:", e);
     }
 
-    // 4. Fetch recent tournaments / participation
+    // 4. Fetch real club tournaments history and results
     let recentTournaments: any[] = [];
+    const trophyStats = { first: 0, second: 0, third: 0 };
+    let totalTournamentMatches = 0;
+    let totalTournamentWins = 0;
+    let totalKills = 0;
+    let totalDeaths = 0;
+    let totalHeadshots = 0;
+
     try {
       const tourneyRes = await client.query(
-        `SELECT DISTINCT t.id, t.title, t.status, t.created_at
-         FROM promo_tournaments t
-         JOIN promo_tournament_participants tp ON t.id = tp.tournament_id
-         JOIN promo_team_members tm ON tp.team_id = tm.team_id
-         WHERE tm.phone = $1
+        `SELECT DISTINCT 
+            t.id, t.name, t.discipline, t.type, t.status, t.created_at, t.finished_at, t.config, t.prize_pool,
+            c.id as competitor_id, c.display_name as competitor_name
+         FROM club_tournaments t
+         JOIN tournament_competitors c ON c.tournament_id = t.id
+         LEFT JOIN promo_team_members tm ON c.promo_team_id = tm.team_id
+         WHERE c.player_id::text = $1 
+            OR (tm.phone IS NOT NULL AND tm.phone = $2)
+            OR (tm.player_id IS NOT NULL AND tm.player_id::text = $1)
          ORDER BY t.created_at DESC
-         LIMIT 5`,
-        [playerPhone]
+         LIMIT 20`,
+        [String(row.id), playerPhone || ""]
       );
-      recentTournaments = tourneyRes.rows;
+
+      for (const t of tourneyRes.rows) {
+        // Determine place from config.final_standings if finished
+        let place: number | null = null;
+        const standings = t.config?.final_standings;
+        if (Array.isArray(standings)) {
+          const entry = standings.find(
+            (s: any) =>
+              String(s.competitor_id) === String(t.competitor_id) ||
+              (s.display_name && s.display_name.trim().toLowerCase() === (t.competitor_name || "").trim().toLowerCase())
+          );
+          if (entry && typeof entry.place === "number") {
+            place = entry.place;
+          }
+        }
+
+        // Count match results for this competitor in this tournament
+        const matchRes = await client.query(
+          `SELECT id, score1, score2, status, winner_competitor_id, result, competitor_a_id, competitor_b_id
+           FROM tournament_matches
+           WHERE tournament_id = $1 AND (competitor_a_id = $2 OR competitor_b_id = $2)`,
+          [t.id, t.competitor_id]
+        );
+
+        let wins = 0;
+        let losses = 0;
+        for (const m of matchRes.rows) {
+          if (m.status === "FINISHED") {
+            if (String(m.winner_competitor_id) === String(t.competitor_id)) {
+              wins++;
+              totalTournamentWins++;
+            } else if (m.winner_competitor_id) {
+              losses++;
+            }
+            totalTournamentMatches++;
+
+            // Accumulate player kills/deaths from match.result
+            if (m.result?.maps && typeof m.result.maps === "object") {
+              const pSteam = String(row.steam_id || "");
+              const pName = String(row.nickname || row.full_name || "").toLowerCase();
+              for (const mapData of Object.values(m.result.maps) as any[]) {
+                const players = [
+                  ...(Array.isArray(mapData.stats?.team1?.players) ? mapData.stats.team1.players : Object.values(mapData.stats?.team1?.players || {})),
+                  ...(Array.isArray(mapData.stats?.team2?.players) ? mapData.stats.team2.players : Object.values(mapData.stats?.team2?.players || {})),
+                ];
+                for (const p of players as any[]) {
+                  const steam = String(p.steamid || p.steamId || p.steam_id || "");
+                  const name = String(p.name || p.nickname || "").toLowerCase();
+                  if ((pSteam && steam === pSteam) || (pName && name === pName)) {
+                    totalKills += Number(p.kills ?? p.stats?.kills ?? 0) || 0;
+                    totalDeaths += Number(p.deaths ?? p.stats?.deaths ?? 0) || 0;
+                    totalHeadshots += Number(p.headshot_kills ?? p.stats?.headshot_kills ?? 0) || 0;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // If place wasn't explicitly recorded in standings but it's FINISHED
+        if (!place && t.status === "FINISHED") {
+          if (wins > 0 && losses === 0) place = 1;
+          else if (losses === 1 && wins > 0) place = 2;
+        }
+
+        if (place === 1) trophyStats.first++;
+        else if (place === 2) trophyStats.second++;
+        else if (place === 3) trophyStats.third++;
+
+        recentTournaments.push({
+          id: t.id,
+          title: t.name,
+          discipline: t.discipline || "cs2",
+          type: t.type || "1vs1",
+          status: t.status,
+          createdAt: t.created_at,
+          finishedAt: t.finished_at,
+          place,
+          isWinner: place === 1,
+          competitorName: t.competitor_name,
+          wins,
+          losses,
+          totalMatches: matchRes.rowCount || 0,
+          prizePool: t.prize_pool,
+        });
+      }
     } catch (e) {
-      console.warn("[Public Player API] Tournament query skipped/empty:", e);
+      console.warn("[Public Player API] Tournament query error:", e);
     }
+
+    // 4.5 Fetch real CS2 ELO from discipline_elo
+    let cs2Elo = row.faceit_elo || 1000;
+    try {
+      const eloRes = await client.query(
+        `SELECT elo, matches_played FROM discipline_elo WHERE player_id = $1 AND discipline = 'cs2'`,
+        [row.id]
+      );
+      if (eloRes.rowCount && eloRes.rows[0]) {
+        cs2Elo = eloRes.rows[0].elo || cs2Elo;
+      }
+    } catch (e) {}
+
+    const effectiveMatchesCount = totalTournamentMatches > 0 ? totalTournamentMatches : fragStats.matchesCount;
+    const effectiveKills = totalKills > 0 ? totalKills : fragStats.kills;
+    const effectiveDeaths = totalDeaths > 0 ? totalDeaths : (fragStats.deaths || 1);
+    const effectiveKd = effectiveDeaths > 0 ? Number((effectiveKills / effectiveDeaths).toFixed(2)) : 1.0;
+    const effectiveHeadshots = totalHeadshots > 0 ? totalHeadshots : fragStats.headshots;
+
+    const combatStats = {
+      matchesCount: effectiveMatchesCount,
+      wins: totalTournamentWins,
+      kills: effectiveKills,
+      deaths: effectiveDeaths,
+      headshots: effectiveHeadshots,
+      kdRatio: effectiveKd,
+      cs2Rating: cs2Elo,
+      trophies: trophyStats,
+    };
 
     // 5. Viewer captained teams (so viewer can invite player to their team)
     let viewerCaptainedTeams: any[] = [];
@@ -204,7 +329,7 @@ export async function GET(
         faceitMatches: row.faceit_matches || null,
         createdAt: row.created_at,
       },
-      stats: fragStats,
+      stats: combatStats,
       teams,
       recentTournaments,
       viewerCaptainedTeams,

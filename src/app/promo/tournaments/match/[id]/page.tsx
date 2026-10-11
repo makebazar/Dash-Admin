@@ -336,6 +336,7 @@ export default function MatchLobby() {
   const [isRequestingPause, setIsRequestingPause] = useState(false);
   const [isRestartingServer, setIsRestartingServer] = useState(false);
   const [vetoCountdown, setVetoCountdown] = useState(45);
+  const [selectedStatsTab, setSelectedStatsTab] = useState<string>("all");
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
@@ -588,12 +589,15 @@ export default function MatchLobby() {
   }, [player, checkins]);
 
   const isTeam1Ct = useMemo(() => {
-    const liveStatsSide = match?.matchStats?.team1?.side || match?.matchStats?.team1?.team_side;
+    if (match?.team1Side) {
+      return String(match.team1Side).toUpperCase().includes("CT");
+    }
+    const liveStatsSide = match?.matchStats?.team1_side || match?.matchStats?.team1?.side || match?.matchStats?.team1?.team_side;
     if (liveStatsSide) {
       return String(liveStatsSide).toLowerCase().includes("ct");
     }
     return true; // Default Team A = CT, Team B = T
-  }, [match?.matchStats]);
+  }, [match?.team1Side, match?.matchStats]);
   // ----------------------------------------------------------------
 
   if (loading || !match) {
@@ -687,7 +691,8 @@ export default function MatchLobby() {
     .split(",")
     .map((s: string) => s.trim())
     .filter(Boolean);
-  const primaryMapKey = selectedMaps[0] || "de_mirage";
+  const currentMapIndex = typeof match.currentMapIndex === "number" ? match.currentMapIndex : 0;
+  const primaryMapKey = selectedMaps[currentMapIndex] || selectedMaps[0] || "de_mirage";
   const selectedMapInfo = getMapInfo(primaryMapKey, match?.customMaps);
 
   const format = match.matchFormat || "bo1";
@@ -812,6 +817,15 @@ export default function MatchLobby() {
                 <span className="text-gray-500 font-sans font-light">:</span>
                 <span className={cn(isWinnerB ? "text-emerald-400" : sideB === "CT" ? "text-sky-400" : "text-orange-400")}>{match.score2 ?? 0}</span>
               </div>
+
+              {(format === "bo3" || format === "bo5") && isMatchStarted && (
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-mono font-bold text-gray-300 bg-white/5 px-2.5 py-0.5 rounded-full border border-white/5">
+                  <span className="text-gray-400">Карта {currentMapIndex + 1} ({selectedMapInfo.name}):</span>
+                  <span className={cn(sideA === "CT" ? "text-sky-400" : "text-orange-400")}>{match.currentMapScore1 ?? 0}</span>
+                  <span className="text-gray-500">:</span>
+                  <span className={cn(sideB === "CT" ? "text-sky-400" : "text-orange-400")}>{match.currentMapScore2 ?? 0}</span>
+                </div>
+              )}
 
               <div className="mt-1.5 text-xs font-bold tracking-widest uppercase">
                 {veto?.selected_map ? (
@@ -1363,16 +1377,133 @@ export default function MatchLobby() {
                       )}
                     </h3>
                     <span className="text-xs font-mono font-bold text-gray-400">
-                      {match.score1 ?? 0} : {match.score2 ?? 0}
+                      {selectedStatsTab === "all" ? (
+                        <span>{match.score1 ?? 0} : {match.score2 ?? 0}</span>
+                      ) : (
+                        <span>
+                          {match.mapsHistory?.[selectedStatsTab]
+                            ? `${match.mapsHistory[selectedStatsTab].score1} : ${match.mapsHistory[selectedStatsTab].score2}`
+                            : `${match.currentMapScore1 ?? 0} : ${match.currentMapScore2 ?? 0}`}
+                        </span>
+                      )}
                     </span>
                   </div>
 
+                  {/* Multi-Map Stats Navigation Tabs */}
+                  {(format === "bo3" || format === "bo5") && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none border-b border-white/5 pb-2">
+                      <button
+                        onClick={() => setSelectedStatsTab("all")}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap",
+                          selectedStatsTab === "all"
+                            ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
+                            : "bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white"
+                        )}
+                      >
+                        Все карты
+                      </button>
+
+                      {selectedMaps.map((mapKey: string, idx: number) => {
+                        const mapInfo = getMapInfo(mapKey, match?.customMaps);
+                        const mapHist = match?.mapsHistory?.[String(idx)];
+                        const isCurrentMap = idx === currentMapIndex;
+                        const isPlayedOrPlaying = Boolean(mapHist || isCurrentMap);
+                        const mapScore = mapHist
+                          ? `(${mapHist.score1}:${mapHist.score2})`
+                          : isCurrentMap && (match.currentMapScore1 !== undefined || match.currentMapScore2 !== undefined)
+                          ? `(${match.currentMapScore1 ?? 0}:${match.currentMapScore2 ?? 0})`
+                          : "";
+
+                        return (
+                          <button
+                            key={mapKey + idx}
+                            onClick={() => setSelectedStatsTab(String(idx))}
+                            disabled={!isPlayedOrPlaying}
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap flex items-center gap-1.5",
+                              selectedStatsTab === String(idx)
+                                ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
+                                : isPlayedOrPlaying
+                                ? "bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white cursor-pointer"
+                                : "bg-white/[0.02] text-gray-600 opacity-50 cursor-not-allowed"
+                            )}
+                          >
+                            <span>Карта {idx + 1}: {mapInfo.name}</span>
+                            {mapScore && <span className="text-[10px] font-mono opacity-80">{mapScore}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {(() => {
-                    const totalPlayedRounds = (match.score1 ?? 0) + (match.score2 ?? 0);
-                    const allStatsPlayers = [
-                      ...extractTeamPlayers(match.matchStats?.team1),
-                      ...extractTeamPlayers(match.matchStats?.team2),
-                    ];
+                    let targetStats = match.matchStats;
+                    let totalPlayedRounds = 0;
+                    let allStatsPlayers: any[] = [];
+
+                    if (selectedStatsTab !== "all") {
+                      const mapData = match.mapsHistory?.[selectedStatsTab];
+                      if (mapData) {
+                        targetStats = mapData.stats || match.matchStats;
+                        totalPlayedRounds = (mapData.score1 ?? 0) + (mapData.score2 ?? 0);
+                      } else if (selectedStatsTab === String(currentMapIndex)) {
+                        targetStats = match.matchStats;
+                        totalPlayedRounds = (match.currentMapScore1 ?? 0) + (match.currentMapScore2 ?? 0);
+                      }
+                      allStatsPlayers = [
+                        ...extractTeamPlayers(targetStats?.team1),
+                        ...extractTeamPlayers(targetStats?.team2),
+                      ];
+                    } else {
+                      const historyEntries = Object.values(match.mapsHistory || {}) as any[];
+                      if (historyEntries.length > 1) {
+                        const playerAgg: Record<string, any> = {};
+                        let roundsSum = 0;
+
+                        for (const m of historyEntries) {
+                          roundsSum += (m.score1 ?? 0) + (m.score2 ?? 0);
+                          const mPlayers = [
+                            ...extractTeamPlayers(m.stats?.team1),
+                            ...extractTeamPlayers(m.stats?.team2),
+                          ];
+                          for (const p of mPlayers) {
+                            const key = String(p.steamid || p.steamId || p.steam_id || p.name || p.nickname || "");
+                            if (!key) continue;
+                            if (!playerAgg[key]) {
+                              playerAgg[key] = {
+                                name: p.name || p.nickname || "Игрок",
+                                steamid: p.steamid || p.steamId || p.steam_id,
+                                kills: 0,
+                                deaths: 0,
+                                assists: 0,
+                                damage: 0,
+                                headshot_kills: 0,
+                                mvps: 0,
+                                score: 0,
+                              };
+                            }
+                            playerAgg[key].kills += Number(p.kills ?? p.stats?.kills ?? 0) || 0;
+                            playerAgg[key].deaths += Number(p.deaths ?? p.stats?.deaths ?? 0) || 0;
+                            playerAgg[key].assists += Number(p.assists ?? p.stats?.assists ?? 0) || 0;
+                            playerAgg[key].damage += Number(p.damage ?? p.stats?.damage ?? 0) || 0;
+                            playerAgg[key].headshot_kills += Number(p.headshot_kills ?? p.stats?.headshot_kills ?? 0) || 0;
+                            playerAgg[key].mvps += Number(p.mvps ?? p.stats?.mvps ?? 0) || 0;
+                            playerAgg[key].score += Number(p.score ?? p.stats?.score ?? 0) || 0;
+                          }
+                        }
+                        totalPlayedRounds = roundsSum;
+                        allStatsPlayers = Object.values(playerAgg);
+                      } else {
+                        totalPlayedRounds = (format === "bo3" || format === "bo5")
+                          ? (match.currentMapScore1 ?? 0) + (match.currentMapScore2 ?? 0)
+                          : (match.score1 ?? 0) + (match.score2 ?? 0);
+                        allStatsPlayers = [
+                          ...extractTeamPlayers(match.matchStats?.team1),
+                          ...extractTeamPlayers(match.matchStats?.team2),
+                        ];
+                      }
+                    }
 
                     const getCompetitorStats = (comp: any, fallbackIdx: number, defaultTeam: "team1" | "team2") => {
                       const steam = String(comp?.playerId || comp?.captainId || comp?.roster?.[0]?.steam_id || comp?.roster?.[0]?.id || "");
@@ -1391,7 +1522,7 @@ export default function MatchLobby() {
                       }
 
                       if (!found) {
-                        const teamPlayers = extractTeamPlayers(match.matchStats?.[defaultTeam]);
+                        const teamPlayers = extractTeamPlayers(targetStats?.[defaultTeam]);
                         found = teamPlayers[fallbackIdx];
                       }
 
@@ -1405,7 +1536,7 @@ export default function MatchLobby() {
 
                     const getTeamRosterStats = (comp: any, defaultTeam: "team1" | "team2") => {
                       const roster = comp?.roster || [{ id: comp?.playerId, full_name: comp?.name, nickname: comp?.name }];
-                      const teamStatsPlayers = extractTeamPlayers(match.matchStats?.[defaultTeam]);
+                      const teamStatsPlayers = extractTeamPlayers(targetStats?.[defaultTeam]);
 
                       return roster.map((member: any, idx: number) => {
                         const steam = String(member.steam_id || member.id || "");

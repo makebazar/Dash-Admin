@@ -47,9 +47,37 @@ export async function POST(
 
     const team1Score = payload.team1_series_score ?? payload.team1?.score ?? payload.team1_score ?? 0;
     const team2Score = payload.team2_series_score ?? payload.team2?.score ?? payload.team2_score ?? 0;
+
+    // Side resolution from MatchZy event payload
+    let currentTeam1Side: "CT" | "T" | null = null;
+    let currentTeam2Side: "CT" | "T" | null = null;
+    if (payload.winner?.side && payload.winner?.team) {
+      const winSide = String(payload.winner.side) === "3" ? "CT" : (String(payload.winner.side) === "2" ? "T" : null);
+      if (winSide) {
+        if (payload.winner.team === "team1") {
+          currentTeam1Side = winSide;
+          currentTeam2Side = winSide === "CT" ? "T" : "CT";
+        } else if (payload.winner.team === "team2") {
+          currentTeam2Side = winSide;
+          currentTeam1Side = winSide === "CT" ? "T" : "CT";
+        }
+      }
+    } else if ((event === "side_picked" || event === "knife_won") && payload.side && payload.team) {
+      const pickedSide = String(payload.side).toLowerCase().includes("ct") ? "CT" : "T";
+      if (payload.team === "team1") {
+        currentTeam1Side = pickedSide;
+        currentTeam2Side = pickedSide === "CT" ? "T" : "CT";
+      } else if (payload.team === "team2") {
+        currentTeam2Side = pickedSide;
+        currentTeam1Side = pickedSide === "CT" ? "T" : "CT";
+      }
+    }
+
     const matchStats = {
-      team1: payload.team1,
-      team2: payload.team2,
+      team1: { ...payload.team1, side: currentTeam1Side },
+      team2: { ...payload.team2, side: currentTeam2Side },
+      team1_side: currentTeam1Side,
+      team2_side: currentTeam2Side,
       map_number: payload.map_number,
       round_number: payload.round_number,
       winner: payload.winner,
@@ -72,6 +100,18 @@ export async function POST(
           `UPDATE club_cs2_matches SET game_state = 'knife_won', updated_at = NOW() WHERE id = $1 AND club_id = $2`,
           [resolvedCs2Id, resolvedClubId]
         ).catch(() => {});
+
+        if (tourneyMatchId && currentTeam1Side) {
+          await client.query(
+            `UPDATE tournament_matches
+             SET result = jsonb_set(
+               jsonb_set(COALESCE(result, '{}'::jsonb), '{team1_side}', to_jsonb($1::text)),
+               '{team2_side}', to_jsonb($2::text)
+             )
+             WHERE id = $3`,
+            [currentTeam1Side, currentTeam2Side, tourneyMatchId]
+          ).catch(() => {});
+        }
       } else if (event === "going_live") {
         await client.query(
           `UPDATE club_cs2_matches SET status = 'live', game_state = 'live', updated_at = NOW() WHERE id = $1 AND club_id = $2`,
@@ -84,10 +124,64 @@ export async function POST(
         ).catch(() => {});
 
         if (tourneyMatchId) {
-          await client.query(
-            `UPDATE tournament_matches SET score1 = $1, score2 = $2, result = jsonb_set(COALESCE(result, '{}'::jsonb), '{stats}', $3::jsonb) WHERE id = $4`,
-            [team1Score, team2Score, JSON.stringify(matchStats), tourneyMatchId]
-          ).catch(() => {});
+          const tMatchRes = await client.query(
+            `SELECT m.id, m.round, m.score1, m.score2, m.result, t.config as tournament_config
+             FROM tournament_matches m
+             JOIN club_tournaments t ON m.tournament_id = t.id
+             WHERE m.id = $1`,
+            [tourneyMatchId]
+          ).catch(() => ({ rows: [] }));
+
+          if (tMatchRes.rows.length > 0) {
+            const tm = tMatchRes.rows[0];
+            const resolvedFormat = resolveMatchFormat(tm.tournament_config, tm.round, undefined, tm.result);
+            const numMaps = resolvedFormat === "bo5" ? 5 : (resolvedFormat === "bo3" ? 3 : 1);
+            const mapNum = payload.map_number ?? (tm.result?.current_map_number ?? 0);
+            const mapScore1 = payload.team1?.score ?? 0;
+            const mapScore2 = payload.team2?.score ?? 0;
+
+            const existingMaps = (tm.result?.maps && typeof tm.result.maps === "object") ? tm.result.maps : {};
+            const effTeam1Side = currentTeam1Side || tm.result?.team1_side || existingMaps[String(mapNum)]?.team1_side || "CT";
+            const effTeam2Side = currentTeam2Side || tm.result?.team2_side || existingMaps[String(mapNum)]?.team2_side || (effTeam1Side === "CT" ? "T" : "CT");
+
+            const updatedMaps = {
+              ...existingMaps,
+              [String(mapNum)]: {
+                map_number: mapNum,
+                score1: mapScore1,
+                score2: mapScore2,
+                team1_side: effTeam1Side,
+                team2_side: effTeam2Side,
+                stats: matchStats,
+              },
+            };
+
+            const seriesScore1 = numMaps > 1
+              ? (payload.team1_series_score ?? payload.team1?.series_score ?? tm.score1 ?? 0)
+              : mapScore1;
+            const seriesScore2 = numMaps > 1
+              ? (payload.team2_series_score ?? payload.team2?.series_score ?? tm.score2 ?? 0)
+              : mapScore2;
+
+            const updatedResult = {
+              ...(tm.result || {}),
+              format: resolvedFormat,
+              current_map_number: mapNum,
+              current_map_score1: mapScore1,
+              current_map_score2: mapScore2,
+              team1_side: effTeam1Side,
+              team2_side: effTeam2Side,
+              maps: updatedMaps,
+              stats: matchStats,
+            };
+
+            await client.query(
+              `UPDATE tournament_matches 
+               SET score1 = $1, score2 = $2, result = $3
+               WHERE id = $4`,
+              [seriesScore1, seriesScore2, JSON.stringify(updatedResult), tourneyMatchId]
+            ).catch(() => {});
+          }
         }
       } else if (event === "game_paused") {
         await client.query(
@@ -141,12 +235,13 @@ export async function POST(
       }
     }
 
-    // If map ended, calculate results and ELO
-    if (event === "map_result" && tourneyMatchId) {
+    // If map ended or series ended, calculate results, advance bracket and ELO
+    if ((event === "map_result" || event === "series_end") && tourneyMatchId) {
       await client.query("BEGIN");
 
       const matchRes = await client.query(
         `SELECT m.id, m.tournament_id, m.round, m.competitor_a_id, m.competitor_b_id, m.status,
+                m.score1, m.score2, m.result,
                 t.config as tournament_config
          FROM tournament_matches m
          JOIN club_tournaments t ON m.tournament_id = t.id
@@ -156,8 +251,11 @@ export async function POST(
 
       if (matchRes.rowCount > 0 && matchRes.rows[0].status !== "FINISHED") {
         const match = matchRes.rows[0];
-        const team1Won = team1Score > team2Score;
-        const totalRounds = Math.max(1, team1Score + team2Score);
+        const mapNum = payload.map_number ?? (match.result?.current_map_number ?? 0);
+        const mapScore1 = payload.team1?.score ?? (match.result?.current_map_score1 ?? team1Score);
+        const mapScore2 = payload.team2?.score ?? (match.result?.current_map_score2 ?? team2Score);
+        const team1Won = mapScore1 > mapScore2;
+        const totalRounds = Math.max(1, mapScore1 + mapScore2);
 
         // Process players for ELO calculation
         const mapToEloInputs = async (playersObj: any): Promise<EloPlayerInput[]> => {
@@ -193,8 +291,16 @@ export async function POST(
           return list;
         };
 
-        const team1EloInputs = await mapToEloInputs(payload.team1?.players);
-        const team2EloInputs = await mapToEloInputs(payload.team2?.players);
+        const existingMaps = (match.result?.maps && typeof match.result.maps === "object") ? match.result.maps : {};
+        const team1Players = (payload.team1?.players && (Array.isArray(payload.team1.players) ? payload.team1.players.length > 0 : Object.keys(payload.team1.players).length > 0))
+          ? payload.team1.players
+          : (existingMaps[String(mapNum)]?.stats?.team1?.players || match.result?.stats?.team1?.players);
+        const team2Players = (payload.team2?.players && (Array.isArray(payload.team2.players) ? payload.team2.players.length > 0 : Object.keys(payload.team2.players).length > 0))
+          ? payload.team2.players
+          : (existingMaps[String(mapNum)]?.stats?.team2?.players || match.result?.stats?.team2?.players);
+
+        const team1EloInputs = await mapToEloInputs(team1Players);
+        const team2EloInputs = await mapToEloInputs(team2Players);
 
         if (team1EloInputs.length > 0 && team2EloInputs.length > 0) {
           const eloResults = calculateCs2MatchElo(team1EloInputs, team2EloInputs, team1Won);
@@ -215,13 +321,64 @@ export async function POST(
         const resolvedFormat = resolveMatchFormat(match.tournament_config, match.round, undefined, match.result);
         const numMaps = resolvedFormat === "bo5" ? 5 : (resolvedFormat === "bo3" ? 3 : 1);
         const mapsToWin = Math.ceil(numMaps / 2);
-        const team1SeriesScore = payload.team1?.series_score ?? (team1Won ? 1 : 0);
-        const team2SeriesScore = payload.team2?.series_score ?? (!team1Won ? 1 : 0);
-        const isSeriesOver = numMaps <= 1 || team1SeriesScore >= mapsToWin || team2SeriesScore >= mapsToWin;
 
+        const effTeam1Side = currentTeam1Side || match.result?.team1_side || existingMaps[String(mapNum)]?.team1_side || "CT";
+        const effTeam2Side = currentTeam2Side || match.result?.team2_side || existingMaps[String(mapNum)]?.team2_side || (effTeam1Side === "CT" ? "T" : "CT");
+
+        const finalMapStats = (payload.team1?.players && (Array.isArray(payload.team1.players) ? payload.team1.players.length > 0 : Object.keys(payload.team1.players).length > 0))
+          ? matchStats
+          : (existingMaps[String(mapNum)]?.stats || matchStats);
+
+        const updatedMaps = {
+          ...existingMaps,
+          [String(mapNum)]: {
+            map_number: mapNum,
+            score1: mapScore1,
+            score2: mapScore2,
+            winner: team1Won ? "team1" : "team2",
+            team1_side: effTeam1Side,
+            team2_side: effTeam2Side,
+            stats: finalMapStats,
+            finished: true,
+          },
+        };
+
+        // Determine series score
+        let team1SeriesScore = payload.team1_series_score ?? payload.team1?.series_score;
+        let team2SeriesScore = payload.team2_series_score ?? payload.team2?.series_score;
+
+        if (team1SeriesScore === undefined || team2SeriesScore === undefined) {
+          let w1 = 0;
+          let w2 = 0;
+          for (const m of Object.values(updatedMaps) as any[]) {
+            if (m.finished) {
+              if (m.winner === "team1" || m.score1 > m.score2) w1++;
+              else if (m.winner === "team2" || m.score2 > m.score1) w2++;
+            }
+          }
+          team1SeriesScore = numMaps > 1 ? w1 : (team1Won ? 1 : 0);
+          team2SeriesScore = numMaps > 1 ? w2 : (!team1Won ? 1 : 0);
+        }
+
+        const isSeriesOver = event === "series_end" || numMaps <= 1 || team1SeriesScore >= mapsToWin || team2SeriesScore >= mapsToWin;
         const seriesWinnerCompetitorId = team1SeriesScore > team2SeriesScore ? match.competitor_a_id : match.competitor_b_id;
-        const displayScore1 = numMaps > 1 ? team1SeriesScore : team1Score;
-        const displayScore2 = numMaps > 1 ? team2SeriesScore : team2Score;
+        const displayScore1 = numMaps > 1 ? team1SeriesScore : mapScore1;
+        const displayScore2 = numMaps > 1 ? team2SeriesScore : mapScore2;
+
+        const finalResultPayload = {
+          ...(match.result || {}),
+          format: resolvedFormat,
+          current_map_number: mapNum,
+          current_map_score1: mapScore1,
+          current_map_score2: mapScore2,
+          series_score1: displayScore1,
+          series_score2: displayScore2,
+          team1_side: effTeam1Side,
+          team2_side: effTeam2Side,
+          maps: updatedMaps,
+          stats: finalMapStats,
+          winner_team: team1SeriesScore > team2SeriesScore ? "team1" : "team2",
+        };
 
         if (isSeriesOver) {
           // Finalize match row
@@ -229,12 +386,16 @@ export async function POST(
             `UPDATE tournament_matches
              SET score1 = $1, score2 = $2, status = 'FINISHED', winner_competitor_id = $3, result = $4
              WHERE id = $5`,
-            [displayScore1, displayScore2, seriesWinnerCompetitorId, JSON.stringify(payload), tourneyMatchId]
+            [displayScore1, displayScore2, seriesWinnerCompetitorId, JSON.stringify(finalResultPayload), tourneyMatchId]
           );
 
           // Advance bracket if in playoffs
           if (match.round > 0 && seriesWinnerCompetitorId) {
-            await advancePlayoffWinner(client, String(tourneyMatchId), seriesWinnerCompetitorId);
+            try {
+              await advancePlayoffWinner(client, String(tourneyMatchId), seriesWinnerCompetitorId);
+            } catch (advanceErr) {
+              console.error(`[CS2 Webhook] advancePlayoffWinner error for match ${tourneyMatchId}:`, advanceErr);
+            }
           }
         } else {
           // Series continues: update current map/series score without finishing match prematurely
@@ -242,7 +403,7 @@ export async function POST(
             `UPDATE tournament_matches
              SET score1 = $1, score2 = $2, result = $3
              WHERE id = $4`,
-            [displayScore1, displayScore2, JSON.stringify(payload), tourneyMatchId]
+            [displayScore1, displayScore2, JSON.stringify(finalResultPayload), tourneyMatchId]
           );
         }
 

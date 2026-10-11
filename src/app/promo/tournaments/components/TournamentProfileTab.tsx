@@ -586,6 +586,39 @@ export function TournamentProfileTab({
             </h3>
           </div>
 
+          {/* Trophies showcase if player has any placements */}
+          {stats.trophies && (stats.trophies.first > 0 || stats.trophies.second > 0 || stats.trophies.third > 0) && (
+            <div className="grid grid-cols-3 gap-3 bg-black/40 border border-white/5 p-4 rounded-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-lg">
+                  🏆
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400 block">Побед (1-е место)</span>
+                  <span className="text-base font-black text-white">{stats.trophies.first}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-slate-400/10 border border-slate-400/20 flex items-center justify-center text-lg">
+                  🥈
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-300 block">Финал (2-е место)</span>
+                  <span className="text-base font-black text-white">{stats.trophies.second}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-700/10 border border-amber-700/20 flex items-center justify-center text-lg">
+                  🥉
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-amber-500 block">Бронза (3-е место)</span>
+                  <span className="text-base font-black text-white">{stats.trophies.third}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white/5 border border-white/5 p-4 rounded-2xl">
               <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block mb-1">
@@ -600,7 +633,12 @@ export function TournamentProfileTab({
               <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block mb-1">
                 Сыграно матчей
               </span>
-              <span className="text-xl font-black text-white block">{stats.matchesCount}</span>
+              <span className="text-xl font-black text-white block">
+                {stats.matchesCount}
+                {stats.wins > 0 && (
+                  <span className="text-xs text-emerald-400 font-bold ml-1.5">({stats.wins}W)</span>
+                )}
+              </span>
             </div>
 
             <div className="bg-white/5 border border-white/5 p-4 rounded-2xl">
@@ -675,40 +713,109 @@ export function TournamentProfileTab({
       </div>
 
       {/* Tournaments History */}
-      {tournaments.length > 0 && (
-        <div className="bg-[#0c0c0e] border border-white/5 rounded-3xl p-6 sm:p-8 space-y-4 shadow-xl">
-          <div className="flex items-center justify-between border-b border-white/5 pb-4">
+      <div className="bg-[#0c0c0e] border border-white/5 rounded-3xl p-6 sm:p-8 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between border-b border-white/5 pb-4">
+          <div className="flex items-center gap-2">
             <h3 className="text-sm font-black uppercase italic tracking-tight text-white">
-              Участие в турнирах
+              История турниров
             </h3>
-          </div>
-
-          <div className="space-y-3">
-            {tournaments.map((t: any) => (
-              <div
-                key={t.id}
-                className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between"
-              >
-                <div className="space-y-0.5">
-                  <span className="text-sm font-black uppercase italic tracking-tight text-white block">
-                    {t.title}
-                  </span>
-                  <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">
-                    {new Date(t.created_at).toLocaleDateString("ru-RU", {
-                      day: "numeric",
-                      month: "long",
-                    })}
-                  </span>
-                </div>
-
-                <span className="text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-gray-400">
-                  {t.status === "ACTIVE" ? "LIVE" : t.status === "REGISTRATION" ? "Регистрация" : "Завершен"}
-                </span>
-              </div>
-            ))}
+            <span className="text-[10px] font-black text-orange-400 uppercase px-2.5 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/20">
+              {tournaments.length}
+            </span>
           </div>
         </div>
-      )}
+
+        {tournaments.length === 0 ? (
+          <div className="bg-black/30 border border-white/5 rounded-2xl p-6 text-center text-gray-500 text-xs font-medium">
+            Игрок еще не участвовал в турнирах.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {tournaments.map((t: any) => {
+              const dateStr = t.createdAt
+                ? new Date(t.createdAt).toLocaleDateString("ru-RU", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })
+                : "";
+              const activeClub = p?.clubId || "";
+
+              return (
+                <div
+                  key={t.id}
+                  className="bg-white/5 border border-white/10 hover:border-white/20 transition-all rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 group"
+                >
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="text-base font-black uppercase tracking-tight text-white group-hover:text-orange-400 transition-colors truncate">
+                        {t.title}
+                      </span>
+
+                      {/* Discipline / Type badge */}
+                      <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-white/5 text-gray-400 border border-white/5">
+                        {t.discipline?.toUpperCase() || "CS2"} • {t.type || "1v1"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-gray-400 font-medium flex-wrap">
+                      <span>{dateStr}</span>
+                      {t.competitorName && (
+                        <>
+                          <span className="text-gray-600">•</span>
+                          <span className="text-gray-300">Участник: <strong className="text-white">{t.competitorName}</strong></span>
+                        </>
+                      )}
+                      {t.totalMatches > 0 && (
+                        <>
+                          <span className="text-gray-600">•</span>
+                          <span className="text-emerald-400 font-bold">{t.wins} побед</span>
+                          <span className="text-gray-500">/</span>
+                          <span className="text-red-400 font-bold">{t.losses} поражений</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center">
+                    {/* Placement badge */}
+                    {t.place === 1 ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl bg-yellow-500/15 border border-yellow-500/30 text-yellow-400 shadow-lg shadow-yellow-500/10">
+                        🏆 1-е место (Чемпион)
+                      </span>
+                    ) : t.place === 2 ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl bg-slate-300/15 border border-slate-300/30 text-slate-200">
+                        🥈 2-е место (Финалист)
+                      </span>
+                    ) : t.place === 3 ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-xl bg-amber-700/15 border border-amber-700/30 text-amber-400">
+                        🥉 3-е место
+                      </span>
+                    ) : t.status === "FINISHED" ? (
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-xl bg-white/5 border border-white/10 text-gray-400">
+                        Завершен
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                        {t.status === "ACTIVE" ? "LIVE" : "Регистрация"}
+                      </span>
+                    )}
+
+                    {/* Link to tournament bracket */}
+                    <a
+                      href={`/promo/tournaments?tournamentId=${t.id}&tab=bracket${activeClub ? `&clubId=${activeClub}` : ""}`}
+                      className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-orange-500/30 text-xs font-bold text-gray-300 hover:text-white rounded-xl transition-all flex items-center gap-1 shrink-0"
+                    >
+                      <span>Сетка</span>
+                      <span>↗</span>
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Edit Tournament Profile Modal */}
       <AnimatePresence>

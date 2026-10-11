@@ -495,7 +495,16 @@ export async function GET(
       }
     }
 
-    // Combined live score
+    // Combined live score and multi-map metadata
+    const resolvedFormat = resolveMatchFormat(match.tournament_config, match.round, undefined, match.result);
+    const numMaps = resolvedFormat === "bo5" ? 5 : (resolvedFormat === "bo3" ? 3 : 1);
+    const currentMapNumber = cs2Match?.match_stats?.map_number ?? match.result?.current_map_number ?? 0;
+    const currentMapScore1 = match.result?.current_map_score1 ?? (cs2Match?.match_stats?.team1?.score ?? (numMaps > 1 ? 0 : (match.score1 ?? 0)));
+    const currentMapScore2 = match.result?.current_map_score2 ?? (cs2Match?.match_stats?.team2?.score ?? (numMaps > 1 ? 0 : (match.score2 ?? 0)));
+    const team1Side = cs2Match?.match_stats?.team1_side ?? match.result?.team1_side ?? "CT";
+    const team2Side = cs2Match?.match_stats?.team2_side ?? match.result?.team2_side ?? (team1Side === "CT" ? "T" : "CT");
+    const mapsHistory = match.result?.maps || {};
+
     const liveScore1 = cs2Match ? cs2Match.score1 : (match.score1 ?? 0);
     const liveScore2 = cs2Match ? cs2Match.score2 : (match.score2 ?? 0);
     const matchStats = cs2Match?.match_stats || match.result?.stats || null;
@@ -511,6 +520,12 @@ export async function GET(
         discipline: match.discipline || "cs2",
         score1: liveScore1,
         score2: liveScore2,
+        currentMapIndex: currentMapNumber,
+        currentMapScore1,
+        currentMapScore2,
+        team1Side,
+        team2Side,
+        mapsHistory,
         cs2ServerId: match.cs2_server_id || cs2Match?.id,
         cs2ServerPort: serverPort,
         cs2ServerIp: serverIp,
@@ -528,7 +543,7 @@ export async function GET(
           ? match.tournament_config.mapPool
           : getTournamentDefaultMapPool(match.tournament_type || match.type || match.tournament_config?.type),
         customMaps: customMapsRes.rows.length > 0 ? customMapsRes.rows : (match.tournament_config?.customMaps || []),
-        matchFormat: resolveMatchFormat(match.tournament_config, match.round, undefined, match.result),
+        matchFormat: resolvedFormat,
         competitorA: compA ? { 
           id: match.competitor_a_id, 
           name: compA.display_name, 

@@ -772,10 +772,12 @@ export async function checkAndFinalizeTournament(
       : null,
   ].filter(Boolean);
 
-  // Mark tournament as FINISHED and store standings in config
+  // Ensure finished_at column exists and mark tournament as FINISHED with standings
+  await client.query(`ALTER TABLE club_tournaments ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP WITH TIME ZONE;`).catch(() => {});
   await client.query(
     `UPDATE club_tournaments
      SET status = 'FINISHED',
+         updated_at = NOW(),
          finished_at = NOW(),
          config = jsonb_set(
            COALESCE(config, '{}'::jsonb),
@@ -814,6 +816,13 @@ export function resolveMatchFormat(
   const baseFormat = normalize(cfg.matchFormat) || normalize(cfg.match_format) || normalize(cfg.format) || "bo1";
   const semiFormat = normalize(cfg.semiFinalFormat) || normalize(cfg.semi_final_format) || normalize(cfg.semiFinal) || baseFormat;
   const grandFormat = normalize(cfg.grandFinalFormat) || normalize(cfg.grand_final_format) || normalize(cfg.grandFinal) || baseFormat;
+
+  if (matchResult?.format && normalize(matchResult.format)) {
+    return normalize(matchResult.format)!;
+  }
+  if (matchResult?.matchFormat && normalize(matchResult.matchFormat)) {
+    return normalize(matchResult.matchFormat)!;
+  }
 
   const stage = matchResult?.stage;
 

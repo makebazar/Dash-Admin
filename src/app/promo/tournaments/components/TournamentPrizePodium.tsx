@@ -1,8 +1,25 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Trophy, Award, Gift, Sparkles, Coins, Percent, FileText, CheckCircle2, Crown, Target, Zap, Shield, Flame } from "lucide-react";
+import {
+  Trophy,
+  Award,
+  Gift,
+  Sparkles,
+  Coins,
+  FileText,
+  CheckCircle2,
+  Crown,
+  Target,
+  Layers,
+  Clock,
+  Swords,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  resolveTournamentMapInfo,
+  getTournamentDefaultMapPool,
+} from "@/lib/cs2/maps";
 
 interface TournamentPrizePodiumProps {
   tournament: any;
@@ -95,10 +112,22 @@ export function TournamentPrizePodium({
 
   // Determine winners if tournament is finished
   const standings = tournament.config?.final_standings || [];
-  const finalMatch = matches.find((m) => m.round === Math.max(...matches.map((x) => x.round)));
+  const maxRound = matches.length > 0 ? Math.max(...matches.map((x) => x.round)) : 0;
+  const finalMatch = matches.find((m) => m.round === maxRound && m.order_in_round === 1);
+  
   const championCompFromMatch =
     finalMatch && finalMatch.winner_competitor_id
       ? competitors.find((c) => String(c.id) === String(finalMatch.winner_competitor_id))
+      : null;
+
+  const runnerUpFromMatch =
+    finalMatch && finalMatch.winner_competitor_id
+      ? competitors.find((c) =>
+          String(c.id) ===
+          (String(finalMatch.winner_competitor_id) === String(finalMatch.competitor_a_id)
+            ? String(finalMatch.competitor_b_id)
+            : String(finalMatch.competitor_a_id))
+        )
       : null;
 
   const firstStanding = standings.find((s: any) => s.place === 1);
@@ -111,11 +140,113 @@ export function TournamentPrizePodium({
 
   const secondWinner = secondStanding
     ? competitors.find((c) => String(c.id) === String(secondStanding.competitor_id)) || { display_name: secondStanding.display_name }
-    : null;
+    : runnerUpFromMatch;
 
   const thirdWinner = thirdStanding
     ? competitors.find((c) => String(c.id) === String(thirdStanding.competitor_id)) || { display_name: thirdStanding.display_name }
     : null;
+
+  // 3rd place existence logic:
+  // 1. If finished: only if place 3 was recorded in standings or thirdWinner exists.
+  // 2. If not finished: only if there are > 2 competitors or registration allows > 2 slots.
+  const isFinished = tournament.status === "FINISHED" || standings.length > 0;
+  const maxSlots = Number(
+    tournament.config?.maxParticipants || tournament.config?.settings?.maxParticipants || 0
+  );
+  const totalCompetitors = competitors.length;
+
+  const hasThirdPlace = isFinished
+    ? Boolean(thirdStanding || thirdWinner)
+    : (totalCompetitors > 2 || (tournament.status === "REGISTRATION" && (maxSlots > 2 || maxSlots === 0)));
+
+  // Placements rank helper
+  const getPlacementRank = (p: any, idx: number) => {
+    if (p.label.includes("1") || p.id === "1") return 1;
+    if (p.label.includes("2") || p.id === "2") return 2;
+    if (p.label.includes("3") || p.id === "3") return 3;
+    return idx + 1;
+  };
+
+  const firstPlace = placements.find((p: any) => getPlacementRank(p, 0) === 1);
+  const secondPlace = placements.find((p: any) => getPlacementRank(p, 1) === 2);
+  const thirdPlace = hasThirdPlace
+    ? placements.find((p: any) => getPlacementRank(p, 2) === 3)
+    : null;
+
+  // Extra placements (only if 3rd place exists and more than 3 were configured)
+  const extraPlacements = hasThirdPlace && placements.length > 3 ? placements.slice(3) : [];
+
+  // Match format resolution
+  const cfg = tournament.config?.settings || tournament.config || {};
+  const baseFmt = String(cfg.matchFormat || cfg.match_format || "bo1").toLowerCase();
+  const semiFmt = String(cfg.semiFinalFormat || cfg.semi_final_format || baseFmt).toLowerCase();
+  const grandFmt = String(cfg.grandFinalFormat || cfg.grand_final_format || baseFmt).toLowerCase();
+
+  const formatSummary = useMemo(() => {
+    const getDesc = (fmt: string) =>
+      fmt === "bo1" ? "до 1 победы" : fmt === "bo3" ? "до 2 побед" : "до 3 побед";
+
+    if (baseFmt === semiFmt && baseFmt === grandFmt) {
+      return {
+        isUnified: true,
+        headline: `Все матчи: ${baseFmt.toUpperCase()}`,
+        stages: [
+          {
+            label: "Все раунды сетки",
+            format: baseFmt.toUpperCase(),
+            desc: getDesc(baseFmt),
+          },
+        ],
+      };
+    }
+
+    const stages: { label: string; format: string; desc: string }[] = [];
+    stages.push({
+      label: "Основная сетка",
+      format: baseFmt.toUpperCase(),
+      desc: getDesc(baseFmt),
+    });
+
+    if (semiFmt !== baseFmt) {
+      stages.push({
+        label: "Полуфинал (1/2)",
+        format: semiFmt.toUpperCase(),
+        desc: getDesc(semiFmt),
+      });
+    }
+
+    stages.push({
+      label: "Гранд-финал",
+      format: grandFmt.toUpperCase(),
+      desc: getDesc(grandFmt),
+    });
+
+    const headlineParts = [`Сетка: ${baseFmt.toUpperCase()}`];
+    if (semiFmt !== baseFmt) headlineParts.push(`1/2: ${semiFmt.toUpperCase()}`);
+    headlineParts.push(`Финал: ${grandFmt.toUpperCase()}`);
+
+    return {
+      isUnified: false,
+      headline: headlineParts.join(" • "),
+      stages,
+    };
+  }, [baseFmt, semiFmt, grandFmt]);
+
+  // Map Pool resolution
+  const rawMapPool = cfg.mapPool || [];
+  const customMaps = cfg.customMaps || [];
+  const activeMapPool = useMemo(() => {
+    if (Array.isArray(rawMapPool) && rawMapPool.length > 0) {
+      return rawMapPool;
+    }
+    return getTournamentDefaultMapPool(tournament.type);
+  }, [rawMapPool, tournament.type]);
+
+  const resolvedMaps = useMemo(() => {
+    return activeMapPool.map((mapId: string) =>
+      resolveTournamentMapInfo(mapId, customMaps)
+    );
+  }, [activeMapPool, customMaps]);
 
   // Nominations & Special Awards
   const activeNominations = useMemo(() => {
@@ -123,7 +254,7 @@ export function TournamentPrizePodium({
     return rawNoms.filter((n: any) => n.enabled);
   }, [tournament.prize_distribution]);
 
-  // Aggregate stats from all tournament matches
+  // Aggregate stats from all tournament matches for nominations
   const nominationWinners = useMemo(() => {
     if (activeNominations.length === 0) return {};
 
@@ -218,7 +349,6 @@ export function TournamentPrizePodium({
 
     const winners: Record<string, { name: string; statValue: string }> = {};
 
-    // 1. MVP (Highest average Rating 2.0)
     const mvpLeader = [...playersList].sort((a, b) => (b.ratingsSum / b.maps) - (a.ratingsSum / a.maps))[0];
     if (mvpLeader) {
       winners["mvp"] = {
@@ -227,7 +357,6 @@ export function TournamentPrizePodium({
       };
     }
 
-    // 2. Headshot King (Highest % HS with min 3 kills)
     const hsLeader = [...playersList].filter((p) => p.kills >= 3).sort((a, b) => (b.headshot_kills / b.kills) - (a.headshot_kills / a.kills))[0] || playersList[0];
     if (hsLeader) {
       const pct = hsLeader.kills > 0 ? Math.round((hsLeader.headshot_kills / hsLeader.kills) * 100) : 0;
@@ -237,7 +366,6 @@ export function TournamentPrizePodium({
       };
     }
 
-    // 3. Damage Leader (Highest ADR)
     const dmgLeader = [...playersList].sort((a, b) => (b.damage / b.rounds) - (a.damage / a.rounds))[0];
     if (dmgLeader) {
       winners["damage"] = {
@@ -246,7 +374,6 @@ export function TournamentPrizePodium({
       };
     }
 
-    // 4. Clutch Master (Most clutches)
     const clutchLeader = [...playersList].sort((a, b) => b.clutches - a.clutches)[0];
     if (clutchLeader) {
       winners["clutch"] = {
@@ -255,7 +382,6 @@ export function TournamentPrizePodium({
       };
     }
 
-    // 5. First Blood King (Most First Kills)
     const entryLeader = [...playersList].sort((a, b) => b.first_kills - a.first_kills)[0];
     if (entryLeader) {
       winners["entry"] = {
@@ -267,17 +393,7 @@ export function TournamentPrizePodium({
     return winners;
   }, [activeNominations, matches]);
 
-  const getPlacementRank = (p: any, idx: number) => {
-    if (p.label.includes("1") || p.id === "1") return 1;
-    if (p.label.includes("2") || p.id === "2") return 2;
-    if (p.label.includes("3") || p.id === "3") return 3;
-    return idx + 1;
-  };
-
-  const firstPlace = placements.find((p: any) => getPlacementRank(p, 0) === 1);
-  const secondPlace = placements.find((p: any) => getPlacementRank(p, 1) === 2);
-  const thirdPlace = placements.find((p: any) => getPlacementRank(p, 2) === 3);
-
+  // Sleek, modern esports podium card renderer
   const renderPodiumCard = (p: any, rank: 1 | 2 | 3, winnerComp?: any) => {
     if (!p) return null;
 
@@ -287,91 +403,131 @@ export function TournamentPrizePodium({
 
     const rankConfig = {
       1: {
-        height: "min-h-[280px]",
-        bg: "bg-gradient-to-b from-yellow-500/15 via-[#131316] to-[#0c0c0e]",
-        border: "border-yellow-500/40 shadow-[0_0_30px_rgba(234,179,8,0.1)]",
-        badgeBg: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-        icon: <Trophy className="w-8 h-8 text-yellow-400" />,
-        title: "1 Место • Чемпион",
-        order: "order-1 sm:order-2",
-        scale: "sm:scale-105 z-10",
+        minHeight: "min-h-[280px]",
+        gradient: "from-amber-500/15 via-[#141418] to-[#0c0c0e]",
+        border: "border-amber-500/35 hover:border-amber-500/60 shadow-[0_0_35px_rgba(245,158,11,0.08)]",
+        topLine: "from-transparent via-amber-400/80 to-transparent",
+        accentColor: "text-amber-400",
+        rankLabel: "1-е Место",
+        subLabel: "Чемпион турнира",
+        icon: (
+          <Crown className="w-6 h-6 text-amber-400 fill-amber-400/20 drop-shadow-[0_0_12px_rgba(245,158,11,0.5)]" />
+        ),
+        avatarBg: "bg-amber-500/15 border-amber-500/30 text-amber-400",
+        scale: hasThirdPlace ? "sm:scale-105 z-10" : "z-10",
+        order: hasThirdPlace ? "order-1 sm:order-2" : "order-1",
       },
       2: {
-        height: "min-h-[260px]",
-        bg: "bg-gradient-to-b from-slate-400/15 via-[#131316] to-[#0c0c0e]",
-        border: "border-slate-400/30 shadow-[0_0_20px_rgba(148,163,184,0.08)]",
-        badgeBg: "bg-slate-400/20 text-slate-300 border-slate-400/30",
-        icon: <Award className="w-7 h-7 text-slate-300" />,
-        title: "2 Место • Серебро",
-        order: "order-2 sm:order-1",
+        minHeight: "min-h-[260px]",
+        gradient: "from-slate-300/10 via-[#141418] to-[#0c0c0e]",
+        border: "border-slate-400/25 hover:border-slate-400/50 shadow-[0_0_25px_rgba(148,163,184,0.05)]",
+        topLine: "from-transparent via-slate-300/60 to-transparent",
+        accentColor: "text-slate-300",
+        rankLabel: "2-е Место",
+        subLabel: "Вице-чемпион",
+        icon: (
+          <Award className="w-6 h-6 text-slate-300 drop-shadow-[0_0_10px_rgba(148,163,184,0.4)]" />
+        ),
+        avatarBg: "bg-slate-400/15 border-slate-400/30 text-slate-300",
         scale: "z-0",
+        order: hasThirdPlace ? "order-2 sm:order-1" : "order-2",
       },
       3: {
-        height: "min-h-[240px]",
-        bg: "bg-gradient-to-b from-amber-700/15 via-[#131316] to-[#0c0c0e]",
-        border: "border-amber-700/30 shadow-[0_0_20px_rgba(180,83,9,0.08)]",
-        badgeBg: "bg-amber-700/20 text-amber-400 border-amber-700/30",
-        icon: <Award className="w-6 h-6 text-amber-500" />,
-        title: "3 Место • Бронза",
-        order: "order-3",
+        minHeight: "min-h-[250px]",
+        gradient: "from-amber-700/10 via-[#141418] to-[#0c0c0e]",
+        border: "border-amber-700/25 hover:border-amber-700/50 shadow-[0_0_25px_rgba(180,83,9,0.05)]",
+        topLine: "from-transparent via-amber-600/60 to-transparent",
+        accentColor: "text-amber-500",
+        rankLabel: "3-е Место",
+        subLabel: "Бронзовый призёр",
+        icon: (
+          <Award className="w-6 h-6 text-amber-500 drop-shadow-[0_0_10px_rgba(180,83,9,0.4)]" />
+        ),
+        avatarBg: "bg-amber-700/15 border-amber-700/30 text-amber-500",
         scale: "z-0",
+        order: "order-3",
       },
     }[rank];
 
     return (
       <div
         className={cn(
-          "rounded-[2.5rem] border p-6 flex flex-col justify-between transition-all relative overflow-hidden",
-          rankConfig.height,
-          rankConfig.bg,
+          "rounded-[2.2rem] border p-6 flex flex-col justify-between transition-all relative overflow-hidden group",
+          rankConfig.minHeight,
+          "bg-gradient-to-b",
+          rankConfig.gradient,
           rankConfig.border,
           rankConfig.order,
           rankConfig.scale
         )}
       >
-        {/* Glow corner */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl pointer-events-none" />
+        {/* Top ambient highlight line */}
+        <div className={cn("absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r", rankConfig.topLine)} />
+        <div className="absolute -top-12 -right-12 w-36 h-36 bg-white/5 rounded-full blur-3xl pointer-events-none group-hover:bg-white/10 transition-colors" />
 
-        {/* Top Header */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
-              {rankConfig.icon}
-            </div>
-            <span
-              className={cn(
-                "text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-xl border",
-                rankConfig.badgeBg
-              )}
-            >
-              {p.cashPct}% Фонда
-            </span>
-          </div>
-
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block">
-              {rankConfig.title}
-            </span>
-            {winnerComp ? (
-              <div className="mt-1 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="text-base font-black text-white uppercase italic truncate">
-                  {winnerComp.display_name}
+        {/* Header: Rank emblem & Share */}
+        <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-white/[0.04] border border-white/5 flex items-center justify-center shrink-0">
+                {rankConfig.icon}
+              </div>
+              <div>
+                <span className={cn("text-xs font-black uppercase tracking-wider block", rankConfig.accentColor)}>
+                  {rankConfig.rankLabel}
+                </span>
+                <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider block">
+                  {rankConfig.subLabel}
                 </span>
               </div>
-            ) : null}
+            </div>
+
+            {/* Seamless percentage callout without nested container badge */}
+            <div className="text-right shrink-0">
+              <span className="text-sm font-black font-mono text-white/95 tracking-tight block">
+                {p.cashPct}%
+              </span>
+              <span className="text-[9px] uppercase font-bold text-gray-500 tracking-wider block">
+                фонда
+              </span>
+            </div>
           </div>
+
+          {/* Winner details */}
+          {winnerComp ? (
+            <div className="mt-4 p-3.5 rounded-2xl bg-white/[0.03] border border-white/5 flex items-center gap-3">
+              <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs uppercase shrink-0 border", rankConfig.avatarBg)}>
+                {winnerComp.display_name?.slice(0, 2) || "🏆"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-gray-500 block">
+                  Победитель
+                </span>
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="text-base font-black text-white uppercase italic tracking-tight truncate">
+                    {winnerComp.display_name}
+                  </span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center gap-2.5 text-gray-500 text-xs">
+              <Clock className="w-4 h-4 text-gray-600 shrink-0" />
+              <span className="italic font-medium">Определится по итогам финала</span>
+            </div>
+          )}
         </div>
 
         {/* Prize breakdown */}
-        <div className="space-y-2.5 pt-4 border-t border-white/5">
+        <div className="space-y-2 pt-4 border-t border-white/5 mt-4">
           {cashAmount > 0 && (
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                <Coins className="w-3.5 h-3.5 text-yellow-500" />
-                Наличные:
+                <Coins className="w-3.5 h-3.5 text-amber-400" />
+                Призовые:
               </span>
-              <span className="text-base font-black text-white italic">
+              <span className="text-base font-black text-white font-mono">
                 {formatCurrency(cashAmount)}
               </span>
             </div>
@@ -383,7 +539,7 @@ export function TournamentPrizePodium({
                 <Sparkles className="w-3.5 h-3.5 text-orange-400" />
                 Баланс клуба:
               </span>
-              <span className="text-xs font-black text-orange-400">
+              <span className="text-sm font-black text-orange-400 font-mono">
                 +{p.bonus} Б
               </span>
             </div>
@@ -395,7 +551,7 @@ export function TournamentPrizePodium({
                 <Gift className="w-3.5 h-3.5 text-purple-400" />
                 Приз:
               </span>
-              <span className="text-xs font-bold text-purple-300 truncate max-w-[120px]">
+              <span className="text-xs font-bold text-purple-300 truncate max-w-[140px]">
                 {itemName}
               </span>
             </div>
@@ -411,29 +567,36 @@ export function TournamentPrizePodium({
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gray-400">
-            <Trophy className="w-4 h-4 text-yellow-500" />
-            <span>Пьедестал победителей и распределение призов</span>
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <span>Пьедестал победителей и распределение призов</span>
           </div>
           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
             Общий фонд: {formatCurrency(activePrizePool)}
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 items-end">
-          {renderPodiumCard(secondPlace, 2, secondWinner)}
-          {renderPodiumCard(firstPlace, 1, firstWinner)}
-          {renderPodiumCard(thirdPlace, 3, thirdWinner)}
-        </div>
+        {hasThirdPlace && thirdPlace ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 items-end">
+            {renderPodiumCard(secondPlace, 2, secondWinner)}
+            {renderPodiumCard(firstPlace, 1, firstWinner)}
+            {renderPodiumCard(thirdPlace, 3, thirdWinner)}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 max-w-4xl mx-auto gap-6 items-stretch">
+            {renderPodiumCard(firstPlace, 1, firstWinner)}
+            {renderPodiumCard(secondPlace, 2, secondWinner)}
+          </div>
+        )}
       </div>
 
-      {/* Other placements if more than 3 */}
-      {placements.length > 3 && (
+      {/* Additional placements if more than 3 */}
+      {extraPlacements.length > 0 && (
         <div className="bg-[#0c0c0e]/95 border border-white/5 rounded-[2rem] p-6 space-y-4">
           <h4 className="text-xs font-black uppercase tracking-widest text-gray-400">
             Дополнительные призовые места
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {placements.slice(3).map((p: any, idx: number) => {
+            {extraPlacements.map((p: any, idx: number) => {
               const cashAmount = Math.round((activePrizePool * (p.cashPct || 0)) / 100);
               return (
                 <div
@@ -442,8 +605,12 @@ export function TournamentPrizePodium({
                 >
                   <span className="font-bold text-gray-300">{p.label}</span>
                   <div className="flex items-center gap-3">
-                    {cashAmount > 0 && <span className="font-black text-white">{formatCurrency(cashAmount)}</span>}
-                    {p.bonus > 0 && <span className="font-bold text-orange-400">+{p.bonus} Б</span>}
+                    {cashAmount > 0 && (
+                      <span className="font-black text-white">{formatCurrency(cashAmount)}</span>
+                    )}
+                    {p.bonus > 0 && (
+                      <span className="font-bold text-orange-400">+{p.bonus} Б</span>
+                    )}
                   </div>
                 </div>
               );
@@ -574,37 +741,120 @@ export function TournamentPrizePodium({
               Параметры турнира
             </span>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-2.5 text-xs">
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-gray-400">Дисциплина:</span>
-                <span className="font-black text-white uppercase">{tournament.discipline}</span>
+                <span className="font-black text-white uppercase">{tournament.discipline || "CS2"}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-gray-400">Формат сетки:</span>
                 <span className="font-black text-white">
-                  {tournament.config?.bracketType === "round_robin" ? "Группы + Плей-офф" : "Single Elimination"}
+                  {cfg.bracketType === "round_robin"
+                    ? "Группы + Плей-офф"
+                    : cfg.bracketType === "double_elimination"
+                    ? "Double Elimination"
+                    : "Single Elimination"}
                 </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-gray-400">Формат матчей:</span>
-                <span className="font-black text-orange-500 uppercase">
-                  {(tournament.config?.matchFormat || "bo1").toUpperCase()}
+                <span className="font-black text-orange-400 uppercase text-right">
+                  {formatSummary.headline}
                 </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-gray-400">Взнос:</span>
                 <span className="font-black text-white">
-                  {tournament.entry_fee > 0 ? formatCurrency(tournament.entry_fee) : "Бесплатно"}
+                  {parseFloat(String(tournament.entry_fee || 0)) > 0
+                    ? formatCurrency(parseFloat(tournament.entry_fee))
+                    : "Бесплатно"}
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2">
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
                 <span className="text-gray-400">Макс. участников:</span>
                 <span className="font-black text-white">
-                  {tournament.config?.maxParticipants || "Без ограничений"}
+                  {cfg.maxParticipants ? `${cfg.maxParticipants} слотов` : "Без ограничений"}
                 </span>
               </div>
             </div>
+
+            {/* Stage formats breakdown */}
+            <div className="pt-2 space-y-2 border-t border-white/5">
+              <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 block">
+                Регламент серий по стадиям:
+              </span>
+              <div className="space-y-1.5">
+                {formatSummary.stages.map((st, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between text-[11px] bg-white/[0.02] px-3 py-1.5 rounded-xl border border-white/5"
+                  >
+                    <span className="text-gray-300 font-medium">{st.label}:</span>
+                    <div className="flex items-center gap-1.5 font-mono">
+                      <span className="font-black text-orange-400">{st.format}</span>
+                      <span className="text-gray-500 text-[10px]">({st.desc})</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
+
+      {/* 3. Tournament Map Pool */}
+      <div className="bg-[#0c0c0e]/95 border border-white/5 rounded-[2.5rem] p-7 space-y-5 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/5 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-orange-500/10 border border-orange-500/20 text-orange-400">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white flex items-center gap-2">
+                <span>Соревновательный пул карт (Map Pool)</span>
+                <span className="text-xs font-mono font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-lg border border-orange-500/20">
+                  {resolvedMaps.length} {resolvedMaps.length === 1 ? "карта" : resolvedMaps.length < 5 ? "карты" : "карт"}
+                </span>
+              </h3>
+              <p className="text-[11px] text-gray-400 font-medium">
+                Карты турнира для процедуры вето: баны и выбор локации перед каждым матчем
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          {resolvedMaps.map((map) => (
+            <div
+              key={map.id}
+              className="group relative rounded-2xl overflow-hidden border border-white/10 hover:border-orange-500/50 transition-all aspect-[4/3] flex flex-col justify-end p-2.5 shadow-lg bg-[#141418]"
+            >
+              <img
+                src={map.image}
+                alt={map.name}
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-70 group-hover:opacity-90"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+
+              <div className="relative z-10 space-y-0.5">
+                <span className="text-[9px] font-black uppercase tracking-wider text-orange-400/90 block">
+                  {map.badgeLabel}
+                </span>
+                <span className="text-xs font-black uppercase tracking-tight text-white block truncate">
+                  {map.name}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] text-gray-400 font-medium bg-black/40 px-4 py-2.5 rounded-2xl border border-white/5">
+          <Target className="w-4 h-4 text-orange-400 shrink-0" />
+          <span>
+            В сериях BO1 команды по очереди банят карты до 1 решающей. В сериях BO3 выбирают по карте и играют десайдер.
+          </span>
         </div>
       </div>
     </div>
