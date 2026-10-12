@@ -305,8 +305,7 @@ export function TournamentCompetitorsList({
                             {comp.player_dota_rank_tier ? (() => {
                               const dRank = parseDotaRank(comp.player_dota_rank_tier, comp.player_dota_leaderboard_rank);
                               return (
-                                <span className="inline-flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-0.5 rounded-lg">
-                                  <img src={dRank.badgeUrl} alt={dRank.nameRu} className="w-4 h-4 object-contain" />
+                                <span className="inline-flex items-center bg-white/5 border border-white/10 px-2 py-0.5 rounded-lg">
                                   <span className="text-[10px] font-black" style={{ color: dRank.color }}>{dRank.nameRu}</span>
                                 </span>
                               );
@@ -434,10 +433,7 @@ export function TournamentCompetitorsList({
                                     {member.dotaRankTier ? (() => {
                                       const mRank = parseDotaRank(member.dotaRankTier, member.dotaLeaderboardRank);
                                       return (
-                                        <>
-                                          <img src={mRank.badgeUrl} alt={mRank.nameRu} className="w-3.5 h-3.5 object-contain" />
-                                          <span className="text-[9px] font-bold" style={{ color: mRank.color }}>{mRank.nameRu}</span>
-                                        </>
+                                        <span className="text-[9px] font-bold" style={{ color: mRank.color }}>{mRank.nameRu}</span>
                                       );
                                     })() : null}
                                     <span className="text-[10px] font-black text-emerald-400 font-mono">

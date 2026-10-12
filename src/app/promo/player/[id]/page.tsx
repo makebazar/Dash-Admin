@@ -567,23 +567,21 @@ export default function PublicPlayerProfilePage() {
               <span className="text-xs font-black uppercase tracking-wider text-white">
                 Dota 2
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 {isSelf && player.steamLink && (
                   <button
                     type="button"
                     onClick={() => handleSaveProfile(false, true)}
                     disabled={syncingDota}
-                    className="text-[9px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-full border border-white/10"
+                    className="text-[10px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
                   >
                     {syncingDota ? "Загрузка..." : "↻ Обновить"}
                   </button>
                 )}
                 <span
                   className={cn(
-                    "text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border",
-                    player.steamLink
-                      ? "bg-red-500/10 text-red-400 border-red-500/20"
-                      : "bg-white/5 text-gray-500 border-white/5"
+                    "text-[10px] font-black uppercase tracking-wider",
+                    player.steamLink ? "text-emerald-400" : "text-gray-500"
                   )}
                 >
                   {player.steamLink ? "Привязан" : "Не привязан"}
@@ -597,25 +595,16 @@ export default function PublicPlayerProfilePage() {
                 return (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-2xl bg-black/50 border border-white/10 flex items-center justify-center shrink-0 p-1">
-                          <img
-                            src={rankInfo.badgeUrl}
-                            alt={rankInfo.nameRu}
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
-                            Ранг
-                          </span>
-                          <span
-                            className="text-sm font-black uppercase italic"
-                            style={{ color: rankInfo.color }}
-                          >
-                            {rankInfo.nameRu}
-                          </span>
-                        </div>
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
+                          Ранг
+                        </span>
+                        <span
+                          className="text-sm font-black uppercase italic"
+                          style={{ color: rankInfo.color }}
+                        >
+                          {rankInfo.nameRu}
+                        </span>
                       </div>
 
                       <div className="text-right">

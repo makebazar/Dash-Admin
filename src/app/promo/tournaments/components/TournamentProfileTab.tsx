@@ -422,23 +422,23 @@ export function TournamentProfileTab({
             <span className="text-xs font-black uppercase tracking-wider text-white">
               Faceit CS2
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               {isSelf && p?.faceitLink && (
                 <button
                   type="button"
                   onClick={() => handleSaveProfile(true, false)}
                   disabled={syncingFaceit}
-                  className="text-[9px] font-black uppercase tracking-wider text-orange-400 hover:text-orange-300 transition-colors disabled:opacity-50 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-full border border-white/10"
+                  className="text-[10px] font-black uppercase tracking-wider text-orange-400 hover:text-orange-300 transition-colors disabled:opacity-50"
                 >
                   {syncingFaceit ? "Загрузка..." : "↻ Обновить"}
                 </button>
               )}
               <span
                 className={cn(
-                  "text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border",
+                  "text-[10px] font-black uppercase tracking-wider",
                   p?.faceitLink
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                    : "bg-white/5 text-gray-500 border-white/5"
+                    ? "text-emerald-400"
+                    : "text-gray-500"
                 )}
               >
                 {p?.faceitLink ? "Привязан" : "Не привязан"}
@@ -532,31 +532,26 @@ export function TournamentProfileTab({
         {/* Dota 2 Card */}
         <div className="bg-[#0c0c0e] border border-white/5 rounded-3xl p-6 space-y-4 shadow-xl">
           <div className="flex justify-between items-center border-b border-white/5 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black uppercase tracking-wider text-white">
-                Dota 2
-              </span>
-              <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
-                OpenDota
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-wider text-white">
+              Dota 2
+            </span>
+            <div className="flex items-center gap-2.5">
               {isSelf && (p?.steamLink || p?.steamId) && (
                 <button
                   type="button"
                   onClick={() => handleSaveProfile(false, true)}
                   disabled={syncingDota}
-                  className="text-[9px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-full border border-white/10"
+                  className="text-[10px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
                 >
                   {syncingDota ? "Загрузка..." : "↻ Обновить"}
                 </button>
               )}
               <span
                 className={cn(
-                  "text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border",
+                  "text-[10px] font-black uppercase tracking-wider",
                   (p?.steamLink || p?.steamId || p?.dotaRankTier || p?.dotaMmr)
-                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                    : "bg-white/5 text-gray-500 border-white/5"
+                    ? "text-emerald-400"
+                    : "text-gray-500"
                 )}
               >
                 {(p?.steamLink || p?.steamId || p?.dotaRankTier || p?.dotaMmr) ? "Привязан" : "Не привязан"}
@@ -575,25 +570,16 @@ export function TournamentProfileTab({
                 return (
                   <>
                     <div className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-2xl bg-black/60 border border-white/10 flex items-center justify-center shrink-0 p-1 shadow-md">
-                          <img
-                            src={dotaRank.badgeUrl}
-                            alt={dotaRank.nameRu}
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-                        <div>
-                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
-                            Ранг Dota 2
-                          </span>
-                          <span
-                            className="text-sm font-black uppercase italic"
-                            style={{ color: dotaRank.color }}
-                          >
-                            {p?.dotaRankName || dotaRank.nameRu}
-                          </span>
-                        </div>
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
+                          Ранг Dota 2
+                        </span>
+                        <span
+                          className="text-sm font-black uppercase italic"
+                          style={{ color: dotaRank.color }}
+                        >
+                          {p?.dotaRankName || dotaRank.nameRu}
+                        </span>
                       </div>
 
                       <div className="text-right">
@@ -702,10 +688,10 @@ export function TournamentProfileTab({
             </span>
             <span
               className={cn(
-                "text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border",
+                "text-[10px] font-black uppercase tracking-wider",
                 p?.steamLink
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                  : "bg-white/5 text-gray-500 border-white/5"
+                  ? "text-emerald-400"
+                  : "text-gray-500"
               )}
             >
               {p?.steamLink ? "Привязан" : "Не привязан"}
