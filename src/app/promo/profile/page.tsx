@@ -32,8 +32,6 @@ import Link from "next/link";
 import { getPhoneDisplay } from "@/lib/phone-utils";
 import { BottomNav } from "../components/BottomNav";
 import { cn } from "@/lib/utils";
-import { updatePlayerLinks } from "./actions";
-import { parseDotaRank } from "@/lib/dota-service";
 
 export default function PromoProfile() {
   const [clubs, setClubs] = useState<any[]>([]);
@@ -44,53 +42,6 @@ export default function PromoProfile() {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState("");
   const router = useRouter();
-
-  // Links states
-  const [steamLink, setSteamLink] = useState("");
-  const [faceitLink, setFaceitLink] = useState("");
-  const [savingLinks, setSavingLinks] = useState(false);
-  const [syncingDota, setSyncingDota] = useState(false);
-
-  const handleSaveLinks = async () => {
-    setSavingLinks(true);
-    const formData = new FormData();
-    formData.append("steam_link", steamLink);
-    formData.append("faceit_link", faceitLink);
-    const res = await updatePlayerLinks(formData);
-    if (res.success) {
-      await fetchData();
-    } else {
-      alert("Ошибка при сохранении: " + res.error);
-    }
-    setSavingLinks(false);
-  };
-
-  const handleSyncDota = async () => {
-    setSyncingDota(true);
-    try {
-      const res = await fetch("/api/promo/player/tournament-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          syncDotaNow: true,
-          steamLink: steamLink || player?.steam_link || "",
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        await fetchData();
-        alert(data.dotaSynced ? "Dota 2 статистика успешно обновлена!" : "Синхронизация завершена.");
-      } else {
-        alert(data.error || "Ошибка синхронизации Dota 2");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Ошибка сети при синхронизации Dota 2");
-    } finally {
-      setSyncingDota(false);
-    }
-  };
-
 
   // Inventory states
   const [inventory, setInventory] = useState<any[]>([]);
@@ -175,8 +126,6 @@ export default function PromoProfile() {
       const clubsData = await clubsRes.json();
 
       setPlayer({ ...playerData.player, activeTickets: playerData.tickets });
-      setSteamLink(playerData.player.steam_link || "");
-      setFaceitLink(playerData.player.faceit_link || "");
       setClubs(clubsData.clubs || []);
       if (referralsRes) {
         setReferralData(referralsRes);
@@ -428,18 +377,6 @@ export default function PromoProfile() {
                       {Math.floor(player?.bonusBalance || 0)} ₽
                     </div>
                   </Link>
-                  <Link
-                    href="/promo/teams"
-                    className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 transition-all group/card"
-                  >
-                    <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">
-                      Команда
-                    </div>
-                    <div className="text-xl sm:text-2xl font-black text-white flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-white" />
-                      Моя
-                    </div>
-                  </Link>
                 </div>
               </div>
             </div>
@@ -549,164 +486,6 @@ export default function PromoProfile() {
 
           {/* Right Column */}
           <div className="lg:col-span-7 space-y-6">
-            {/* Game Profiles Section */}
-            <div className="bg-white/5 border border-white/10 rounded-3xl sm:rounded-[2.5rem] p-6 shadow-xl">
-              <div className="mb-6">
-                <h3 className="text-lg font-black uppercase italic tracking-tight text-white">
-                  Игровые профили
-                </h3>
-                <p className="text-xs text-gray-400 font-medium mt-0.5">
-                  Привяжите аккаунты для участия в турнирах
-                </p>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-end">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Steam Profile URL</label>
-                    {player?.steam_id && <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">ПРИВЯЗАН</span>}
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="https://steamcommunity.com/id/..."
-                    value={steamLink}
-                    onChange={(e) => setSteamLink(e.target.value)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-end">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-gray-400">Faceit Profile URL</label>
-                    {player?.faceit_link && <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">ПРИВЯЗАН</span>}
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="https://www.faceit.com/ru/players/..."
-                    value={faceitLink}
-                    onChange={(e) => setFaceitLink(e.target.value)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors"
-                  />
-                </div>
-
-                <button
-                  onClick={handleSaveLinks}
-                  disabled={savingLinks}
-                  className="w-full bg-white/10 hover:bg-white/20 border border-white/15 disabled:opacity-50 text-white font-black uppercase italic text-xs tracking-wider py-3 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 mt-2"
-                >
-                  {savingLinks ? "СОХРАНЕНИЕ..." : "СОХРАНИТЬ ПРОФИЛИ"}
-                </button>
-
-                {/* Dota 2 Live Stats Display */}
-                {(player?.steam_id || player?.dotaRankTier || player?.dotaMmr || player?.dotaStats) && (() => {
-                  const rankInfo = parseDotaRank(player.dotaRankTier, player.dotaLeaderboardRank);
-                  return (
-                    <div className="mt-4 pt-4 border-t border-white/10 space-y-3.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black uppercase tracking-wider text-white">
-                            Статистика Dota 2
-                          </span>
-                          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
-                            OpenDota
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleSyncDota}
-                          disabled={syncingDota}
-                          className="text-[10px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-lg border border-white/10 cursor-pointer flex items-center gap-1"
-                        >
-                          {syncingDota ? "Синхронизация..." : "↻ Синхронизировать"}
-                        </button>
-                      </div>
-
-                      <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-black/60 border border-white/10 flex items-center justify-center shrink-0 p-1">
-                            <img
-                              src={rankInfo.badgeUrl}
-                              alt={rankInfo.nameRu}
-                              className="w-full h-full object-contain"
-                            />
-                          </div>
-                          <div>
-                            <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
-                              Ранг аккаунта
-                            </span>
-                            <span
-                              className="text-sm font-black uppercase italic"
-                              style={{ color: rankInfo.color }}
-                            >
-                              {rankInfo.nameRu}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
-                            Рейтинг MMR
-                          </span>
-                          <span className="text-base font-black text-emerald-400 font-mono italic">
-                            {player.dotaMmr ? `${player.dotaMmr} MMR` : "—"}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-center">
-                        <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
-                          <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 block mb-0.5">
-                            Процент побед
-                          </span>
-                          <span className="text-xs font-black text-emerald-400">
-                            {player.dotaWinrate ? `${player.dotaWinrate}%` : "—"}
-                          </span>
-                        </div>
-                        <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
-                          <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 block mb-0.5">
-                            Всего матчей
-                          </span>
-                          <span className="text-xs font-black text-white">
-                            {player.dotaMatches ? player.dotaMatches : "—"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Top 3 signature heroes */}
-                      {player.dotaStats?.topHeroes && player.dotaStats.topHeroes.length > 0 && (
-                        <div className="space-y-2 pt-1 border-t border-white/5">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">
-                            Сигнатурные герои
-                          </span>
-                          <div className="grid grid-cols-3 gap-2">
-                            {player.dotaStats.topHeroes.map((h: any) => (
-                              <div
-                                key={h.heroId}
-                                className="bg-white/[0.03] p-2 rounded-xl border border-white/5 flex flex-col items-center text-center"
-                                title={`${h.heroNameRu}: ${h.games} игр, ${h.winrate}% побед`}
-                              >
-                                <img
-                                  src={h.iconUrl}
-                                  alt={h.heroNameRu}
-                                  className="w-10 h-7 rounded object-cover mb-1 border border-white/10"
-                                />
-                                <span className="text-[9px] font-bold text-gray-200 truncate w-full">
-                                  {h.heroNameRu}
-                                </span>
-                                <span className="text-[8px] font-black text-emerald-400">
-                                  {h.winrate}% WR
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-
             {/* Inventory Section */}
             <div className="bg-white/5 border border-white/10 rounded-3xl sm:rounded-[2.5rem] p-6 shadow-xl">
               <div className="flex items-center justify-between mb-6">

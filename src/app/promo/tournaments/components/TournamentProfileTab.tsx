@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { parseDotaRank } from "@/lib/dota-service";
 import {
   TournamentNotificationModal,
   TournamentNotificationData,
@@ -44,6 +45,7 @@ export function TournamentProfileTab({
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [syncingFaceit, setSyncingFaceit] = useState(false);
+  const [syncingDota, setSyncingDota] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Invite Modal states
@@ -132,9 +134,10 @@ export function TournamentProfileTab({
     }
   };
 
-  const handleSaveProfile = async (syncFaceit = false) => {
+  const handleSaveProfile = async (syncFaceit = false, syncDota = false) => {
     setSavingProfile(true);
     if (syncFaceit) setSyncingFaceit(true);
+    if (syncDota) setSyncingDota(true);
 
     try {
       const res = await fetch("/api/promo/player/tournament-profile", {
@@ -147,6 +150,7 @@ export function TournamentProfileTab({
           steamLink: editSteamLink,
           faceitLink: editFaceitLink,
           syncFaceitNow: syncFaceit,
+          syncDotaNow: syncDota,
         }),
       });
 
@@ -154,7 +158,7 @@ export function TournamentProfileTab({
       if (res.ok) {
         if (activeId) await fetchProfile(activeId);
         if (onRefreshPlayer) onRefreshPlayer();
-        if (!syncFaceit) {
+        if (!syncFaceit && !syncDota) {
           setShowEditModal(false);
           setModalNotification({
             type: "success",
@@ -162,13 +166,22 @@ export function TournamentProfileTab({
             message: "Ваш турнирный профиль успешно сохранен!",
             actionText: "Отлично",
           });
-        } else {
+        } else if (syncFaceit) {
           setModalNotification({
             type: "success",
             title: "Faceit синхронизирован",
             message: data.faceitSynced
               ? "Статистика Faceit (ELO, K/D, победы) успешно обновлена!"
               : "Данные Faceit сохранены.",
+            actionText: "Отлично",
+          });
+        } else if (syncDota) {
+          setModalNotification({
+            type: "success",
+            title: "Dota 2 синхронизирована",
+            message: data.dotaSynced
+              ? "Статистика Dota 2 (MMR, ранг, сигнатурные герои) успешно обновлена через OpenDota!"
+              : "Данные Dota 2 сохранены.",
             actionText: "Отлично",
           });
         }
@@ -191,6 +204,7 @@ export function TournamentProfileTab({
     } finally {
       setSavingProfile(false);
       setSyncingFaceit(false);
+      setSyncingDota(false);
     }
   };
 
@@ -400,8 +414,8 @@ export function TournamentProfileTab({
         </div>
       </motion.div>
 
-      {/* Esports Cards (Faceit & Steam) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Esports Cards (Faceit, Dota 2 & Steam) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {/* Faceit Card */}
         <div className="bg-[#0c0c0e] border border-white/5 rounded-3xl p-6 space-y-4 shadow-xl">
           <div className="flex justify-between items-center border-b border-white/5 pb-3">
@@ -412,7 +426,7 @@ export function TournamentProfileTab({
               {isSelf && p?.faceitLink && (
                 <button
                   type="button"
-                  onClick={() => handleSaveProfile(true)}
+                  onClick={() => handleSaveProfile(true, false)}
                   disabled={syncingFaceit}
                   className="text-[9px] font-black uppercase tracking-wider text-orange-400 hover:text-orange-300 transition-colors disabled:opacity-50 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-full border border-white/10"
                 >
@@ -509,6 +523,171 @@ export function TournamentProfileTab({
                   className="text-xs font-bold uppercase tracking-wider text-orange-400 hover:text-orange-300"
                 >
                   + Привязать Faceit
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Dota 2 Card */}
+        <div className="bg-[#0c0c0e] border border-white/5 rounded-3xl p-6 space-y-4 shadow-xl">
+          <div className="flex justify-between items-center border-b border-white/5 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-white">
+                Dota 2
+              </span>
+              <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+                OpenDota
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {isSelf && (p?.steamLink || p?.steamId) && (
+                <button
+                  type="button"
+                  onClick={() => handleSaveProfile(false, true)}
+                  disabled={syncingDota}
+                  className="text-[9px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-full border border-white/10"
+                >
+                  {syncingDota ? "Загрузка..." : "↻ Обновить"}
+                </button>
+              )}
+              <span
+                className={cn(
+                  "text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border",
+                  (p?.steamLink || p?.steamId || p?.dotaRankTier || p?.dotaMmr)
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : "bg-white/5 text-gray-500 border-white/5"
+                )}
+              >
+                {(p?.steamLink || p?.steamId || p?.dotaRankTier || p?.dotaMmr) ? "Привязан" : "Не привязан"}
+              </span>
+            </div>
+          </div>
+
+          {(p?.steamLink || p?.steamId || p?.dotaRankTier || p?.dotaMmr) ? (
+            <div className="space-y-4">
+              {(() => {
+                const dotaRank = parseDotaRank(p?.dotaRankTier, p?.dotaLeaderboardRank);
+                const dotaStats = typeof p?.dotaStats === "string" ? (() => { try { return JSON.parse(p.dotaStats); } catch { return null; } })() : p?.dotaStats;
+                const dotabuffUrl = dotaStats?.dotabuffUrl || (p?.steamId ? `https://www.dotabuff.com/players/${p.steamId}` : null);
+                const topHeroes = dotaStats?.topHeroes || [];
+
+                return (
+                  <>
+                    <div className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-black/60 border border-white/10 flex items-center justify-center shrink-0 p-1 shadow-md">
+                          <img
+                            src={dotaRank.badgeUrl}
+                            alt={dotaRank.nameRu}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
+                            Ранг Dota 2
+                          </span>
+                          <span
+                            className="text-sm font-black uppercase italic"
+                            style={{ color: dotaRank.color }}
+                          >
+                            {p?.dotaRankName || dotaRank.nameRu}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
+                          Рейтинг MMR
+                        </span>
+                        <span className="text-base font-black text-emerald-400 italic font-mono">
+                          {p?.dotaMmr ? `${p.dotaMmr} MMR` : (p?.dotaRankTier ? "Калиброван" : "—")}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 block mb-0.5">
+                          Процент побед
+                        </span>
+                        <span className="text-xs font-black text-emerald-400">
+                          {p?.dotaWinrate ? `${p.dotaWinrate}%` : "—"}
+                        </span>
+                      </div>
+                      <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 block mb-0.5">
+                          Матчи
+                        </span>
+                        <span className="text-xs font-black text-white">
+                          {p?.dotaMatches ? p.dotaMatches : "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {topHeroes.length > 0 && (
+                      <div className="space-y-2 pt-1 border-t border-white/5">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">
+                          Сигнатурные герои
+                        </span>
+                        <div className="grid grid-cols-3 gap-2">
+                          {topHeroes.slice(0, 3).map((h: any) => (
+                            <div
+                              key={h.heroId}
+                              className="bg-white/[0.03] p-2 rounded-xl border border-white/5 flex flex-col items-center text-center"
+                              title={`${h.heroNameRu || h.heroName}: ${h.games} игр, ${h.winrate}% побед`}
+                            >
+                              <img
+                                src={h.iconUrl}
+                                alt={h.heroNameRu || h.heroName}
+                                className="w-10 h-7 rounded object-cover mb-1 border border-white/10"
+                              />
+                              <span className="text-[9px] font-bold text-gray-200 truncate w-full">
+                                {h.heroNameRu || h.heroName}
+                              </span>
+                              <span className="text-[8px] font-black text-emerald-400">
+                                {h.winrate}% WR
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {dotabuffUrl ? (
+                      <a
+                        href={dotabuffUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full inline-flex items-center justify-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-black uppercase tracking-widest py-3 rounded-2xl transition-colors"
+                      >
+                        Открыть Dotabuff ↗
+                      </a>
+                    ) : (
+                      isSelf && (
+                        <button
+                          type="button"
+                          onClick={() => handleSaveProfile(false, true)}
+                          disabled={syncingDota}
+                          className="w-full inline-flex items-center justify-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-black uppercase tracking-widest py-3 rounded-2xl transition-colors disabled:opacity-50"
+                        >
+                          {syncingDota ? "Синхронизация..." : "↻ Синхронизировать OpenDota"}
+                        </button>
+                      )
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          ) : (
+            <div className="space-y-3 py-2">
+              <p className="text-xs text-gray-500 font-medium">Steam профиль еще не привязан для синхронизации Dota 2.</p>
+              {isSelf && (
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="text-xs font-bold uppercase tracking-wider text-red-400 hover:text-red-300"
+                >
+                  + Привязать Steam
                 </button>
               )}
             </div>
@@ -948,9 +1127,21 @@ export function TournamentProfileTab({
                     ⚠️ Ссылка steamcommunity.com/my не подходит. Это общая ссылка, которая открывает профиль любого открывшего её человека. Укажите прямую ссылку на ваш профиль (например: https://steamcommunity.com/id/... или https://steamcommunity.com/profiles/7656119...)
                   </p>
                 ) : (
-                  <p className="text-[9px] text-gray-500 font-medium">
-                    Укажите прямую ссылку на профиль или 17-значный SteamID64 (необходим игровому серверу CS2).
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[9px] text-gray-500 font-medium">
+                      Укажите прямую ссылку на профиль или 17-значный SteamID64 (используется для серверов CS2 и статистики Dota 2).
+                    </p>
+                    {editSteamLink && (
+                      <button
+                        type="button"
+                        onClick={() => handleSaveProfile(false, true)}
+                        disabled={syncingDota}
+                        className="text-[9px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 shrink-0"
+                      >
+                        {syncingDota ? "Синхронизация..." : "↻ Обновить Dota 2"}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -963,7 +1154,7 @@ export function TournamentProfileTab({
                   {editFaceitLink && (
                     <button
                       type="button"
-                      onClick={() => handleSaveProfile(true)}
+                      onClick={() => handleSaveProfile(true, false)}
                       disabled={syncingFaceit}
                       className="text-[9px] font-black uppercase tracking-wider text-orange-400 hover:text-orange-300 transition-colors disabled:opacity-50"
                     >

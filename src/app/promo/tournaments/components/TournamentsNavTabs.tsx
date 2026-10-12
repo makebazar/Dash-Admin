@@ -4,7 +4,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-export type TournamentTabType = "feed" | "team" | "profile" | "leaderboard";
+export type TournamentTabType = "feed" | "profile" | "leaderboard" | "team";
 
 interface TournamentsNavTabsProps {
   activeTab: TournamentTabType;
@@ -19,7 +19,6 @@ export function TournamentsNavTabs({
 }: TournamentsNavTabsProps) {
   const tabs: Array<{ id: TournamentTabType; label: string }> = [
     { id: "feed", label: "Турниры" },
-    { id: "team", label: "Моя Команда" },
     { id: "profile", label: selectedPlayerName ? `Профиль (${selectedPlayerName})` : "Профиль" },
     { id: "leaderboard", label: "Лидерборд" },
   ];

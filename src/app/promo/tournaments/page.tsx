@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { TournamentsHeader } from "./components/TournamentsHeader";
 import { TournamentsNavTabs, TournamentTabType } from "./components/TournamentsNavTabs";
 import { TournamentsFeedTab } from "./components/TournamentsFeedTab";
-import { MyTeamTab } from "./components/MyTeamTab";
 import { TournamentProfileTab } from "./components/TournamentProfileTab";
 import { LeaderboardTab } from "./components/LeaderboardTab";
 import { BottomNav } from "../components/BottomNav";
@@ -302,22 +301,7 @@ export default function TournamentsPortal() {
           />
         )}
 
-        {/* Tab 2: MY TEAM */}
-        {activeTab === "team" && (
-          <MyTeamTab
-            player={player}
-            teams={teams}
-            incomingInvites={incomingInvites}
-            outgoingInvites={outgoingInvites}
-            lftPlayers={lftPlayers}
-            activeTeamId={activeTeamId}
-            setActiveTeamId={setActiveTeamId}
-            onRefreshTeams={fetchPlayerAndTeam}
-            onSelectPlayer={handleSelectPlayer}
-          />
-        )}
-
-        {/* Tab 3: TOURNAMENT PROFILE */}
+        {/* Tab: TOURNAMENT PROFILE */}
         {activeTab === "profile" && (
           <TournamentProfileTab
             currentPlayer={player}
