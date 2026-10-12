@@ -50,12 +50,14 @@ export async function GET(
       ALTER TABLE club_cs2_matches ADD COLUMN IF NOT EXISTS config_data JSONB DEFAULT '{}'::jsonb;
     `);
 
-    // 1. Fetch agent state
+    // 1. Fetch agent state (pick freshest active agent for this club)
     const agentRes = await query(
       `SELECT club_id, lan_ip, base_port, max_instances, instances_data, last_heartbeat,
-              (last_heartbeat > NOW() - INTERVAL '15 seconds') as is_online
+              (last_heartbeat > NOW() - INTERVAL '60 seconds') as is_online
        FROM club_cs2_agents
-       WHERE club_id = $1`,
+       WHERE club_id = $1
+       ORDER BY last_heartbeat DESC
+       LIMIT 1`,
       [parsedClubId]
     );
 

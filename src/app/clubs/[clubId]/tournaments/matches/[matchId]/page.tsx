@@ -34,6 +34,7 @@ import {
   Gamepad2,
   Calendar,
   Save,
+  ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseCs2StatusPlayers } from "@/lib/cs2/utils";
@@ -116,8 +117,19 @@ export default function MatchControlPage() {
   // Dota 2 state
   const [dotaLobby, setDotaLobby] = useState<any>(null);
   const [isLaunchingDotaGame, setIsLaunchingDotaGame] = useState(false);
+  const [isFlippingDotaTeams, setIsFlippingDotaTeams] = useState(false);
+  const [isResendingDotaInvites, setIsResendingDotaInvites] = useState(false);
+  const [inviteCooldown, setInviteCooldown] = useState(0);
   const [copiedLobbyName, setCopiedLobbyName] = useState(false);
   const [copiedLobbyPassword, setCopiedLobbyPassword] = useState(false);
+
+  useEffect(() => {
+    if (inviteCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setInviteCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [inviteCooldown]);
 
   // Active Control Tab
   const [activeTab, setActiveTab] = useState<"server" | "rcon" | "players" | "schedule">("server");
@@ -218,6 +230,7 @@ export default function MatchControlPage() {
           selectedMap: finalMap,
           knifeRound,
           practiceMode,
+          flipSides: isDotaFlipped,
         }),
       });
       const data = await res.json();
@@ -289,6 +302,62 @@ export default function MatchControlPage() {
       alert("Ошибка сети");
     } finally {
       setIsLaunchingDotaGame(false);
+    }
+  };
+
+  const handleFlipDotaTeams = async () => {
+    setIsFlippingDotaTeams(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "flip_dota_teams",
+          matchId: match.id,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchMatchData();
+        if (data.radiantName && data.direName) {
+          alert(`Стороны изменены: Radiant — ${data.radiantName}, Dire — ${data.direName}`);
+        }
+      } else {
+        alert(data.error || "Не удалось поменять стороны");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети при смене сторон");
+    } finally {
+      setIsFlippingDotaTeams(false);
+    }
+  };
+
+  const handleResendDotaInvites = async (accountId?: string) => {
+    if (inviteCooldown > 0 || isResendingDotaInvites) return;
+    setIsResendingDotaInvites(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "resend_dota_invites",
+          matchId: match.id,
+          accountId,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setInviteCooldown(15);
+        alert(data.message || "Приглашения в лобби Dota 2 повторно отправлены игрокам!");
+      } else {
+        alert(data.error || "Не удалось отправить приглашения в лобби Dota 2");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети при отправке приглашений");
+    } finally {
+      setIsResendingDotaInvites(false);
     }
   };
 
@@ -474,6 +543,9 @@ export default function MatchControlPage() {
   const compA = match.competitorA;
   const compB = match.competitorB;
   const isDota = match.tournamentDiscipline === "dota2" || match.discipline === "dota2";
+  const isDotaFlipped = Boolean(dotaLobby?.flipped || match.result?.dota_lobby?.flipped);
+  const radiantTeamName = isDotaFlipped ? (compB?.name || "Команда 2") : (compA?.name || "Команда 1");
+  const direTeamName = isDotaFlipped ? (compA?.name || "Команда 1") : (compB?.name || "Команда 2");
   const statusLower = match.status?.toLowerCase() || "scheduled";
   const isFinished = statusLower === "finished";
   const isDotaLobbyReady = dotaLobby?.status === "lobby_ready" || dotaLobby?.status === "ready";
@@ -561,11 +633,11 @@ export default function MatchControlPage() {
               <div className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-0.5 border",
                 isDota
-                  ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                  ? (isDotaFlipped ? "bg-rose-500/10 border-rose-500/25 text-rose-400" : "bg-emerald-500/10 border-emerald-500/25 text-emerald-400")
                   : "bg-sky-500/10 border-sky-500/25 text-sky-400"
               )}>
-                <Shield className="w-3 h-3" />
-                <span>{isDota ? "СИЛЫ СВЕТА (RADIANT)" : "СПЕЦНАЗ (CT)"}</span>
+                {isDota ? (isDotaFlipped ? <Flame className="w-3 h-3" /> : <Shield className="w-3 h-3" />) : <Shield className="w-3 h-3" />}
+                <span>{isDota ? (isDotaFlipped ? "СИЛЫ ТЬМЫ (DIRE)" : "СИЛЫ СВЕТА (RADIANT)") : "СПЕЦНАЗ (CT)"}</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
                 {compA?.name || "Ожидает пару..."}
@@ -581,27 +653,27 @@ export default function MatchControlPage() {
                 <span className={cn(
                   "px-2 py-0.5 rounded-md border font-mono font-bold",
                   isDota
-                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    ? (isDotaFlipped ? "text-rose-400 bg-rose-500/10 border-rose-500/20" : "text-emerald-400 bg-emerald-500/10 border-emerald-500/20")
                     : "text-sky-400 bg-sky-500/10 border-sky-500/20"
                 )}>
-                  {isDota ? "RADIANT" : "CT"}
+                  {isDota ? (isDotaFlipped ? "DIRE" : "RADIANT") : "CT"}
                 </span>
                 <span className="text-gray-600 font-mono text-[10px]">VS</span>
                 <span className={cn(
                   "px-2 py-0.5 rounded-md border font-mono font-bold",
                   isDota
-                    ? "text-rose-400 bg-rose-500/10 border-rose-500/20"
+                    ? (isDotaFlipped ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-rose-400 bg-rose-500/10 border-rose-500/20")
                     : "text-orange-400 bg-orange-500/10 border-orange-500/20"
                 )}>
-                  {isDota ? "DIRE" : "T"}
+                  {isDota ? (isDotaFlipped ? "RADIANT" : "DIRE") : "T"}
                 </span>
               </div>
               <div className="text-4xl sm:text-6xl font-black font-mono tracking-tight text-white flex items-center justify-center gap-3">
-                <span className={cn(match.winnerId === compA?.id ? "text-emerald-400" : isDota ? "text-emerald-300" : "text-sky-400")}>
+                <span className={cn(match.winnerId === compA?.id ? "text-emerald-400" : isDota ? (isDotaFlipped ? "text-rose-300" : "text-emerald-300") : "text-sky-400")}>
                   {match.score1 ?? 0}
                 </span>
                 <span className="text-gray-500 font-sans font-light">:</span>
-                <span className={cn(match.winnerId === compB?.id ? "text-emerald-400" : isDota ? "text-rose-300" : "text-orange-400")}>
+                <span className={cn(match.winnerId === compB?.id ? "text-emerald-400" : isDota ? (isDotaFlipped ? "text-emerald-300" : "text-rose-300") : "text-orange-400")}>
                   {match.score2 ?? 0}
                 </span>
               </div>
@@ -621,11 +693,11 @@ export default function MatchControlPage() {
               <div className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-0.5 border",
                 isDota
-                  ? "bg-rose-500/10 border-rose-500/25 text-rose-400"
+                  ? (isDotaFlipped ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-rose-500/10 border-rose-500/25 text-rose-400")
                   : "bg-orange-500/10 border-orange-500/25 text-orange-400"
               )}>
-                <Flame className="w-3 h-3" />
-                <span>{isDota ? "СИЛЫ ТЬМЫ (DIRE)" : "ТЕРРОРИСТЫ (T)"}</span>
+                {isDota ? (isDotaFlipped ? <Shield className="w-3 h-3" /> : <Flame className="w-3 h-3" />) : <Flame className="w-3 h-3" />}
+                <span>{isDota ? (isDotaFlipped ? "СИЛЫ СВЕТА (RADIANT)" : "СИЛЫ ТЬМЫ (DIRE)") : "ТЕРРОРИСТЫ (T)"}</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
                 {compB?.name || "Ожидает пару..."}
@@ -919,17 +991,53 @@ export default function MatchControlPage() {
                         </div>
                       </div>
 
-                      {/* Sides Assignment */}
-                      <div className="p-3.5 bg-black/40 rounded-2xl border border-white/5 text-xs text-gray-300 flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                          <span className="text-emerald-400 font-bold">Силы Света (Radiant):</span>
-                          <span>{compA?.name || "Команда 1"}</span>
+                      {/* Sides Assignment with Flip & Resend Buttons */}
+                      <div className="p-4 bg-black/40 rounded-2xl border border-white/5 space-y-3">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-4 flex-wrap text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                              <span className="text-emerald-400 font-bold">Силы Света (Radiant):</span>
+                              <span className="font-semibold text-white">{radiantTeamName}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+                              <span className="text-rose-400 font-bold">Силы Тьмы (Dire):</span>
+                              <span className="font-semibold text-white">{direTeamName}</span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isFlippingDotaTeams}
+                            onClick={handleFlipDotaTeams}
+                            className="px-3 py-1.5 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            <ArrowLeftRight className={cn("w-3.5 h-3.5", isFlippingDotaTeams && "animate-spin")} />
+                            <span>{isFlippingDotaTeams ? "Смена..." : "Поменять стороны ⇄"}</span>
+                          </button>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
-                          <span className="text-rose-400 font-bold">Силы Тьмы (Dire):</span>
-                          <span>{compB?.name || "Команда 2"}</span>
+
+                        {/* Resend invite button with cooldown */}
+                        <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-3 flex-wrap">
+                          <span className="text-[11px] text-gray-400">
+                            Игроки не получили инвайт или возник кулдаун в Steam?
+                          </span>
+                          <button
+                            type="button"
+                            disabled={isResendingDotaInvites || inviteCooldown > 0}
+                            onClick={() => handleResendDotaInvites()}
+                            className="px-3.5 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            <Send className={cn("w-3.5 h-3.5", isResendingDotaInvites && "animate-pulse")} />
+                            <span>
+                              {isResendingDotaInvites
+                                ? "Отправка..."
+                                : inviteCooldown > 0
+                                ? `Кулдаун (${inviteCooldown}с)`
+                                : "Отправить инвайты повторно ↻"}
+                            </span>
+                          </button>
                         </div>
                       </div>
 
@@ -995,6 +1103,32 @@ export default function MatchControlPage() {
                       <p className="text-xs text-gray-400 leading-relaxed">
                         Бот DashMatch автоматически создаст лобби в Dota 2 с заданным регламентом, распределит команды по сторонам (Radiant / Dire) и разошлет приглашения игрокам по Steam ID.
                       </p>
+
+                      {/* Sides Preview before launch */}
+                      <div className="p-3.5 bg-black/40 rounded-2xl border border-white/5 flex items-center justify-between flex-wrap gap-2 text-xs">
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                            <span className="text-emerald-400 font-bold">Radiant:</span>
+                            <span className="font-semibold text-white">{radiantTeamName}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+                            <span className="text-rose-400 font-bold">Dire:</span>
+                            <span className="font-semibold text-white">{direTeamName}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={isFlippingDotaTeams}
+                          onClick={handleFlipDotaTeams}
+                          className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <ArrowLeftRight className={cn("w-3.5 h-3.5", isFlippingDotaTeams && "animate-spin")} />
+                          <span>Поменять стороны ⇄</span>
+                        </button>
+                      </div>
 
                       <div className="space-y-2.5">
                         <button

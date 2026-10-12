@@ -44,9 +44,11 @@ export async function POST(
     // 1. Check agent state to get IP and free port
     const agentRes = await query(
       `SELECT lan_ip, base_port, max_instances, instances_data,
-              (last_heartbeat > NOW() - INTERVAL '30 seconds') as is_online
+              (last_heartbeat > NOW() - INTERVAL '60 seconds') as is_online
        FROM club_cs2_agents
-       WHERE club_id = $1`,
+       WHERE club_id = $1
+       ORDER BY last_heartbeat DESC
+       LIMIT 1`,
       [parsedClubId]
     );
 

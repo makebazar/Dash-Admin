@@ -99,6 +99,7 @@ export interface LaunchDotaMatchOptions {
   serverRegion?: string;
   password?: string;
   gameName?: string;
+  flipSides?: boolean;
 }
 
 /**
@@ -117,7 +118,7 @@ export async function launchDotaMatch(
 
   // 1. Fetch match and tournament details
   const matchRes = await client.query(
-    `SELECT m.id, m.competitor_a_id, m.competitor_b_id, m.tournament_id,
+    `SELECT m.id, m.competitor_a_id, m.competitor_b_id, m.tournament_id, m.result,
             t.name as tournament_name, t.type as tournament_type, t.config as tournament_config,
             ca.display_name as name_a, cb.display_name as name_b
      FROM tournament_matches m
@@ -133,12 +134,22 @@ export async function launchDotaMatch(
   }
 
   const matchData = matchRes.rows[0];
-  const nameA = matchData.name_a || "Radiant";
-  const nameB = matchData.name_b || "Dire";
+  const nameA = matchData.name_a || "Команда 1";
+  const nameB = matchData.name_b || "Команда 2";
+
+  // Determine flipped status
+  const isFlipped = options?.flipSides !== undefined
+    ? Boolean(options.flipSides)
+    : Boolean(matchData.result?.dota_lobby?.flipped);
+
+  const radiantCompId = isFlipped ? matchData.competitor_b_id : matchData.competitor_a_id;
+  const direCompId = isFlipped ? matchData.competitor_a_id : matchData.competitor_b_id;
+  const radiantName = isFlipped ? nameB : nameA;
+  const direName = isFlipped ? nameA : nameB;
 
   // 2. Resolve roster steam IDs
-  const radiantSteamIds = await getCompetitorSteamIds(client, matchData.competitor_a_id);
-  const direSteamIds = await getCompetitorSteamIds(client, matchData.competitor_b_id);
+  const radiantSteamIds = await getCompetitorSteamIds(client, radiantCompId);
+  const direSteamIds = await getCompetitorSteamIds(client, direCompId);
 
   // 3. Resolve Game Mode & Server Region
   const tConfig = matchData.tournament_config || {};
@@ -179,11 +190,16 @@ export async function launchDotaMatch(
       password,
       resolvedGameMode,
       resolvedRegion,
-      nameA,
-      nameB,
+      radiantName,
+      direName,
       JSON.stringify({
         radiant: radiantSteamIds,
         dire: direSteamIds,
+        radiant_name: radiantName,
+        dire_name: direName,
+        radiant_competitor_id: radiantCompId,
+        dire_competitor_id: direCompId,
+        flipped: isFlipped,
         tournament_id: matchData.tournament_id,
         tournament_name: matchData.tournament_name,
       }),
@@ -196,8 +212,13 @@ export async function launchDotaMatch(
     password: password,
     game_mode: resolvedGameMode,
     server_region: resolvedRegion,
+    radiant_name: radiantName,
+    dire_name: direName,
+    radiant_competitor_id: radiantCompId,
+    dire_competitor_id: direCompId,
     radiant_steam_ids: radiantSteamIds,
     dire_steam_ids: direSteamIds,
+    flipped: isFlipped,
     status: "starting",
   };
 
@@ -220,10 +241,20 @@ export async function launchDotaMatch(
       server_region: resolvedRegion,
       radiant: radiantSteamIds,
       dire: direSteamIds,
+      radiant_name: radiantName,
+      dire_name: direName,
+      flipped: isFlipped,
     },
   };
 
   const delivered = broadcastSseCommand(clubId, ssePayload);
+
+  // Fallback queue in club_cs2_commands
+  await client.query(
+    `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+     VALUES ($1, 'START_DOTA_MATCH', $2, $3::jsonb, 'pending')`,
+    [clubId, cleanMatchId, JSON.stringify(ssePayload.payload)]
+  ).catch(() => {});
 
   // 7. Real-time PostgreSQL NOTIFY for UI updates
   await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(cleanMatchId)]).catch(() => {});
@@ -239,6 +270,200 @@ export async function launchDotaMatch(
     password,
     gameMode: resolvedGameMode,
     serverRegion: resolvedRegion,
+    radiantName,
+    direName,
+    flipped: isFlipped,
+  };
+}
+
+/**
+ * Swaps Radiant and Dire sides for an existing or scheduled Dota 2 match lobby
+ */
+export async function flipDotaTeams(
+  client: any,
+  clubId: number,
+  matchId: string | number
+) {
+  const cleanMatchId = String(matchId).replace(/^dm-dota-/, "").replace(/^dm-tourney-/, "").replace(/^dm-/, "");
+  const dmMatchId = `dm-dota-${cleanMatchId}`;
+
+  const curRes = await client.query(
+    `SELECT m.id, m.competitor_a_id, m.competitor_b_id, m.tournament_id, m.result,
+            ca.display_name as name_a, cb.display_name as name_b,
+            cdm.team1_name, cdm.team2_name, cdm.extra
+     FROM tournament_matches m
+     LEFT JOIN tournament_competitors ca ON m.competitor_a_id = ca.id
+     LEFT JOIN tournament_competitors cb ON m.competitor_b_id = cb.id
+     LEFT JOIN club_dota_matches cdm ON (cdm.id = $1 OR cdm.tournament_match_id = $2)
+     WHERE m.id = $2`,
+    [dmMatchId, cleanMatchId]
+  ).catch(() => ({ rows: [] }));
+
+  if (curRes.rows.length === 0) {
+    throw new Error(`Матч #${cleanMatchId} не найден`);
+  }
+
+  const row = curRes.rows[0];
+  const currentLobby = row.result?.dota_lobby || {};
+  const currentExtra = row.extra || {};
+  const currentlyFlipped = Boolean(currentLobby.flipped || currentExtra.flipped);
+  const nextFlipped = !currentlyFlipped;
+
+  const nameA = row.name_a || "Команда 1";
+  const nameB = row.name_b || "Команда 2";
+
+  const radiantCompId = nextFlipped ? row.competitor_b_id : row.competitor_a_id;
+  const direCompId = nextFlipped ? row.competitor_a_id : row.competitor_b_id;
+  const radiantName = nextFlipped ? nameB : nameA;
+  const direName = nextFlipped ? nameA : nameB;
+
+  const radiantSteamIds = await getCompetitorSteamIds(client, radiantCompId);
+  const direSteamIds = await getCompetitorSteamIds(client, direCompId);
+
+  // Update club_dota_matches if exists
+  const updatedExtra = {
+    ...currentExtra,
+    radiant: radiantSteamIds,
+    dire: direSteamIds,
+    radiant_name: radiantName,
+    dire_name: direName,
+    radiant_competitor_id: radiantCompId,
+    dire_competitor_id: direCompId,
+    flipped: nextFlipped,
+  };
+
+  await client.query(
+    `UPDATE club_dota_matches
+     SET team1_name = $1, team2_name = $2, extra = $3::jsonb, updated_at = NOW()
+     WHERE (id = $4 OR tournament_match_id = $5) AND club_id = $6`,
+    [radiantName, direName, JSON.stringify(updatedExtra), dmMatchId, cleanMatchId, clubId]
+  ).catch(() => {});
+
+  // Update tournament_matches result
+  const updatedLobby = {
+    ...currentLobby,
+    radiant_name: radiantName,
+    dire_name: direName,
+    radiant_competitor_id: radiantCompId,
+    dire_competitor_id: direCompId,
+    radiant_steam_ids: radiantSteamIds,
+    dire_steam_ids: direSteamIds,
+    flipped: nextFlipped,
+  };
+
+  await client.query(
+    `UPDATE tournament_matches
+     SET result = jsonb_set(COALESCE(result, '{}'::jsonb), '{dota_lobby}', $1::jsonb)
+     WHERE id = $2`,
+    [JSON.stringify(updatedLobby), cleanMatchId]
+  ).catch(() => {});
+
+  // Broadcast command to DashMatch bot via SSE
+  const sseCmd = {
+    type: "FLIP_DOTA_TEAMS",
+    match_id: String(cleanMatchId),
+    payload: {
+      flipped: nextFlipped,
+      radiant: radiantSteamIds,
+      dire: direSteamIds,
+      radiant_name: radiantName,
+      dire_name: direName,
+    },
+  };
+  const delivered = broadcastSseCommand(clubId, sseCmd);
+
+  // Fallback queue in club_cs2_commands
+  await client.query(
+    `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+     VALUES ($1, 'FLIP_DOTA_TEAMS', $2, $3::jsonb, 'pending')`,
+    [clubId, cleanMatchId, JSON.stringify(sseCmd.payload)]
+  ).catch(() => {});
+
+  // Notify UI
+  await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(cleanMatchId)]).catch(() => {});
+  if (row.tournament_id) {
+    await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(row.tournament_id)]).catch(() => {});
+  }
+
+  return {
+    success: true,
+    flipped: nextFlipped,
+    radiantName,
+    direName,
+    delivered,
+  };
+}
+
+/**
+ * Resends in-game lobby invites to players (all or specific target player)
+ */
+export async function resendDotaInvites(
+  client: any,
+  clubId: number,
+  matchId: string | number,
+  targetAccountOrSteamId?: string
+) {
+  const cleanMatchId = String(matchId).replace(/^dm-dota-/, "").replace(/^dm-tourney-/, "").replace(/^dm-/, "");
+
+  let steamIdsToInvite: string[] = [];
+  if (targetAccountOrSteamId) {
+    steamIdsToInvite = [String(targetAccountOrSteamId).trim()];
+  } else {
+    // Admin resend: gather all players from match
+    const matchRes = await client.query(
+      `SELECT competitor_a_id, competitor_b_id FROM tournament_matches WHERE id = $1`,
+      [cleanMatchId]
+    ).catch(() => ({ rows: [] }));
+
+    if (matchRes.rows.length > 0) {
+      const ca = matchRes.rows[0].competitor_a_id;
+      const cb = matchRes.rows[0].competitor_b_id;
+      const idsA = await getCompetitorSteamIds(client, ca);
+      const idsB = await getCompetitorSteamIds(client, cb);
+      steamIdsToInvite = Array.from(new Set([...idsA, ...idsB]));
+    }
+  }
+
+  if (steamIdsToInvite.length === 0) {
+    throw new Error("Не найдены Steam ID игроков для отправки приглашения");
+  }
+
+  let delivered = false;
+  if (steamIdsToInvite.length === 1) {
+    const sseCmd = {
+      type: "INVITE_DOTA_PLAYER",
+      match_id: String(cleanMatchId),
+      payload: {
+        account_id: steamIdsToInvite[0],
+      },
+    };
+    delivered = broadcastSseCommand(clubId, sseCmd);
+    await client.query(
+      `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+       VALUES ($1, 'INVITE_DOTA_PLAYER', $2, $3::jsonb, 'pending')`,
+      [clubId, cleanMatchId, JSON.stringify(sseCmd.payload)]
+    ).catch(() => {});
+  } else {
+    const sseCmd = {
+      type: "INVITE_ALL_DOTA_PLAYERS",
+      match_id: String(cleanMatchId),
+      payload: {
+        players: steamIdsToInvite,
+      },
+    };
+    delivered = broadcastSseCommand(clubId, sseCmd);
+    await client.query(
+      `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+       VALUES ($1, 'INVITE_ALL_DOTA_PLAYERS', $2, $3::jsonb, 'pending')`,
+      [clubId, cleanMatchId, JSON.stringify(sseCmd.payload)]
+    ).catch(() => {});
+  }
+
+  return {
+    success: true,
+    delivered,
+    invitedCount: steamIdsToInvite.length,
+    targets: steamIdsToInvite,
   };
 }
 

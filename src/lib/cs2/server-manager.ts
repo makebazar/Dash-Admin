@@ -22,8 +22,8 @@ export async function allocateServerSlot(
   const agentsRes = await client.query(
     `SELECT agent_id, lan_ip, base_port, max_instances, last_heartbeat
      FROM club_cs2_agents
-     WHERE club_id = $1 AND last_heartbeat > NOW() - INTERVAL '45 seconds'
-     ORDER BY updated_at ASC`,
+     WHERE club_id = $1 AND last_heartbeat > NOW() - INTERVAL '60 seconds'
+     ORDER BY last_heartbeat DESC`,
     [clubId]
   ).catch(() => ({ rows: [] }));
 

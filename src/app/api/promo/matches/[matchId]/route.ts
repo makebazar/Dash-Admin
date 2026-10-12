@@ -7,7 +7,7 @@ import { normalizeCS2Map } from "@/lib/cs2/utils";
 import { verifySessionValue } from "@/lib/session";
 import { resolveSteamId64, validateSteamInput } from "@/lib/steam-resolver";
 import { launchOrQueueMatchServer, processServerQueue } from "@/lib/cs2/server-manager";
-import { launchDotaMatch, stopDotaMatch } from "@/lib/dota/server-manager";
+import { launchDotaMatch, stopDotaMatch, resendDotaInvites, flipDotaTeams } from "@/lib/dota/server-manager";
 
 async function ensureMatchLobbyTables(client: any) {
   try {
@@ -424,9 +424,11 @@ export async function GET(
     // 6. Fetch club CS2 agent status
     const agentRes = await client.query(
       `SELECT lan_ip, base_port, max_instances, last_heartbeat,
-              (last_heartbeat > NOW() - INTERVAL '30 seconds') as is_online
+              (last_heartbeat > NOW() - INTERVAL '60 seconds') as is_online
        FROM club_cs2_agents
-       WHERE club_id = $1`,
+       WHERE club_id = $1
+       ORDER BY last_heartbeat DESC
+       LIMIT 1`,
       [matchClubId]
     ).catch(() => ({ rows: [] }));
 
@@ -1122,7 +1124,7 @@ export async function POST(
       );
 
       const agentRes = await client.query(
-        `SELECT lan_ip, base_port FROM club_cs2_agents WHERE club_id = $1`,
+        `SELECT lan_ip, base_port FROM club_cs2_agents WHERE club_id = $1 ORDER BY last_heartbeat DESC LIMIT 1`,
         [matchClubId]
       ).catch(() => ({ rows: [] }));
       const agent = agentRes.rows[0];
@@ -1309,6 +1311,34 @@ export async function POST(
         await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(match.tournament_id)]).catch(() => {});
       }
       return NextResponse.json({ success: true, message: "Лобби сброшено" });
+    }
+
+    // ACTION: RESEND_DOTA_INVITE (Player or Admin requesting Dota 2 lobby invite)
+    if (action === "resend_dota_invite") {
+      let targetSteam = body.steamId;
+      if (!targetSteam) {
+        const pRes = await client.query(
+          `SELECT steam_id FROM promo_players WHERE id::text = $1 OR phone_number = $1`,
+          [String(playerId)]
+        ).catch(() => ({ rows: [] }));
+        targetSteam = pRes.rows[0]?.steam_id;
+      }
+
+      if (!targetSteam && isAdmin && body.accountId) {
+        targetSteam = body.accountId;
+      }
+
+      if (!targetSteam) {
+        return NextResponse.json({
+          error: "Steam ID не найден. Пожалуйста, привяжите Steam ID в турнирном профиле."
+        }, { status: 400 });
+      }
+
+      const inviteRes = await resendDotaInvites(client, matchClubId, parsedMatchId, targetSteam);
+      return NextResponse.json({
+        ...inviteRes,
+        message: "Приглашение в лобби Dota 2 отправлено! Проверьте приглашение в игре.",
+      });
     }
 
     return NextResponse.json({ error: "Неверное действие" }, { status: 400 });

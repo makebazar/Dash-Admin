@@ -391,6 +391,18 @@ export default function MatchLobby() {
   const [vetoCountdown, setVetoCountdown] = useState(45);
   const [selectedStatsTab, setSelectedStatsTab] = useState<string>("all");
 
+  // Dota 2 invite states
+  const [isResendingDotaInvite, setIsResendingDotaInvite] = useState(false);
+  const [dotaInviteCooldown, setDotaInviteCooldown] = useState(0);
+
+  useEffect(() => {
+    if (dotaInviteCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setDotaInviteCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [dotaInviteCooldown]);
+
   // Spectator states
   const [isJoiningSpec, setIsJoiningSpec] = useState(false);
   const [showSpecModal, setShowSpecModal] = useState(false);
@@ -701,6 +713,33 @@ export default function MatchLobby() {
     window.location.href = `steam://connect/${ip}:${port}`;
   };
 
+  const handleResendDotaInvite = async () => {
+    if (dotaInviteCooldown > 0 || isResendingDotaInvite) return;
+    setIsResendingDotaInvite(true);
+    try {
+      const res = await fetch(`/api/promo/matches/${matchId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "resend_dota_invite",
+          steamId: player?.steam_id,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDotaInviteCooldown(15);
+        alert(data.message || "Приглашение отправлено! Проверьте клиент Steam или Dota 2.");
+      } else {
+        alert(data.error || "Не удалось отправить повторное приглашение в лобби");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети при отправке приглашения");
+    } finally {
+      setIsResendingDotaInvite(false);
+    }
+  };
+
   // --- Hooks must come before any early return (Rules of Hooks) ---
   const compA = match?.competitorA;
   const compB = match?.competitorB;
@@ -790,8 +829,33 @@ export default function MatchLobby() {
   const isWinnerA = isFinished && match.winnerId === compA?.id;
   const isWinnerB = isFinished && match.winnerId === compB?.id;
 
-  const sideA = isDota ? "Radiant" : (isTeam1Ct ? "CT" : "T");
-  const sideB = isDota ? "Dire" : (isTeam1Ct ? "T" : "CT");
+  const isDotaFlipped = Boolean(match.dotaLobby?.flipped || match.result?.dota_lobby?.flipped);
+  const sideA = isDota ? (isDotaFlipped ? "Dire" : "Radiant") : (isTeam1Ct ? "CT" : "T");
+  const sideB = isDota ? (isDotaFlipped ? "Radiant" : "Dire") : (isTeam1Ct ? "T" : "CT");
+
+  const isPlayerInCompA = useMemo(() => {
+    if (!player || !compA) return false;
+    const pId = String(player.id || "");
+    const pPhone = String(player.phone_number || "");
+    const check = (t: any) => t && (String(t) === pId || (pPhone && String(t) === pPhone));
+    if (check(compA.playerId) || check(compA.captainId) || check(compA.id)) return true;
+    if (compA.roster?.some((p: any) => check(p.id) || check(p.player_id) || check(p.phone))) return true;
+    return false;
+  }, [player, compA]);
+
+  const isPlayerInCompB = useMemo(() => {
+    if (!player || !compB) return false;
+    const pId = String(player.id || "");
+    const pPhone = String(player.phone_number || "");
+    const check = (t: any) => t && (String(t) === pId || (pPhone && String(t) === pPhone));
+    if (check(compB.playerId) || check(compB.captainId) || check(compB.id)) return true;
+    if (compB.roster?.some((p: any) => check(p.id) || check(p.player_id) || check(p.phone))) return true;
+    return false;
+  }, [player, compB]);
+
+  const myDotaSide = isDota
+    ? (isPlayerInCompA ? sideA : isPlayerInCompB ? sideB : null)
+    : null;
 
   const getMessageDetails = (m: ChatMessage) => {
     const rawSide = (m.sender_side || "").toUpperCase();
@@ -1673,6 +1737,86 @@ export default function MatchLobby() {
                               </div>
                             </div>
 
+                            {/* Sides Allocation Card */}
+                            <div className="p-3.5 bg-white/5 rounded-xl border border-white/5 space-y-2.5">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                                  <span>⚔️ Распределение по сторонам:</span>
+                                </span>
+                                {myDotaSide && (
+                                  <span className={cn(
+                                    "px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider border",
+                                    myDotaSide === "Radiant"
+                                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                                      : "bg-rose-500/20 text-rose-400 border-rose-500/30"
+                                  )}>
+                                    Ваша сторона: {myDotaSide === "Radiant" ? "Radiant (Силы Света)" : "Dire (Силы Тьмы)"}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <div className={cn(
+                                  "p-2.5 rounded-xl border flex items-center justify-between gap-2",
+                                  myDotaSide === "Radiant" ? "bg-emerald-500/10 border-emerald-500/30" : "bg-black/40 border-white/5"
+                                )}>
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0"></span>
+                                    <span className="text-emerald-400 font-bold shrink-0">Radiant:</span>
+                                    <span className="font-semibold text-white truncate">
+                                      {sideA === "Radiant" ? (compA?.name || "Команда 1") : (compB?.name || "Команда 2")}
+                                    </span>
+                                  </div>
+                                  {myDotaSide === "Radiant" && (
+                                    <span className="text-[10px] font-bold text-emerald-400 uppercase shrink-0">Вы здесь</span>
+                                  )}
+                                </div>
+
+                                <div className={cn(
+                                  "p-2.5 rounded-xl border flex items-center justify-between gap-2",
+                                  myDotaSide === "Dire" ? "bg-rose-500/10 border-rose-500/30" : "bg-black/40 border-white/5"
+                                )}>
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shrink-0"></span>
+                                    <span className="text-rose-400 font-bold shrink-0">Dire:</span>
+                                    <span className="font-semibold text-white truncate">
+                                      {sideB === "Dire" ? (compB?.name || "Команда 2") : (compA?.name || "Команда 1")}
+                                    </span>
+                                  </div>
+                                  {myDotaSide === "Dire" && (
+                                    <span className="text-[10px] font-bold text-rose-400 uppercase shrink-0">Вы здесь</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Resend invite button with cooldown */}
+                            <div className="flex items-center justify-between gap-3 p-3 bg-black/40 rounded-xl border border-white/5 flex-wrap">
+                              <div className="space-y-0.5">
+                                <div className="text-xs font-bold text-gray-200">
+                                  Не пришло приглашение в игре?
+                                </div>
+                                <div className="text-[10px] text-gray-400">
+                                  Бот DashMatch отправит инвайт повторно прямо в клиенте Dota 2
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isResendingDotaInvite || dotaInviteCooldown > 0}
+                                onClick={handleResendDotaInvite}
+                                className="px-3.5 py-2 rounded-xl bg-orange-500/15 hover:bg-orange-500/25 text-orange-400 border border-orange-500/30 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                              >
+                                <Send className={cn("w-3.5 h-3.5", isResendingDotaInvite && "animate-pulse")} />
+                                <span>
+                                  {isResendingDotaInvite
+                                    ? "Отправка..."
+                                    : dotaInviteCooldown > 0
+                                    ? `Подождите ${dotaInviteCooldown}с`
+                                    : "Отправить повторно приглашение в лобби ↻"}
+                                </span>
+                              </button>
+                            </div>
+
                             <div className="text-[11px] text-gray-400 bg-white/5 p-3 rounded-xl border border-white/5 space-y-1">
                               <div className="text-gray-200 font-bold flex items-center gap-1.5">
                                 <span>🎮 Как зайти в матч:</span>
@@ -1684,7 +1828,7 @@ export default function MatchLobby() {
                                 2. Найдите в списке лобби по названию и введите пароль выше.
                               </div>
                               <div>
-                                3. Займите слот вашей команды: <strong>Radiant</strong> ({match.competitorA?.name || "Команда 1"}) или <strong>Dire</strong> ({match.competitorB?.name || "Команда 2"}).
+                                3. Займите слот вашей команды: <strong>{sideA === "Radiant" ? (compA?.name || "Команда 1") : (compB?.name || "Команда 2")}</strong> за Radiant или <strong>{sideB === "Dire" ? (compB?.name || "Команда 2") : (compA?.name || "Команда 1")}</strong> за Dire.
                               </div>
                               <div className="text-orange-400 text-[10px] pt-1">
                                 💡 Если к вашему профилю привязан Steam ID, бот DashMatch автоматически отправит приглашение в лобби прямо в игре!

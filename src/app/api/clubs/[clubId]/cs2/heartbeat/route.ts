@@ -121,6 +121,8 @@ export async function POST(
           config_url: p.config_url || "",
           auth_token: p.auth_token || "",
           command: p.command || "",
+          payload: p,
+          ...p,
         });
       }
 

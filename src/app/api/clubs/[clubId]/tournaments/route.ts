@@ -14,7 +14,7 @@ import { calculateStandardMatchElo } from "@/lib/elo";
 import { broadcastSseCommand } from "@/lib/cs2/sse";
 import { normalizeCS2Map } from "@/lib/cs2/utils";
 import { launchOrQueueMatchServer, processServerQueue } from "@/lib/cs2/server-manager";
-import { launchDotaMatch, launchDotaGameInLobby, stopDotaMatch } from "@/lib/dota/server-manager";
+import { launchDotaMatch, launchDotaGameInLobby, stopDotaMatch, flipDotaTeams, resendDotaInvites } from "@/lib/dota/server-manager";
 import GameAgentConnector from "@/lib/game-agent";
 
 async function ensureTournamentsSchema(client: any) {
@@ -332,30 +332,34 @@ export async function GET(
         [tournamentId]
       );
 
-      // If CS2, fetch DashMatch agent status and active matches on club PCs
+      // Fetch DashMatch agent status (supports both CS2 dedicated servers and Dota 2 lobby bots)
       let dashmatchAgent = null;
       let activeCs2Matches: any[] = [];
+      let activeDotaMatches: any[] = [];
+
+      const agentRes = await client.query(
+        `SELECT club_id, lan_ip, base_port, max_instances, instances_data, last_heartbeat,
+                (last_heartbeat > NOW() - INTERVAL '60 seconds') as is_online
+         FROM club_cs2_agents
+         WHERE club_id = $1
+         ORDER BY last_heartbeat DESC
+         LIMIT 1`,
+        [parsedClubId]
+      ).catch(() => ({ rows: [] }));
+
+      if (agentRes.rows && agentRes.rows.length > 0) {
+        const a = agentRes.rows[0];
+        dashmatchAgent = {
+          is_online: Boolean(a.is_online),
+          lan_ip: a.lan_ip || "127.0.0.1",
+          base_port: a.base_port || 27015,
+          max_instances: a.max_instances || 4,
+          instances: a.instances_data || [],
+          last_heartbeat: a.last_heartbeat,
+        };
+      }
+
       if (tournament.discipline === "cs2") {
-        const agentRes = await client.query(
-          `SELECT club_id, lan_ip, base_port, max_instances, instances_data, last_heartbeat,
-                  (last_heartbeat > NOW() - INTERVAL '30 seconds') as is_online
-           FROM club_cs2_agents
-           WHERE club_id = $1`,
-          [parsedClubId]
-        ).catch(() => ({ rows: [] }));
-
-        if (agentRes.rows && agentRes.rows.length > 0) {
-          const a = agentRes.rows[0];
-          dashmatchAgent = {
-            is_online: Boolean(a.is_online),
-            lan_ip: a.lan_ip || "127.0.0.1",
-            base_port: a.base_port || 27015,
-            max_instances: a.max_instances || 4,
-            instances: a.instances_data || [],
-            last_heartbeat: a.last_heartbeat,
-          };
-        }
-
         const cs2MatchesRes = await client.query(
           `SELECT id, map_name, match_format, team1_name, team2_name, status, port, server_ip,
                   score1, score2, rcon_last_command, rcon_last_response, game_state, match_stats, config_data
@@ -365,6 +369,16 @@ export async function GET(
           [parsedClubId]
         ).catch(() => ({ rows: [] }));
         activeCs2Matches = cs2MatchesRes.rows || [];
+      } else if (tournament.discipline === "dota2") {
+        const dotaMatchesRes = await client.query(
+          `SELECT id, tournament_match_id, game_name, password, game_mode, server_region, status,
+                  team1_name, team2_name, score1, score2, extra
+           FROM club_dota_matches
+           WHERE club_id = $1 AND status NOT IN ('stopped', 'finished')
+           ORDER BY created_at DESC`,
+          [parsedClubId]
+        ).catch(() => ({ rows: [] }));
+        activeDotaMatches = dotaMatchesRes.rows || [];
       }
 
       return NextResponse.json({
@@ -374,6 +388,7 @@ export async function GET(
         payouts: payoutsRes.rows,
         dashmatchAgent,
         activeCs2Matches,
+        activeDotaMatches,
       });
     }
 
@@ -1640,10 +1655,12 @@ export async function POST(
       const match = matchRes.rows[0];
 
       if (match.discipline === "dota2") {
-        const dotaResult = await launchDotaMatch(client, parsedClubId, matchId);
+        const dotaResult = await launchDotaMatch(client, parsedClubId, matchId, {
+          flipSides: body.flipSides !== undefined ? Boolean(body.flipSides) : undefined,
+        });
         return NextResponse.json({
           ...dotaResult,
-          message: "Лобби Dota 2 перезапускается ботом на ПК клуба!",
+          message: "Лобби Dota 2 запускается ботом на ПК клуба!",
         });
       }
 
@@ -1827,6 +1844,32 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message: "Команда запуска матча в лобби Dota 2 отправлена боту клуба!",
+      });
+    }
+
+    // Action: FLIP DOTA TEAMS (DashMatch)
+    if (action === "flip_dota_teams") {
+      const { matchId } = body;
+      if (!matchId) {
+        return NextResponse.json({ error: "ID матча обязателен" }, { status: 400 });
+      }
+      const flipRes = await flipDotaTeams(client, parsedClubId, matchId);
+      return NextResponse.json({
+        ...flipRes,
+        message: `Стороны лобби Dota 2 успешно изменены: Radiant — ${flipRes.radiantName}, Dire — ${flipRes.direName}`,
+      });
+    }
+
+    // Action: RESEND DOTA LOBBY INVITES (DashMatch)
+    if (action === "resend_dota_invites") {
+      const { matchId, accountId } = body;
+      if (!matchId) {
+        return NextResponse.json({ error: "ID матча обязателен" }, { status: 400 });
+      }
+      const inviteRes = await resendDotaInvites(client, parsedClubId, matchId, accountId);
+      return NextResponse.json({
+        ...inviteRes,
+        message: "Приглашения в лобби Dota 2 успешно отправлены повторно!",
       });
     }
 

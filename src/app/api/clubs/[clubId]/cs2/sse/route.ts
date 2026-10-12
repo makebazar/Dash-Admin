@@ -29,15 +29,29 @@ export async function GET(
       // Register client for instant broadcasts
       cleanup = registerSseClient(parsedClubId, controller);
 
-      // Send initial hello
+      // Send initial hello & mark agent heartbeat fresh
       controller.enqueue(
         encoder.encode(`event: connected\ndata: ${JSON.stringify({ club_id: parsedClubId, time: Date.now() })}\n\n`)
       );
+      query(
+        `UPDATE club_cs2_agents SET last_heartbeat = NOW(), updated_at = NOW()
+         WHERE club_id = $1 AND agent_id = (
+           SELECT agent_id FROM club_cs2_agents WHERE club_id = $1 ORDER BY last_heartbeat DESC LIMIT 1
+         )`,
+        [parsedClubId]
+      ).catch(() => {});
 
       // Keepalive ping every 15s to prevent proxies from terminating idle connections
       heartbeatInterval = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(`: ping\n\n`));
+          query(
+            `UPDATE club_cs2_agents SET last_heartbeat = NOW(), updated_at = NOW()
+             WHERE club_id = $1 AND agent_id = (
+               SELECT agent_id FROM club_cs2_agents WHERE club_id = $1 ORDER BY last_heartbeat DESC LIMIT 1
+             )`,
+            [parsedClubId]
+          ).catch(() => {});
         } catch {
           if (heartbeatInterval) clearInterval(heartbeatInterval);
         }
