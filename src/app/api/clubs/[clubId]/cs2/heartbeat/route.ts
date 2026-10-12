@@ -97,6 +97,12 @@ export async function POST(
       [parsedClubId, agentId, lanIp, basePort, maxInstances, instances]
     );
 
+    // Clean up old stale agent rows for this club (> 60 seconds inactive) so queries never pick ghost records
+    await query(
+      `DELETE FROM club_cs2_agents WHERE club_id = $1 AND agent_id != $2 AND last_heartbeat < NOW() - INTERVAL '60 seconds'`,
+      [parsedClubId, agentId]
+    ).catch(() => {});
+
     // 3. Fetch pending commands for this agent or broadcast commands
     const cmdRes = await query(
       `SELECT id, command_type, match_id, payload

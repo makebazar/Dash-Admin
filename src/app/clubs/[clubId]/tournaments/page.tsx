@@ -131,6 +131,9 @@ export default function AdminTournaments() {
       const res = await fetch(`/api/clubs/${clubId}/tournaments`);
       const data = await res.json();
       setTournaments(data.tournaments || []);
+      if (data.dashmatchAgent !== undefined) {
+        setDashmatchAgent(data.dashmatchAgent);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -176,6 +179,23 @@ export default function AdminTournaments() {
       setLoading(false);
     }
     init();
+
+    // Background interval to keep agent status fresh in real-time
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/clubs/${clubId}/cs2/status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.agent) {
+            setDashmatchAgent(data.agent);
+          }
+        }
+      } catch (e) {
+        // ignore background poll error
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [clubId, urlTournamentId, urlTab]);
 
   const handleDeleteTournament = async () => {

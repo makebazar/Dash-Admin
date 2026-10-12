@@ -426,7 +426,34 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ tournaments: tournamentsRes.rows });
+    // Also query active DashMatch agent for tournaments list header
+    const agentRes = await client.query(
+      `SELECT club_id, lan_ip, base_port, max_instances, instances_data, last_heartbeat,
+              (last_heartbeat > NOW() - INTERVAL '60 seconds') as is_online
+       FROM club_cs2_agents
+       WHERE club_id = $1
+       ORDER BY last_heartbeat DESC
+       LIMIT 1`,
+      [parsedClubId]
+    ).catch(() => ({ rows: [] }));
+
+    let dashmatchAgent = null;
+    if (agentRes.rows && agentRes.rows.length > 0) {
+      const a = agentRes.rows[0];
+      dashmatchAgent = {
+        is_online: Boolean(a.is_online),
+        lan_ip: a.lan_ip || "127.0.0.1",
+        base_port: a.base_port || 27015,
+        max_instances: a.max_instances || 4,
+        instances: a.instances_data || [],
+        last_heartbeat: a.last_heartbeat,
+      };
+    }
+
+    return NextResponse.json({ 
+      tournaments: tournamentsRes.rows,
+      dashmatchAgent,
+    });
   } catch (error) {
     console.error("Admin Tournaments GET Error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
