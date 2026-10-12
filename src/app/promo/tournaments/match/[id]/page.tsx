@@ -787,6 +787,26 @@ export default function MatchLobby() {
     }
     return true; // Default Team A = CT, Team B = T
   }, [match?.team1Side, match?.matchStats]);
+
+  const isPlayerInCompA = useMemo(() => {
+    if (!player || !compA) return false;
+    const pId = String(player.id || "");
+    const pPhone = String(player.phone_number || "");
+    const check = (t: any) => t && (String(t) === pId || (pPhone && String(t) === pPhone));
+    if (check(compA.playerId) || check(compA.captainId) || check(compA.id)) return true;
+    if (compA.roster?.some((p: any) => check(p.id) || check(p.player_id) || check(p.phone))) return true;
+    return false;
+  }, [player, compA]);
+
+  const isPlayerInCompB = useMemo(() => {
+    if (!player || !compB) return false;
+    const pId = String(player.id || "");
+    const pPhone = String(player.phone_number || "");
+    const check = (t: any) => t && (String(t) === pId || (pPhone && String(t) === pPhone));
+    if (check(compB.playerId) || check(compB.captainId) || check(compB.id)) return true;
+    if (compB.roster?.some((p: any) => check(p.id) || check(p.player_id) || check(p.phone))) return true;
+    return false;
+  }, [player, compB]);
   // ----------------------------------------------------------------
 
   if (loading || !match) {
@@ -832,26 +852,6 @@ export default function MatchLobby() {
   const isDotaFlipped = Boolean(match.dotaLobby?.flipped || match.result?.dota_lobby?.flipped);
   const sideA = isDota ? (isDotaFlipped ? "Dire" : "Radiant") : (isTeam1Ct ? "CT" : "T");
   const sideB = isDota ? (isDotaFlipped ? "Radiant" : "Dire") : (isTeam1Ct ? "T" : "CT");
-
-  const isPlayerInCompA = useMemo(() => {
-    if (!player || !compA) return false;
-    const pId = String(player.id || "");
-    const pPhone = String(player.phone_number || "");
-    const check = (t: any) => t && (String(t) === pId || (pPhone && String(t) === pPhone));
-    if (check(compA.playerId) || check(compA.captainId) || check(compA.id)) return true;
-    if (compA.roster?.some((p: any) => check(p.id) || check(p.player_id) || check(p.phone))) return true;
-    return false;
-  }, [player, compA]);
-
-  const isPlayerInCompB = useMemo(() => {
-    if (!player || !compB) return false;
-    const pId = String(player.id || "");
-    const pPhone = String(player.phone_number || "");
-    const check = (t: any) => t && (String(t) === pId || (pPhone && String(t) === pPhone));
-    if (check(compB.playerId) || check(compB.captainId) || check(compB.id)) return true;
-    if (compB.roster?.some((p: any) => check(p.id) || check(p.player_id) || check(p.phone))) return true;
-    return false;
-  }, [player, compB]);
 
   const myDotaSide = isDota
     ? (isPlayerInCompA ? sideA : isPlayerInCompB ? sideB : null)
