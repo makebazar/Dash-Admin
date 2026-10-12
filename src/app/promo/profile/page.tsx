@@ -33,6 +33,7 @@ import { getPhoneDisplay } from "@/lib/phone-utils";
 import { BottomNav } from "../components/BottomNav";
 import { cn } from "@/lib/utils";
 import { updatePlayerLinks } from "./actions";
+import { parseDotaRank } from "@/lib/dota-service";
 
 export default function PromoProfile() {
   const [clubs, setClubs] = useState<any[]>([]);
@@ -48,6 +49,7 @@ export default function PromoProfile() {
   const [steamLink, setSteamLink] = useState("");
   const [faceitLink, setFaceitLink] = useState("");
   const [savingLinks, setSavingLinks] = useState(false);
+  const [syncingDota, setSyncingDota] = useState(false);
 
   const handleSaveLinks = async () => {
     setSavingLinks(true);
@@ -61,6 +63,32 @@ export default function PromoProfile() {
       alert("Ошибка при сохранении: " + res.error);
     }
     setSavingLinks(false);
+  };
+
+  const handleSyncDota = async () => {
+    setSyncingDota(true);
+    try {
+      const res = await fetch("/api/promo/player/tournament-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          syncDotaNow: true,
+          steamLink: steamLink || player?.steam_link || "",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchData();
+        alert(data.dotaSynced ? "Dota 2 статистика успешно обновлена!" : "Синхронизация завершена.");
+      } else {
+        alert(data.error || "Ошибка синхронизации Dota 2");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка сети при синхронизации Dota 2");
+    } finally {
+      setSyncingDota(false);
+    }
   };
 
 
@@ -568,6 +596,114 @@ export default function PromoProfile() {
                 >
                   {savingLinks ? "СОХРАНЕНИЕ..." : "СОХРАНИТЬ ПРОФИЛИ"}
                 </button>
+
+                {/* Dota 2 Live Stats Display */}
+                {(player?.steam_id || player?.dotaRankTier || player?.dotaMmr || player?.dotaStats) && (() => {
+                  const rankInfo = parseDotaRank(player.dotaRankTier, player.dotaLeaderboardRank);
+                  return (
+                    <div className="mt-4 pt-4 border-t border-white/10 space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black uppercase tracking-wider text-white">
+                            Статистика Dota 2
+                          </span>
+                          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+                            OpenDota
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSyncDota}
+                          disabled={syncingDota}
+                          className="text-[10px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-lg border border-white/10 cursor-pointer flex items-center gap-1"
+                        >
+                          {syncingDota ? "Синхронизация..." : "↻ Синхронизировать"}
+                        </button>
+                      </div>
+
+                      <div className="bg-black/40 border border-white/5 rounded-2xl p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-black/60 border border-white/10 flex items-center justify-center shrink-0 p-1">
+                            <img
+                              src={rankInfo.badgeUrl}
+                              alt={rankInfo.nameRu}
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
+                              Ранг аккаунта
+                            </span>
+                            <span
+                              className="text-sm font-black uppercase italic"
+                              style={{ color: rankInfo.color }}
+                            >
+                              {rankInfo.nameRu}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
+                            Рейтинг MMR
+                          </span>
+                          <span className="text-base font-black text-emerald-400 font-mono italic">
+                            {player.dotaMmr ? `${player.dotaMmr} MMR` : "—"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+                          <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 block mb-0.5">
+                            Процент побед
+                          </span>
+                          <span className="text-xs font-black text-emerald-400">
+                            {player.dotaWinrate ? `${player.dotaWinrate}%` : "—"}
+                          </span>
+                        </div>
+                        <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+                          <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 block mb-0.5">
+                            Всего матчей
+                          </span>
+                          <span className="text-xs font-black text-white">
+                            {player.dotaMatches ? player.dotaMatches : "—"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Top 3 signature heroes */}
+                      {player.dotaStats?.topHeroes && player.dotaStats.topHeroes.length > 0 && (
+                        <div className="space-y-2 pt-1 border-t border-white/5">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">
+                            Сигнатурные герои
+                          </span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {player.dotaStats.topHeroes.map((h: any) => (
+                              <div
+                                key={h.heroId}
+                                className="bg-white/[0.03] p-2 rounded-xl border border-white/5 flex flex-col items-center text-center"
+                                title={`${h.heroNameRu}: ${h.games} игр, ${h.winrate}% побед`}
+                              >
+                                <img
+                                  src={h.iconUrl}
+                                  alt={h.heroNameRu}
+                                  className="w-10 h-7 rounded object-cover mb-1 border border-white/10"
+                                />
+                                <span className="text-[9px] font-bold text-gray-200 truncate w-full">
+                                  {h.heroNameRu}
+                                </span>
+                                <span className="text-[8px] font-black text-emerald-400">
+                                  {h.winrate}% WR
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

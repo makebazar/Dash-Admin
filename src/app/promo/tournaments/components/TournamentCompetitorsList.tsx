@@ -13,6 +13,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { parseDotaRank } from "@/lib/dota-service";
 
 interface Competitor {
   id: string;
@@ -26,6 +27,13 @@ interface Competitor {
   player_faceit_link?: string | null;
   player_avatar_url?: string | null;
   player_name?: string | null;
+  player_dota_rank_tier?: number | null;
+  player_dota_rank_name?: string | null;
+  player_dota_leaderboard_rank?: number | null;
+  player_dota_mmr?: number | null;
+  player_dota_winrate?: number | null;
+  player_dota_matches?: number | null;
+  player_dota_stats?: any;
   meta?: any;
   payment_status?: string;
   team_logo?: string | null;
@@ -40,6 +48,13 @@ interface Competitor {
     faceitLvl?: number;
     faceitLink?: string;
     avatarUrl?: string;
+    dotaRankTier?: number | null;
+    dotaRankName?: string | null;
+    dotaLeaderboardRank?: number | null;
+    dotaMmr?: number | null;
+    dotaWinrate?: number | null;
+    dotaMatches?: number | null;
+    dotaStats?: any;
   }>;
 }
 
@@ -119,10 +134,20 @@ export function TournamentCompetitorsList({
     }
   };
 
+  const isDota = tournament?.discipline === "dota2";
+
   const calcAverageElo = (members?: any[]) => {
     if (!members || members.length === 0) return null;
     const total = members.reduce((sum, m) => sum + (m.faceitElo || m.elo || 1000), 0);
     return Math.round(total / members.length);
+  };
+
+  const calcAverageDotaMmr = (members?: any[]) => {
+    if (!members || members.length === 0) return null;
+    const withMmr = members.filter((m) => m.dotaMmr);
+    if (withMmr.length === 0) return null;
+    const total = withMmr.reduce((sum, m) => sum + m.dotaMmr, 0);
+    return Math.round(total / withMmr.length);
   };
 
   const getFaceitLevelBadge = (level?: number | null) => {
@@ -184,6 +209,7 @@ export function TournamentCompetitorsList({
             const isExpanded = expandedTeams[comp.id] ?? true;
             const isTeam = comp.type === "TEAM" || (comp.team_members && comp.team_members.length > 1);
             const avgElo = calcAverageElo(comp.team_members);
+            const avgDotaMmr = calcAverageDotaMmr(comp.team_members);
             const playerElo = comp.player_elo || comp.meta?.elo || 1000;
             const faceitLvl = comp.player_faceit_lvl;
 
@@ -252,12 +278,21 @@ export function TournamentCompetitorsList({
                       <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400 font-bold uppercase tracking-wider flex-wrap">
                         {isTeam ? (
                           <>
-                            <span className="flex items-center gap-1.5">
-                              <span>AVG ELO:</span>
-                              <strong className="text-yellow-400 font-black">
-                                {avgElo || 1000}
-                              </strong>
-                            </span>
+                            {isDota ? (
+                              <span className="flex items-center gap-1.5">
+                                <span>AVG MMR:</span>
+                                <strong className="text-emerald-400 font-black font-mono">
+                                  {avgDotaMmr ? `${avgDotaMmr} MMR` : "—"}
+                                </strong>
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1.5">
+                                <span>AVG ELO:</span>
+                                <strong className="text-yellow-400 font-black">
+                                  {avgElo || 1000}
+                                </strong>
+                              </span>
+                            )}
                             {comp.team_members && (
                               <>
                                 <span className="text-gray-700">•</span>
@@ -265,6 +300,36 @@ export function TournamentCompetitorsList({
                               </>
                             )}
                           </>
+                        ) : isDota ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {comp.player_dota_rank_tier ? (() => {
+                              const dRank = parseDotaRank(comp.player_dota_rank_tier, comp.player_dota_leaderboard_rank);
+                              return (
+                                <span className="inline-flex items-center gap-1 bg-white/5 border border-white/10 px-2 py-0.5 rounded-lg">
+                                  <img src={dRank.badgeUrl} alt={dRank.nameRu} className="w-4 h-4 object-contain" />
+                                  <span className="text-[10px] font-black" style={{ color: dRank.color }}>{dRank.nameRu}</span>
+                                </span>
+                              );
+                            })() : (
+                              <span className="text-gray-500 text-[10px] font-bold">Без ранга</span>
+                            )}
+                            {comp.player_dota_mmr ? (
+                              <>
+                                <span className="text-gray-700">•</span>
+                                <strong className="text-emerald-400 font-black font-mono">
+                                  {comp.player_dota_mmr} MMR
+                                </strong>
+                              </>
+                            ) : null}
+                            {comp.player_dota_winrate ? (
+                              <>
+                                <span className="text-gray-700">•</span>
+                                <span className="text-gray-300 font-bold">
+                                  {comp.player_dota_winrate}% WR
+                                </span>
+                              </>
+                            ) : null}
+                          </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
                             {faceitLvl && getFaceitLevelBadge(faceitLvl)}
@@ -364,12 +429,29 @@ export function TournamentCompetitorsList({
                                     Запас
                                   </span>
                                 )}
-                                <div className="flex items-center gap-1.5 bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
-                                  {memberLvl && getFaceitLevelBadge(memberLvl)}
-                                  <span className="text-[10px] font-black text-yellow-400 font-mono">
-                                    {memberElo} ELO
-                                  </span>
-                                </div>
+                                {isDota ? (
+                                  <div className="flex items-center gap-1.5 bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
+                                    {member.dotaRankTier ? (() => {
+                                      const mRank = parseDotaRank(member.dotaRankTier, member.dotaLeaderboardRank);
+                                      return (
+                                        <>
+                                          <img src={mRank.badgeUrl} alt={mRank.nameRu} className="w-3.5 h-3.5 object-contain" />
+                                          <span className="text-[9px] font-bold" style={{ color: mRank.color }}>{mRank.nameRu}</span>
+                                        </>
+                                      );
+                                    })() : null}
+                                    <span className="text-[10px] font-black text-emerald-400 font-mono">
+                                      {member.dotaMmr ? `${member.dotaMmr} MMR` : "—"}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
+                                    {memberLvl && getFaceitLevelBadge(memberLvl)}
+                                    <span className="text-[10px] font-black text-yellow-400 font-mono">
+                                      {memberElo} ELO
+                                    </span>
+                                  </div>
+                                )}
                                 <span className="text-[9px] text-gray-500 group-hover:text-orange-400 font-bold ml-0.5">
                                   ↗
                                 </span>

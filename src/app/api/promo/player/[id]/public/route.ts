@@ -29,12 +29,20 @@ export async function GET(
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS faceit_winrate NUMERIC(5,2);
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS faceit_matches INTEGER;
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS faceit_avatar TEXT;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_rank_tier INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_rank_name VARCHAR(100);
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_leaderboard_rank INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_mmr INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_winrate NUMERIC(5,2);
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_matches INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_stats JSONB;
     `);
 
     // 1. Fetch target player base info
     const playerRes = await client.query(
       `SELECT p.id, p.full_name, p.nickname, p.steam_link, p.steam_id, p.faceit_link, p.phone_number, p.created_at,
               p.avatar_url, p.lft_status, p.faceit_lvl, p.faceit_elo, p.faceit_kd, p.faceit_winrate, p.faceit_matches, p.faceit_avatar,
+              p.dota_rank_tier, p.dota_rank_name, p.dota_leaderboard_rank, p.dota_mmr, p.dota_winrate, p.dota_matches, p.dota_stats,
               COALESCE(b.total_xp, 0) as total_xp,
               c.name as club_name, c.id as club_id
        FROM promo_players p
@@ -334,6 +342,13 @@ export async function GET(
         faceitKd: row.faceit_kd ? parseFloat(row.faceit_kd) : null,
         faceitWinrate: row.faceit_winrate ? parseFloat(row.faceit_winrate) : null,
         faceitMatches: row.faceit_matches || null,
+        dotaRankTier: row.dota_rank_tier || null,
+        dotaRankName: row.dota_rank_name || null,
+        dotaLeaderboardRank: row.dota_leaderboard_rank || null,
+        dotaMmr: row.dota_mmr || null,
+        dotaWinrate: row.dota_winrate ? parseFloat(row.dota_winrate) : null,
+        dotaMatches: row.dota_matches || null,
+        dotaStats: row.dota_stats || null,
         createdAt: row.created_at,
       },
       stats: combatStats,

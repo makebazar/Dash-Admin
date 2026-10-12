@@ -107,9 +107,15 @@ export function MatchControlModal({
   const [restoreRound, setRestoreRound] = useState("1");
   const [activeCs2Match, setActiveCs2Match] = useState<ActiveCs2MatchInfo | null>(null);
 
+  // Dota 2 state
+  const [dotaLobby, setDotaLobby] = useState<any>(null);
+  const [isLaunchingDotaGame, setIsLaunchingDotaGame] = useState(false);
+  const [copiedLobbyName, setCopiedLobbyName] = useState(false);
+  const [copiedLobbyPassword, setCopiedLobbyPassword] = useState(false);
+
   // Fetch / Sync status of agent & match on open
   const fetchDashMatchStatus = useCallback(async () => {
-    if (!clubId || tournament.discipline !== "cs2") return;
+    if (!clubId || (tournament.discipline !== "cs2" && tournament.discipline !== "dota2")) return;
     try {
       const res = await fetch(`/api/clubs/${clubId}/cs2/status`);
       if (res.ok) {
@@ -117,13 +123,25 @@ export function MatchControlModal({
         if (data.agent) {
           setAgent(data.agent);
         }
-        if (data.matches && match) {
+        if (data.matches && match && tournament.discipline === "cs2") {
           const dmId = `dm-tourney-${match.id}`;
           const found = data.matches.find((m: any) => m.id === dmId || m.id === match.cs2_server_id);
           if (found) {
             setActiveCs2Match(found);
             if (found.score1 !== undefined) setScore1(found.score1);
             if (found.score2 !== undefined) setScore2(found.score2);
+          }
+        }
+      }
+
+      if (tournament.discipline === "dota2" && match) {
+        const promoRes = await fetch(`/api/promo/matches/${match.id}`);
+        if (promoRes.ok) {
+          const promoData = await promoRes.json();
+          if (promoData.match?.dotaLobby) {
+            setDotaLobby(promoData.match.dotaLobby);
+            if (promoData.match.score1 !== undefined) setScore1(promoData.match.score1);
+            if (promoData.match.score2 !== undefined) setScore2(promoData.match.score2);
           }
         }
       }
@@ -171,12 +189,40 @@ export function MatchControlModal({
 
   // Periodic polling while modal is open
   useEffect(() => {
-    if (!isOpen || tournament.discipline !== "cs2") return;
+    if (!isOpen || (tournament.discipline !== "cs2" && tournament.discipline !== "dota2")) return;
     const interval = setInterval(() => {
       fetchDashMatchStatus();
     }, 4000);
     return () => clearInterval(interval);
   }, [isOpen, tournament.discipline, fetchDashMatchStatus]);
+
+  const handleLaunchDotaGame = async () => {
+    if (!match) return;
+    setIsLaunchingDotaGame(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "launch_dota_match",
+          matchId: match.id,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchDashMatchStatus();
+        await onRefreshTournament();
+        alert("Команда запуска игры в лобби Dota 2 отправлена боту!");
+      } else {
+        alert(data.error || "Не удалось запустить игру в лобби Dota 2");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети");
+    } finally {
+      setIsLaunchingDotaGame(false);
+    }
+  };
 
   if (!isOpen || !match) return null;
 
@@ -475,8 +521,257 @@ export function MatchControlModal({
           </button>
         </div>
 
-        {/* CS2 DEDICATED SERVER SECTION (DashMatch) */}
-        {tournament.discipline === "cs2" ? (
+        {/* DOTA 2 DEDICATED SECTION (DashMatch) */}
+        {tournament.discipline === "dota2" ? (
+          <div className="space-y-4">
+            {/* Agent Status Pill */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+              <div className="flex items-center gap-2.5">
+                <div className={cn(
+                  "w-8 h-8 rounded-xl flex items-center justify-center",
+                  isAgentOnline ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"
+                )}>
+                  {isAgentOnline ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                    <span>DashMatch Dota 2 Бот:</span>
+                    <span className={cn(
+                      "text-[11px] px-2 py-0.5 rounded-full font-semibold",
+                      isAgentOnline ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"
+                    )}>
+                      {isAgentOnline ? `В сети (LAN: ${agent?.lan_ip || "127.0.0.1"})` : "Не подключен на ПК клуба"}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    {isAgentOnline
+                      ? "Бот активен и готов создавать лобби и приглашать участников"
+                      : "Запустите dashmatch.exe на выделенном ПК клуба для работы бота"}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => fetchDashMatchStatus()}
+                className="text-xs text-slate-500 hover:text-slate-800 p-2 rounded-lg hover:bg-slate-200/50 transition-colors flex items-center gap-1 cursor-pointer"
+                title="Обновить статус"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* DOTA LOBBY ACTIVE STATE */}
+            {dotaLobby && dotaLobby.status !== "stopped" ? (
+              <div className="p-5 rounded-2xl bg-slate-900 text-white space-y-4 shadow-sm">
+                {/* Header */}
+                <div className="flex items-center justify-between gap-2 flex-wrap pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md flex items-center gap-1",
+                      dotaLobby.status === "live"
+                        ? "bg-red-500 text-white animate-pulse"
+                        : dotaLobby.status === "lobby_ready" || dotaLobby.status === "ready"
+                        ? "bg-emerald-500 text-white"
+                        : "bg-blue-500 text-white"
+                    )}>
+                      {dotaLobby.status === "live" ? (
+                        "🔴 Live Матч"
+                      ) : dotaLobby.status === "lobby_ready" || dotaLobby.status === "ready" ? (
+                        "🟢 Лобби готово • Ожидание игроков"
+                      ) : (
+                        "Создание лобби..."
+                      )}
+                    </span>
+
+                    <span className="font-bold text-sm text-emerald-400">
+                      {compA?.display_name || "Radiant"}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-white font-mono font-bold text-sm">
+                      {dotaLobby.score1 ?? score1} : {dotaLobby.score2 ?? score2}
+                    </span>
+                    <span className="font-bold text-sm text-rose-400">
+                      {compB?.display_name || "Dire"}
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 font-mono">
+                    {dotaLobby.gameMode || "Captains Mode"} • {dotaLobby.serverRegion || "Stockholm"}
+                  </div>
+                </div>
+
+                {/* Credentials */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="bg-slate-800/90 rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-sans">Имя лобби</span>
+                      <span className="text-orange-400 font-bold truncate">{dotaLobby.gameName || `DashMatch #${match.id}`}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(dotaLobby.gameName || `DashMatch #${match.id}`);
+                        setCopiedLobbyName(true);
+                        setTimeout(() => setCopiedLobbyName(false), 2000);
+                      }}
+                      className="px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      {copiedLobbyName ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedLobbyName ? "Скопировано" : "Копировать"}</span>
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-800/90 rounded-xl p-3 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-sans">Пароль</span>
+                      <span className="text-emerald-400 font-bold font-mono">{dotaLobby.password || "—"}</span>
+                    </div>
+                    {dotaLobby.password && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(dotaLobby.password);
+                          setCopiedLobbyPassword(true);
+                          setTimeout(() => setCopiedLobbyPassword(false), 2000);
+                        }}
+                        className="px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        {copiedLobbyPassword ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedLobbyPassword ? "Скопировано" : "Копировать"}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Team Assignment Info */}
+                <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700/60 text-[11px] text-slate-300 flex items-center justify-between">
+                  <div>
+                    <span className="text-emerald-400 font-bold">Силы Света (Radiant):</span> {compA?.display_name || "Команда 1"}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-rose-400 font-bold">Силы Тьмы (Dire):</span> {compB?.display_name || "Команда 2"}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="space-y-2 pt-1">
+                  {(dotaLobby.status === "lobby_ready" || dotaLobby.status === "ready") && (
+                    <button
+                      type="button"
+                      disabled={isLaunchingDotaGame}
+                      onClick={handleLaunchDotaGame}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                    >
+                      {isLaunchingDotaGame ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Запуск матча...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 fill-white" />
+                          <span>🚀 Запустить игру в лобби Dota 2</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isRestartingServer || isStoppingServer}
+                        onClick={handleRestartServer}
+                        className="px-3 py-2 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <RefreshCw className={cn("w-3.5 h-3.5", isRestartingServer && "animate-spin")} />
+                        Перезапустить лобби
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isStoppingServer || isRestartingServer}
+                        onClick={handleStopServer}
+                        className="px-3 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 text-rose-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Square className="w-3.5 h-3.5 fill-rose-300" />
+                        Закрыть лобби
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isResettingLobby}
+                      onClick={handleResetLobby}
+                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                      title="Сбросить лобби и готовность"
+                    >
+                      <RotateCcw className={cn("w-3.5 h-3.5", isResettingLobby && "animate-spin")} />
+                      Сбросить лобби
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* DOTA LOBBY NOT LAUNCHED */
+              <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Gamepad2 className="w-5 h-5 text-orange-600" />
+                    <h4 className="text-sm font-bold text-slate-900">Создание лобби Dota 2 через бота</h4>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                    DashMatch Bot
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600">
+                  Бот автоматически создаст лобби в Dota 2 с заданным регламентом (Captains Mode / 1v1 Solo Mid), распределит команды по сторонам (Radiant / Dire) и разошлет инвайты игрокам по Steam ID.
+                </p>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleLaunchServer}
+                    disabled={isLaunchingServer || !isAgentOnline}
+                    className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider py-3 rounded-xl transition-all shadow-md shadow-orange-500/10 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isLaunchingServer ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Создание лобби в Dota 2...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-4 h-4 fill-white" />
+                        Создать лобби Dota 2 сейчас
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isResettingLobby}
+                    onClick={handleResetLobby}
+                    className="w-full py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className={cn("w-3.5 h-3.5", isResettingLobby && "animate-spin")} />
+                    <span>Сбросить статус лобби</span>
+                  </button>
+                </div>
+
+                {!isAgentOnline && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      Агент DashMatch на ПК клуба сейчас не на связи. Запустите <strong>dashmatch.exe</strong> на выделенном компьютере для работы бота.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : tournament.discipline === "cs2" ? (
           <div className="space-y-4">
             
             {/* Agent Status Pill */}

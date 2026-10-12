@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { BottomNav } from "@/app/promo/components/BottomNav";
 import { cn } from "@/lib/utils";
+import { parseDotaRank } from "@/lib/dota-service";
 
 interface PublicPlayerProfile {
   id: string;
@@ -23,6 +24,13 @@ interface PublicPlayerProfile {
   faceitKd: number | null;
   faceitWinrate: number | null;
   faceitMatches: number | null;
+  dotaRankTier: number | null;
+  dotaRankName: string | null;
+  dotaLeaderboardRank: number | null;
+  dotaMmr: number | null;
+  dotaWinrate: number | null;
+  dotaMatches: number | null;
+  dotaStats: any;
   createdAt: string;
 }
 
@@ -88,6 +96,7 @@ export default function PublicPlayerProfilePage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [syncingFaceit, setSyncingFaceit] = useState(false);
+  const [syncingDota, setSyncingDota] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Invite Modal states
@@ -175,9 +184,10 @@ export default function PublicPlayerProfilePage() {
     }
   };
 
-  const handleSaveProfile = async (syncFaceit = false) => {
+  const handleSaveProfile = async (syncFaceit = false, syncDota = false) => {
     setSavingProfile(true);
     if (syncFaceit) setSyncingFaceit(true);
+    if (syncDota) setSyncingDota(true);
 
     try {
       const res = await fetch("/api/promo/player/tournament-profile", {
@@ -190,16 +200,19 @@ export default function PublicPlayerProfilePage() {
           steamLink: editSteamLink,
           faceitLink: editFaceitLink,
           syncFaceitNow: syncFaceit,
+          syncDotaNow: syncDota,
         }),
       });
 
       const data = await res.json();
       if (res.ok) {
         await loadProfile();
-        if (!syncFaceit) {
+        if (!syncFaceit && !syncDota) {
           setShowEditModal(false);
-        } else {
+        } else if (syncFaceit) {
           alert(data.faceitSynced ? "Faceit профиль успешно синхронизирован!" : "Данные Faceit сохранены.");
+        } else if (syncDota) {
+          alert(data.dotaSynced ? "Dota 2 статистика успешно обновлена!" : "Steam профиль сохранен.");
         }
       } else {
         alert(data.error || "Ошибка сохранения профиля");
@@ -210,6 +223,7 @@ export default function PublicPlayerProfilePage() {
     } finally {
       setSavingProfile(false);
       setSyncingFaceit(false);
+      setSyncingDota(false);
     }
   };
 
@@ -420,8 +434,8 @@ export default function PublicPlayerProfilePage() {
           </div>
         </motion.div>
 
-        {/* Esports Accounts Section (Faceit & Steam) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Esports Accounts Section (Faceit, Dota 2 & Steam) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {/* Faceit Card */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -437,7 +451,7 @@ export default function PublicPlayerProfilePage() {
               {isSelf && player.faceitLink && (
                 <button
                   type="button"
-                  onClick={() => handleSaveProfile(true)}
+                  onClick={() => handleSaveProfile(true, false)}
                   disabled={syncingFaceit}
                   className="text-[9px] font-black uppercase tracking-wider text-orange-400 hover:text-orange-300 transition-colors disabled:opacity-50 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-full border border-white/10"
                 >
@@ -536,6 +550,165 @@ export default function PublicPlayerProfilePage() {
                     className="text-xs font-bold uppercase tracking-wider text-orange-400 hover:text-orange-300"
                   >
                     + Привязать Faceit
+                  </button>
+                )}
+              </div>
+            )}
+          </motion.div>
+
+          {/* Dota 2 Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08 }}
+            className="bg-[#0c0c0e] border border-white/5 rounded-3xl p-6 space-y-4 shadow-xl"
+          >
+            <div className="flex justify-between items-center border-b border-white/5 pb-3">
+              <span className="text-xs font-black uppercase tracking-wider text-white">
+                Dota 2
+              </span>
+              <div className="flex items-center gap-2">
+                {isSelf && player.steamLink && (
+                  <button
+                    type="button"
+                    onClick={() => handleSaveProfile(false, true)}
+                    disabled={syncingDota}
+                    className="text-[9px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-full border border-white/10"
+                  >
+                    {syncingDota ? "Загрузка..." : "↻ Обновить"}
+                  </button>
+                )}
+                <span
+                  className={cn(
+                    "text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border",
+                    player.steamLink
+                      ? "bg-red-500/10 text-red-400 border-red-500/20"
+                      : "bg-white/5 text-gray-500 border-white/5"
+                  )}
+                >
+                  {player.steamLink ? "Привязан" : "Не привязан"}
+                </span>
+              </div>
+            </div>
+
+            {player.steamLink ? (
+              (() => {
+                const rankInfo = parseDotaRank(player.dotaRankTier, player.dotaLeaderboardRank);
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-black/50 border border-white/10 flex items-center justify-center shrink-0 p-1">
+                          <img
+                            src={rankInfo.badgeUrl}
+                            alt={rankInfo.nameRu}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
+                            Ранг
+                          </span>
+                          <span
+                            className="text-sm font-black uppercase italic"
+                            style={{ color: rankInfo.color }}
+                          >
+                            {rankInfo.nameRu}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400 block">
+                          Рейтинг
+                        </span>
+                        <span className="text-base font-black text-emerald-400 font-mono italic">
+                          {player.dotaMmr ? `${player.dotaMmr} MMR` : "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 block mb-0.5">
+                          Winrate
+                        </span>
+                        <span className="text-xs font-black text-emerald-400">
+                          {player.dotaWinrate ? `${player.dotaWinrate}%` : "—"}
+                        </span>
+                      </div>
+                      <div className="bg-white/5 p-2.5 rounded-xl border border-white/5">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 block mb-0.5">
+                          Матчи
+                        </span>
+                        <span className="text-xs font-black text-white">
+                          {player.dotaMatches ? player.dotaMatches : "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Top 3 heroes */}
+                    {player.dotaStats?.topHeroes && player.dotaStats.topHeroes.length > 0 && (
+                      <div className="space-y-2 pt-1 border-t border-white/5">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">
+                          Сигнатурные герои
+                        </span>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {player.dotaStats.topHeroes.map((h: any) => (
+                            <div
+                              key={h.heroId}
+                              className="bg-white/[0.03] p-1.5 rounded-xl border border-white/5 flex flex-col items-center text-center"
+                              title={`${h.heroNameRu}: ${h.games} игр, ${h.winrate}% побед`}
+                            >
+                              <img
+                                src={h.iconUrl}
+                                alt={h.heroNameRu}
+                                className="w-10 h-7 rounded object-cover mb-1 border border-white/10"
+                              />
+                              <span className="text-[9px] font-bold text-gray-200 truncate w-full">
+                                {h.heroNameRu}
+                              </span>
+                              <span className="text-[8px] font-black text-emerald-400">
+                                {h.winrate}% WR
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <a
+                        href={`https://www.opendota.com/players/${player.steamId ? Number(BigInt(player.steamId) - BigInt("76561197960265728")) : ""}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 inline-flex items-center justify-center gap-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors"
+                      >
+                        OpenDota ↗
+                      </a>
+                      <a
+                        href={`https://www.dotabuff.com/players/${player.steamId ? Number(BigInt(player.steamId) - BigInt("76561197960265728")) : ""}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 inline-flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-[10px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors"
+                      >
+                        Dotabuff ↗
+                      </a>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              <div className="space-y-3 py-2">
+                <p className="text-xs text-gray-500 font-medium">
+                  Steam профиль не привязан. Привяжите Steam для автоматической загрузки ранга и MMR Dota 2.
+                </p>
+                {isSelf && (
+                  <button
+                    onClick={() => setShowEditModal(true)}
+                    className="text-xs font-bold uppercase tracking-wider text-red-400 hover:text-red-300"
+                  >
+                    + Привязать Steam
                   </button>
                 )}
               </div>
@@ -873,10 +1046,22 @@ export default function PublicPlayerProfilePage() {
               </div>
 
               {/* Steam Link */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block">
-                  Steam профиль
-                </label>
+              <div className="space-y-3 bg-black/30 p-4 rounded-2xl border border-white/5">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block">
+                    Steam профиль (Dota 2 & CS2)
+                  </label>
+                  {editSteamLink && (
+                    <button
+                      type="button"
+                      onClick={() => handleSaveProfile(false, true)}
+                      disabled={syncingDota}
+                      className="text-[9px] font-black uppercase tracking-wider text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+                    >
+                      {syncingDota ? "Синхронизация..." : "↻ Обновить Dota 2"}
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   placeholder="https://steamcommunity.com/id/..."
@@ -884,6 +1069,9 @@ export default function PublicPlayerProfilePage() {
                   onChange={(e) => setEditSteamLink(e.target.value)}
                   className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-xs text-white focus:outline-none focus:border-orange-500 transition-colors"
                 />
+                <p className="text-[9px] text-gray-500 font-medium leading-relaxed">
+                  По SteamID автоматически загружаются ранг, медаль, MMR, процент побед и сигнатурные герои Dota 2.
+                </p>
               </div>
 
               {/* Faceit Link Section (NO MANUAL STATS) */}

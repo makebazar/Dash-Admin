@@ -14,6 +14,7 @@ import { calculateStandardMatchElo } from "@/lib/elo";
 import { broadcastSseCommand } from "@/lib/cs2/sse";
 import { normalizeCS2Map } from "@/lib/cs2/utils";
 import { launchOrQueueMatchServer, processServerQueue } from "@/lib/cs2/server-manager";
+import { launchDotaMatch, launchDotaGameInLobby, stopDotaMatch } from "@/lib/dota/server-manager";
 import GameAgentConnector from "@/lib/game-agent";
 
 async function ensureTournamentsSchema(client: any) {
@@ -117,6 +118,13 @@ async function ensureTournamentsSchema(client: any) {
       ALTER TABLE tournament_competitors ADD COLUMN IF NOT EXISTS promo_team_id INTEGER;
       ALTER TABLE tournament_competitors ADD COLUMN IF NOT EXISTS player_id UUID;
       ALTER TABLE tournament_competitors ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_rank_tier INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_rank_name VARCHAR(100);
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_leaderboard_rank INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_mmr INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_winrate NUMERIC(5,2);
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_matches INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_stats JSONB;
 
       CREATE TABLE IF NOT EXISTS tournament_entries (
         id BIGSERIAL PRIMARY KEY,
@@ -232,6 +240,13 @@ export async function GET(
                 COALESCE(solo_p.avatar_url, solo_p.faceit_avatar) as player_avatar_url,
                 COALESCE(solo_p.nickname, solo_p.full_name, c.display_name) as player_name,
                 COALESCE(pt.logo_url, t_teams.logo_url) as team_logo,
+                solo_p.dota_rank_tier as player_dota_rank_tier,
+                solo_p.dota_rank_name as player_dota_rank_name,
+                solo_p.dota_leaderboard_rank as player_dota_leaderboard_rank,
+                solo_p.dota_mmr as player_dota_mmr,
+                solo_p.dota_winrate as player_dota_winrate,
+                solo_p.dota_matches as player_dota_matches,
+                solo_p.dota_stats as player_dota_stats,
                 COALESCE(
                   (
                     SELECT json_agg(json_build_object(
@@ -244,7 +259,14 @@ export async function GET(
                       'faceitLink', p.faceit_link,
                       'faceitLvl', p.faceit_lvl,
                       'faceitElo', p.faceit_elo,
-                      'elo', COALESCE(p.faceit_elo, elo.elo, 1000)
+                      'elo', COALESCE(p.faceit_elo, elo.elo, 1000),
+                      'dotaRankTier', p.dota_rank_tier,
+                      'dotaRankName', p.dota_rank_name,
+                      'dotaLeaderboardRank', p.dota_leaderboard_rank,
+                      'dotaMmr', p.dota_mmr,
+                      'dotaWinrate', p.dota_winrate,
+                      'dotaMatches', p.dota_matches,
+                      'dotaStats', p.dota_stats
                     ))
                     FROM promo_team_members ptm
                     LEFT JOIN promo_players p ON ptm.phone = p.phone_number
@@ -262,7 +284,14 @@ export async function GET(
                       'faceitLink', p.faceit_link,
                       'faceitLvl', p.faceit_lvl,
                       'faceitElo', p.faceit_elo,
-                      'elo', COALESCE(p.faceit_elo, elo.elo, 1000)
+                      'elo', COALESCE(p.faceit_elo, elo.elo, 1000),
+                      'dotaRankTier', p.dota_rank_tier,
+                      'dotaRankName', p.dota_rank_name,
+                      'dotaLeaderboardRank', p.dota_leaderboard_rank,
+                      'dotaMmr', p.dota_mmr,
+                      'dotaWinrate', p.dota_winrate,
+                      'dotaMatches', p.dota_matches,
+                      'dotaStats', p.dota_stats
                     ))
                     FROM team_members tm
                     JOIN promo_players p ON tm.player_id::text = p.id::text
@@ -1541,6 +1570,15 @@ export async function POST(
       }
 
       const match = matchRes.rows[0];
+
+      if (match.discipline === "dota2") {
+        const dotaResult = await launchDotaMatch(client, parsedClubId, matchId);
+        return NextResponse.json({
+          ...dotaResult,
+          message: "Команда создания лобби Dota 2 отправлена боту клуба!",
+        });
+      }
+
       const tConfig = match.tournament_config || {};
       const tSettings = tConfig.settings || tConfig;
       const pool = (tSettings.mapPool && tSettings.mapPool.length > 0)
@@ -1590,7 +1628,7 @@ export async function POST(
 
       const matchRes = await client.query(
         `SELECT m.id, m.tournament_id, m.round, m.result, m.competitor_a_id, m.competitor_b_id, m.cs2_server_id,
-                t.name as tournament_name, t.type as tournament_type, t.config as tournament_config
+                t.name as tournament_name, t.type as tournament_type, t.config as tournament_config, t.discipline
          FROM tournament_matches m
          JOIN club_tournaments t ON m.tournament_id = t.id
          WHERE m.id = $1 AND t.club_id = $2`,
@@ -1600,6 +1638,14 @@ export async function POST(
         return NextResponse.json({ error: "Матч не найден" }, { status: 404 });
       }
       const match = matchRes.rows[0];
+
+      if (match.discipline === "dota2") {
+        const dotaResult = await launchDotaMatch(client, parsedClubId, matchId);
+        return NextResponse.json({
+          ...dotaResult,
+          message: "Лобби Dota 2 перезапускается ботом на ПК клуба!",
+        });
+      }
 
       // Check active cs2 match record to preserve existing running map if not explicitly overridden
       const cs2Res = await client.query(
@@ -1658,33 +1704,48 @@ export async function POST(
         return NextResponse.json({ error: "ID матча обязателен" }, { status: 400 });
       }
 
-      const dmMatchId = `dm-tourney-${matchId}`;
+      const cleanMatchId = parseInt(String(matchId).replace(/\D/g, ""), 10) || 0;
+      const discRes = await client.query(
+        `SELECT t.discipline FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
+        [cleanMatchId]
+      ).catch(() => ({ rows: [] }));
+      const isDota = discRes.rows[0]?.discipline === "dota2";
 
-      // 1. Stop CS2 server
-      await client.query(
-        `UPDATE club_cs2_matches SET status = 'stopped', updated_at = NOW() WHERE (id = $1 OR id = $2) AND club_id = $3`,
-        [dmMatchId, matchId, parsedClubId]
-      ).catch(() => {});
+      if (isDota) {
+        await stopDotaMatch(client, parsedClubId, matchId);
+      } else {
+        const dmMatchId = `dm-tourney-${matchId}`;
 
-      await client.query(
-        `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
-         VALUES ($1, 'STOP_MATCH', $2, '{}'::jsonb, 'pending')`,
-        [parsedClubId, dmMatchId]
-      ).catch(() => {});
-      broadcastSseCommand(parsedClubId, { type: "STOP_MATCH", match_id: dmMatchId });
+        // 1. Stop CS2 server
+        await client.query(
+          `UPDATE club_cs2_matches SET status = 'stopped', updated_at = NOW() WHERE (id = $1 OR id = $2) AND club_id = $3`,
+          [dmMatchId, matchId, parsedClubId]
+        ).catch(() => {});
+
+        await client.query(
+          `INSERT INTO club_cs2_commands (club_id, command_type, match_id, payload, status)
+           VALUES ($1, 'STOP_MATCH', $2, '{}'::jsonb, 'pending')`,
+          [parsedClubId, dmMatchId]
+        ).catch(() => {});
+        broadcastSseCommand(parsedClubId, { type: "STOP_MATCH", match_id: dmMatchId });
+
+        // Process any queued matches waiting for freed slot
+        await processServerQueue(client, parsedClubId);
+      }
 
       // 2. Delete veto state
       await client.query(`DELETE FROM match_veto WHERE match_id = $1`, [matchId]).catch(() => {});
 
       // 3. Reset checkins if requested
       if (resetCheckin) {
-        await client.query(`DELETE FROM lobby_checkin WHERE match_id::text = $1 OR match_id::text = $2`, [String(matchId), dmMatchId]).catch(() => {});
+        await client.query(`DELETE FROM lobby_checkin WHERE match_id::text = $1 OR match_id::text = $2`, [String(matchId), `dm-tourney-${matchId}`]).catch(() => {});
       }
 
       // 4. Reset tournament match status
       await client.query(
         `UPDATE tournament_matches
-         SET cs2_server_id = NULL, status = 'PENDING', score1 = 0, score2 = 0, winner_competitor_id = NULL
+         SET cs2_server_id = NULL, status = 'PENDING', score1 = 0, score2 = 0, winner_competitor_id = NULL,
+             result = result - 'dota_lobby'
          WHERE id = $1`,
         [matchId]
       );
@@ -1697,12 +1758,9 @@ export async function POST(
         await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(tournamentId)]).catch(() => {});
       }
 
-      // Process any queued matches waiting for freed slot
-      await processServerQueue(client, parsedClubId);
-
       return NextResponse.json({
         success: true,
-        message: "Лобби матча и стадия вето успешно сброшены!",
+        message: "Лобби матча и готовность успешно сброшены!",
       });
     }
 
@@ -1711,6 +1769,21 @@ export async function POST(
       const { matchId } = body;
       if (!matchId) {
         return NextResponse.json({ error: "ID матча обязателен" }, { status: 400 });
+      }
+
+      const cleanMatchId = parseInt(String(matchId).replace(/\D/g, ""), 10) || 0;
+      const discRes = await client.query(
+        `SELECT t.discipline FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
+        [cleanMatchId]
+      ).catch(() => ({ rows: [] }));
+      const isDota = discRes.rows[0]?.discipline === "dota2";
+
+      if (isDota) {
+        await stopDotaMatch(client, parsedClubId, matchId);
+        return NextResponse.json({
+          success: true,
+          message: "Команда закрытия лобби Dota 2 отправлена боту клуба",
+        });
       }
 
       const dmMatchId = String(matchId).startsWith("dm-") ? String(matchId) : `dm-tourney-${matchId}`;
@@ -1741,6 +1814,19 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message: "Команда остановки сервера отправлена на ПК клуба",
+      });
+    }
+
+    // Action: LAUNCH DOTA MATCH IN LOBBY (DashMatch)
+    if (action === "launch_dota_match") {
+      const { matchId } = body;
+      if (!matchId) {
+        return NextResponse.json({ error: "ID матча обязателен" }, { status: 400 });
+      }
+      await launchDotaGameInLobby(client, parsedClubId, matchId);
+      return NextResponse.json({
+        success: true,
+        message: "Команда запуска матча в лобби Dota 2 отправлена боту клуба!",
       });
     }
 

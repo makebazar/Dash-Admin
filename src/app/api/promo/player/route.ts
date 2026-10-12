@@ -15,7 +15,9 @@ export async function GET(request: Request) {
 
     // Get player global data + club-specific balance
     let result = await client.query(
-      `SELECT p.id, p.full_name, p.nickname, p.avatar_url, p.faceit_avatar, p.faceit_lvl, p.faceit_elo, p.lft_status, p.phone_number, p.steam_id, p.steam_link, p.faceit_link, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
+      `SELECT p.id, p.full_name, p.nickname, p.avatar_url, p.faceit_avatar, p.faceit_lvl, p.faceit_elo, p.lft_status, p.phone_number, p.steam_id, p.steam_link, p.faceit_link,
+              p.dota_rank_tier, p.dota_rank_name, p.dota_leaderboard_rank, p.dota_mmr, p.dota_winrate, p.dota_matches, p.dota_stats,
+              b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
              FROM promo_players p
              JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
              JOIN clubs c ON c.id = b.club_id
@@ -45,7 +47,9 @@ export async function GET(request: Request) {
 
         // Fetch again
         result = await client.query(
-          `SELECT p.id, p.full_name, p.nickname, p.avatar_url, p.faceit_avatar, p.faceit_lvl, p.faceit_elo, p.lft_status, p.phone_number, p.steam_id, p.steam_link, p.faceit_link, b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
+          `SELECT p.id, p.full_name, p.nickname, p.avatar_url, p.faceit_avatar, p.faceit_lvl, p.faceit_elo, p.lft_status, p.phone_number, p.steam_id, p.steam_link, p.faceit_link,
+                  p.dota_rank_tier, p.dota_rank_name, p.dota_leaderboard_rank, p.dota_mmr, p.dota_winrate, p.dota_matches, p.dota_stats,
+                  b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
                  FROM promo_players p
                  JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
                  JOIN clubs c ON c.id = b.club_id
@@ -249,6 +253,13 @@ export async function GET(request: Request) {
         steam_id: data.steam_id || data.steam_link || null,
         steam_link: data.steam_link || (data.steam_id ? `https://steamcommunity.com/profiles/${data.steam_id}` : null),
         faceit_link: data.faceit_link,
+        dotaRankTier: data.dota_rank_tier || null,
+        dotaRankName: data.dota_rank_name || null,
+        dotaLeaderboardRank: data.dota_leaderboard_rank || null,
+        dotaMmr: data.dota_mmr || null,
+        dotaWinrate: data.dota_winrate ? parseFloat(data.dota_winrate) : null,
+        dotaMatches: data.dota_matches || null,
+        dotaStats: data.dota_stats || null,
         totalXp,
         bonusBalance: parseFloat(data.bonus_balance || 0),
         activeBoostPercent: parseInt(data.active_boost_percent || 0),

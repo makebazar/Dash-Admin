@@ -777,20 +777,21 @@ export default function MatchLobby() {
     ? compA?.name
     : (veto?.current_turn_competitor_id === compB?.id ? compB?.name : "Ожидание");
 
+  const isDota = match.discipline === "dota2";
   const statusLower = match.status?.toLowerCase() || "scheduled";
   const isFinished = statusLower === "finished";
-  const isVeto = statusLower === "veto";
+  const isVeto = statusLower === "veto" && !isDota;
   const isScheduled = statusLower === "scheduled" || statusLower === "pending";
-  const isMatchStarted = ["in_progress", "live", "playing", "finished", "starting", "waiting_server"].includes(statusLower);
+  const isMatchStarted = ["in_progress", "live", "playing", "finished", "starting", "waiting_server", "ready"].includes(statusLower);
 
   const serverStatus = match.serverStatus || "idle";
-  const isServerReady = ["ready", "warmup", "knife", "live", "paused"].includes(serverStatus);
+  const isServerReady = ["ready", "warmup", "knife", "live", "paused"].includes(serverStatus) || (isDota && (serverStatus === "ready" || serverStatus === "live" || Boolean(match.dotaLobby?.password)));
 
   const isWinnerA = isFinished && match.winnerId === compA?.id;
   const isWinnerB = isFinished && match.winnerId === compB?.id;
 
-  const sideA = isTeam1Ct ? "CT" : "T";
-  const sideB = isTeam1Ct ? "T" : "CT";
+  const sideA = isDota ? "Radiant" : (isTeam1Ct ? "CT" : "T");
+  const sideB = isDota ? "Dire" : (isTeam1Ct ? "T" : "CT");
 
   const getMessageDetails = (m: ChatMessage) => {
     const rawSide = (m.sender_side || "").toUpperCase();
@@ -1614,43 +1615,121 @@ export default function MatchLobby() {
 
                       {/* Connect bar */}
                       <div className="space-y-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                          <button
-                            onClick={handleCopyConnect}
-                            className="sm:col-span-6 py-3 px-3.5 bg-black/60 hover:bg-black/80 border border-white/10 hover:border-orange-500/40 rounded-xl text-xs font-mono font-bold text-gray-200 transition-all flex items-center justify-between gap-3 group cursor-pointer"
-                          >
-                            <span className="truncate text-orange-400 font-mono">
-                              {match.connectCommand || `connect ${match.cs2ServerIp}:${match.cs2ServerPort}`}
-                            </span>
-                            {copiedConnect ? (
-                              <span className="text-emerald-400 text-xs font-bold uppercase shrink-0">
-                                Скопировано
-                              </span>
-                            ) : (
-                              <span className="text-gray-400 group-hover:text-white text-xs font-bold uppercase shrink-0">
-                                Копировать
-                              </span>
-                            )}
-                          </button>
+                        {isDota ? (
+                          <div className="space-y-3 bg-black/40 p-4 rounded-2xl border border-white/5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {/* Lobby Name */}
+                              <div className="space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-gray-400 block">
+                                  Имя лобби в Dota 2:
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    readOnly
+                                    value={match.dotaLobby?.gameName || match.result?.dota_lobby?.game_name || `DashMatch #${match.id}`}
+                                    className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono font-bold text-orange-400"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const name = match.dotaLobby?.gameName || match.result?.dota_lobby?.game_name || `DashMatch #${match.id}`;
+                                      navigator.clipboard.writeText(name);
+                                      alert("Имя лобби скопировано в буфер обмена!");
+                                    }}
+                                    className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors"
+                                  >
+                                    Копировать
+                                  </button>
+                                </div>
+                              </div>
 
-                          <button
-                            onClick={handleConnectServer}
-                            className="sm:col-span-3 py-3 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
-                          >
-                            <Play className="w-4 h-4 fill-white" />
-                            <span>Зайти в CS2</span>
-                          </button>
+                              {/* Lobby Password */}
+                              <div className="space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-gray-400 block">
+                                  Пароль от лобби:
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    readOnly
+                                    value={match.dotaLobby?.password || match.result?.dota_lobby?.password || "—"}
+                                    className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono font-bold text-emerald-400"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const pass = match.dotaLobby?.password || match.result?.dota_lobby?.password || "";
+                                      if (pass) {
+                                        navigator.clipboard.writeText(pass);
+                                        alert("Пароль скопирован в буфер обмена!");
+                                      }
+                                    }}
+                                    className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors shadow-sm"
+                                  >
+                                    Копировать
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
 
-                          <button
-                            onClick={() => handleJoinSpectator()}
-                            disabled={isJoiningSpec}
-                            className="sm:col-span-3 py-3 px-3 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-white/15 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
-                            title="Подключиться к серверу в режиме наблюдателя (Spectator)"
-                          >
-                            <Eye className="w-4 h-4 text-amber-400" />
-                            <span>{isJoiningSpec ? "Вход..." : "Наблюдатель"}</span>
-                          </button>
-                        </div>
+                            <div className="text-[11px] text-gray-400 bg-white/5 p-3 rounded-xl border border-white/5 space-y-1">
+                              <div className="text-gray-200 font-bold flex items-center gap-1.5">
+                                <span>🎮 Как зайти в матч:</span>
+                              </div>
+                              <div>
+                                1. Запустите <strong>Dota 2</strong> → нажмите <strong>Играть</strong> → вкладка <strong>Пользовательские лобби</strong>.
+                              </div>
+                              <div>
+                                2. Найдите в списке лобби по названию и введите пароль выше.
+                              </div>
+                              <div>
+                                3. Займите слот вашей команды: <strong>Radiant</strong> ({match.competitorA?.name || "Команда 1"}) или <strong>Dire</strong> ({match.competitorB?.name || "Команда 2"}).
+                              </div>
+                              <div className="text-orange-400 text-[10px] pt-1">
+                                💡 Если к вашему профилю привязан Steam ID, бот DashMatch автоматически отправит приглашение в лобби прямо в игре!
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                            <button
+                              onClick={handleCopyConnect}
+                              className="sm:col-span-6 py-3 px-3.5 bg-black/60 hover:bg-black/80 border border-white/10 hover:border-orange-500/40 rounded-xl text-xs font-mono font-bold text-gray-200 transition-all flex items-center justify-between gap-3 group cursor-pointer"
+                            >
+                              <span className="truncate text-orange-400 font-mono">
+                                {match.connectCommand || `connect ${match.cs2ServerIp}:${match.cs2ServerPort}`}
+                              </span>
+                              {copiedConnect ? (
+                                <span className="text-emerald-400 text-xs font-bold uppercase shrink-0">
+                                  Скопировано
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 group-hover:text-white text-xs font-bold uppercase shrink-0">
+                                  Копировать
+                                </span>
+                              )}
+                            </button>
+
+                            <button
+                              onClick={handleConnectServer}
+                              className="sm:col-span-3 py-3 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                            >
+                              <Play className="w-4 h-4 fill-white" />
+                              <span>Зайти в CS2</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleJoinSpectator()}
+                              disabled={isJoiningSpec}
+                              className="sm:col-span-3 py-3 px-3 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all border border-white/15 flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
+                              title="Подключиться к серверу в режиме наблюдателя (Spectator)"
+                            >
+                              <Eye className="w-4 h-4 text-amber-400" />
+                              <span>{isJoiningSpec ? "Вход..." : "Наблюдатель"}</span>
+                            </button>
+                          </div>
+                        )}
 
                         {/* SPECTATOR MODAL */}
                         <AnimatePresence>

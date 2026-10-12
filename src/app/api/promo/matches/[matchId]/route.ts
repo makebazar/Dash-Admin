@@ -7,6 +7,7 @@ import { normalizeCS2Map } from "@/lib/cs2/utils";
 import { verifySessionValue } from "@/lib/session";
 import { resolveSteamId64, validateSteamInput } from "@/lib/steam-resolver";
 import { launchOrQueueMatchServer, processServerQueue } from "@/lib/cs2/server-manager";
+import { launchDotaMatch, stopDotaMatch } from "@/lib/dota/server-manager";
 
 async function ensureMatchLobbyTables(client: any) {
   try {
@@ -104,12 +105,18 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
   try {
     console.log(`[Lobby API] Launching or queuing DashMatch server for match ${matchId} on map ${selectedMap} in club ${clubId}...`);
 
-    // Fetch match details to get format
+    // Fetch match details to get format & discipline
     const matchRes = await client.query(
-      `SELECT m.round, m.result, t.type as tournament_type, t.config as tournament_config FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
+      `SELECT m.round, m.result, t.type as tournament_type, t.config as tournament_config, t.discipline FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
       [matchId]
     ).catch(() => ({ rows: [] }));
     const match = matchRes.rows[0];
+
+    if (match?.discipline === "dota2") {
+      await launchDotaMatch(client, clubId, matchId);
+      return;
+    }
+
     const tType = String(match?.tournament_type || "").toLowerCase();
     const gameFormat = (tType === "2vs2" || tType === "mix_2vs2")
       ? "2v2"
@@ -129,16 +136,27 @@ async function triggerServerLaunch(matchId: string, selectedMap: string, clubId:
       }
     );
   } catch (err) {
-    console.error(`[Lobby API] CS2 Server Launch failed for match ${matchId}:`, err);
+    console.error(`[Lobby API] Match Server Launch failed for match ${matchId}:`, err);
   } finally {
     client.release();
   }
 }
 
-// Background stopper for CS2 server
+// Background stopper for CS2/Dota server
 async function triggerServerStop(matchId: string, clubId: number) {
   const client = await getClient();
   try {
+    const cleanId = parseInt(String(matchId).replace(/\D/g, ""), 10) || 0;
+    const matchRes = await client.query(
+      `SELECT t.discipline FROM tournament_matches m JOIN club_tournaments t ON m.tournament_id = t.id WHERE m.id = $1`,
+      [cleanId]
+    ).catch(() => ({ rows: [] }));
+
+    if (matchRes.rows[0]?.discipline === "dota2") {
+      await stopDotaMatch(client, clubId, matchId);
+      return;
+    }
+
     const dmMatchId = `dm-tourney-${matchId}`;
     await client.query(
       `UPDATE club_cs2_matches SET status = 'stopped', updated_at = NOW() WHERE (id = $1 OR id = $2) AND club_id = $3`,
@@ -433,6 +451,17 @@ export async function GET(
     ).catch(() => ({ rows: [] }));
 
     const cs2Match = cs2Res.rows[0];
+
+    // 7.5 Fetch live Dota match if exists
+    const dotaRes = await client.query(
+      `SELECT id, status, lobby_id, game_name, password, game_mode, server_region, score1, score2, winner, duration, created_at, updated_at
+       FROM club_dota_matches
+       WHERE id = $1 OR tournament_match_id = $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [`dm-dota-${parsedMatchId}`, parsedMatchId]
+    ).catch(() => ({ rows: [] }));
+    const dotaMatch = dotaRes.rows[0];
+
     const serverIp = (cs2Match?.server_ip && cs2Match.server_ip !== "127.0.0.1")
       ? cs2Match.server_ip
       : (agent?.lan_ip || cs2Match?.server_ip || process.env.GAME_SERVER_IP || "127.0.0.1");
@@ -458,7 +487,19 @@ export async function GET(
 
     let queuePosition = 1;
 
-    if (statusLower === "finished" || cs2Match?.status === "finished") {
+    if (match.discipline === "dota2") {
+      if (statusLower === "finished" || dotaMatch?.status === "finished") {
+        serverStatus = "finished";
+      } else if (statusLower === "live" || dotaMatch?.status === "live") {
+        serverStatus = "live";
+      } else if (dotaMatch?.status === "lobby_ready" || statusLower === "ready" || match.result?.dota_lobby?.state === "lobby_ready") {
+        serverStatus = "ready";
+      } else if (statusLower === "starting" || dotaMatch?.status === "starting") {
+        serverStatus = "starting";
+      } else {
+        serverStatus = "idle";
+      }
+    } else if (statusLower === "finished" || cs2Match?.status === "finished") {
       serverStatus = "finished";
     } else if (isScheduledPhase || isVetoPhase) {
       serverStatus = "idle";
@@ -528,12 +569,29 @@ export async function GET(
     }
 
     // In BO3/BO5, score1/score2 is the series score (maps won). In BO1, it is map rounds!
-    const effectiveScore1 = numMaps > 1 ? seriesScore1 : (cs2Match ? cs2Match.score1 : (match.score1 ?? 0));
-    const effectiveScore2 = numMaps > 1 ? seriesScore2 : (cs2Match ? cs2Match.score2 : (match.score2 ?? 0));
+    const effectiveScore1 = match.discipline === "dota2"
+      ? (dotaMatch ? dotaMatch.score1 : (match.score1 ?? 0))
+      : (numMaps > 1 ? seriesScore1 : (cs2Match ? cs2Match.score1 : (match.score1 ?? 0)));
+    const effectiveScore2 = match.discipline === "dota2"
+      ? (dotaMatch ? dotaMatch.score2 : (match.score2 ?? 0))
+      : (numMaps > 1 ? seriesScore2 : (cs2Match ? cs2Match.score2 : (match.score2 ?? 0)));
 
-    const team1Side = cs2Match?.match_stats?.team1_side ?? match.result?.team1_side ?? "CT";
-    const team2Side = cs2Match?.match_stats?.team2_side ?? match.result?.team2_side ?? (team1Side === "CT" ? "T" : "CT");
-    const matchStats = cs2Match?.match_stats || match.result?.stats || null;
+    const team1Side = match.discipline === "dota2" ? "Radiant" : (cs2Match?.match_stats?.team1_side ?? match.result?.team1_side ?? "CT");
+    const team2Side = match.discipline === "dota2" ? "Dire" : (cs2Match?.match_stats?.team2_side ?? match.result?.team2_side ?? (team1Side === "CT" ? "T" : "CT"));
+    const matchStats = cs2Match?.match_stats || match.result?.stats || match.result?.dota_stats || null;
+
+    const dotaLobbyData = dotaMatch ? {
+      lobbyId: dotaMatch.lobby_id || match.result?.dota_lobby?.lobby_id || "",
+      gameName: dotaMatch.game_name || match.result?.dota_lobby?.game_name || `DashMatch #${parsedMatchId}`,
+      password: dotaMatch.password || match.result?.dota_lobby?.password || "",
+      gameMode: dotaMatch.game_mode || "CM",
+      serverRegion: dotaMatch.server_region || "STOCKHOLM",
+      status: dotaMatch.status,
+      score1: dotaMatch.score1,
+      score2: dotaMatch.score2,
+      winner: dotaMatch.winner,
+      duration: dotaMatch.duration,
+    } : (match.result?.dota_lobby || null);
 
     return NextResponse.json({
       match: {
@@ -559,14 +617,17 @@ export async function GET(
         cs2ServerId: match.cs2_server_id || cs2Match?.id,
         cs2ServerPort: serverPort,
         cs2ServerIp: serverIp,
-        connectCommand: `connect ${serverIp}:${serverPort}`,
-        gameState: cs2Match?.game_state || (match.status === "FINISHED" ? "finished" : "live"),
+        connectCommand: match.discipline === "dota2"
+          ? (dotaLobbyData?.password ? `Пароль: ${dotaLobbyData.password}` : "")
+          : `connect ${serverIp}:${serverPort}`,
+        gameState: cs2Match?.game_state || (match.status === "FINISHED" ? "finished" : (dotaMatch?.status || "live")),
         serverStatus,
         queuePosition,
         isAgentOnline,
         selectedMap,
-        serverStartedAt: cs2Match?.created_at || null,
+        serverStartedAt: cs2Match?.created_at || dotaMatch?.created_at || null,
         matchStats,
+        dotaLobby: dotaLobbyData,
         scheduledAt: match.scheduled_at,
         winnerId: match.winner_competitor_id,
         mapPool: (match.tournament_config?.mapPool && match.tournament_config.mapPool.length > 0)
@@ -772,18 +833,27 @@ export async function POST(
       const allReady = hasBothCompetitors && expectedPlayers.length >= 2 && expectedPlayers.every(id => readyPlayerIds.has(id));
 
       if (allReady && (match.status?.toLowerCase() === "scheduled" || match.status?.toLowerCase() === "pending")) {
-        // Start VETO phase
-        await client.query(
-          `UPDATE tournament_matches SET status = 'veto' WHERE id = $1`,
-          [parsedMatchId]
-        );
+        if (match.discipline === "dota2") {
+          // For Dota 2: No map veto! Directly launch Dota 2 Practice Lobby via DashMatch bot
+          await client.query(
+            `UPDATE tournament_matches SET status = 'starting' WHERE id = $1`,
+            [parsedMatchId]
+          );
+          triggerServerLaunch(matchId, "dota", matchClubId);
+        } else {
+          // Start VETO phase for CS2
+          await client.query(
+            `UPDATE tournament_matches SET status = 'veto' WHERE id = $1`,
+            [parsedMatchId]
+          );
 
-        await client.query(
-          `INSERT INTO match_veto (match_id, current_turn_competitor_id, updated_at)
-           VALUES ($1, $2, NOW())
-           ON CONFLICT (match_id) DO UPDATE SET current_turn_competitor_id = $2, updated_at = NOW()`,
-          [parsedMatchId, match.competitor_a_id]
-        );
+          await client.query(
+            `INSERT INTO match_veto (match_id, current_turn_competitor_id, updated_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (match_id) DO UPDATE SET current_turn_competitor_id = $2, updated_at = NOW()`,
+            [parsedMatchId, match.competitor_a_id]
+          );
+        }
       }
 
       await client.query("COMMIT");

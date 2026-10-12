@@ -113,6 +113,12 @@ export default function MatchControlPage() {
   const [restoreRound, setRestoreRound] = useState("1");
   const [copiedConnect, setCopiedConnect] = useState(false);
 
+  // Dota 2 state
+  const [dotaLobby, setDotaLobby] = useState<any>(null);
+  const [isLaunchingDotaGame, setIsLaunchingDotaGame] = useState(false);
+  const [copiedLobbyName, setCopiedLobbyName] = useState(false);
+  const [copiedLobbyPassword, setCopiedLobbyPassword] = useState(false);
+
   // Active Control Tab
   const [activeTab, setActiveTab] = useState<"server" | "rcon" | "players" | "schedule">("server");
 
@@ -130,6 +136,9 @@ export default function MatchControlPage() {
       if (matchData.match) {
         setScore1(matchData.match.score1 ?? 0);
         setScore2(matchData.match.score2 ?? 0);
+        if (matchData.match.dotaLobby) {
+          setDotaLobby(matchData.match.dotaLobby);
+        }
         if (matchData.match.scheduledAt) {
           const d = new Date(matchData.match.scheduledAt);
           const pad = (n: number) => n.toString().padStart(2, "0");
@@ -254,6 +263,32 @@ export default function MatchControlPage() {
       alert("Ошибка сети при перезапуске сервера");
     } finally {
       setIsRestartingServer(false);
+    }
+  };
+
+  const handleLaunchDotaGame = async () => {
+    setIsLaunchingDotaGame(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "launch_dota_match",
+          matchId: match.id,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchMatchData();
+        alert("Команда запуска игры в лобби Dota 2 отправлена боту!");
+      } else {
+        alert(data.error || "Не удалось запустить игру в лобби Dota 2");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети");
+    } finally {
+      setIsLaunchingDotaGame(false);
     }
   };
 
@@ -438,10 +473,15 @@ export default function MatchControlPage() {
 
   const compA = match.competitorA;
   const compB = match.competitorB;
+  const isDota = match.tournamentDiscipline === "dota2" || match.discipline === "dota2";
   const statusLower = match.status?.toLowerCase() || "scheduled";
   const isFinished = statusLower === "finished";
-  const isLive = statusLower === "live" || statusLower === "in_progress" || Boolean(activeCs2Match);
-  const isServerRunning = Boolean(activeCs2Match && activeCs2Match.status !== "stopped" && activeCs2Match.status !== "finished");
+  const isDotaLobbyReady = dotaLobby?.status === "lobby_ready" || dotaLobby?.status === "ready";
+  const isDotaLobbyLive = dotaLobby?.status === "live";
+  const isServerRunning = isDota
+    ? Boolean(dotaLobby && dotaLobby.status !== "stopped" && dotaLobby.status !== "finished")
+    : Boolean(activeCs2Match && activeCs2Match.status !== "stopped" && activeCs2Match.status !== "finished");
+  const isLive = statusLower === "live" || statusLower === "in_progress" || Boolean(activeCs2Match) || isDotaLobbyLive;
 
   const serverIp = activeCs2Match?.server_ip || agent?.lan_ip || "127.0.0.1";
   const serverPort = activeCs2Match?.port || agent?.base_port || 27015;
@@ -518,9 +558,14 @@ export default function MatchControlPage() {
           <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
             {/* Team A */}
             <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/25 text-sky-400 text-[10px] font-black uppercase tracking-wider mb-0.5">
-                <Shield className="w-3 h-3 text-sky-400" />
-                <span>СПЕЦНАЗ (CT)</span>
+              <div className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-0.5 border",
+                isDota
+                  ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                  : "bg-sky-500/10 border-sky-500/25 text-sky-400"
+              )}>
+                <Shield className="w-3 h-3" />
+                <span>{isDota ? "СИЛЫ СВЕТА (RADIANT)" : "СПЕЦНАЗ (CT)"}</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
                 {compA?.name || "Ожидает пару..."}
@@ -533,35 +578,54 @@ export default function MatchControlPage() {
             {/* Score & Stage */}
             <div className="text-center flex flex-col items-center justify-center space-y-1">
               <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider mb-0.5">
-                <span className="px-2 py-0.5 rounded-md border text-sky-400 bg-sky-500/10 border-sky-500/20 font-mono font-bold">
-                  CT
+                <span className={cn(
+                  "px-2 py-0.5 rounded-md border font-mono font-bold",
+                  isDota
+                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    : "text-sky-400 bg-sky-500/10 border-sky-500/20"
+                )}>
+                  {isDota ? "RADIANT" : "CT"}
                 </span>
                 <span className="text-gray-600 font-mono text-[10px]">VS</span>
-                <span className="px-2 py-0.5 rounded-md border text-orange-400 bg-orange-500/10 border-orange-500/20 font-mono font-bold">
-                  T
+                <span className={cn(
+                  "px-2 py-0.5 rounded-md border font-mono font-bold",
+                  isDota
+                    ? "text-rose-400 bg-rose-500/10 border-rose-500/20"
+                    : "text-orange-400 bg-orange-500/10 border-orange-500/20"
+                )}>
+                  {isDota ? "DIRE" : "T"}
                 </span>
               </div>
               <div className="text-4xl sm:text-6xl font-black font-mono tracking-tight text-white flex items-center justify-center gap-3">
-                <span className={cn(match.winnerId === compA?.id ? "text-emerald-400" : "text-sky-400")}>{match.score1 ?? 0}</span>
+                <span className={cn(match.winnerId === compA?.id ? "text-emerald-400" : isDota ? "text-emerald-300" : "text-sky-400")}>
+                  {match.score1 ?? 0}
+                </span>
                 <span className="text-gray-500 font-sans font-light">:</span>
-                <span className={cn(match.winnerId === compB?.id ? "text-emerald-400" : "text-orange-400")}>{match.score2 ?? 0}</span>
+                <span className={cn(match.winnerId === compB?.id ? "text-emerald-400" : isDota ? "text-rose-300" : "text-orange-400")}>
+                  {match.score2 ?? 0}
+                </span>
               </div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 border border-white/10 text-[11px] font-bold uppercase tracking-wider text-gray-300">
                 <span>{match.matchFormat?.toUpperCase() || "BO1"}</span>
                 <span>•</span>
-                <span className="text-orange-400">{selectedMapInfo.name}</span>
+                <span className="text-orange-400">{isDota ? (dotaLobby?.gameMode || "Captains Mode") : selectedMapInfo.name}</span>
                 <span>•</span>
-                <span className={cn(isFinished ? "text-emerald-400" : isServerRunning ? "text-red-400 animate-pulse" : "text-gray-400")}>
-                  {isFinished ? "Завершен" : isServerRunning ? "● LIVE CS2" : "Ожидание"}
+                <span className={cn(isFinished ? "text-emerald-400" : (isServerRunning || isDotaLobbyLive) ? "text-red-400 animate-pulse" : "text-gray-400")}>
+                  {isFinished ? "Завершен" : (isServerRunning || isDotaLobbyLive) ? (isDota ? "● LIVE DOTA 2" : "● LIVE CS2") : "Ожидание"}
                 </span>
               </div>
             </div>
 
             {/* Team B */}
             <div className="space-y-1 text-left md:text-right">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/25 text-orange-400 text-[10px] font-black uppercase tracking-wider mb-0.5">
-                <Flame className="w-3 h-3 text-orange-400" />
-                <span>ТЕРРОРИСТЫ (T)</span>
+              <div className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-0.5 border",
+                isDota
+                  ? "bg-rose-500/10 border-rose-500/25 text-rose-400"
+                  : "bg-orange-500/10 border-orange-500/25 text-orange-400"
+              )}>
+                <Flame className="w-3 h-3" />
+                <span>{isDota ? "СИЛЫ ТЬМЫ (DIRE)" : "ТЕРРОРИСТЫ (T)"}</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
                 {compB?.name || "Ожидает пару..."}
@@ -594,7 +658,7 @@ export default function MatchControlPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-wider text-white">
-                    DashMatch CS2 Агент
+                    {isDota ? "DashMatch Dota 2 Бот" : "DashMatch CS2 Агент"}
                   </h3>
                   <div className="text-[11px] text-gray-400 font-mono">
                     {agent?.is_online ? `В сети • LAN IP: ${agent.lan_ip || "127.0.0.1"}` : "Агент не отвечает на хосте"}
@@ -613,25 +677,42 @@ export default function MatchControlPage() {
 
             <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-black/40 p-3 rounded-2xl border border-white/5">
               <div>
-                <span className="text-gray-500 block text-[9px] uppercase font-bold font-sans">Порты выделения</span>
-                <span className="text-gray-200 font-bold">{agent?.base_port || 27015} .. {(agent?.base_port || 27015) + (agent?.max_instances || 4) - 1}</span>
+                <span className="text-gray-500 block text-[9px] uppercase font-bold font-sans">
+                  {isDota ? "Режим лобби" : "Порты выделения"}
+                </span>
+                <span className="text-gray-200 font-bold">
+                  {isDota ? (dotaLobby?.gameMode || "Captains Mode") : `${agent?.base_port || 27015} .. ${(agent?.base_port || 27015) + (agent?.max_instances || 4) - 1}`}
+                </span>
               </div>
               <div>
-                <span className="text-gray-500 block text-[9px] uppercase font-bold font-sans">Свободно слотов</span>
-                <span className="text-emerald-400 font-bold">{agent?.max_instances ? `${agent.max_instances} матчей` : "Доступен"}</span>
+                <span className="text-gray-500 block text-[9px] uppercase font-bold font-sans">
+                  {isDota ? "Статус бота" : "Свободно слотов"}
+                </span>
+                <span className="text-emerald-400 font-bold">
+                  {isDota ? (agent?.is_online ? "Готов к матчам" : "Оффлайн") : (agent?.max_instances ? `${agent.max_instances} матчей` : "Доступен")}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Live Server Quick Actions / Status */}
+          {/* Live Server / Dota Lobby Quick Actions / Status */}
           <div className="md:col-span-7 bg-[#111116] border border-white/5 rounded-3xl p-5 space-y-4 shadow-xl flex flex-col justify-between">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-widest text-orange-400 block">
-                  Игровой сервер CS2
+                  {isDota ? "Игровое лобби Dota 2" : "Игровой сервер CS2"}
                 </span>
                 <h3 className="text-base font-black uppercase tracking-tight text-white">
-                  {isServerRunning ? (
+                  {isDota ? (
+                    isServerRunning ? (
+                      <span className="text-emerald-400 flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                        {isDotaLobbyLive ? "Идет матч (Live)" : "Лобби готово • Ожидание игроков"}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">Лобби Dota 2 не создано</span>
+                    )
+                  ) : isServerRunning ? (
                     <span className="text-emerald-400 flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
                       Сервер запущен (Порт :{serverPort})
@@ -648,7 +729,7 @@ export default function MatchControlPage() {
                     onClick={handleRestartServer}
                     disabled={isRestartingServer || isStoppingServer}
                     className="px-3.5 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
-                    title="Перезапустить CS2 сервер матча"
+                    title={isDota ? "Перезапустить лобби Dota 2" : "Перезапустить CS2 сервер матча"}
                   >
                     <RefreshCw className={cn("w-3.5 h-3.5", isRestartingServer && "animate-spin")} />
                     <span>Перезапустить</span>
@@ -668,7 +749,50 @@ export default function MatchControlPage() {
               </div>
             </div>
 
-            {isServerRunning ? (
+            {isDota ? (
+              isServerRunning ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="py-2.5 px-3.5 bg-black/60 rounded-xl border border-white/10 flex items-center justify-between">
+                    <span className="text-gray-400 truncate font-sans text-xs">
+                      Лобби: <strong className="text-orange-400 font-mono">{dotaLobby?.gameName || `DashMatch #${match.id}`}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(dotaLobby?.gameName || `DashMatch #${match.id}`);
+                        setCopiedLobbyName(true);
+                        setTimeout(() => setCopiedLobbyName(false), 2000);
+                      }}
+                      className="text-[11px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-gray-200 cursor-pointer"
+                    >
+                      {copiedLobbyName ? "Скопировано" : "Копировать"}
+                    </button>
+                  </div>
+                  <div className="py-2.5 px-3.5 bg-black/60 rounded-xl border border-white/10 flex items-center justify-between">
+                    <span className="text-gray-400 truncate font-sans text-xs">
+                      Пароль: <strong className="text-emerald-400 font-mono">{dotaLobby?.password || "—"}</strong>
+                    </span>
+                    {dotaLobby?.password && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(dotaLobby.password);
+                          setCopiedLobbyPassword(true);
+                          setTimeout(() => setCopiedLobbyPassword(false), 2000);
+                        }}
+                        className="text-[11px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-gray-200 cursor-pointer"
+                      >
+                        {copiedLobbyPassword ? "Скопировано" : "Копировать"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-400 bg-black/30 p-3 rounded-2xl border border-white/5">
+                  Лобби Dota 2 создается автоматически после подтверждения готовности всеми игроками, либо вы можете создать его вручную кнопкой ниже.
+                </div>
+              )
+            ) : isServerRunning ? (
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                 <button
                   onClick={handleCopyConnect}
@@ -707,19 +831,272 @@ export default function MatchControlPage() {
           {/* LEFT 7 COLS: SERVER LAUNCHER & RCON DECK */}
           <div className="lg:col-span-7 space-y-6">
 
-            {/* SERVER LAUNCHER */}
-            <div className="bg-[#111116] border border-white/5 rounded-3xl p-6 space-y-5 shadow-xl">
-              <div className="border-b border-white/5 pb-3 flex items-center justify-between">
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
-                    Запуск матча
+            {isDota ? (
+              <>
+                {/* DOTA 2 LOBBY MANAGEMENT */}
+                <div className="bg-[#111116] border border-white/5 rounded-3xl p-6 space-y-5 shadow-xl">
+                  <div className="border-b border-white/5 pb-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
+                        Управление матчем
+                      </div>
+                      <h3 className="text-lg font-black uppercase tracking-tight text-white mt-0.5">
+                        Лобби Dota 2
+                      </h3>
+                    </div>
+                    <Gamepad2 className="w-5 h-5 text-orange-500" />
                   </div>
-                  <h3 className="text-lg font-black uppercase tracking-tight text-white mt-0.5">
-                    Параметры сервера CS2
-                  </h3>
+
+                  {dotaLobby && dotaLobby.status !== "stopped" ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className={cn(
+                          "text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md flex items-center gap-1.5",
+                          dotaLobby.status === "live"
+                            ? "bg-red-500 text-white animate-pulse"
+                            : isDotaLobbyReady
+                            ? "bg-emerald-500 text-white"
+                            : "bg-blue-500 text-white"
+                        )}>
+                          {dotaLobby.status === "live" ? (
+                            "🔴 Live Матч идет"
+                          ) : isDotaLobbyReady ? (
+                            "🟢 Лобби готово • Ожидание игроков"
+                          ) : (
+                            "Создание лобби ботом..."
+                          )}
+                        </span>
+
+                        <div className="text-xs font-mono text-gray-400">
+                          {dotaLobby.gameMode || "Captains Mode"} • {dotaLobby.serverRegion || "Stockholm"}
+                        </div>
+                      </div>
+
+                      {/* Credentials */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                        <div className="bg-black/60 rounded-2xl p-4 border border-white/5 flex items-center justify-between">
+                          <div>
+                            <span className="text-gray-500 block text-[10px] uppercase font-sans">Имя лобби</span>
+                            <span className="text-orange-400 font-bold truncate text-sm">
+                              {dotaLobby.gameName || `DashMatch #${match.id}`}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(dotaLobby.gameName || `DashMatch #${match.id}`);
+                              setCopiedLobbyName(true);
+                              setTimeout(() => setCopiedLobbyName(false), 2000);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-gray-200 text-xs transition-all cursor-pointer flex items-center gap-1"
+                          >
+                            {copiedLobbyName ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            <span>{copiedLobbyName ? "Скопировано" : "Копировать"}</span>
+                          </button>
+                        </div>
+
+                        <div className="bg-black/60 rounded-2xl p-4 border border-white/5 flex items-center justify-between">
+                          <div>
+                            <span className="text-gray-500 block text-[10px] uppercase font-sans">Пароль</span>
+                            <span className="text-emerald-400 font-bold font-mono text-sm">
+                              {dotaLobby.password || "—"}
+                            </span>
+                          </div>
+                          {dotaLobby.password && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(dotaLobby.password);
+                                setCopiedLobbyPassword(true);
+                                setTimeout(() => setCopiedLobbyPassword(false), 2000);
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-gray-200 text-xs transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              {copiedLobbyPassword ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              <span>{copiedLobbyPassword ? "Скопировано" : "Копировать"}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Sides Assignment */}
+                      <div className="p-3.5 bg-black/40 rounded-2xl border border-white/5 text-xs text-gray-300 flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                          <span className="text-emerald-400 font-bold">Силы Света (Radiant):</span>
+                          <span>{compA?.name || "Команда 1"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-rose-400"></span>
+                          <span className="text-rose-400 font-bold">Силы Тьмы (Dire):</span>
+                          <span>{compB?.name || "Команда 2"}</span>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="space-y-3 pt-1">
+                        {isDotaLobbyReady && (
+                          <button
+                            type="button"
+                            disabled={isLaunchingDotaGame}
+                            onClick={handleLaunchDotaGame}
+                            className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-emerald-600/20 active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            {isLaunchingDotaGame ? (
+                              <>
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                <span>Запуск игры в клиенте Dota 2...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play className="w-4 h-4 fill-white" />
+                                <span>🚀 Запустить игру в лобби Dota 2</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            disabled={isRestartingServer || isStoppingServer}
+                            onClick={handleRestartServer}
+                            className="py-3 px-3 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <RefreshCw className={cn("w-3.5 h-3.5", isRestartingServer && "animate-spin")} />
+                            <span>Перезапустить</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={isStoppingServer || isRestartingServer}
+                            onClick={handleStopServer}
+                            className="py-3 px-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <Pause className="w-3.5 h-3.5" />
+                            <span>Закрыть лобби</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={isResettingLobby}
+                            onClick={handleResetLobby}
+                            className="py-3 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <RotateCcw className={cn("w-3.5 h-3.5", isResettingLobby && "animate-spin")} />
+                            <span>Сбросить</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* DOTA LOBBY NOT LAUNCHED */
+                    <div className="space-y-4">
+                      <p className="text-xs text-gray-400 leading-relaxed">
+                        Бот DashMatch автоматически создаст лобби в Dota 2 с заданным регламентом, распределит команды по сторонам (Radiant / Dire) и разошлет приглашения игрокам по Steam ID.
+                      </p>
+
+                      <div className="space-y-2.5">
+                        <button
+                          type="button"
+                          onClick={handleLaunchServer}
+                          disabled={isLaunchingServer || !agent?.is_online}
+                          className="w-full py-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-orange-500/20 active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          {isLaunchingServer ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Создание лобби в Dota 2...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4 fill-white" />
+                              <span>🎮 Создать лобби Dota 2 сейчас</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isResettingLobby}
+                          onClick={handleResetLobby}
+                          className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <RotateCcw className={cn("w-3.5 h-3.5", isResettingLobby && "animate-spin")} />
+                          <span>Сбросить статус лобби</span>
+                        </button>
+                      </div>
+
+                      {!agent?.is_online && (
+                        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-400 text-xs flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                          <span>
+                            Агент DashMatch на ПК клуба сейчас не на связи. Запустите <strong>dashmatch.exe</strong> на выделенном компьютере для работы бота.
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <Gamepad2 className="w-5 h-5 text-orange-500" />
-              </div>
+
+                {/* DOTA 2 GUIDE & WORKFLOW */}
+                <div className="bg-[#111116] border border-white/5 rounded-3xl p-6 space-y-4 shadow-xl">
+                  <div className="border-b border-white/5 pb-3">
+                    <h4 className="text-sm font-black uppercase tracking-wider text-white">
+                      Порядок проведения матча по Dota 2
+                    </h4>
+                  </div>
+
+                  <div className="space-y-3 text-xs text-gray-300">
+                    <div className="flex items-start gap-3 p-3 bg-black/40 rounded-xl border border-white/5">
+                      <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 font-bold flex items-center justify-center text-[10px] shrink-0">1</span>
+                      <div>
+                        <strong className="text-white block font-medium">Готовность участников</strong>
+                        Игроки занимают клубные ПК и нажимают кнопку "Готов" в личном кабинете матча.
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-black/40 rounded-xl border border-white/5">
+                      <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 font-bold flex items-center justify-center text-[10px] shrink-0">2</span>
+                      <div>
+                        <strong className="text-white block font-medium">Создание лобби</strong>
+                        Бот DashMatch автоматически создает пользовательское лобби с паролем и отправляет инвайты в Steam.
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-black/40 rounded-xl border border-white/5">
+                      <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 font-bold flex items-center justify-center text-[10px] shrink-0">3</span>
+                      <div>
+                        <strong className="text-white block font-medium">Вход в лобби</strong>
+                        Игроки принимают приглашение бота или заходят вручную: <em>Играть → Пользовательские лобби → Поиск по имени</em>.
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-black/40 rounded-xl border border-white/5">
+                      <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 font-bold flex items-center justify-center text-[10px] shrink-0">4</span>
+                      <div>
+                        <strong className="text-white block font-medium">Старт и авто-фиксация</strong>
+                        После того как слоты команд заполнены, нажмите "Запустить игру в лобби" (или бот запустит автоматически). По завершению результат матча и счет подтянутся автоматически!
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* SERVER LAUNCHER */}
+                <div className="bg-[#111116] border border-white/5 rounded-3xl p-6 space-y-5 shadow-xl">
+                  <div className="border-b border-white/5 pb-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
+                        Запуск матча
+                      </div>
+                      <h3 className="text-lg font-black uppercase tracking-tight text-white mt-0.5">
+                        Параметры сервера CS2
+                      </h3>
+                    </div>
+                    <Gamepad2 className="w-5 h-5 text-orange-500" />
+                  </div>
 
               <div className="space-y-4">
                 {/* Map Picker */}
@@ -987,8 +1364,10 @@ export default function MatchControlPage() {
                 </form>
               </div>
             </div>
+          </>
+        )}
 
-          </div>
+      </div>
 
           {/* RIGHT 5 COLS: ROSTER CHECK-INS & MANUAL MATCH RESULTS */}
           <div className="lg:col-span-5 space-y-6">

@@ -222,7 +222,7 @@ export function TournamentDetailHeader({
           <div className="flex items-center gap-3 shrink-0 flex-wrap">
             {getStatusBadge()}
 
-            {tournament.discipline === "cs2" && (
+            {(tournament.discipline === "cs2" || tournament.discipline === "dota2") && (
               <button
                 type="button"
                 onClick={() => router.push(`/clubs/${clubId}/tournaments?tab=servers`)}

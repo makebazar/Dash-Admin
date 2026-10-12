@@ -200,6 +200,10 @@ export default function CreateTournamentPage({
   const [mapFilter, setMapFilter] = useState<"all" | "5v5" | "wingman" | "1v1" | "workshop">("5v5");
   const [customClubMaps, setCustomClubMaps] = useState<any[]>([]);
 
+  // Dota 2 settings
+  const [dotaGameMode, setDotaGameMode] = useState<"CM" | "1V1MID" | "AP" | "TURBO">("CM");
+  const [dotaServerRegion, setDotaServerRegion] = useState<"STOCKHOLM" | "EUROPE">("STOCKHOLM");
+
   // Fetch club workshop maps
   const fetchClubCustomMaps = useCallback(async () => {
     try {
@@ -359,6 +363,12 @@ export default function CreateTournamentPage({
           if (cfg.itemPool && Array.isArray(cfg.itemPool)) {
             setItemPool(cfg.itemPool);
           }
+          if (cfg.gameMode) {
+            setDotaGameMode(cfg.gameMode);
+          }
+          if (cfg.serverRegion) {
+            setDotaServerRegion(cfg.serverRegion);
+          }
 
           if (t.starts_at) {
             const dt = new Date(t.starts_at);
@@ -421,6 +431,13 @@ export default function CreateTournamentPage({
         { id: "2vs2", name: "2vs2 Команды" },
         { id: "5vs5", name: "5vs5 Команды" },
         { id: "mix_2vs2", name: "Mix 2vs2 (Дуэты)" },
+        { id: "mix_5vs5", name: "Mix (5x5 Сбалансированный)" },
+      ];
+    } else if (discipline === "dota2") {
+      return [
+        { id: "5vs5", name: "5vs5 Команды" },
+        { id: "1vs1", name: "1vs1 Solo Mid" },
+        { id: "2vs2", name: "2vs2 Команды" },
         { id: "mix_5vs5", name: "Mix (5x5 Сбалансированный)" },
       ];
     } else if (discipline === "fifa" || discipline === "ufc") {
@@ -659,6 +676,8 @@ export default function CreateTournamentPage({
           matchFormat,
           semiFinalFormat,
           grandFinalFormat,
+          gameMode: dotaGameMode,
+          serverRegion: dotaServerRegion,
         },
       };
 
@@ -835,7 +854,7 @@ export default function CreateTournamentPage({
                     { id: "cs2", name: "Counter-Strike 2", badge: "Автосервер" },
                     { id: "fifa", name: "EA FC / FIFA", badge: "Ручной ввод" },
                     { id: "ufc", name: "UFC", badge: "Ручной ввод" },
-                    { id: "dota2", name: "Dota 2", badge: "Ручной ввод" },
+                    { id: "dota2", name: "Dota 2", badge: "Автосервер" },
                   ].map((discItem) => (
                     <button
                       key={discItem.id}
@@ -878,18 +897,26 @@ export default function CreateTournamentPage({
                       onClick={() => {
                         setType(typeItem.id);
                         if (!editTournamentId) {
-                          if (typeItem.id === "1vs1") {
-                            setMapPool(CS2_AIM_1V1_MAP_POOL);
-                            setMapFilter("1v1");
-                          } else if (
-                            typeItem.id === "2vs2" ||
-                            typeItem.id === "mix_2vs2"
-                          ) {
-                            setMapPool(CS2_WINGMAN_MAP_POOL);
-                            setMapFilter("wingman");
+                          if (discipline === "dota2") {
+                            if (typeItem.id === "1vs1") {
+                              setDotaGameMode("1V1MID");
+                            } else {
+                              setDotaGameMode("CM");
+                            }
                           } else {
-                            setMapPool(CS2_5V5_MAP_POOL);
-                            setMapFilter("5v5");
+                            if (typeItem.id === "1vs1") {
+                              setMapPool(CS2_AIM_1V1_MAP_POOL);
+                              setMapFilter("1v1");
+                            } else if (
+                              typeItem.id === "2vs2" ||
+                              typeItem.id === "mix_2vs2"
+                            ) {
+                              setMapPool(CS2_WINGMAN_MAP_POOL);
+                              setMapFilter("wingman");
+                            } else {
+                              setMapPool(CS2_5V5_MAP_POOL);
+                              setMapFilter("5v5");
+                            }
                           }
                         }
                       }}
@@ -1216,6 +1243,83 @@ export default function CreateTournamentPage({
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* Dota 2 Lobby Settings */}
+              {discipline === "dota2" && (
+                <div className="bg-slate-50 border border-slate-200/80 rounded-3xl p-6 space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 pb-4">
+                    <div>
+                      <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                        <Gamepad2 className="w-4 h-4 text-orange-500" />
+                        Настройки лобби Dota 2 (Автоматический бот DashMatch)
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Бот создаст закрытое лобби на серверах Valve, разошлет инвайты игрокам по Steam ID и запустит матч
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Game Mode */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
+                        Игровой режим (Game Mode)
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "CM", label: "Captains Mode (CM)", desc: "Пики и баны капитанов" },
+                          { id: "1V1MID", label: "1v1 Solo Mid", desc: "Дуэль 1 на 1 по миду" },
+                          { id: "AP", label: "All Pick (AP)", desc: "Свободный выбор героев" },
+                          { id: "TURBO", label: "Turbo", desc: "Ускоренный режим" },
+                        ].map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setDotaGameMode(m.id as any)}
+                            className={cn(
+                              "p-3 rounded-2xl border text-left transition-all flex flex-col justify-between gap-1 cursor-pointer",
+                              dotaGameMode === m.id
+                                ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100/60"
+                            )}
+                          >
+                            <span className="text-xs font-black">{m.label}</span>
+                            <span className={cn("text-[9px]", dotaGameMode === m.id ? "text-slate-300" : "text-slate-400")}>{m.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Server Region */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
+                        Регион серверов Valve
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "STOCKHOLM", label: "Стокгольм (Россия / СНГ)", desc: "Минимальный пинг для РФ и СНГ" },
+                          { id: "EUROPE", label: "Западная Европа", desc: "Люксембург / Европа" },
+                        ].map((r) => (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => setDotaServerRegion(r.id as any)}
+                            className={cn(
+                              "p-3 rounded-2xl border text-left transition-all flex flex-col justify-between gap-1 cursor-pointer",
+                              dotaServerRegion === r.id
+                                ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100/60"
+                            )}
+                          >
+                            <span className="text-xs font-black">{r.label}</span>
+                            <span className={cn("text-[9px]", dotaServerRegion === r.id ? "text-slate-300" : "text-slate-400")}>{r.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

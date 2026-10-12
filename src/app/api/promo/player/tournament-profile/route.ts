@@ -40,6 +40,13 @@ export async function POST(request: Request) {
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS faceit_winrate NUMERIC(5,2);
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS faceit_matches INTEGER;
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS faceit_avatar TEXT;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_rank_tier INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_rank_name VARCHAR(100);
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_leaderboard_rank INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_mmr INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_winrate NUMERIC(5,2);
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_matches INTEGER;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS dota_stats JSONB;
     `);
 
     // Parse Faceit data if link provided or sync requested
@@ -71,6 +78,15 @@ export async function POST(request: Request) {
       if (!resolvedSteamLink) {
         resolvedSteamLink = `https://steamcommunity.com/profiles/${steamId}`;
       }
+    }
+
+    // If sync requested or Steam link given, fetch Dota 2 stats from OpenDota
+    let dotaStats: any = null;
+    const { syncDotaNow } = body;
+    const targetSteamId = steamId || (!steamLink ? (await client.query(`SELECT steam_id FROM promo_players WHERE id = $1`, [playerId])).rows[0]?.steam_id : null);
+    if (targetSteamId && (steamLink !== undefined || syncDotaNow)) {
+      const { fetchDotaStats } = await import("@/lib/dota-service");
+      dotaStats = await fetchDotaStats(targetSteamId);
     }
 
     // Build update query
@@ -172,6 +188,30 @@ export async function POST(request: Request) {
       }
     }
 
+    // Process Dota 2 Stats
+    if (dotaStats) {
+      updates.push(`dota_rank_tier = $${valIdx++}`);
+      values.push(dotaStats.rankTier);
+
+      updates.push(`dota_rank_name = $${valIdx++}`);
+      values.push(dotaStats.rank?.nameRu || dotaStats.rank?.name || null);
+
+      updates.push(`dota_leaderboard_rank = $${valIdx++}`);
+      values.push(dotaStats.rank?.leaderboardRank || null);
+
+      updates.push(`dota_mmr = $${valIdx++}`);
+      values.push(dotaStats.mmr);
+
+      updates.push(`dota_winrate = $${valIdx++}`);
+      values.push(dotaStats.winrate);
+
+      updates.push(`dota_matches = $${valIdx++}`);
+      values.push(dotaStats.matches);
+
+      updates.push(`dota_stats = $${valIdx++}`);
+      values.push(JSON.stringify(dotaStats));
+    }
+
     if (updates.length > 0) {
       values.push(playerId);
       await client.query(
@@ -183,7 +223,8 @@ export async function POST(request: Request) {
     // Fetch updated record
     const result = await client.query(
       `SELECT id, full_name, nickname, avatar_url, lft_status, steam_link, steam_id, faceit_link,
-              faceit_lvl, faceit_elo, faceit_kd, faceit_winrate, faceit_matches, faceit_avatar
+              faceit_lvl, faceit_elo, faceit_kd, faceit_winrate, faceit_matches, faceit_avatar,
+              dota_rank_tier, dota_rank_name, dota_leaderboard_rank, dota_mmr, dota_winrate, dota_matches, dota_stats
        FROM promo_players
        WHERE id = $1`,
       [playerId]
@@ -193,6 +234,7 @@ export async function POST(request: Request) {
       success: true,
       player: result.rows[0],
       faceitSynced: Boolean(faceitStats),
+      dotaSynced: Boolean(dotaStats),
     });
   } catch (error: any) {
     console.error("Tournament Profile Update Error:", error);
