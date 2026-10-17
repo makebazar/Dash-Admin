@@ -105,160 +105,78 @@ export function CompetitorsList({
       {/* 1. Quick Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {/* Total registered */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-              Всего участников
-            </span>
-            <Users className="w-4 h-4 text-slate-400" />
-          </div>
-          <div className="text-2xl font-black text-slate-900">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-1">
+          <span className="text-xs font-medium text-slate-500 block">
+            Всего участников
+          </span>
+          <div className="text-2xl font-bold tracking-tight text-slate-900">
             {mainCompetitors.length}{" "}
-            <span className="text-xs font-bold text-slate-400">
+            <span className="text-xs font-normal text-slate-400">
               / {maxParticipants}
             </span>
           </div>
-          <span className="text-[10px] text-slate-500 font-medium block">
+          <span className="text-[11px] text-slate-500 font-normal block">
             Основной состав слотов
           </span>
         </div>
 
         {/* Paid */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">
-              Оплачено
-            </span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-          </div>
-          <div className="text-2xl font-black text-emerald-600">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-1">
+          <span className="text-xs font-medium text-emerald-600 block">
+            Оплачено
+          </span>
+          <div className="text-2xl font-bold tracking-tight text-emerald-600">
             {paidCompetitors.length}
           </div>
-          <span className="text-[10px] text-slate-500 font-medium block">
+          <span className="text-[11px] text-slate-500 font-normal block">
             Подтвержденные слоты
           </span>
         </div>
 
         {/* Unpaid */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">
-              Ожидает взноса
-            </span>
-            <Clock className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="text-2xl font-black text-amber-600">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-1">
+          <span className="text-xs font-medium text-amber-600 block">
+            Ожидает взноса
+          </span>
+          <div className="text-2xl font-bold tracking-tight text-amber-600">
             {unpaidCompetitors.length}
           </div>
-          <span className="text-[10px] text-slate-500 font-medium block">
+          <span className="text-[11px] text-slate-500 font-normal block">
             Неоплаченные заявки
           </span>
         </div>
 
         {/* Reserve */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-widest text-blue-600">
-              В резерве
-            </span>
-            <AlertCircle className="w-4 h-4 text-blue-500" />
-          </div>
-          <div className="text-2xl font-black text-blue-600">
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-1">
+          <span className="text-xs font-medium text-blue-600 block">
+            В резерве
+          </span>
+          <div className="text-2xl font-bold tracking-tight text-blue-600">
             {reserveCompetitors.length}
           </div>
-          <span className="text-[10px] text-slate-500 font-medium block">
+          <span className="text-[11px] text-slate-500 font-normal block">
             Очередь ожидания
           </span>
         </div>
       </div>
 
-      {/* 2. Dev Test Bots Toolbar (if REGISTRATION / DRAFT) */}
-      {isEditable && onGenerateBots && (
-        <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-3xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-600 text-white rounded-2xl shadow-sm">
-              <Bot className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black uppercase text-indigo-950 block">
-                  Тестовые боты (Автозаполнение)
-                </span>
-                <span className="text-[9px] font-black uppercase bg-indigo-200 text-indigo-800 px-1.5 py-0.5 rounded">
-                  Dev Test
-                </span>
-              </div>
-              <span className="text-[10px] text-indigo-700 font-medium mt-0.5 block">
-                Мгновенное заполнение свободных слотов для проверки сетки и регламента
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              disabled={isGeneratingBots}
-              onClick={() => onGenerateBots(4)}
-              className="px-3 py-2 bg-white border border-indigo-200 hover:border-indigo-400 text-indigo-900 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-xs cursor-pointer"
-            >
-              +4 Бота
-            </button>
-            <button
-              type="button"
-              disabled={isGeneratingBots}
-              onClick={() => onGenerateBots(8)}
-              className="px-3 py-2 bg-white border border-indigo-200 hover:border-indigo-400 text-indigo-900 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-xs cursor-pointer"
-            >
-              +8 Ботов
-            </button>
-            <button
-              type="button"
-              disabled={isGeneratingBots}
-              onClick={() => onGenerateBots()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-sm flex items-center gap-1.5 cursor-pointer"
-            >
-              {isGeneratingBots ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Создание...</span>
-                </>
-              ) : (
-                <>
-                  <Bot className="w-3.5 h-3.5" />
-                  <span>Заполнить все слоты</span>
-                </>
-              )}
-            </button>
-            {hasBots && onClearBots && (
-              <button
-                type="button"
-                onClick={onClearBots}
-                className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
-              >
-                Очистить ботов
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 3. Search and Status Filters */}
-      <div className="bg-white border border-slate-200 rounded-[2.5rem] p-6 space-y-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
+      {/* 2. Search and Status Filters */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5 shadow-xs">
+        <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
           {/* Search bar */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Поиск участника по имени, никнейму или телефону..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-2xl pl-11 pr-4 py-3 text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 transition-colors shadow-xs"
+              className="w-full bg-slate-50/50 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 transition-all"
             />
           </div>
 
           {/* Filter Pills */}
-          <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200/80 overflow-x-auto shrink-0">
+          <div className="flex bg-slate-100/70 p-1 rounded-xl border border-slate-200/60 overflow-x-auto shrink-0 gap-1">
             {[
               { id: "all", label: "Все", count: competitors.length },
               { id: "paid", label: "Оплачено", count: paidCompetitors.length },
@@ -277,19 +195,19 @@ export function CompetitorsList({
                 key={tab.id}
                 onClick={() => setStatusFilter(tab.id as any)}
                 className={cn(
-                  "px-3.5 py-1.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                  "px-3 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
                   statusFilter === tab.id
-                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/60"
-                    : "text-slate-500 hover:text-slate-900"
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
                 )}
               >
                 <span>{tab.label}</span>
                 <span
                   className={cn(
-                    "text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold",
+                    "text-[10px] px-1.5 py-0.5 rounded-md font-mono font-bold",
                     statusFilter === tab.id
-                      ? "bg-slate-100 text-slate-700"
-                      : "bg-slate-200/70 text-slate-600"
+                      ? "bg-white/20 text-white"
+                      : "bg-white text-slate-600"
                   )}
                 >
                   {tab.count}
@@ -301,9 +219,8 @@ export function CompetitorsList({
 
         {/* Competitors List */}
         {filteredCompetitors.length === 0 ? (
-          <div className="text-center py-16 space-y-2 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
-            <Users className="w-8 h-8 text-slate-300 mx-auto" />
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+          <div className="text-center py-16 space-y-1.5 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+            <p className="text-xs font-semibold text-slate-400">
               Участники не найдены
             </p>
             {searchQuery && (
@@ -332,6 +249,35 @@ export function CompetitorsList({
                 : 0;
               const totalMembersCount = c.team_members?.length || 0;
 
+              const isDota = tournament?.discipline?.toLowerCase().includes("dota");
+
+              const fullName = isTeam
+                ? c.display_name
+                : (c.player_full_name || c.display_name);
+
+              const rawNickname = !isTeam
+                ? (c.player_name || c.meta?.nickname || (c.player_full_name && c.player_full_name !== c.display_name ? c.display_name : undefined))
+                : undefined;
+              const nickname = rawNickname?.replace(/^@/, "");
+
+              const phone = isTeam
+                ? (c.player_phone || c.meta?.captainPhone || c.meta?.phone)
+                : (c.player_phone || c.meta?.phoneNumber || c.meta?.phone);
+
+              const hasSteam = Boolean(
+                c.player_steam_id ||
+                c.meta?.steamId ||
+                c.meta?.steam_id ||
+                c.meta?.steamId64 ||
+                (isTeam && c.team_members?.some((m) => m.steamId))
+              );
+
+              const ratingText = isDota
+                ? (c.player_dota_mmr
+                    ? `${c.player_dota_mmr} MMR`
+                    : c.player_dota_rank_name || c.meta?.dotaRankName || (c.meta?.dotaMmr ? `${c.meta.dotaMmr} MMR` : "Без ранга Dota"))
+                : `${c.player_elo || c.meta?.elo || 1000} ELO`;
+
               return (
                 <div
                   key={c.id}
@@ -357,68 +303,78 @@ export function CompetitorsList({
                         }
                       }}
                       className={cn(
-                        "flex items-center gap-3.5 flex-1 min-w-0",
+                        "flex items-center gap-3 flex-1 min-w-0",
                         hasMembers && "cursor-pointer select-none"
                       )}
                     >
-                      {/* Avatar */}
-                      <div className="w-11 h-11 rounded-2xl bg-white border border-slate-200 shadow-xs overflow-hidden flex items-center justify-center shrink-0">
-                        {c.team_logo ? (
-                          <img
-                            src={c.team_logo}
-                            alt={c.display_name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : isTeam ? (
-                          <Users className="w-5 h-5 text-orange-500" />
-                        ) : (
-                          <span className="text-sm font-black text-orange-500 uppercase">
-                            {c.display_name.substring(0, 2)}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Details */}
+                      {/* Details (No user avatar icon) */}
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-black text-slate-900 truncate block">
-                            {c.display_name}
+                        <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
+                          {/* Full Name */}
+                          <span className="text-sm font-black text-slate-900 truncate">
+                            {fullName}
                           </span>
 
-                          <span
-                            className={cn(
-                              "text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg border font-mono",
-                              isTeam
-                                ? "bg-orange-50 text-orange-600 border-orange-200"
-                                : "bg-slate-100 text-slate-600 border-slate-200"
-                            )}
-                          >
-                            {isTeam ? "Команда" : "Одиночный игрок"}
-                          </span>
-
-                          {(c.player_elo || c.meta?.elo) && !isTeam && (
-                            <span className="text-[10px] font-black text-orange-600 font-mono">
-                              {c.player_elo || c.meta?.elo} ELO
+                          {/* Nickname */}
+                          {nickname && nickname !== fullName && (
+                            <span className="text-xs font-semibold text-slate-500">
+                              @{nickname}
                             </span>
                           )}
 
+                          {/* Phone number */}
+                          {phone && (
+                            <span className="text-xs font-medium text-slate-500 font-mono">
+                              {phone}
+                            </span>
+                          )}
+
+                          {/* Type typography */}
+                          <span className="text-xs font-medium text-slate-400">
+                            {isTeam ? "Команда" : "Одиночный игрок"}
+                          </span>
+
+                          {/* Rating (Dota MMR or CS ELO) */}
+                          {(!isTeam || c.player_elo || c.player_dota_mmr || c.meta?.elo || c.meta?.dotaMmr) && (
+                            <span className="text-xs font-bold text-orange-600 font-mono">
+                              {ratingText}
+                            </span>
+                          )}
+
+                          {/* Steam status typography */}
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 text-xs font-medium",
+                              hasSteam ? "text-emerald-700" : "text-slate-400"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "w-1.5 h-1.5 rounded-full shrink-0",
+                                hasSteam ? "bg-emerald-500" : "bg-slate-300"
+                              )}
+                            />
+                            <span>{hasSteam ? "Steam подключен" : "Steam не привязан"}</span>
+                          </span>
+
+                          {/* Reserve typography */}
                           {isReserve && (
-                            <span className="text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-lg font-mono">
-                              Резерв
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                              <span>Резерв</span>
                             </span>
                           )}
                         </div>
 
-                        {/* Subtitle */}
-                        <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-0.5">
-                          {hasMembers && (
-                            <span className="text-slate-600 font-bold">
-                              Состав: {c.team_members?.length || 0} игроков
-                            </span>
-                          )}
-                          {isTeam &&
-                            Array.isArray(c.meta?.paidPlayerIds) &&
-                            !isPaid && (
+                        {/* Subtitle for teams */}
+                        {isTeam && (
+                          <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-1">
+                            {hasMembers && (
+                              <span className="text-slate-600 font-bold">
+                                Состав: {c.team_members?.length || 0} игроков
+                              </span>
+                            )}
+                            {Array.isArray(c.meta?.paidPlayerIds) && !isPaid && (
                               <span>
                                 Оплачено:{" "}
                                 <strong className="text-slate-800">
@@ -426,7 +382,8 @@ export function CompetitorsList({
                                 </strong>
                               </span>
                             )}
-                        </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Accordion indicator */}
@@ -443,10 +400,10 @@ export function CompetitorsList({
 
                     {/* Right: Payment status and actions */}
                     <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
-                      {/* Payment Status Badge / Action */}
+                      {/* Payment Status (typography) / Action */}
                       {isPaid ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-3 py-2 rounded-xl">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 px-1 py-1">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                           <span>Оплачено</span>
                         </span>
                       ) : (
@@ -498,6 +455,12 @@ export function CompetitorsList({
                             isPaid ||
                             (Array.isArray(c.meta?.paidPlayerIds) &&
                               c.meta.paidPlayerIds.includes(m.id));
+                          const memberHasSteam = Boolean(m.steamId);
+                          const memberRating = isDota
+                            ? (m.dotaMmr
+                                ? `${m.dotaMmr} MMR`
+                                : m.dotaRankName || (m.elo ? `${m.elo} MMR` : "Без ранга Dota"))
+                            : `${m.elo || 1000} ELO`;
                           return (
                             <div
                               key={m.id}
@@ -517,18 +480,41 @@ export function CompetitorsList({
                                   className="accent-orange-500 w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
                                 />
                                 <div>
-                                  <span className="font-black text-slate-800 block">
-                                    {m.fullName}
-                                  </span>
-                                  {m.phoneNumber && (
-                                    <span className="text-[10px] text-slate-400 font-medium">
-                                      {m.phoneNumber}
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-black text-slate-800">
+                                      {m.fullName}
                                     </span>
-                                  )}
+                                    {m.nickname && m.nickname !== m.fullName && (
+                                      <span className="text-slate-500 font-semibold text-[11px]">
+                                        @{m.nickname.replace(/^@/, "")}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    {m.phoneNumber && (
+                                      <span className="text-[10px] text-slate-400 font-mono">
+                                        {m.phoneNumber}
+                                      </span>
+                                    )}
+                                    <span
+                                      className={cn(
+                                        "inline-flex items-center gap-1 text-[10px] font-medium",
+                                        memberHasSteam ? "text-emerald-700" : "text-slate-400"
+                                      )}
+                                    >
+                                      <span
+                                        className={cn(
+                                          "w-1 h-1 rounded-full shrink-0",
+                                          memberHasSteam ? "bg-emerald-500" : "bg-slate-300"
+                                        )}
+                                      />
+                                      <span>{memberHasSteam ? "Steam подключен" : "Steam не привязан"}</span>
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                               <span className="font-black text-orange-500 font-mono text-xs">
-                                {m.elo ? `${m.elo} ELO` : "1000 ELO"}
+                                {memberRating}
                               </span>
                             </div>
                           );

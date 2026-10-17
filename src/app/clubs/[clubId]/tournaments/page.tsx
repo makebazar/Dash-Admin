@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import {
@@ -12,9 +12,15 @@ import {
   RulesTemplate,
   DashMatchAgentInfo,
   ActiveCs2MatchInfo,
+  TournamentParticipant,
+  PromoTeam,
 } from "./types";
 import { TournamentHeader } from "./components/TournamentHeader";
 import { TournamentList } from "./components/TournamentList";
+import { ParticipantsTab } from "./components/ParticipantsTab";
+import { ParticipantModal } from "./components/ParticipantModal";
+import { TeamsTab } from "./components/TeamsTab";
+import { TeamModal } from "./components/TeamModal";
 import { RulesTemplatesTab } from "./components/RulesTemplatesTab";
 import { RulesTemplateModal } from "./components/RulesTemplateModal";
 import { TournamentDetailHeader } from "./components/TournamentDetailHeader";
@@ -26,6 +32,7 @@ import { MatchControlModal } from "./components/MatchControlModal";
 import { UnpaidPromptModal } from "./components/UnpaidPromptModal";
 import { RebuildBracketModal } from "./components/RebuildBracketModal";
 import { DashMatchServerTab } from "./components/DashMatchServerTab";
+import { TournamentSettingsTab } from "./components/TournamentSettingsTab";
 
 export default function AdminTournaments() {
   const params = useParams();
@@ -47,17 +54,35 @@ export default function AdminTournaments() {
   const [dashmatchAgent, setDashmatchAgent] = React.useState<DashMatchAgentInfo | null>(null);
   const [activeCs2Matches, setActiveCs2Matches] = React.useState<ActiveCs2MatchInfo[]>([]);
 
+  // Participants states
+  const [participants, setParticipants] = React.useState<TournamentParticipant[]>([]);
+  const [isLoadingParticipants, setIsLoadingParticipants] = React.useState(false);
+  const [showParticipantModal, setShowParticipantModal] = React.useState(false);
+  const [editingParticipant, setEditingParticipant] = React.useState<TournamentParticipant | null>(null);
+
+  // Teams states
+  const [teams, setTeams] = React.useState<PromoTeam[]>([]);
+  const [isLoadingTeams, setIsLoadingTeams] = React.useState(false);
+  const [showTeamModal, setShowTeamModal] = React.useState(false);
+  const [editingTeam, setEditingTeam] = React.useState<PromoTeam | null>(null);
+
   // Rules Templates states
   const [rulesTemplates, setRulesTemplates] = React.useState<RulesTemplate[]>(
     []
   );
   const [mainTab, setMainTab] = React.useState<
-    "tournaments" | "rules_templates" | "servers"
+    "tournaments" | "participants" | "teams" | "rules_templates" | "servers" | "settings"
   >(
-    urlTab === "rules_templates"
+    urlTab === "participants"
+      ? "participants"
+      : urlTab === "teams"
+      ? "teams"
+      : urlTab === "rules_templates"
       ? "rules_templates"
       : urlTab === "servers"
       ? "servers"
+      : urlTab === "settings"
+      ? "settings"
       : "tournaments"
   );
   const [showTemplateModal, setShowTemplateModal] = React.useState(false);
@@ -166,6 +191,173 @@ export default function AdminTournaments() {
     }
   };
 
+  const fetchParticipants = React.useCallback(async () => {
+    try {
+      setIsLoadingParticipants(true);
+      const res = await fetch(`/api/clubs/${clubId}/tournaments?action=participants`);
+      if (res.ok) {
+        const data = await res.json();
+        setParticipants(data.participants || []);
+      }
+    } catch (err) {
+      console.error("Error fetching participants:", err);
+    } finally {
+      setIsLoadingParticipants(false);
+    }
+  }, [clubId]);
+
+  const handleSaveParticipant = async (data: {
+    id?: string;
+    fullName: string;
+    nickname?: string;
+    phoneNumber: string;
+    steamId?: string;
+    faceitElo?: string;
+    dotaMmr?: string;
+    faceitLink?: string;
+  }) => {
+    const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "save_participant",
+        ...data,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Не удалось сохранить участника");
+    }
+    await fetchParticipants();
+  };
+
+  const handleDeleteParticipant = async (id: string) => {
+    if (!confirm("Вы действительно хотите отвязать участника от турнирной базы клуба?")) return;
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete_participant",
+          id,
+        }),
+      });
+      if (res.ok) {
+        await fetchParticipants();
+      } else {
+        alert("Не удалось отвязать участника");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка сети при удалении участника");
+    }
+  };
+
+  const fetchTeams = React.useCallback(async () => {
+    try {
+      setIsLoadingTeams(true);
+      const res = await fetch(`/api/clubs/${clubId}/tournaments?action=teams`);
+      const data = await res.json();
+      if (data.teams) {
+        setTeams(data.teams);
+      }
+    } catch (err) {
+      console.error("Error fetching teams:", err);
+    } finally {
+      setIsLoadingTeams(false);
+    }
+  }, [clubId]);
+
+  const handleSaveTeam = async (data: {
+    id?: number;
+    name: string;
+    tag?: string;
+    formatType: string;
+    captainPhone: string;
+    members: string[];
+  }) => {
+    const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "save_team",
+        ...data,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Не удалось сохранить команду");
+    }
+    await fetchTeams();
+  };
+
+  const handleDeleteTeam = async (id: number) => {
+    if (!confirm("Вы действительно хотите удалить эту команду?")) return;
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete_team",
+          id,
+        }),
+      });
+      if (res.ok) {
+        await fetchTeams();
+      } else {
+        alert("Не удалось удалить команду");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка сети при удалении команды");
+    }
+  };
+
+  const handleRequestRenameTeam = async (teamId: number, reason?: string) => {
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "request_team_rename",
+          teamId,
+          reason,
+        }),
+      });
+      if (res.ok) {
+        await fetchTeams();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Не удалось отправить запрос на смену названия");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка при запросе смены названия");
+    }
+  };
+
+  const handleCancelRenameTeam = async (teamId: number) => {
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "cancel_team_rename",
+          teamId,
+        }),
+      });
+      if (res.ok) {
+        await fetchTeams();
+      } else {
+        const err = await res.json();
+        alert(err.error || "Не удалось отменить запрос");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка при отмене запроса");
+    }
+  };
+
   React.useEffect(() => {
     async function init() {
       setLoading(true);
@@ -176,6 +368,15 @@ export default function AdminTournaments() {
       if (urlTab === "rules_templates") {
         await fetchRulesTemplates("all");
       }
+      if (urlTab === "participants") {
+        await fetchParticipants();
+      }
+      if (urlTab === "teams") {
+        await fetchTeams();
+      }
+      // Also fetch in background
+      fetchParticipants();
+      fetchTeams();
       setLoading(false);
     }
     init();
@@ -196,7 +397,7 @@ export default function AdminTournaments() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [clubId, urlTournamentId, urlTab]);
+  }, [clubId, urlTournamentId, urlTab, fetchParticipants]);
 
   const handleDeleteTournament = async () => {
     if (!activeTournament) return;
@@ -458,6 +659,55 @@ export default function AdminTournaments() {
     }
   };
 
+  const handlePublishTournament = async () => {
+    if (!activeTournament) return;
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "publish",
+          id: activeTournament.id,
+        }),
+      });
+      if (res.ok) {
+        await fetchTournamentDetails(activeTournament.id);
+        await fetchTournamentsList();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Не удалось открыть регистрацию");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети");
+    }
+  };
+
+  const handleRevertToDraft = async () => {
+    if (!activeTournament) return;
+    if (!confirm("Перевести турнир обратно в черновик? Игроки в промо-панели перестанут его видеть.")) return;
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "revert_to_draft",
+          id: activeTournament.id,
+        }),
+      });
+      if (res.ok) {
+        await fetchTournamentDetails(activeTournament.id);
+        await fetchTournamentsList();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Не удалось перевести турнир в черновик");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка сети");
+    }
+  };
+
   const handleRebuildBracket = async () => {
     if (!activeTournament) return;
     setIsRebuildingBracket(true);
@@ -615,76 +865,174 @@ export default function AdminTournaments() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 p-4 sm:p-8 space-y-8">
-      {/* 1. ROOT TOURNAMENTS LIST VIEW (When no active tournament is open) */}
-      {!activeTournament && (
-        <>
-          <TournamentHeader
-            clubId={clubId}
-            activeTournament={null}
-            onBack={() => {}}
-            onDelete={() => {}}
-          />
+    <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
+      <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6 md:px-8 py-8 sm:py-12 md:py-16">
+        {/* 1. ROOT TOURNAMENTS LIST VIEW (When no active tournament is open) */}
+        {!activeTournament && (
+          <>
+            <TournamentHeader
+              clubId={clubId}
+              activeTournament={null}
+              onBack={() => {}}
+              onDelete={() => {}}
+            />
 
-          {/* Root Main Tabs */}
-          <div className="flex gap-6 border-b border-slate-200 mb-8 overflow-x-auto">
-            <button
-              onClick={() => {
-                setMainTab("tournaments");
-                updateUrl({ tab: null, id: null });
-              }}
-              className={cn(
-                "text-xs font-black uppercase tracking-widest pb-4 px-1 transition-all border-b-2 -mb-px cursor-pointer shrink-0",
-                mainTab === "tournaments"
-                  ? "border-orange-500 text-orange-500"
-                  : "border-transparent text-slate-400 hover:text-slate-600"
-              )}
-            >
-              Список турниров
-            </button>
-            <button
-              onClick={() => {
-                setMainTab("rules_templates");
-                fetchRulesTemplates("all");
-                updateUrl({ tab: "rules_templates", id: null });
-              }}
-              className={cn(
-                "text-xs font-black uppercase tracking-widest pb-4 px-1 transition-all border-b-2 -mb-px cursor-pointer shrink-0",
-                mainTab === "rules_templates"
-                  ? "border-orange-500 text-orange-500"
-                  : "border-transparent text-slate-400 hover:text-slate-600"
-              )}
-            >
-              Шаблоны регламента
-            </button>
-            <button
-              onClick={() => {
-                setMainTab("servers");
-                updateUrl({ tab: "servers", id: null });
-              }}
-              className={cn(
-                "text-xs font-black uppercase tracking-widest pb-4 px-1 transition-all border-b-2 -mb-px cursor-pointer shrink-0 flex items-center gap-2",
-                mainTab === "servers"
-                  ? "border-orange-500 text-orange-500"
-                  : "border-transparent text-slate-400 hover:text-slate-600"
-              )}
-            >
-              <span>Серверный агент DashMatch</span>
-              <span
+            {/* Root Main Tabs */}
+            <div className="flex bg-white p-1.5 sm:p-2 rounded-2xl border border-slate-200 shadow-xs gap-1 sm:gap-2 mb-8 overflow-x-auto">
+              <button
+                onClick={() => {
+                  setMainTab("tournaments");
+                  updateUrl({ tab: null, id: null });
+                }}
                 className={cn(
-                  "w-2 h-2 rounded-full",
-                  dashmatchAgent?.is_online ? "bg-emerald-500" : "bg-amber-500"
+                  "px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer flex items-center gap-2 whitespace-nowrap",
+                  mainTab === "tournaments"
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                 )}
-              />
-            </button>
-          </div>
+              >
+                <span>Список турниров</span>
+                {tournaments.length > 0 && (
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono px-2 py-0.5 rounded-md font-bold",
+                      mainTab === "tournaments"
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    )}
+                  >
+                    {tournaments.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setMainTab("participants");
+                  fetchParticipants();
+                  updateUrl({ tab: "participants", id: null });
+                }}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer flex items-center gap-2 whitespace-nowrap",
+                  mainTab === "participants"
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <span>Участники</span>
+                {participants.length > 0 && (
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono px-2 py-0.5 rounded-md font-bold",
+                      mainTab === "participants"
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    )}
+                  >
+                    {participants.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setMainTab("teams");
+                  fetchTeams();
+                  updateUrl({ tab: "teams", id: null });
+                }}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer flex items-center gap-2 whitespace-nowrap",
+                  mainTab === "teams"
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <span>Команды</span>
+                {teams.length > 0 && (
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono px-2 py-0.5 rounded-md font-bold",
+                      mainTab === "teams"
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    )}
+                  >
+                    {teams.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setMainTab("rules_templates");
+                  fetchRulesTemplates("all");
+                  updateUrl({ tab: "rules_templates", id: null });
+                }}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer flex items-center gap-2 whitespace-nowrap",
+                  mainTab === "rules_templates"
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <span>Шаблоны регламента</span>
+                {rulesTemplates.length > 0 && (
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono px-2 py-0.5 rounded-md font-bold",
+                      mainTab === "rules_templates"
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    )}
+                  >
+                    {rulesTemplates.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setMainTab("servers");
+                  updateUrl({ tab: "servers", id: null });
+                }}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer flex items-center gap-2 whitespace-nowrap",
+                  mainTab === "servers"
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <span>DashMatch</span>
+                <span
+                  className={cn(
+                    "w-2 h-2 rounded-full",
+                    dashmatchAgent?.is_online ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                  )}
+                />
+              </button>
+
+              <button
+                onClick={() => {
+                  setMainTab("settings");
+                  updateUrl({ tab: "settings", id: null });
+                }}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer flex items-center gap-2 whitespace-nowrap",
+                  mainTab === "settings"
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <span>Настройки</span>
+              </button>
+            </div>
 
           {mainTab === "tournaments" && (
             <TournamentList
@@ -694,6 +1042,40 @@ export default function AdminTournaments() {
                 setDetailTab("bracket");
                 fetchTournamentDetails(t.id);
               }}
+            />
+          )}
+
+          {mainTab === "participants" && (
+            <ParticipantsTab
+              clubId={clubId}
+              participants={participants}
+              isLoading={isLoadingParticipants}
+              onAddParticipant={() => {
+                setEditingParticipant(null);
+                setShowParticipantModal(true);
+              }}
+              onEditParticipant={(p) => {
+                setEditingParticipant(p);
+                setShowParticipantModal(true);
+              }}
+              onDeleteParticipant={handleDeleteParticipant}
+            />
+          )}
+
+          {mainTab === "teams" && (
+            <TeamsTab
+              clubId={clubId}
+              teams={teams}
+              isLoading={isLoadingTeams}
+              onAddTeam={() => {
+                setEditingTeam(null);
+                setShowTeamModal(true);
+              }}
+              onEditTeam={(t) => {
+                setEditingTeam(t);
+                setShowTeamModal(true);
+              }}
+              onDeleteTeam={handleDeleteTeam}
             />
           )}
 
@@ -721,6 +1103,10 @@ export default function AdminTournaments() {
           {mainTab === "servers" && (
             <DashMatchServerTab clubId={clubId} />
           )}
+
+          {mainTab === "settings" && (
+            <TournamentSettingsTab clubId={clubId} />
+          )}
         </>
       )}
 
@@ -745,6 +1131,8 @@ export default function AdminTournaments() {
             }}
             onDelete={handleDeleteTournament}
             onStartTournament={() => handleStartTournament(false)}
+            onPublish={handlePublishTournament}
+            onRevertToDraft={handleRevertToDraft}
             onOpenRebuildModal={() => {
               setRebuildBracketType(
                 activeTournament.config?.bracketType || "single_elimination"
@@ -764,6 +1152,7 @@ export default function AdminTournaments() {
               competitors={competitors}
               onOpenMatchModal={(m) => setShowMatchModal(m)}
               onStartTournament={() => handleStartTournament(false)}
+              onPublishTournament={handlePublishTournament}
               onOpenRebuildModal={() => {
                 setRebuildBracketType(
                   activeTournament.config?.bracketType || "single_elimination"
@@ -827,6 +1216,33 @@ export default function AdminTournaments() {
         setRules={setTemplateFormRules}
         onSubmit={handleSaveOrUpdateRulesTemplate}
         isSubmitting={isSubmittingTemplate}
+      />
+
+      {/* PARTICIPANT MODAL */}
+      <ParticipantModal
+        isOpen={showParticipantModal}
+        participant={editingParticipant}
+        onClose={() => {
+          setShowParticipantModal(false);
+          setEditingParticipant(null);
+        }}
+        onSave={handleSaveParticipant}
+        onDelete={handleDeleteParticipant}
+      />
+
+      {/* TEAM MODAL */}
+      <TeamModal
+        isOpen={showTeamModal}
+        team={editingTeam}
+        participants={participants}
+        onClose={() => {
+          setShowTeamModal(false);
+          setEditingTeam(null);
+        }}
+        onSave={handleSaveTeam}
+        onDelete={handleDeleteTeam}
+        onRequestRename={handleRequestRenameTeam}
+        onCancelRename={handleCancelRenameTeam}
       />
 
       {/* UNPAID PARTICIPANTS START PROMPT MODAL */}
@@ -903,6 +1319,8 @@ export default function AdminTournaments() {
           activeCs2Matches={activeCs2Matches}
         />
       )}
+      </main>
     </div>
   );
 }
+

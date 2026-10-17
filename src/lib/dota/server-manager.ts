@@ -24,6 +24,7 @@ export async function ensureDotaTables(client: any) {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
+      ALTER TABLE club_dota_matches ADD COLUMN IF NOT EXISTS bot_id VARCHAR(64);
       CREATE INDEX IF NOT EXISTS idx_club_dota_matches_tourney ON club_dota_matches(tournament_match_id);
       CREATE INDEX IF NOT EXISTS idx_club_dota_matches_club ON club_dota_matches(club_id);
     `);
@@ -100,6 +101,8 @@ export interface LaunchDotaMatchOptions {
   password?: string;
   gameName?: string;
   flipSides?: boolean;
+  botId?: string;
+  keepBot?: boolean;
 }
 
 /**
@@ -160,18 +163,31 @@ export async function launchDotaMatch(
   if (tourneyType === "1vs1" || tourneyType === "solo") {
     resolvedGameMode = "1V1MID";
   }
+  const resolvedRegion = options?.serverRegion || tSettings.serverRegion || "Stockholm";
 
-  const resolvedRegion = options?.serverRegion || tSettings.serverRegion || "STOCKHOLM";
-  const gameName = options?.gameName || `DashMatch #${cleanMatchId}`;
+  const existingGames = Array.isArray(matchData.result?.dota_games) ? matchData.result.dota_games : [];
+  const nextGameNum = existingGames.length + 1;
+  const defaultGameName = existingGames.length > 0
+    ? `DashMatch #${cleanMatchId} (Игра ${nextGameNum})`
+    : `DashMatch #${cleanMatchId}`;
+  const gameName = options?.gameName || defaultGameName;
   const password = options?.password || String(Math.floor(1000 + Math.random() * 9000));
+  const seriesScore1 = matchData.score1 ?? matchData.result?.series_score1 ?? 0;
+  const seriesScore2 = matchData.score2 ?? matchData.result?.series_score2 ?? 0;
+
+  const resolvedFormat = String(matchData.tournament_config?.matchFormat || matchData.tournament_type || "bo1").toLowerCase();
+  const numGames = resolvedFormat === "bo5" ? 5 : (resolvedFormat === "bo3" ? 3 : 1);
+  const winsNeeded = Math.ceil(numGames / 2);
+  const assignedBotId = options?.botId || matchData.result?.dota_lobby?.bot_id || null;
+  const keepBot = options?.keepBot !== undefined ? Boolean(options.keepBot) : Boolean(assignedBotId || numGames > 1);
 
   // 4. Save into club_dota_matches
   await client.query(
     `INSERT INTO club_dota_matches (
       id, club_id, tournament_match_id, game_name, password, game_mode, server_region,
-      status, team1_name, team2_name, score1, score2, extra, updated_at
+      status, team1_name, team2_name, score1, score2, bot_id, extra, updated_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, 'starting', $8, $9, 0, 0, $10::jsonb, NOW())
+    VALUES ($1, $2, $3, $4, $5, $6, $7, 'starting', $8, $9, $11, $12, $13, $10::jsonb, NOW())
     ON CONFLICT (id) DO UPDATE SET
       game_name = $4,
       password = $5,
@@ -180,6 +196,9 @@ export async function launchDotaMatch(
       status = 'starting',
       team1_name = $8,
       team2_name = $9,
+      score1 = $11,
+      score2 = $12,
+      bot_id = COALESCE($13, club_dota_matches.bot_id),
       extra = $10::jsonb,
       updated_at = NOW()`,
     [
@@ -200,9 +219,17 @@ export async function launchDotaMatch(
         radiant_competitor_id: radiantCompId,
         dire_competitor_id: direCompId,
         flipped: isFlipped,
+        game_number: nextGameNum,
+        series_format: resolvedFormat,
+        wins_needed: winsNeeded,
+        bot_id: assignedBotId,
+        keep_bot: keepBot,
         tournament_id: matchData.tournament_id,
         tournament_name: matchData.tournament_name,
       }),
+      seriesScore1,
+      seriesScore2,
+      assignedBotId,
     ]
   );
 
@@ -219,6 +246,11 @@ export async function launchDotaMatch(
     radiant_steam_ids: radiantSteamIds,
     dire_steam_ids: direSteamIds,
     flipped: isFlipped,
+    game_number: nextGameNum,
+    series_format: resolvedFormat,
+    wins_needed: winsNeeded,
+    bot_id: assignedBotId,
+    keep_bot: keepBot,
     status: "starting",
   };
 
@@ -244,6 +276,16 @@ export async function launchDotaMatch(
       radiant_name: radiantName,
       dire_name: direName,
       flipped: isFlipped,
+      series_format: resolvedFormat,
+      game_number: nextGameNum,
+      series_score1: seriesScore1,
+      series_score2: seriesScore2,
+      wins_needed: winsNeeded,
+      bot_id: assignedBotId,
+      keep_bot: keepBot,
+      is_series_finished: false,
+      tournament_match_id: cleanMatchId,
+      club_id: clubId,
     },
   };
 
@@ -499,6 +541,13 @@ export async function stopDotaMatch(client: any, clubId: number, matchId: string
   const cleanMatchId = String(matchId).replace(/^dm-dota-/, "").replace(/^dm-tourney-/, "").replace(/^dm-/, "");
   const dmMatchId = `dm-dota-${cleanMatchId}`;
 
+  // Find bot_id to release
+  const botRes = await client.query(
+    `SELECT bot_id FROM club_dota_matches WHERE (id = $1 OR tournament_match_id = $2) AND club_id = $3`,
+    [dmMatchId, cleanMatchId, clubId]
+  ).catch(() => ({ rows: [] }));
+  const botId = botRes.rows[0]?.bot_id || null;
+
   await client.query(
     `UPDATE club_dota_matches SET status = 'stopped', updated_at = NOW() WHERE (id = $1 OR tournament_match_id = $2) AND club_id = $3`,
     [dmMatchId, cleanMatchId, clubId]
@@ -512,7 +561,75 @@ export async function stopDotaMatch(client: any, clubId: number, matchId: string
   broadcastSseCommand(clubId, {
     type: "STOP_DOTA_MATCH",
     match_id: String(cleanMatchId),
+    payload: {
+      bot_id: botId,
+      release_bot: true,
+    },
   });
 
   await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(cleanMatchId)]).catch(() => {});
+  await processDotaQueue(client, clubId);
 }
+
+/**
+ * Informs DashMatch agent that the bot assigned to a match/series is free to be returned to the pool
+ */
+export async function releaseDotaBot(client: any, clubId: number, matchId: string | number, botId?: string | null) {
+  const cleanMatchId = String(matchId).replace(/^dm-dota-/, "").replace(/^dm-tourney-/, "").replace(/^dm-/, "");
+
+  broadcastSseCommand(clubId, {
+    type: "RELEASE_DOTA_BOT",
+    match_id: String(cleanMatchId),
+    payload: {
+      match_id: cleanMatchId,
+      bot_id: botId || null,
+      is_series_finished: true,
+    },
+  });
+
+  // Check if any other match is queued and can take the freed bot
+  await processDotaQueue(client, clubId);
+}
+
+/**
+ * Checks if any Dota 2 match is waiting in queue and starts the oldest one when a bot becomes free.
+ */
+export async function processDotaQueue(client: any, clubId: number) {
+  try {
+    const queuedMatchesRes = await client.query(
+      `SELECT cdm.id, cdm.tournament_match_id, cdm.updated_at, cdm.extra
+       FROM club_dota_matches cdm
+       WHERE cdm.club_id = $1 AND (cdm.status = 'waiting_server' OR cdm.status = 'waiting_bot')
+       ORDER BY cdm.updated_at ASC
+       LIMIT 1`,
+      [clubId]
+    );
+
+    if (queuedMatchesRes.rowCount === 0) {
+      // Also check tournament_matches with status = 'WAITING_SERVER' for dota2
+      const tmRes = await client.query(
+        `SELECT m.id, m.tournament_id, m.updated_at
+         FROM tournament_matches m
+         JOIN club_tournaments t ON m.tournament_id = t.id
+         WHERE t.club_id = $1 AND t.discipline = 'dota2' AND m.status = 'WAITING_SERVER'
+         ORDER BY m.updated_at ASC
+         LIMIT 1`,
+        [clubId]
+      ).catch(() => ({ rowCount: 0, rows: [] }));
+
+      if (tmRes.rowCount === 0) return null;
+      const nextMatchId = tmRes.rows[0].id;
+      console.log(`[Dota Server Queue] Auto-launching queued tournament match ${nextMatchId}...`);
+      return await launchDotaMatch(client, clubId, nextMatchId);
+    }
+
+    const queuedMatch = queuedMatchesRes.rows[0];
+    const matchIdToLaunch = queuedMatch.tournament_match_id || queuedMatch.id;
+    console.log(`[Dota Server Queue] Auto-launching queued match ${matchIdToLaunch}...`);
+    return await launchDotaMatch(client, clubId, matchIdToLaunch);
+  } catch (err) {
+    console.error("[Dota Server Queue Error]", err);
+    return null;
+  }
+}
+

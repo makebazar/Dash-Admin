@@ -1,8 +1,9 @@
 "use client";
 import React from "react";
 import { useRouter } from "next/navigation";
-import { Trophy, Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, ArrowLeft } from "lucide-react";
 import { Tournament } from "../types";
+import { Button } from "@/components/ui/button";
 
 interface TournamentHeaderProps {
   clubId: string;
@@ -20,49 +21,61 @@ export function TournamentHeader({
   const router = useRouter();
 
   return (
-    <div className="flex justify-between items-center mb-8">
+    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
       <div>
-        <h1 className="text-2xl font-black uppercase italic tracking-tight text-slate-900">
-          Управление <span className="text-orange-500">Турнирами</span>
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+          {activeTournament ? activeTournament.name : "Турниры"}
         </h1>
-        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-          Панель администратора клуба
+        <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+          {activeTournament
+            ? "Управление турниром и турнирной сеткой"
+            : "Управление киберспортивными турнирами и матчами клуба"}
         </p>
       </div>
 
       {!activeTournament ? (
-        <button
-          onClick={() => router.push(`/clubs/${clubId}/tournaments/create`)}
-          className="bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase tracking-widest px-6 py-4 rounded-2xl transition-colors shadow-lg shadow-orange-500/10 flex items-center gap-2 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> Создать Турнир
-        </button>
-      ) : (
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={onBack}
-            className="text-xs text-slate-600 hover:text-slate-950 font-black uppercase tracking-widest bg-white border border-slate-200 px-6 py-4 rounded-2xl transition-colors shadow-sm cursor-pointer"
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => router.push(`/clubs/${clubId}/tournaments/create`)}
+            className="h-11 sm:h-12 rounded-xl px-4 sm:px-6 bg-black text-white hover:bg-slate-800 font-medium transition-all shadow-sm"
           >
+            <Plus className="h-4 w-4 mr-2" />
+            <span>Создать турнир</span>
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={onBack}
+            className="h-10 sm:h-11 rounded-xl px-4 border-slate-200 text-slate-700 hover:bg-slate-50 font-medium transition-all"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
             Назад к списку
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
             onClick={() =>
               router.push(
                 `/clubs/${clubId}/tournaments/create?editId=${activeTournament.id}`
               )
             }
-            className="text-xs text-blue-600 hover:text-blue-950 font-black uppercase tracking-widest bg-white border border-blue-200 px-6 py-4 rounded-2xl transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+            className="h-10 sm:h-11 rounded-xl px-4 border-slate-200 text-slate-700 hover:bg-slate-50 font-medium transition-all"
           >
-            <Edit className="w-4 h-4" /> Редактировать
-          </button>
-          <button
+            <Edit className="w-4 h-4 mr-2 text-blue-600" />
+            Редактировать
+          </Button>
+          <Button
+            variant="outline"
             onClick={onDelete}
-            className="text-xs text-rose-600 hover:text-rose-950 font-black uppercase tracking-widest bg-white border border-rose-200 px-6 py-4 rounded-2xl transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+            className="h-10 sm:h-11 rounded-xl px-4 border-rose-200 text-rose-600 hover:bg-rose-50 font-medium transition-all"
           >
-            <Trash2 className="w-4 h-4" /> Удалить
-          </button>
+            <Trash2 className="w-4 h-4 mr-2" />
+            Удалить
+          </Button>
         </div>
       )}
     </div>
   );
 }
+

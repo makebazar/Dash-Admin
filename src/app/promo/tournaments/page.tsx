@@ -9,6 +9,7 @@ import { MyTeamTab } from "./components/MyTeamTab";
 import { TournamentProfileTab } from "./components/TournamentProfileTab";
 import { LeaderboardTab } from "./components/LeaderboardTab";
 import { BottomNav } from "../components/BottomNav";
+import { CaptainRenameModal } from "./components/CaptainRenameModal";
 
 export default function TournamentsPortal() {
   const router = useRouter();
@@ -339,6 +340,30 @@ export default function TournamentsPortal() {
       </div>
 
       <BottomNav />
+
+      {/* CAPTAIN RENAME MODAL: POPUP WHEN CLUB REQUESTS NAME CHANGE */}
+      {(() => {
+        const renameRequestTeam = teams.find(
+          (t: any) => Boolean(t.renameRequested) && (Boolean(t.isCaptain) || t.captainPhone === player?.phoneNumber)
+        ) || (player?.renameRequest ? {
+          id: player.renameRequest.teamId,
+          name: player.renameRequest.currentName,
+          tag: player.renameRequest.currentTag,
+          reason: player.renameRequest.reason,
+        } : null);
+
+        if (!renameRequestTeam) return null;
+
+        return (
+          <CaptainRenameModal
+            isOpen={!!renameRequestTeam}
+            team={renameRequestTeam}
+            onSuccess={async () => {
+              await fetchPlayerAndTeam();
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }

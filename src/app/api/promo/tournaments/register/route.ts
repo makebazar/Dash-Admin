@@ -71,9 +71,9 @@ export async function POST(request: Request) {
         isReserve = true;
       }
     }
-    if (tournament.status !== "DRAFT" && tournament.status !== "REGISTRATION") {
+    if (tournament.status !== "REGISTRATION") {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Регистрация на данный турнир закрыта" }, { status: 400 });
+      return NextResponse.json({ error: "Регистрация на данный турнир еще не открыта или уже завершена" }, { status: 400 });
     }
 
     let displayName = "";
@@ -300,14 +300,6 @@ export async function POST(request: Request) {
        VALUES ($1, $2, $3)`,
       [tournamentId, competitorId, initialStatus]
     );
-
-    // Update tournament status to REGISTRATION if it was in DRAFT
-    if (tournament.status === "DRAFT") {
-      await client.query(
-        `UPDATE club_tournaments SET status = 'REGISTRATION' WHERE id = $1`,
-        [tournamentId]
-      );
-    }
 
     await client.query("COMMIT");
 

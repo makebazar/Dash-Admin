@@ -33,6 +33,7 @@ import { PrizesSidebar } from "./components/PrizesSidebar";
 import { LandingView } from "./components/LandingView";
 import { BottomNav } from "./components/BottomNav";
 import { PromoHeader } from "./components/PromoHeader";
+import { CaptainRenameModal } from "./tournaments/components/CaptainRenameModal";
 import { cn } from "@/lib/utils";
 
 /**
@@ -1520,6 +1521,26 @@ export default function PromoLobby() {
         )}
       </main>
       <BottomNav cartCount={cart.reduce((acc, i) => acc + i.quantity, 0)} />
+
+      {/* CAPTAIN RENAME MODAL: POPUP WHEN CLUB REQUESTS NAME CHANGE */}
+      {player?.renameRequest && (
+        <CaptainRenameModal
+          isOpen={!!player.renameRequest}
+          team={{
+            id: player.renameRequest.teamId,
+            name: player.renameRequest.currentName,
+            tag: player.renameRequest.currentTag,
+            reason: player.renameRequest.reason,
+          }}
+          onSuccess={async () => {
+            const res = await fetch("/api/promo/player");
+            if (res.ok) {
+              const data = await res.json();
+              setPlayer(data.player);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

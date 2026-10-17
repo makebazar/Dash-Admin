@@ -102,6 +102,69 @@ export async function POST(
   }
 }
 
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ clubId: string }> }
+) {
+  try {
+    const { clubId } = await params;
+    await requireClubFullAccess(clubId);
+
+    const parsedClubId = parseInt(clubId, 10);
+    if (isNaN(parsedClubId)) {
+      return NextResponse.json({ error: "Invalid club ID" }, { status: 400 });
+    }
+
+    const body = await request.json();
+    const { id, map_id, name, description, match_format, image_url, is_active } = body;
+
+    const mapRecordId = parseInt(String(id || ""), 10);
+    if (isNaN(mapRecordId)) {
+      return NextResponse.json({ error: "ID записи карты обязателен" }, { status: 400 });
+    }
+
+    const cleanName = String(name || "").trim();
+    if (!cleanName) {
+      return NextResponse.json({ error: "Название карты обязательно" }, { status: 400 });
+    }
+
+    const cleanMapId = map_id ? String(map_id).trim().replace(/[^0-9]/g, "") : null;
+
+    await ensureTable();
+
+    const res = await query(
+      `UPDATE club_cs2_custom_maps 
+       SET map_id = COALESCE($1, map_id),
+           name = $2, 
+           description = $3, 
+           match_format = $4, 
+           image_url = $5,
+           is_active = COALESCE($6, is_active)
+       WHERE id = $7 AND club_id = $8
+       RETURNING *`,
+      [
+        cleanMapId,
+        cleanName,
+        description !== undefined ? String(description).trim() : "Карта из Steam Workshop",
+        match_format || "all",
+        image_url !== undefined ? (image_url ? String(image_url).trim() : null) : null,
+        is_active !== undefined ? Boolean(is_active) : null,
+        mapRecordId,
+        parsedClubId,
+      ]
+    );
+
+    if (res.rowCount === 0) {
+      return NextResponse.json({ error: "Карта не найдена" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, map: res.rows[0] });
+  } catch (error) {
+    console.error("Error updating custom map:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ clubId: string }> }
@@ -135,3 +198,4 @@ export async function DELETE(
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
+

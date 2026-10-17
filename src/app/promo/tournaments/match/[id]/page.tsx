@@ -29,6 +29,7 @@ import {
   Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDotaGameMode } from "@/lib/dota/utils";
 
 interface ChatMessage {
   id: string;
@@ -837,6 +838,11 @@ export default function MatchLobby() {
     : (veto?.current_turn_competitor_id === compB?.id ? compB?.name : "Ожидание");
 
   const isDota = match.discipline === "dota2";
+  const dotaGameModeLabel = formatDotaGameMode(
+    match.dotaLobby?.gameMode || match.defaultDotaGameMode,
+    match.tournamentType || match.type || match.tournamentConfig?.type,
+    match.tournamentConfig
+  );
   const statusLower = match.status?.toLowerCase() || "scheduled";
   const isFinished = statusLower === "finished";
   const isVeto = statusLower === "veto" && !isDota;
@@ -868,7 +874,7 @@ export default function MatchLobby() {
     if (m.sender_kind === "admin" || rawSide === "ADMIN") {
       return {
         sideBadge: "АДМИН",
-        sideBadgeClass: "bg-red-500/20 text-red-400 border border-red-500/30 font-black",
+        sideBadgeClass: "text-red-400 font-bold",
         nameClass: "text-red-400 font-bold",
         side: "ADMIN",
       };
@@ -877,35 +883,45 @@ export default function MatchLobby() {
     if (m.sender_kind === "spectator" || rawSide === "SPECTATOR" || rawSide === "SPEC") {
       return {
         sideBadge: "SPEC",
-        sideBadgeClass: "bg-amber-500/15 text-amber-400 border border-amber-500/30 font-black",
+        sideBadgeClass: "text-amber-400 font-bold",
         nameClass: "text-amber-400 font-bold",
         side: "SPECTATOR",
       };
     }
 
-    if (rawSide === "CT" || (!rawSide && (isCompA || isRosterA))) {
+    if (rawSide === "CT" || rawSide === "RADIANT" || (!rawSide && (isCompA || isRosterA))) {
+      const isRadiant = isDota ? sideA === "Radiant" : false;
       return {
-        sideBadge: "CT",
-        sideLabel: "Спецназ",
-        sideBadgeClass: "bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-sm",
-        nameClass: "text-sky-400 font-bold",
-        side: "CT",
+        sideBadge: isDota ? sideA : "CT",
+        sideLabel: isDota ? (isRadiant ? "Силы Света" : "Силы Тьмы") : "Спецназ",
+        sideBadgeClass: isDota
+          ? (isRadiant ? "text-emerald-400 font-bold" : "text-rose-400 font-bold")
+          : "text-sky-400 font-bold",
+        nameClass: isDota
+          ? (isRadiant ? "text-emerald-400 font-bold" : "text-rose-400 font-bold")
+          : "text-sky-400 font-bold",
+        side: isDota ? sideA : "CT",
       };
     }
 
-    if (rawSide === "T" || (!rawSide && (isCompB || isRosterB))) {
+    if (rawSide === "T" || rawSide === "DIRE" || (!rawSide && (isCompB || isRosterB))) {
+      const isRadiant = isDota ? sideB === "Radiant" : false;
       return {
-        sideBadge: "T",
-        sideLabel: "Террористы",
-        sideBadgeClass: "bg-orange-500/15 text-orange-400 border border-orange-500/30 shadow-sm",
-        nameClass: "text-orange-400 font-bold",
-        side: "T",
+        sideBadge: isDota ? sideB : "T",
+        sideLabel: isDota ? (isRadiant ? "Силы Света" : "Силы Тьмы") : "Террористы",
+        sideBadgeClass: isDota
+          ? (isRadiant ? "text-emerald-400 font-bold" : "text-rose-400 font-bold")
+          : "text-orange-400 font-bold",
+        nameClass: isDota
+          ? (isRadiant ? "text-emerald-400 font-bold" : "text-rose-400 font-bold")
+          : "text-orange-400 font-bold",
+        side: isDota ? sideB : "T",
       };
     }
 
     return {
       sideBadge: "ИГРОК",
-      sideBadgeClass: "bg-gray-500/15 text-gray-400 border border-gray-500/30",
+      sideBadgeClass: "text-gray-400 font-medium",
       nameClass: "text-gray-300 font-bold",
       side: "SPECTATOR",
     };
@@ -920,7 +936,11 @@ export default function MatchLobby() {
   const selectedMapInfo = getMapInfo(primaryMapKey, match?.customMaps);
 
   const format = match.matchFormat || "bo1";
-  const isMultiMap = format === "bo3" || format === "bo5";
+  const dotaGames: any[] = match.dotaGames || match.result?.dota_games || [];
+  const dotaGameNumber = match.dotaLobby?.gameNumber || dotaGames.length + 1;
+  const winsNeeded = format === "bo5" ? 3 : format === "bo3" ? 2 : 1;
+  const isMultiGame = format === "bo3" || format === "bo5" || (isDota && dotaGames.length > 0);
+  const isMultiMap = isDota ? isMultiGame : (format === "bo3" || format === "bo5");
   const seriesScore1 = match.seriesScore1 ?? match.score1 ?? 0;
   const seriesScore2 = match.seriesScore2 ?? match.score2 ?? 0;
   const currentMapScore1 = match.currentMapScore1 ?? 0;
@@ -960,27 +980,27 @@ export default function MatchLobby() {
           {/* Right Section: Clean Status without containers */}
           <div className="shrink-0 flex items-center gap-2 text-xs font-black uppercase tracking-wider">
             {!isParticipant && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold uppercase tracking-widest text-orange-400 mr-1">
-                <Radio className="w-3 h-3 text-orange-400 animate-pulse" />
+              <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-orange-400/90 mr-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
                 <span>Наблюдатель</span>
               </div>
             )}
             {isFinished ? (
               <div className="flex items-center gap-2 text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span>Завершен {isMultiMap ? `(${seriesScore1}:${seriesScore2} по картам)` : `(${match.score1 ?? 0}:${match.score2 ?? 0})`}</span>
+                <span>Завершен {isDota ? `(${seriesScore1}:${seriesScore2} по играм)` : isMultiMap ? `(${seriesScore1}:${seriesScore2} по картам)` : `(${match.score1 ?? 0}:${match.score2 ?? 0})`}</span>
               </div>
             ) : isServerReady ? (
               <div className="flex items-center gap-2 text-red-400">
                 <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />
                 <span>
-                  LIVE {isMultiMap ? `• Карта ${currentMapIndex + 1} (${currentMapScore1}:${currentMapScore2}) • Раунд ${currentRoundNum}` : `• Раунд ${currentRoundNum} (${match.score1 ?? 0}:${match.score2 ?? 0})`}
+                  LIVE {isDota ? `• Игра ${dotaGameNumber}` : isMultiMap ? `• Карта ${currentMapIndex + 1} (${currentMapScore1}:${currentMapScore2}) • Раунд ${currentRoundNum}` : `• Раунд ${currentRoundNum} (${match.score1 ?? 0}:${match.score2 ?? 0})`}
                 </span>
               </div>
             ) : serverStatus === "starting" ? (
               <div className="flex items-center gap-2 text-orange-400">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>Запуск CS2...</span>
+                <span>{isDota ? "Создание лобби Dota 2..." : "Запуск CS2..."}</span>
               </div>
             ) : isVeto ? (
               <div className="flex items-center gap-2 text-amber-400">
@@ -1013,11 +1033,18 @@ export default function MatchLobby() {
             {/* Team A */}
             <div className="flex flex-col items-start min-w-0">
               <div className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-1.5 shadow-sm border",
-                sideA === "CT" ? "bg-sky-500/10 border-sky-500/25 text-sky-400" : "bg-orange-500/10 border-orange-500/25 text-orange-400"
+                "inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-2",
+                isDota
+                  ? (sideA === "Radiant" ? "text-emerald-400" : "text-rose-400")
+                  : (sideA === "CT" ? "text-sky-400" : "text-orange-400")
               )}>
-                {sideA === "CT" ? <Shield className="w-3 h-3 text-sky-400" /> : <Flame className="w-3 h-3 text-orange-400" />}
-                <span>{sideA === "CT" ? "СПЕЦНАЗ (CT)" : "ТЕРРОРИСТЫ (T)"}</span>
+                <span className={cn(
+                  "w-2 h-2 rounded-full shrink-0",
+                  isDota
+                    ? (sideA === "Radiant" ? "bg-emerald-400" : "bg-rose-400")
+                    : (sideA === "CT" ? "bg-sky-400" : "bg-orange-400")
+                )} />
+                <span>{isDota ? (sideA === "Radiant" ? "Силы Света (Radiant)" : "Силы Тьмы (Dire)") : (sideA === "CT" ? "Спецназ (CT)" : "Террористы (T)")}</span>
               </div>
               <div className="flex items-center gap-2">
                 <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white truncate">
@@ -1026,7 +1053,7 @@ export default function MatchLobby() {
                 {isWinnerA && <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400 shrink-0" />}
               </div>
               {!isSolo && (
-                <span className="text-xs text-gray-400 font-medium tracking-wide mt-0.5">
+                <span className="text-xs text-gray-400 font-medium tracking-wide mt-1">
                   Состав: {compA?.roster?.length || 1} чел.
                 </span>
               )}
@@ -1034,29 +1061,39 @@ export default function MatchLobby() {
 
             {/* Middle Score & Match Meta */}
             <div className="text-center flex flex-col items-center justify-center">
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider mb-1">
-                <span className={cn("px-2 py-0.5 rounded-md border font-mono font-bold", sideA === "CT" ? "text-sky-400 bg-sky-500/10 border-sky-500/20" : "text-orange-400 bg-orange-500/10 border-orange-500/20")}>
-                  {sideA}
+              <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest mb-1.5 max-w-sm truncate">
+                <span className={cn(
+                  "truncate max-w-[140px]",
+                  isDota
+                    ? (sideA === "Radiant" ? "text-emerald-400" : "text-rose-400")
+                    : (sideA === "CT" ? "text-sky-400" : "text-orange-400")
+                )} title={compA?.name || (isSolo ? "Игрок 1" : "Команда 1")}>
+                  {compA?.name || (isSolo ? "Игрок 1" : "Команда 1")}
                 </span>
-                <span className="text-gray-600 font-mono text-[10px]">VS</span>
-                <span className={cn("px-2 py-0.5 rounded-md border font-mono font-bold", sideB === "CT" ? "text-sky-400 bg-sky-500/10 border-sky-500/20" : "text-orange-400 bg-orange-500/10 border-orange-500/20")}>
-                  {sideB}
+                <span className="text-gray-600 font-mono text-[10px] shrink-0">VS</span>
+                <span className={cn(
+                  "truncate max-w-[140px]",
+                  isDota
+                    ? (sideB === "Radiant" ? "text-emerald-400" : "text-rose-400")
+                    : (sideB === "CT" ? "text-sky-400" : "text-orange-400")
+                )} title={compB?.name || (isSolo ? "Игрок 2" : "Команда 2")}>
+                  {compB?.name || (isSolo ? "Игрок 2" : "Команда 2")}
                 </span>
               </div>
 
               {/* Big Score: in BO3/BO5 this is SERIES SCORE (Maps Won) */}
               <div className="flex flex-col items-center">
                 {isMultiMap && (
-                  <span className="text-[10px] font-black tracking-widest text-amber-400 uppercase bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full mb-1">
-                    Счёт по картам • {format.toUpperCase()}
+                  <span className="text-xs font-bold tracking-wider text-amber-400/90 uppercase mb-1.5">
+                    {isDota ? `Счёт по играм • ${format.toUpperCase()}` : `Счёт по картам • ${format.toUpperCase()}`}
                   </span>
                 )}
                 <div className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white flex items-center justify-center gap-3">
-                  <span className={cn(isWinnerA ? "text-emerald-400" : sideA === "CT" ? "text-sky-400" : "text-orange-400")}>
+                  <span className={cn(isWinnerA ? "text-emerald-400" : isDota ? (sideA === "Radiant" ? "text-emerald-400" : "text-rose-400") : sideA === "CT" ? "text-sky-400" : "text-orange-400")}>
                     {isMultiMap ? seriesScore1 : (match.score1 ?? 0)}
                   </span>
                   <span className="text-gray-500 font-sans font-light">:</span>
-                  <span className={cn(isWinnerB ? "text-emerald-400" : sideB === "CT" ? "text-sky-400" : "text-orange-400")}>
+                  <span className={cn(isWinnerB ? "text-emerald-400" : isDota ? (sideB === "Radiant" ? "text-emerald-400" : "text-rose-400") : sideB === "CT" ? "text-sky-400" : "text-orange-400")}>
                     {isMultiMap ? seriesScore2 : (match.score2 ?? 0)}
                   </span>
                 </div>
@@ -1064,67 +1101,107 @@ export default function MatchLobby() {
 
               {/* Active Map & Live Round Details for BO3 / BO5 */}
               {isMultiMap ? (
-                <div className="mt-2.5 flex flex-col items-center gap-1.5 w-full max-w-sm">
-                  {/* Current Active Map Banner */}
-                  <div className="flex items-center justify-between w-full bg-white/[0.04] border border-white/10 px-3 py-1.5 rounded-xl shadow-inner text-xs font-mono">
-                    <div className="flex items-center gap-1.5 font-bold text-gray-200">
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                      <span>Карта {currentMapIndex + 1}: {selectedMapInfo.name}</span>
+                isDota ? (
+                  <div className="mt-2.5 flex flex-col items-center gap-1.5 w-full max-w-sm">
+                    {/* Current Active Game Banner */}
+                    <div className="flex items-center justify-center w-full px-2 py-1 text-xs font-mono text-gray-400">
+                      <div className="flex items-center gap-1.5 font-bold text-gray-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                        <span>Игра {dotaGameNumber} серии</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-gray-400 font-sans font-medium">
-                        Раунд {currentRoundNum}:
-                      </span>
-                      <span className="font-black">
-                        <span className={sideA === "CT" ? "text-sky-400" : "text-orange-400"}>{currentMapScore1}</span>
-                        <span className="text-gray-500 mx-0.5">:</span>
-                        <span className={sideB === "CT" ? "text-sky-400" : "text-orange-400"}>{currentMapScore2}</span>
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Multi-Map Progress Trackers */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-0.5">
-                    {selectedMaps.map((mapKey: string, idx: number) => {
-                      const mInfo = getMapInfo(mapKey, match?.customMaps);
-                      const mHist = match?.mapsHistory?.[String(idx)];
-                      const isCur = idx === currentMapIndex;
-                      return (
-                        <div
-                          key={mapKey + idx}
-                          className={cn(
-                            "px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono tracking-wider border flex items-center gap-1",
-                            mHist?.finished
-                              ? "bg-white/5 border-white/10 text-gray-300"
-                              : isCur
-                              ? "bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-sm"
-                              : "bg-black/20 border-white/5 text-gray-600"
-                          )}
-                        >
-                          <span className="uppercase">{mInfo.name}</span>
-                          {mHist ? (
-                            <span className="font-mono opacity-90 text-[9px] font-black">
-                              ({mHist.score1}:{mHist.score2})
-                            </span>
-                          ) : isCur ? (
-                            <span className="font-mono text-[9px] font-black text-orange-400">
-                              ({currentMapScore1}:{currentMapScore2})
-                            </span>
-                          ) : null}
-                        </div>
-                      );
-                    })}
+                    {/* Dota Games Progress Trackers */}
+                    {dotaGames.length > 0 && (
+                      <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-0.5">
+                        {dotaGames.map((g: any, idx: number) => {
+                          const isWinnerCompA = g.winner_competitor_id === compA?.id;
+                          return (
+                            <div
+                              key={g.game_number || idx}
+                              className="px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono tracking-wider border bg-white/5 border-white/10 text-gray-300 flex items-center gap-1"
+                            >
+                              <span>Игра {g.game_number || idx + 1}:</span>
+                              <span className={cn(isWinnerCompA ? "text-emerald-400 font-bold" : "text-rose-400 font-bold")}>
+                                {g.radiant_score ?? 0}:{g.dire_score ?? 0}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ) : isMatchStarted && (
+                ) : (
+                  <div className="mt-2.5 flex flex-col items-center gap-1.5 w-full max-w-sm">
+                    {/* Current Active Map Banner */}
+                    <div className="flex items-center justify-between w-full px-2 py-1 text-xs font-mono text-gray-400">
+                      <div className="flex items-center gap-1.5 font-bold text-gray-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                        <span>Карта {currentMapIndex + 1}: {selectedMapInfo.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-gray-400 font-sans font-medium">
+                          Раунд {currentRoundNum}:
+                        </span>
+                        <span className="font-black">
+                          <span className={sideA === "CT" ? "text-sky-400" : "text-orange-400"}>{currentMapScore1}</span>
+                          <span className="text-gray-500 mx-0.5">:</span>
+                          <span className={sideB === "CT" ? "text-sky-400" : "text-orange-400"}>{currentMapScore2}</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Multi-Map Progress Trackers */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-0.5">
+                      {selectedMaps.map((mapKey: string, idx: number) => {
+                        const mInfo = getMapInfo(mapKey, match?.customMaps);
+                        const mHist = match?.mapsHistory?.[String(idx)];
+                        const isCur = idx === currentMapIndex;
+                        return (
+                          <div
+                            key={mapKey + idx}
+                            className={cn(
+                              "px-2 py-0.5 rounded-lg text-[10px] font-bold font-mono tracking-wider border flex items-center gap-1",
+                              mHist?.finished
+                                ? "bg-white/5 border-white/10 text-gray-300"
+                                : isCur
+                                ? "bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-sm"
+                                : "bg-black/20 border-white/5 text-gray-600"
+                            )}
+                          >
+                            <span className="uppercase">{mInfo.name}</span>
+                            {mHist ? (
+                              <span className="font-mono opacity-90 text-[9px] font-black">
+                                ({mHist.score1}:{mHist.score2})
+                              </span>
+                            ) : isCur ? (
+                              <span className="font-mono text-[9px] font-black text-orange-400">
+                                ({currentMapScore1}:{currentMapScore2})
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )
+              ) : isMatchStarted && !isDota && (
                 /* BO1 Round Banner */
-                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-mono font-bold text-gray-400 bg-white/5 px-2.5 py-0.5 rounded-full border border-white/5">
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-mono font-bold text-gray-400">
                   <span>{selectedMapInfo.name} • Раунд {currentRoundNum}</span>
                 </div>
               )}
 
-              <div className="mt-1.5 text-xs font-bold tracking-widest uppercase">
-                {veto?.selected_map ? (
+              <div className="mt-2 text-xs font-bold tracking-widest uppercase">
+                {isDota ? (
+                  <span className="text-gray-400 flex items-center justify-center gap-1.5">
+                    <span>{format.toUpperCase()}</span>
+                    <span>•</span>
+                    <span>DOTA 2</span>
+                    <span>•</span>
+                    <span className="text-emerald-400 font-bold">{dotaGameModeLabel.toUpperCase()}</span>
+                  </span>
+                ) : veto?.selected_map ? (
                   <span className="text-emerald-400">
                     {format.toUpperCase()} • {selectedMaps.map((m: string) => getMapInfo(m, match?.customMaps).name).join(" / ")}
                   </span>
@@ -1139,11 +1216,18 @@ export default function MatchLobby() {
             {/* Team B */}
             <div className="flex flex-col items-start md:items-end min-w-0">
               <div className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider mb-1.5 shadow-sm border",
-                sideB === "T" ? "bg-orange-500/10 border-orange-500/25 text-orange-400" : "bg-sky-500/10 border-sky-500/25 text-sky-400"
+                "inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-2",
+                isDota
+                  ? (sideB === "Radiant" ? "text-emerald-400" : "text-rose-400")
+                  : (sideB === "T" ? "text-orange-400" : "text-sky-400")
               )}>
-                {sideB === "T" ? <Flame className="w-3 h-3 text-orange-400" /> : <Shield className="w-3 h-3 text-sky-400" />}
-                <span>{sideB === "T" ? "ТЕРРОРИСТЫ (T)" : "СПЕЦНАЗ (CT)"}</span>
+                <span className={cn(
+                  "w-2 h-2 rounded-full shrink-0",
+                  isDota
+                    ? (sideB === "Radiant" ? "bg-emerald-400" : "bg-rose-400")
+                    : (sideB === "T" ? "bg-orange-400" : "bg-sky-400")
+                )} />
+                <span>{isDota ? (sideB === "Radiant" ? "Силы Света (Radiant)" : "Силы Тьмы (Dire)") : (sideB === "T" ? "Террористы (T)" : "Спецназ (CT)")}</span>
               </div>
               <div className="flex items-center gap-2">
                 {isWinnerB && <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400 shrink-0" />}
@@ -1152,7 +1236,7 @@ export default function MatchLobby() {
                 </h2>
               </div>
               {!isSolo && (
-                <span className="text-xs text-gray-400 font-medium tracking-wide mt-0.5">
+                <span className="text-xs text-gray-400 font-medium tracking-wide mt-1">
                   Состав: {compB?.roster?.length || 1} чел.
                 </span>
               )}
@@ -1173,7 +1257,9 @@ export default function MatchLobby() {
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className={cn(
                     "px-1.5 py-0.5 rounded text-[9px] font-black tracking-wider uppercase shrink-0 border",
-                    sideA === "CT" ? "bg-sky-500/15 text-sky-400 border-sky-500/30" : "bg-orange-500/15 text-orange-400 border-orange-500/30"
+                    isDota
+                      ? (sideA === "Radiant" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border-rose-500/30")
+                      : (sideA === "CT" ? "bg-sky-500/15 text-sky-400 border-sky-500/30" : "bg-orange-500/15 text-orange-400 border-orange-500/30")
                   )}>
                     {sideA}
                   </span>
@@ -1192,6 +1278,9 @@ export default function MatchLobby() {
                   const isCap = compA?.captainId === p.id || compA?.playerId === p.id;
                   const playerName = p.nickname || p.full_name || p.name || compA?.name || "Игрок";
                   const profileUrl = p.id ? `/promo/player/${p.id}${clubId ? `?clubId=${clubId}` : ""}` : null;
+                  const ratingStr = isDota
+                    ? (p.dota_mmr ? `${p.dota_mmr} MMR` : p.dota_rank_name || null)
+                    : (p.player_elo ? `${p.player_elo} ELO` : null);
 
                   return (
                     <div
@@ -1210,7 +1299,9 @@ export default function MatchLobby() {
                               href={profileUrl}
                               className={cn(
                                 "text-sm font-bold text-white transition-colors truncate block",
-                                sideA === "CT" ? "hover:text-sky-400" : "hover:text-orange-400"
+                                isDota
+                                  ? (sideA === "Radiant" ? "hover:text-emerald-400" : "hover:text-rose-400")
+                                  : (sideA === "CT" ? "hover:text-sky-400" : "hover:text-orange-400")
                               )}
                               title="Перейти в профиль игрока"
                             >
@@ -1224,7 +1315,9 @@ export default function MatchLobby() {
                           {isCap && !isSolo && (
                             <span className={cn(
                               "text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded",
-                              sideA === "CT" ? "text-sky-400 bg-sky-500/10" : "text-orange-400 bg-orange-500/10"
+                              isDota
+                                ? (sideA === "Radiant" ? "text-emerald-400 bg-emerald-500/10" : "text-rose-400 bg-rose-500/10")
+                                : (sideA === "CT" ? "text-sky-400 bg-sky-500/10" : "text-orange-400 bg-orange-500/10")
                             )}>
                               КЭП
                             </span>
@@ -1232,10 +1325,17 @@ export default function MatchLobby() {
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-mono mt-0.5">
                           <span>ПК {checkin?.pc_number ? `#${checkin.pc_number}` : "—"}</span>
-                          {p.player_elo && (
+                          {ratingStr && (
                             <>
                               <span className="text-gray-600">•</span>
-                              <span className={cn("font-bold", sideA === "CT" ? "text-sky-400" : "text-orange-400")}>{p.player_elo} ELO</span>
+                              <span className={cn(
+                                "font-bold",
+                                isDota
+                                  ? (sideA === "Radiant" ? "text-emerald-400" : "text-rose-400")
+                                  : (sideA === "CT" ? "text-sky-400" : "text-orange-400")
+                              )}>
+                                {ratingStr}
+                              </span>
                             </>
                           )}
                         </div>
@@ -1539,7 +1639,7 @@ export default function MatchLobby() {
               <div className="space-y-4">
 
                 {/* SCENARIO A: AGENT OFFLINE */}
-                {serverStatus === "agent_offline" && (
+                {serverStatus === "agent_offline" && !isServerReady && (
                   <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-5 space-y-3.5">
                     <div className="space-y-1">
                       <h3 className="text-sm font-black uppercase tracking-wider text-red-400">
@@ -1561,7 +1661,7 @@ export default function MatchLobby() {
                 )}
 
                 {/* SCENARIO B: WAITING IN SERVER QUEUE */}
-                {serverStatus === "waiting_server" && (
+                {serverStatus === "waiting_server" && !isServerReady && (
                   <div className="bg-[#0e0e12] border border-amber-500/30 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
                     <div className="relative w-12 h-12 mx-auto flex items-center justify-center">
                       <div className="absolute inset-0 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
@@ -1569,13 +1669,15 @@ export default function MatchLobby() {
                     </div>
                     <div className="space-y-1.5">
                       <div className="text-[10px] font-black uppercase tracking-widest text-amber-400">
-                        Вето завершено • Выбрана карта {selectedMapInfo.name}
+                        {isDota ? "Готовность подтверждена" : `Вето завершено • Выбрана карта ${selectedMapInfo.name}`}
                       </div>
                       <h3 className="text-base font-black uppercase tracking-tight text-white">
-                        В очереди на запуск сервера CS2
+                        {isDota ? "В очереди на создание лобби Dota 2" : "В очереди на запуск сервера CS2"}
                       </h3>
                       <p className="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
-                        Все серверные слоты клуба сейчас заняты другими матчами. Ваш выбор карты и чек-ин сохранены. Сервер запустится <strong className="text-amber-400">автоматически</strong> сразу после завершения любой текущей игры!
+                        {isDota
+                          ? "Все слоты бота сейчас заняты другими матчами клуба. Лобби создастся автоматически сразу после освобождения слота!"
+                          : "Все серверные слоты клуба сейчас заняты другими матчами. Ваш выбор карты и чек-ин сохранены. Сервер запустится автоматически сразу после завершения любой текущей игры!"}
                       </p>
                     </div>
 
@@ -1587,51 +1689,55 @@ export default function MatchLobby() {
                 )}
 
                 {/* SCENARIO C: SERVER STARTING */}
-                {serverStatus === "starting" && (
+                {serverStatus === "starting" && !isServerReady && (
                   <div className="bg-[#0e0e12] border border-orange-500/30 rounded-2xl p-6 text-center space-y-4 shadow-2xl">
                     <div className="w-10 h-10 border-2 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mx-auto" />
                     <div className="space-y-1">
                       <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">
-                        Вето завершено • Выбрана карта {selectedMapInfo.name}
+                        {isDota ? "Инициализация матча Dota 2" : `Вето завершено • Выбрана карта ${selectedMapInfo.name}`}
                       </div>
                       <h3 className="text-base font-black uppercase tracking-tight text-white">
-                        Запуск игрового CS2 сервера...
+                        {isDota ? "Создание лобби в Dota 2..." : "Запуск игрового CS2 сервера..."}
                       </h3>
                       <p className="text-xs text-gray-400 max-w-md mx-auto leading-relaxed">
-                        Выделение порта :{match.cs2ServerPort || 27015} и компиляция конфигов матча. Пожалуйста, ожидайте — адрес подключения появится здесь автоматически сразу после старта сервера.
+                        {isDota
+                          ? "Бот DashMatch создает пользовательское лобби, настраивает стороны и рассылает инвайты игрокам. Пожалуйста, ожидайте."
+                          : `Выделение порта :${match.cs2ServerPort || 27015} и компиляция конфигов матча. Пожалуйста, ожидайте — адрес подключения появится здесь автоматически сразу после старта сервера.`}
                       </p>
                     </div>
 
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-bold text-gray-300">
                       <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
-                      <span>Инициализация игрового сервера</span>
+                      <span>{isDota ? "Подготовка лобби Dota 2" : "Инициализация игрового сервера"}</span>
                     </div>
                   </div>
                 )}
 
                 {/* SCENARIO C: SERVER TIMEOUT */}
-                {serverStatus === "start_failed" && (
+                {serverStatus === "start_failed" && !isServerReady && (
                   <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-5 space-y-3.5">
                     <div className="space-y-1">
                       <h3 className="text-sm font-black uppercase tracking-wider text-amber-400">
-                        Превышено время ожидания сервера
+                        {isDota ? "Превышено время ожидания создания лобби" : "Превышено время ожидания сервера"}
                       </h3>
                       <p className="text-xs text-gray-300">
-                        Сервер CS2 не сообщил о готовности. Возможно, порт был занят или агент переподключался.
+                        {isDota
+                          ? "Бот Dota 2 не сообщил о создании лобби. Возможно, Steam клиента на хосте переподключался."
+                          : "Сервер CS2 не сообщил о готовности. Возможно, порт был занят или агент переподключался."}
                       </p>
                     </div>
 
                     <button
                       onClick={handleRestartServer}
                       disabled={isRestartingServer}
-                      className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 flex items-center gap-2 active:scale-95"
+                      className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 flex items-center gap-2 active:scale-95 cursor-pointer"
                     >
                       {isRestartingServer ? (
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                       ) : (
                         <Play className="w-3.5 h-3.5 fill-white" />
                       )}
-                      <span>Перезапустить CS2</span>
+                      <span>{isDota ? "Перезапустить бота Dota 2" : "Перезапустить CS2"}</span>
                     </button>
                   </div>
                 )}
@@ -1639,156 +1745,89 @@ export default function MatchLobby() {
                 {/* SCENARIO D: SERVER READY / LIVE */}
                 {isServerReady && !isFinished && (
                   <div className="relative rounded-2xl bg-[#0e0e12] border border-emerald-500/30 p-5 space-y-4 shadow-2xl overflow-hidden">
-                    <div
-                      className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none filter blur-md"
-                      style={{ backgroundImage: `url(${selectedMapInfo.image})` }}
-                    />
+                    {!isDota && (
+                      <div
+                        className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none filter blur-md"
+                        style={{ backgroundImage: `url(${selectedMapInfo.image})` }}
+                      />
+                    )}
 
                     <div className="relative z-10 space-y-4">
                       <div className="flex items-center justify-between flex-wrap gap-3 border-b border-white/5 pb-3">
                         <div>
                           <div className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                            <span>Сервер CS2 запущен</span>
+                            <span>
+                              {isDota
+                                ? (match.dotaLobby?.status === "live" ? "Матч Dota 2 идет (Live)" : "Лобби Dota 2 создано")
+                                : "Сервер CS2 запущен"}
+                            </span>
                           </div>
                           <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-0.5">
-                            {serverStatus === "warmup" ? "Разминка" : serverStatus === "knife" ? "Ножевой раунд" : "Матч идет"} • Карта {selectedMapInfo.name}
+                            {isDota
+                              ? `${dotaGameModeLabel} • Регион: ${match.dotaLobby?.serverRegion || "Stockholm"}`
+                              : `${serverStatus === "warmup" ? "Разминка" : serverStatus === "knife" ? "Ножевой раунд" : "Матч идет"} • Карта ${selectedMapInfo.name}`}
                           </div>
                         </div>
 
-                        <button
-                          onClick={handleTacticalPause}
-                          disabled={isRequestingPause}
-                          className={cn(
-                            "px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border flex items-center gap-1.5 active:scale-95 cursor-pointer",
-                            serverStatus === "paused"
-                              ? "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/30 shadow-lg shadow-emerald-500/10"
-                              : "bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border-white/5"
-                          )}
-                        >
-                          {isRequestingPause ? (
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          ) : serverStatus === "paused" ? (
-                            <Play className="w-3.5 h-3.5 fill-emerald-400 text-emerald-400" />
-                          ) : (
-                            <Pause className="w-3.5 h-3.5 text-orange-400" />
-                          )}
-                          <span>{serverStatus === "paused" ? "Снять с паузы" : "Тактическая пауза"}</span>
-                        </button>
+                        {!isDota && (
+                          <button
+                            onClick={handleTacticalPause}
+                            disabled={isRequestingPause}
+                            className={cn(
+                              "px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border flex items-center gap-1.5 active:scale-95 cursor-pointer",
+                              serverStatus === "paused"
+                                ? "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/30 shadow-lg shadow-emerald-500/10"
+                                : "bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border-white/5"
+                            )}
+                          >
+                            {isRequestingPause ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : serverStatus === "paused" ? (
+                              <Play className="w-3.5 h-3.5 fill-emerald-400 text-emerald-400" />
+                            ) : (
+                              <Pause className="w-3.5 h-3.5 text-orange-400" />
+                            )}
+                            <span>{serverStatus === "paused" ? "Снять с паузы" : "Тактическая пауза"}</span>
+                          </button>
+                        )}
                       </div>
 
                       {/* Connect bar */}
                       <div className="space-y-2">
                         {isDota ? (
                           <div className="space-y-3 bg-black/40 p-4 rounded-2xl border border-white/5">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {/* Lobby Name */}
-                              <div className="space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-gray-400 block">
-                                  Имя лобби в Dota 2:
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={match.dotaLobby?.gameName || match.result?.dota_lobby?.game_name || `DashMatch #${match.id}`}
-                                    className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono font-bold text-orange-400"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const name = match.dotaLobby?.gameName || match.result?.dota_lobby?.game_name || `DashMatch #${match.id}`;
-                                      navigator.clipboard.writeText(name);
-                                      alert("Имя лобби скопировано в буфер обмена!");
-                                    }}
-                                    className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors"
-                                  >
-                                    Копировать
-                                  </button>
+                            {/* Games in series for players */}
+                            {isMultiGame && dotaGames.length > 0 && (
+                              <div className="p-3 bg-black/40 rounded-xl border border-white/5 space-y-2">
+                                <div className="text-[11px] font-bold text-gray-300 uppercase tracking-wider flex items-center justify-between">
+                                  <span>История игр серии:</span>
+                                  <span className="text-amber-400 font-mono text-[10px]">До {winsNeeded} {winsNeeded === 1 ? "победы" : "побед"}</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                  {dotaGames.map((g: any, idx: number) => {
+                                    const radiantWinner = Boolean(g.radiant_win);
+                                    const radiantComp = g.radiant_competitor_id === compB?.id ? compB : compA;
+                                    const direComp = g.dire_competitor_id === compA?.id ? compA : compB;
+                                    const winnerName = radiantWinner ? (radiantComp?.name || "Radiant") : (direComp?.name || "Dire");
+                                    return (
+                                      <div key={idx} className="flex items-center justify-between text-xs bg-white/5 px-3 py-2 rounded-lg border border-white/5 font-mono flex-wrap gap-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-bold text-amber-400">Игра #{g.game_number || idx + 1}</span>
+                                          <span className="text-gray-400">({radiantComp?.name} vs {direComp?.name})</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-white font-bold">{g.radiant_score ?? 0} : {g.dire_score ?? 0}</span>
+                                          <span className="text-emerald-400 font-bold uppercase text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                            🏆 {winnerName}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
-
-                              {/* Lobby Password */}
-                              <div className="space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-gray-400 block">
-                                  Пароль от лобби:
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <input
-                                    type="text"
-                                    readOnly
-                                    value={match.dotaLobby?.password || match.result?.dota_lobby?.password || "—"}
-                                    className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs font-mono font-bold text-emerald-400"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const pass = match.dotaLobby?.password || match.result?.dota_lobby?.password || "";
-                                      if (pass) {
-                                        navigator.clipboard.writeText(pass);
-                                        alert("Пароль скопирован в буфер обмена!");
-                                      }
-                                    }}
-                                    className="px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer transition-colors shadow-sm"
-                                  >
-                                    Копировать
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Sides Allocation Card */}
-                            <div className="p-3.5 bg-white/5 rounded-xl border border-white/5 space-y-2.5">
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
-                                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
-                                  <span>⚔️ Распределение по сторонам:</span>
-                                </span>
-                                {myDotaSide && (
-                                  <span className={cn(
-                                    "px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider border",
-                                    myDotaSide === "Radiant"
-                                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                                      : "bg-rose-500/20 text-rose-400 border-rose-500/30"
-                                  )}>
-                                    Ваша сторона: {myDotaSide === "Radiant" ? "Radiant (Силы Света)" : "Dire (Силы Тьмы)"}
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                <div className={cn(
-                                  "p-2.5 rounded-xl border flex items-center justify-between gap-2",
-                                  myDotaSide === "Radiant" ? "bg-emerald-500/10 border-emerald-500/30" : "bg-black/40 border-white/5"
-                                )}>
-                                  <div className="flex items-center gap-2 truncate">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0"></span>
-                                    <span className="text-emerald-400 font-bold shrink-0">Radiant:</span>
-                                    <span className="font-semibold text-white truncate">
-                                      {sideA === "Radiant" ? (compA?.name || "Команда 1") : (compB?.name || "Команда 2")}
-                                    </span>
-                                  </div>
-                                  {myDotaSide === "Radiant" && (
-                                    <span className="text-[10px] font-bold text-emerald-400 uppercase shrink-0">Вы здесь</span>
-                                  )}
-                                </div>
-
-                                <div className={cn(
-                                  "p-2.5 rounded-xl border flex items-center justify-between gap-2",
-                                  myDotaSide === "Dire" ? "bg-rose-500/10 border-rose-500/30" : "bg-black/40 border-white/5"
-                                )}>
-                                  <div className="flex items-center gap-2 truncate">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shrink-0"></span>
-                                    <span className="text-rose-400 font-bold shrink-0">Dire:</span>
-                                    <span className="font-semibold text-white truncate">
-                                      {sideB === "Dire" ? (compB?.name || "Команда 2") : (compA?.name || "Команда 1")}
-                                    </span>
-                                  </div>
-                                  {myDotaSide === "Dire" && (
-                                    <span className="text-[10px] font-bold text-rose-400 uppercase shrink-0">Вы здесь</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
+                            )}
 
                             {/* Resend invite button with cooldown */}
                             <div className="flex items-center justify-between gap-3 p-3 bg-black/40 rounded-xl border border-white/5 flex-wrap">
@@ -1815,24 +1854,6 @@ export default function MatchLobby() {
                                     : "Отправить повторно приглашение в лобби ↻"}
                                 </span>
                               </button>
-                            </div>
-
-                            <div className="text-[11px] text-gray-400 bg-white/5 p-3 rounded-xl border border-white/5 space-y-1">
-                              <div className="text-gray-200 font-bold flex items-center gap-1.5">
-                                <span>🎮 Как зайти в матч:</span>
-                              </div>
-                              <div>
-                                1. Запустите <strong>Dota 2</strong> → нажмите <strong>Играть</strong> → вкладка <strong>Пользовательские лобби</strong>.
-                              </div>
-                              <div>
-                                2. Найдите в списке лобби по названию и введите пароль выше.
-                              </div>
-                              <div>
-                                3. Займите слот вашей команды: <strong>{sideA === "Radiant" ? (compA?.name || "Команда 1") : (compB?.name || "Команда 2")}</strong> за Radiant или <strong>{sideB === "Dire" ? (compB?.name || "Команда 2") : (compA?.name || "Команда 1")}</strong> за Dire.
-                              </div>
-                              <div className="text-orange-400 text-[10px] pt-1">
-                                💡 Если к вашему профилю привязан Steam ID, бот DashMatch автоматически отправит приглашение в лобби прямо в игре!
-                              </div>
                             </div>
                           </div>
                         ) : (
@@ -1955,19 +1976,22 @@ export default function MatchLobby() {
                           )}
                         </AnimatePresence>
 
-                        <p className="text-[11px] text-gray-400 leading-relaxed bg-black/30 px-3.5 py-2 rounded-xl border border-white/5">
-                          Команда подключения автоматически копируется. Если CS2 открылся в меню — откройте консоль (<kbd className="bg-white/10 px-1.5 py-0.5 rounded text-orange-400 font-mono font-bold">~</kbd>) и нажмите <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono font-bold">Ctrl+V</kbd> + <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono font-bold">Enter</kbd>.
-                        </p>
+                        {!isDota && (
+                          <p className="text-[11px] text-gray-400 leading-relaxed bg-black/30 px-3.5 py-2 rounded-xl border border-white/5">
+                            Команда подключения автоматически копируется. Если CS2 открылся в меню — откройте консоль (<kbd className="bg-white/10 px-1.5 py-0.5 rounded text-orange-400 font-mono font-bold">~</kbd>) и нажмите <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono font-bold">Ctrl+V</kbd> + <kbd className="bg-white/10 px-1.5 py-0.5 rounded text-white font-mono font-bold">Enter</kbd>.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* MATCH STATS SCOREBOARD */}
-                <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-5 space-y-4 shadow-xl">
-                  <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
-                      <span>Статистика матча</span>
+                {/* MATCH STATS SCOREBOARD (CS2 ONLY) */}
+                {!isDota && (
+                  <div className="bg-[#0c0c10] border border-white/5 rounded-2xl p-5 space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
+                        <span>Статистика матча</span>
                       {isServerReady && !isFinished && (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-ping" />
@@ -2401,6 +2425,7 @@ export default function MatchLobby() {
                     );
                   })()}
                 </div>
+                )}
 
                 {/* SCENARIO E: FINISHED VICTORY BANNER */}
                 {isFinished && (
@@ -2421,7 +2446,7 @@ export default function MatchLobby() {
                     </div>
 
                     {/* Series Nominations across all maps */}
-                    {(() => {
+                    {!isDota && (() => {
                       const rawMaps = match.mapsHistory || match.result?.maps;
                       const entries = (rawMaps && typeof rawMaps === "object") ? Object.values(rawMaps) : [];
                       const playerAgg: Record<string, any> = {};
@@ -2616,7 +2641,9 @@ export default function MatchLobby() {
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className={cn(
                     "px-1.5 py-0.5 rounded text-[9px] font-black tracking-wider uppercase shrink-0 border",
-                    sideB === "T" ? "bg-orange-500/15 text-orange-400 border-orange-500/30" : "bg-sky-500/15 text-sky-400 border-sky-500/30"
+                    isDota
+                      ? (sideB === "Radiant" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border-rose-500/30")
+                      : (sideB === "T" ? "bg-orange-500/15 text-orange-400 border-orange-500/30" : "bg-sky-500/15 text-sky-400 border-sky-500/30")
                   )}>
                     {sideB}
                   </span>
@@ -2635,6 +2662,9 @@ export default function MatchLobby() {
                   const isCap = compB?.captainId === p.id || compB?.playerId === p.id;
                   const playerName = p.nickname || p.full_name || p.name || compB?.name || "Игрок";
                   const profileUrl = p.id ? `/promo/player/${p.id}${clubId ? `?clubId=${clubId}` : ""}` : null;
+                  const ratingStr = isDota
+                    ? (p.dota_mmr ? `${p.dota_mmr} MMR` : p.dota_rank_name || null)
+                    : (p.player_elo ? `${p.player_elo} ELO` : null);
 
                   return (
                     <div
@@ -2653,7 +2683,9 @@ export default function MatchLobby() {
                               href={profileUrl}
                               className={cn(
                                 "text-sm font-bold text-white transition-colors truncate block",
-                                sideB === "T" ? "hover:text-orange-400" : "hover:text-sky-400"
+                                isDota
+                                  ? (sideB === "Radiant" ? "hover:text-emerald-400" : "hover:text-rose-400")
+                                  : (sideB === "T" ? "hover:text-orange-400" : "hover:text-sky-400")
                               )}
                               title="Перейти в профиль игрока"
                             >
@@ -2667,7 +2699,9 @@ export default function MatchLobby() {
                           {isCap && !isSolo && (
                             <span className={cn(
                               "text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded",
-                              sideB === "T" ? "text-orange-400 bg-orange-500/10" : "text-sky-400 bg-sky-500/10"
+                              isDota
+                                ? (sideB === "Radiant" ? "text-emerald-400 bg-emerald-500/10" : "text-rose-400 bg-rose-500/10")
+                                : (sideB === "T" ? "text-orange-400 bg-orange-500/10" : "text-sky-400 bg-sky-500/10")
                             )}>
                               КЭП
                             </span>
@@ -2675,10 +2709,17 @@ export default function MatchLobby() {
                         </div>
                         <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-mono mt-0.5">
                           <span>ПК {checkin?.pc_number ? `#${checkin.pc_number}` : "—"}</span>
-                          {p.player_elo && (
+                          {ratingStr && (
                             <>
                               <span className="text-gray-600">•</span>
-                              <span className={cn("font-bold", sideB === "T" ? "text-orange-400" : "text-sky-400")}>{p.player_elo} ELO</span>
+                              <span className={cn(
+                                "font-bold",
+                                isDota
+                                  ? (sideB === "Radiant" ? "text-emerald-400" : "text-rose-400")
+                                  : (sideB === "T" ? "text-orange-400" : "text-sky-400")
+                              )}>
+                                {ratingStr}
+                              </span>
                             </>
                           )}
                         </div>

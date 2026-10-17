@@ -304,7 +304,7 @@ export async function GET(
     const matchRes = await client.query(
       `SELECT m.id, m.tournament_id, m.round, m.order_in_round, m.competitor_a_id, m.competitor_b_id,
               m.score1, m.score2, m.status, m.cs2_server_id, m.winner_competitor_id, m.scheduled_at, m.result,
-              t.id as club_tournament_id, t.club_id, t.name as tournament_name, t.discipline, t.config as tournament_config
+              t.id as club_tournament_id, t.club_id, t.name as tournament_name, t.discipline, t.type as tournament_type, t.config as tournament_config
        FROM tournament_matches m
        JOIN club_tournaments t ON m.tournament_id = t.id
        WHERE m.id = $1`,
@@ -496,8 +496,24 @@ export async function GET(
         serverStatus = "live";
       } else if (dotaMatch?.status === "lobby_ready" || statusLower === "ready" || match.result?.dota_lobby?.state === "lobby_ready") {
         serverStatus = "ready";
+      } else if (statusLower === "waiting_server" || dotaMatch?.status === "waiting_server" || dotaMatch?.status === "waiting_bot" || match.result?.dota_lobby?.status === "waiting_server") {
+        serverStatus = "waiting_server";
+        const qRes = await client.query(
+          `SELECT count(*)::int as pos FROM club_dota_matches 
+           WHERE club_id = $1 AND (status = 'waiting_server' OR status = 'waiting_bot') AND updated_at <= $2`,
+          [matchClubId, dotaMatch?.updated_at || new Date()]
+        ).catch(() => ({ rows: [{ pos: 1 }] }));
+        queuePosition = dotaMatch?.extra?.queue_position || qRes.rows[0]?.pos || 1;
       } else if (statusLower === "starting" || dotaMatch?.status === "starting") {
-        serverStatus = "starting";
+        const timestamp = dotaMatch?.updated_at ? new Date(dotaMatch.updated_at).getTime() : (dotaMatch?.created_at ? new Date(dotaMatch.created_at).getTime() : Date.now());
+        const elapsedSec = (Date.now() - timestamp) / 1000;
+        if (elapsedSec > 180 && dotaMatch?.status !== "starting") {
+          serverStatus = "start_failed";
+        } else {
+          serverStatus = "starting";
+        }
+      } else if (dotaMatch?.status === "stopped" || dotaMatch?.status === "failed") {
+        serverStatus = "start_failed";
       } else {
         serverStatus = "idle";
       }
@@ -572,34 +588,50 @@ export async function GET(
 
     // In BO3/BO5, score1/score2 is the series score (maps won). In BO1, it is map rounds!
     const effectiveScore1 = match.discipline === "dota2"
-      ? (dotaMatch ? dotaMatch.score1 : (match.score1 ?? 0))
+      ? (match.score1 ?? (dotaMatch ? dotaMatch.score1 : 0))
       : (numMaps > 1 ? seriesScore1 : (cs2Match ? cs2Match.score1 : (match.score1 ?? 0)));
     const effectiveScore2 = match.discipline === "dota2"
-      ? (dotaMatch ? dotaMatch.score2 : (match.score2 ?? 0))
+      ? (match.score2 ?? (dotaMatch ? dotaMatch.score2 : 0))
       : (numMaps > 1 ? seriesScore2 : (cs2Match ? cs2Match.score2 : (match.score2 ?? 0)));
 
     const team1Side = match.discipline === "dota2" ? "Radiant" : (cs2Match?.match_stats?.team1_side ?? match.result?.team1_side ?? "CT");
     const team2Side = match.discipline === "dota2" ? "Dire" : (cs2Match?.match_stats?.team2_side ?? match.result?.team2_side ?? (team1Side === "CT" ? "T" : "CT"));
     const matchStats = cs2Match?.match_stats || match.result?.stats || match.result?.dota_stats || null;
 
+    const tourneyType = String(match.tournament_type || match.type || match.tournament_config?.type || "").toLowerCase();
+    const defaultDotaMode = (tourneyType === "1vs1" || tourneyType === "solo") ? "1V1MID" : (match.tournament_config?.gameMode || "CM");
+    const resolvedDotaGameMode = dotaMatch?.game_mode || defaultDotaMode;
+
     const dotaLobbyData = dotaMatch ? {
       lobbyId: dotaMatch.lobby_id || match.result?.dota_lobby?.lobby_id || "",
       gameName: dotaMatch.game_name || match.result?.dota_lobby?.game_name || `DashMatch #${parsedMatchId}`,
       password: dotaMatch.password || match.result?.dota_lobby?.password || "",
-      gameMode: dotaMatch.game_mode || "CM",
+      gameMode: resolvedDotaGameMode,
       serverRegion: dotaMatch.server_region || "STOCKHOLM",
       status: dotaMatch.status,
       score1: dotaMatch.score1,
       score2: dotaMatch.score2,
       winner: dotaMatch.winner,
       duration: dotaMatch.duration,
-    } : (match.result?.dota_lobby || null);
+      botId: dotaMatch.bot_id || match.result?.dota_lobby?.bot_id || null,
+      queuePosition: dotaMatch.extra?.queue_position || queuePosition,
+      flipped: dotaMatch.extra?.flipped ?? match.result?.dota_lobby?.flipped ?? false,
+      gameNumber: dotaMatch.extra?.game_number ?? match.result?.dota_lobby?.game_number ?? ((match.result?.dota_games?.length || 0) + 1),
+    } : (match.result?.dota_lobby ? {
+      ...match.result.dota_lobby,
+      botId: match.result.dota_lobby.bot_id || null,
+      queuePosition: match.result.dota_lobby.queue_position || queuePosition,
+      gameMode: match.result.dota_lobby.gameMode || resolvedDotaGameMode,
+    } : null);
 
     return NextResponse.json({
       match: {
         id: match.id,
         tournamentId: match.tournament_id,
         tournamentName: match.tournament_name,
+        tournamentType: match.tournament_type || match.type || match.tournament_config?.type || "5vs5",
+        tournamentConfig: match.tournament_config || {},
+        defaultDotaGameMode: defaultDotaMode,
         round: match.round,
         orderInRound: match.order_in_round,
         status: match.status,
@@ -616,6 +648,7 @@ export async function GET(
         team1Side,
         team2Side,
         mapsHistory,
+        dotaGames: match.result?.dota_games || [],
         cs2ServerId: match.cs2_server_id || cs2Match?.id,
         cs2ServerPort: serverPort,
         cs2ServerIp: serverIp,
@@ -823,16 +856,18 @@ export async function POST(
         [parsedMatchId, playerId, pcNumber]
       );
 
-      // Verify if all players are ready to start veto
+      // Verify if all players are ready to start veto or auto-launch lobby
       const hasBothCompetitors = Boolean(match.competitor_a_id && match.competitor_b_id);
       const expectedPlayers = await getExpectedPlayers(client, parsedMatchId, match.competitor_a_id, match.competitor_b_id);
       const readyPlayersRes = await client.query(
         `SELECT player_id FROM lobby_checkin WHERE match_id = $1 AND is_ready = true`,
         [parsedMatchId]
       );
-      const readyPlayerIds = new Set(readyPlayersRes.rows.map((r: any) => r.player_id));
+      const readyPlayerIds = new Set(readyPlayersRes.rows.map((r: any) => String(r.player_id)));
 
-      const allReady = hasBothCompetitors && expectedPlayers.length >= 2 && expectedPlayers.every(id => readyPlayerIds.has(id));
+      const allExpectedReady = hasBothCompetitors && expectedPlayers.length >= 2 && expectedPlayers.every(id => readyPlayerIds.has(String(id)));
+      const twoPlayersCheckedIn = hasBothCompetitors && readyPlayerIds.size >= 2;
+      const allReady = allExpectedReady || twoPlayersCheckedIn;
 
       if (allReady && (match.status?.toLowerCase() === "scheduled" || match.status?.toLowerCase() === "pending")) {
         if (match.discipline === "dota2") {

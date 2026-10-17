@@ -15,6 +15,8 @@ import {
   Layers,
 } from "lucide-react";
 import { Tournament, formatTypeLabel } from "../types";
+import { Button } from "@/components/ui/button";
+import { formatDotaGameMode } from "@/lib/dota/utils";
 
 interface TournamentInfoTabProps {
   clubId: string;
@@ -36,41 +38,18 @@ export function TournamentInfoTab({
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* 1. Main Parameters Grid */}
-      <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-orange-50 rounded-2xl text-orange-500">
-              <Settings className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-black uppercase italic tracking-tight text-slate-900">
-                Параметры и настройки турнира
-              </h3>
-              <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                Техническая конфигурация дисциплины
-              </p>
-            </div>
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-5 shadow-xs">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+          <div className="p-2 bg-slate-100 rounded-xl text-slate-600">
+            <Settings className="w-5 h-5" />
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                router.push(
-                  `/clubs/${clubId}/tournaments/create?editId=${tournament.id}`
-                )
-              }
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase tracking-widest px-4 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Edit className="w-3.5 h-3.5 text-blue-600" />
-              <span>Редактировать</span>
-            </button>
-            <button
-              onClick={onDelete}
-              className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-black text-xs uppercase tracking-widest px-4 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Удалить</span>
-            </button>
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Параметры и настройки турнира
+            </h3>
+            <p className="text-xs text-slate-500 font-normal">
+              Техническая конфигурация дисциплины
+            </p>
           </div>
         </div>
 
@@ -81,7 +60,9 @@ export function TournamentInfoTab({
               Дисциплина
             </span>
             <span className="text-sm font-black uppercase text-slate-900 block">
-              {tournament.discipline?.toUpperCase() || "CS2"}
+              {tournament.discipline?.toLowerCase() === "dota2"
+                ? "Dota 2"
+                : tournament.discipline?.toUpperCase() || "CS2"}
             </span>
             <span className="text-[10px] text-slate-500 font-medium">
               Киберспортивный режим
@@ -212,7 +193,7 @@ export function TournamentInfoTab({
         </div>
 
         {/* Map Pool if CS2 */}
-        {mapPool.length > 0 && (
+        {tournament.discipline === "cs2" && mapPool.length > 0 && (
           <div className="space-y-2 pt-2 border-t border-slate-100">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
               Пул соревновательных карт (Map Pool)
@@ -229,19 +210,44 @@ export function TournamentInfoTab({
             </div>
           </div>
         )}
+
+        {/* Dota 2 Lobby Parameters */}
+        {tournament.discipline === "dota2" && (
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+              Параметры лобби Dota 2
+            </span>
+            <div className="flex flex-wrap gap-2.5">
+              <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700">
+                <span className="text-slate-400 mr-1.5">Режим:</span>
+                <span className="font-semibold text-slate-900">
+                  {formatDotaGameMode(tournament.config?.gameMode, tournament.type, tournament.config)}
+                </span>
+              </div>
+              <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700">
+                <span className="text-slate-400 mr-1.5">Сервер:</span>
+                <span className="font-semibold text-slate-900">
+                  {tournament.config?.serverRegion === "STOCKHOLM"
+                    ? "Стокгольм (Stockholm)"
+                    : tournament.config?.serverRegion || "Автоматически"}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. Tournament Rules Block */}
-      <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 space-y-4 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4 shadow-xs">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-          <div className="p-2.5 bg-blue-50 rounded-2xl text-blue-600">
+          <div className="p-2 bg-slate-100 rounded-xl text-slate-600">
             <FileText className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-base font-black uppercase italic tracking-tight text-slate-900">
+            <h3 className="text-base font-semibold text-slate-900">
               Регламент и правила турнира
             </h3>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+            <p className="text-xs text-slate-500 font-normal">
               Публичный регламент для участников клуба
             </p>
           </div>

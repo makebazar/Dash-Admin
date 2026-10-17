@@ -16,6 +16,7 @@ import { normalizeCS2Map } from "@/lib/cs2/utils";
 import { launchOrQueueMatchServer, processServerQueue } from "@/lib/cs2/server-manager";
 import { launchDotaMatch, launchDotaGameInLobby, stopDotaMatch, flipDotaTeams, resendDotaInvites } from "@/lib/dota/server-manager";
 import GameAgentConnector from "@/lib/game-agent";
+import { fetchFaceitStats, calculateFaceitLevel } from "@/lib/faceit-service";
 
 async function ensureTournamentsSchema(client: any) {
   try {
@@ -29,6 +30,24 @@ async function ensureTournamentsSchema(client: any) {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS tournament_disciplines (
+        id SERIAL PRIMARY KEY,
+        club_id INTEGER NOT NULL,
+        key VARCHAR(50) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        badge VARCHAR(100) DEFAULT 'Ручной ввод',
+        formats JSONB DEFAULT '["1vs1", "2vs2"]'::jsonb,
+        description TEXT,
+        is_system BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(club_id, key)
+      );
+      ALTER TABLE tournament_disciplines ADD COLUMN IF NOT EXISTS badge VARCHAR(100) DEFAULT 'Ручной ввод';
+      ALTER TABLE tournament_disciplines ADD COLUMN IF NOT EXISTS formats JSONB DEFAULT '["1vs1", "2vs2"]'::jsonb;
+      ALTER TABLE tournament_disciplines ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE tournament_disciplines ADD COLUMN IF NOT EXISTS is_system BOOLEAN DEFAULT FALSE;
+
       CREATE TABLE IF NOT EXISTS promo_players (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         phone_number VARCHAR(50) NOT NULL,
@@ -41,6 +60,7 @@ async function ensureTournamentsSchema(client: any) {
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS full_name VARCHAR(255);
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS nickname VARCHAR(100);
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS is_bot BOOLEAN DEFAULT FALSE;
+      ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS faceit_link TEXT;
 
       CREATE TABLE IF NOT EXISTS promo_player_balances (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -78,6 +98,9 @@ async function ensureTournamentsSchema(client: any) {
       ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS tag VARCHAR(10);
       ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS logo_url TEXT;
       ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS format_type VARCHAR(20) DEFAULT '5vs5';
+      ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS rename_requested BOOLEAN DEFAULT FALSE;
+      ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS rename_reason TEXT;
+      ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS rename_requested_at TIMESTAMPTZ;
 
       CREATE TABLE IF NOT EXISTS promo_team_members (
         team_id INTEGER NOT NULL REFERENCES promo_teams(id) ON DELETE CASCADE,
@@ -198,6 +221,46 @@ export async function GET(
     // Ensure required tables and columns exist
     await ensureTournamentsSchema(client);
 
+    // 0. Fetch disciplines
+    if (action === "disciplines") {
+      const countRes = await client.query(
+        `SELECT count(*)::int as cnt FROM tournament_disciplines WHERE club_id = $1`,
+        [parsedClubId]
+      );
+      if (countRes.rows[0].cnt === 0) {
+        await client.query(
+          `INSERT INTO tournament_disciplines (club_id, key, name, badge, formats, description, is_system)
+           VALUES 
+            ($1, 'cs2', 'Counter-Strike 2', 'Автосервер', '["5vs5", "2vs2", "1vs1", "mix_5vs5", "mix_2vs2"]'::jsonb, 'Официальный серверный агент DashMatch с поддержкой Veto и авто-статистики', TRUE),
+            ($1, 'dota2', 'Dota 2', 'Автосервер', '["5vs5", "1vs1"]'::jsonb, 'Автоматический запуск лобби Dota 2 через Steam / Game Agent', TRUE),
+            ($1, 'fifa', 'EA Sports FC / FIFA', 'Ручной ввод', '["1vs1", "2vs2"]'::jsonb, 'Турниры по симулятору футбола на консолях или ПК', FALSE),
+            ($1, 'ufc', 'UFC', 'Ручной ввод', '["1vs1"]'::jsonb, 'Файтинги и смешанные единоборства на PlayStation / Xbox', FALSE)
+           ON CONFLICT (club_id, key) DO NOTHING`,
+          [parsedClubId]
+        );
+      } else {
+        // Guarantee CS2 and Dota 2 exist and are marked as system
+        await client.query(
+          `INSERT INTO tournament_disciplines (club_id, key, name, badge, formats, description, is_system)
+           VALUES 
+            ($1, 'cs2', 'Counter-Strike 2', 'Автосервер', '["5vs5", "2vs2", "1vs1", "mix_5vs5", "mix_2vs2"]'::jsonb, 'Официальный серверный агент DashMatch с поддержкой Veto и авто-статистики', TRUE),
+            ($1, 'dota2', 'Dota 2', 'Автосервер', '["5vs5", "1vs1"]'::jsonb, 'Автоматический запуск лобби Dota 2 через Steam / Game Agent', TRUE)
+           ON CONFLICT (club_id, key) DO UPDATE 
+           SET is_system = TRUE`,
+          [parsedClubId]
+        );
+      }
+
+      const discRes = await client.query(
+        `SELECT id, club_id, key, name, badge, formats, description, is_system, created_at, updated_at
+         FROM tournament_disciplines 
+         WHERE club_id = $1 
+         ORDER BY is_system DESC, id ASC`,
+        [parsedClubId]
+      );
+      return NextResponse.json({ disciplines: discRes.rows });
+    }
+
     // 0. Fetch rules templates
     if (action === "rules_templates") {
       const discipline = url.searchParams.get("discipline");
@@ -210,6 +273,193 @@ export async function GET(
       queryStr += ` ORDER BY name ASC`;
       const templatesRes = await client.query(queryStr, paramsArr);
       return NextResponse.json({ templates: templatesRes.rows });
+    }
+
+    // 0.1 Fetch participants of the club
+    if (action === "participants") {
+      const search = url.searchParams.get("search")?.trim().toLowerCase();
+      let queryStr = `
+        SELECT
+          p.id,
+          p.phone_number,
+          p.full_name,
+          p.nickname,
+          p.steam_id,
+          p.steam_link,
+          p.avatar_url,
+          p.faceit_elo,
+          p.faceit_lvl,
+          p.faceit_link,
+          p.dota_mmr,
+          p.dota_rank_name,
+          p.dota_rank_tier,
+          p.is_bot,
+          p.created_at,
+          (
+            SELECT json_build_object(
+              'id', t.id,
+              'name', t.name,
+              'tag', t.tag,
+              'role', tm.role,
+              'logo_url', t.logo_url
+            )
+            FROM promo_team_members tm
+            JOIN promo_teams t ON tm.team_id = t.id
+            WHERE tm.phone = p.phone_number AND t.club_id = $1
+            ORDER BY tm.joined_at DESC
+            LIMIT 1
+          ) as team,
+          (
+            SELECT COUNT(DISTINCT tc.tournament_id)::int
+            FROM tournament_competitors tc
+            JOIN club_tournaments ct ON tc.tournament_id = ct.id
+            WHERE ct.club_id = $1
+              AND (
+                tc.player_id = p.id
+                OR tc.meta->>'captainPhone' = p.phone_number
+                OR tc.meta::text LIKE '%' || p.phone_number || '%'
+              )
+          ) as tournaments_count,
+          (
+            COALESCE(
+              (
+                SELECT COUNT(DISTINCT tm.id)::int
+                FROM tournament_matches tm
+                JOIN club_tournaments ct ON tm.tournament_id = ct.id
+                JOIN tournament_competitors tc ON (tm.competitor_a_id = tc.id OR tm.competitor_b_id = tc.id)
+                WHERE ct.club_id = $1
+                  AND (
+                    tc.player_id = p.id
+                    OR tc.meta->>'captainPhone' = p.phone_number
+                    OR tc.meta::text LIKE '%' || p.phone_number || '%'
+                  )
+              ), 0
+            ) +
+            COALESCE(
+              (
+                SELECT COUNT(*)::int
+                FROM promo_frag_matches pfm
+                WHERE pfm.player_id = p.id AND pfm.club_id = $1
+              ), 0
+            ) +
+            COALESCE(
+              (
+                SELECT SUM(de.matches_played)::int
+                FROM discipline_elo de
+                WHERE de.player_id = p.id
+              ), 0
+            )
+          )::int as matches_count,
+          (
+            SELECT COALESCE(SUM(tp.amount), 0)::numeric
+            FROM tournament_payouts tp
+            JOIN club_tournaments ct ON tp.tournament_id = ct.id
+            JOIN tournament_competitors tc ON tp.competitor_id = tc.id
+            WHERE ct.club_id = $1
+              AND (
+                tc.player_id = p.id
+                OR tc.meta->>'captainPhone' = p.phone_number
+                OR tc.meta::text LIKE '%' || p.phone_number || '%'
+              )
+          ) as total_payouts
+        FROM promo_players p
+        WHERE (
+          EXISTS (SELECT 1 FROM promo_frag_matches m WHERE m.player_id = p.id AND m.club_id = $1)
+          OR EXISTS (SELECT 1 FROM discipline_elo de WHERE de.player_id = p.id AND de.matches_played > 0)
+          OR EXISTS (
+            SELECT 1 FROM tournament_competitors tc
+            JOIN club_tournaments ct ON tc.tournament_id = ct.id
+            WHERE ct.club_id = $1
+              AND (
+                tc.player_id = p.id
+                OR tc.meta->>'captainPhone' = p.phone_number
+                OR tc.meta::text LIKE '%' || p.phone_number || '%'
+              )
+          )
+          OR EXISTS (
+            SELECT 1 FROM promo_team_members tm
+            JOIN promo_teams pt ON tm.team_id = pt.id
+            WHERE tm.phone = p.phone_number AND pt.club_id = $1
+          )
+        )
+      `;
+
+      const paramsArr: any[] = [parsedClubId];
+      if (search) {
+        queryStr += ` AND (
+          LOWER(COALESCE(p.full_name, '')) LIKE $2
+          OR LOWER(COALESCE(p.nickname, '')) LIKE $2
+          OR LOWER(COALESCE(p.phone_number, '')) LIKE $2
+          OR LOWER(COALESCE(p.steam_id, '')) LIKE $2
+        )`;
+        paramsArr.push(`%${search}%`);
+      }
+
+      queryStr += ` ORDER BY p.created_at DESC`;
+      const participantsRes = await client.query(queryStr, paramsArr);
+      return NextResponse.json({ participants: participantsRes.rows });
+    }
+
+    // 0. Fetch teams
+    if (action === "teams") {
+      const search = url.searchParams.get("search") || "";
+      let teamsQuery = `
+        SELECT t.id, t.club_id, t.name, t.tag, t.captain_phone, t.logo_url,
+               COALESCE(t.format_type, '5vs5') as format_type, t.join_code, t.created_at,
+               t.rename_requested, t.rename_reason, t.rename_requested_at,
+               cp.full_name as captain_name, cp.nickname as captain_nickname
+        FROM promo_teams t
+        LEFT JOIN promo_players cp ON t.captain_phone = cp.phone_number
+        WHERE t.club_id = $1
+      `;
+      const queryParams: any[] = [parsedClubId];
+      if (search.trim()) {
+        teamsQuery += ` AND (
+          LOWER(t.name) LIKE $2
+          OR LOWER(COALESCE(t.tag, '')) LIKE $2
+          OR LOWER(COALESCE(t.captain_phone, '')) LIKE $2
+          OR LOWER(COALESCE(cp.full_name, '')) LIKE $2
+          OR LOWER(COALESCE(cp.nickname, '')) LIKE $2
+        )`;
+        queryParams.push(`%${search.trim().toLowerCase()}%`);
+      }
+      teamsQuery += ` ORDER BY t.created_at DESC`;
+
+      const teamsRes = await client.query(teamsQuery, queryParams);
+      const teamIds = teamsRes.rows.map((r: any) => r.id);
+      let membersByTeam: Record<number, any[]> = {};
+
+      if (teamIds.length > 0) {
+        const membersRes = await client.query(
+          `SELECT tm.team_id, tm.phone, tm.role, tm.joined_at,
+                  p.id as player_id, p.full_name, p.nickname, p.faceit_elo, p.faceit_lvl, p.dota_mmr
+           FROM promo_team_members tm
+           LEFT JOIN promo_players p ON tm.phone = p.phone_number
+           WHERE tm.team_id = ANY($1::int[])
+           ORDER BY CASE WHEN tm.role = 'captain' THEN 0 ELSE 1 END, tm.joined_at ASC`,
+          [teamIds]
+        );
+        membersRes.rows.forEach((m: any) => {
+          if (!membersByTeam[m.team_id]) membersByTeam[m.team_id] = [];
+          membersByTeam[m.team_id].push({
+            phone: m.phone,
+            role: m.role,
+            playerId: m.player_id,
+            fullName: m.full_name,
+            nickname: m.nickname,
+            faceitElo: m.faceit_elo,
+            faceitLvl: m.faceit_lvl,
+            dotaMmr: m.dota_mmr,
+          });
+        });
+      }
+
+      const teams = teamsRes.rows.map((t: any) => ({
+        ...t,
+        members: membersByTeam[t.id] || [],
+      }));
+
+      return NextResponse.json({ teams });
     }
 
     // 1. Fetch detailed view of a single tournament
@@ -239,6 +489,9 @@ export async function GET(
                 solo_p.faceit_link as player_faceit_link,
                 COALESCE(solo_p.avatar_url, solo_p.faceit_avatar) as player_avatar_url,
                 COALESCE(solo_p.nickname, solo_p.full_name, c.display_name) as player_name,
+                solo_p.phone_number as player_phone,
+                solo_p.full_name as player_full_name,
+                solo_p.steam_id as player_steam_id,
                 COALESCE(pt.logo_url, t_teams.logo_url) as team_logo,
                 solo_p.dota_rank_tier as player_dota_rank_tier,
                 solo_p.dota_rank_name as player_dota_rank_name,
@@ -254,6 +507,7 @@ export async function GET(
                       'fullName', COALESCE(p.nickname, p.full_name, ptm.phone),
                       'nickname', p.nickname,
                       'phoneNumber', ptm.phone,
+                      'steamId', p.steam_id,
                       'role', ptm.role,
                       'avatarUrl', COALESCE(p.avatar_url, p.faceit_avatar),
                       'faceitLink', p.faceit_link,
@@ -279,6 +533,7 @@ export async function GET(
                       'fullName', COALESCE(p.nickname, p.full_name),
                       'nickname', p.nickname,
                       'phoneNumber', p.phone_number,
+                      'steamId', p.steam_id,
                       'role', 'player',
                       'avatarUrl', COALESCE(p.avatar_url, p.faceit_avatar),
                       'faceitLink', p.faceit_link,
@@ -478,6 +733,446 @@ export async function POST(
 
     const body = await request.json();
     const { action } = body;
+    // Action: SAVE / UPDATE DISCIPLINE
+    if (action === "save_discipline") {
+      const { id, key, name, badge, formats, description } = body;
+      if (!name || !name.trim()) {
+        return NextResponse.json({ error: "Укажите название дисциплины" }, { status: 400 });
+      }
+
+      const validFormats = Array.isArray(formats) && formats.length > 0 ? formats : ["1vs1", "2vs2"];
+
+      if (id) {
+        const existing = await client.query(
+          `SELECT * FROM tournament_disciplines WHERE id = $1 AND club_id = $2`,
+          [id, parsedClubId]
+        );
+        if (existing.rowCount === 0) {
+          return NextResponse.json({ error: "Дисциплина не найдена" }, { status: 404 });
+        }
+        const isSys = Boolean(existing.rows[0].is_system || existing.rows[0].key === "cs2" || existing.rows[0].key === "dota2");
+        const finalKey = isSys
+          ? existing.rows[0].key
+          : (key ? key.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "") : existing.rows[0].key);
+
+        const updated = await client.query(
+          `UPDATE tournament_disciplines 
+           SET name = $1, badge = $2, formats = $3, description = $4, key = $5, updated_at = NOW()
+           WHERE id = $6 AND club_id = $7
+           RETURNING *`,
+          [
+            name.trim(),
+            badge?.trim() || (isSys ? "Автосервер" : "Ручной ввод"),
+            JSON.stringify(validFormats),
+            description?.trim() || "",
+            finalKey,
+            id,
+            parsedClubId
+          ]
+        );
+        return NextResponse.json({ success: true, discipline: updated.rows[0] });
+      } else {
+        if (!key || !key.trim()) {
+          return NextResponse.json({ error: "Укажите уникальный код дисциплины (например: valorant, mk1)" }, { status: 400 });
+        }
+        const sanitizedKey = key.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+        if (!sanitizedKey) {
+          return NextResponse.json({ error: "Код дисциплины должен состоять из латинских букв или цифр" }, { status: 400 });
+        }
+        if (sanitizedKey === "cs2" || sanitizedKey === "dota2") {
+          return NextResponse.json({ error: "Коды 'cs2' и 'dota2' зарезервированы для системных дисциплин" }, { status: 400 });
+        }
+
+        const checkExisting = await client.query(
+          `SELECT id FROM tournament_disciplines WHERE club_id = $1 AND key = $2`,
+          [parsedClubId, sanitizedKey]
+        );
+        if (checkExisting.rowCount > 0) {
+          return NextResponse.json({ error: "Дисциплина с таким кодом уже существует в клубе" }, { status: 400 });
+        }
+
+        const inserted = await client.query(
+          `INSERT INTO tournament_disciplines (club_id, key, name, badge, formats, description, is_system)
+           VALUES ($1, $2, $3, $4, $5, $6, FALSE)
+           RETURNING *`,
+          [
+            parsedClubId,
+            sanitizedKey,
+            name.trim(),
+            badge?.trim() || "Ручной ввод",
+            JSON.stringify(validFormats),
+            description?.trim() || ""
+          ]
+        );
+        return NextResponse.json({ success: true, discipline: inserted.rows[0] });
+      }
+    }
+
+    // Action: DELETE DISCIPLINE
+    if (action === "delete_discipline") {
+      const { id } = body;
+      if (!id) {
+        return NextResponse.json({ error: "ID дисциплины обязателен" }, { status: 400 });
+      }
+      const existing = await client.query(
+        `SELECT * FROM tournament_disciplines WHERE id = $1 AND club_id = $2`,
+        [id, parsedClubId]
+      );
+      if (existing.rowCount === 0) {
+        return NextResponse.json({ error: "Дисциплина не найдена" }, { status: 404 });
+      }
+
+      if (existing.rows[0].is_system || existing.rows[0].key === "cs2" || existing.rows[0].key === "dota2") {
+        return NextResponse.json(
+          { error: "Системные дисциплины (CS2 и Dota 2) нельзя удалить!" },
+          { status: 400 }
+        );
+      }
+
+      await client.query(
+        `DELETE FROM tournament_disciplines WHERE id = $1 AND club_id = $2`,
+        [id, parsedClubId]
+      );
+      return NextResponse.json({ success: true });
+    }
+
+    // Action: SAVE PARTICIPANT
+    if (action === "save_participant") {
+      const { id, phoneNumber, fullName, nickname, steamId, faceitElo, dotaMmr, faceitLink } = body;
+      const cleanPhone = (phoneNumber || "").replace(/[^0-9+]/g, "").trim();
+      if (!cleanPhone && !id) {
+        return NextResponse.json({ error: "Укажите номер телефона участника" }, { status: 400 });
+      }
+
+      const hasFaceit = Boolean(faceitLink && faceitLink.trim());
+      const resolvedFaceitLink: string | null = hasFaceit ? faceitLink.trim() : null;
+      let resolvedFaceitElo: number | null = null;
+      let resolvedFaceitLvl: number | null = null;
+      let resolvedFaceitNick: string | null = null;
+      let resolvedFaceitAvatar: string | null = null;
+
+      if (hasFaceit) {
+        if (faceitElo !== undefined && faceitElo !== "" && !isNaN(parseInt(faceitElo))) {
+          resolvedFaceitElo = parseInt(faceitElo);
+          resolvedFaceitLvl = calculateFaceitLevel(resolvedFaceitElo);
+        }
+
+        try {
+          const stats = await fetchFaceitStats(resolvedFaceitLink!);
+          if (stats) {
+            if (stats.elo && (!resolvedFaceitElo || isNaN(resolvedFaceitElo))) {
+              resolvedFaceitElo = stats.elo;
+            }
+            if (stats.level) resolvedFaceitLvl = stats.level;
+            if (stats.nickname) resolvedFaceitNick = stats.nickname;
+            if (stats.avatar) resolvedFaceitAvatar = stats.avatar;
+          }
+        } catch (e) {
+          console.warn("Failed to fetch Faceit stats for link:", resolvedFaceitLink, e);
+        }
+      }
+
+      const cleanSteamId = steamId !== undefined ? (steamId.trim() || null) : null;
+      const cleanDotaMmr = dotaMmr !== undefined && dotaMmr !== "" && !isNaN(parseInt(dotaMmr)) ? parseInt(dotaMmr) : null;
+      const cleanFullName = fullName !== undefined ? (fullName.trim() || "Игрок") : null;
+      const cleanNickname = nickname !== undefined ? (nickname.trim() || null) : null;
+
+      let playerId = id;
+      if (playerId) {
+        // Update existing player
+        if (!hasFaceit) {
+          // Explicitly unlink Faceit if link was cleared
+          await client.query(
+            `UPDATE promo_players
+             SET full_name = COALESCE($1, full_name),
+                 nickname = $2,
+                 steam_id = $3,
+                 dota_mmr = $4,
+                 faceit_link = NULL,
+                 faceit_elo = NULL,
+                 faceit_lvl = NULL,
+                 faceit_nickname = NULL,
+                 faceit_avatar = NULL,
+                 faceit_kd = NULL,
+                 faceit_winrate = NULL,
+                 faceit_matches = NULL,
+                 phone_number = COALESCE(NULLIF($5, ''), phone_number)
+             WHERE id = $6`,
+            [
+              cleanFullName,
+              cleanNickname,
+              cleanSteamId,
+              cleanDotaMmr,
+              cleanPhone || null,
+              playerId,
+            ]
+          );
+        } else {
+          await client.query(
+            `UPDATE promo_players
+             SET full_name = COALESCE($1, full_name),
+                 nickname = $2,
+                 steam_id = $3,
+                 faceit_elo = $4,
+                 faceit_lvl = COALESCE($5, faceit_lvl),
+                 faceit_nickname = COALESCE($6, faceit_nickname),
+                 faceit_avatar = COALESCE($7, faceit_avatar),
+                 dota_mmr = $8,
+                 faceit_link = $9,
+                 phone_number = COALESCE(NULLIF($10, ''), phone_number)
+             WHERE id = $11`,
+            [
+              cleanFullName,
+              cleanNickname,
+              cleanSteamId,
+              resolvedFaceitElo,
+              resolvedFaceitLvl,
+              resolvedFaceitNick,
+              resolvedFaceitAvatar,
+              cleanDotaMmr,
+              resolvedFaceitLink,
+              cleanPhone || null,
+              playerId,
+            ]
+          );
+        }
+      } else {
+        // Find existing by phone or create
+        const existingPlayer = await client.query(
+          `SELECT id FROM promo_players WHERE phone_number = $1 LIMIT 1`,
+          [cleanPhone]
+        );
+
+        if (existingPlayer.rowCount && existingPlayer.rowCount > 0) {
+          playerId = existingPlayer.rows[0].id;
+          if (!hasFaceit) {
+            await client.query(
+              `UPDATE promo_players
+               SET full_name = COALESCE($1, full_name),
+                   nickname = $2,
+                   steam_id = $3,
+                   dota_mmr = $4,
+                   faceit_link = NULL,
+                   faceit_elo = NULL,
+                   faceit_lvl = NULL,
+                   faceit_nickname = NULL,
+                   faceit_avatar = NULL,
+                   faceit_kd = NULL,
+                   faceit_winrate = NULL,
+                   faceit_matches = NULL
+               WHERE id = $5`,
+              [
+                cleanFullName,
+                cleanNickname,
+                cleanSteamId,
+                cleanDotaMmr,
+                playerId,
+              ]
+            );
+          } else {
+            await client.query(
+              `UPDATE promo_players
+               SET full_name = COALESCE($1, full_name),
+                   nickname = $2,
+                   steam_id = $3,
+                   faceit_elo = $4,
+                   faceit_lvl = COALESCE($5, faceit_lvl),
+                   faceit_nickname = COALESCE($6, faceit_nickname),
+                   faceit_avatar = COALESCE($7, faceit_avatar),
+                   dota_mmr = $8,
+                   faceit_link = $9
+               WHERE id = $10`,
+              [
+                cleanFullName,
+                cleanNickname,
+                cleanSteamId,
+                resolvedFaceitElo,
+                resolvedFaceitLvl,
+                resolvedFaceitNick,
+                resolvedFaceitAvatar,
+                cleanDotaMmr,
+                resolvedFaceitLink,
+                playerId,
+              ]
+            );
+          }
+        } else {
+          const newPlayer = await client.query(
+            `INSERT INTO promo_players (phone_number, full_name, nickname, pin_hash, steam_id, faceit_elo, faceit_lvl, faceit_nickname, faceit_avatar, dota_mmr, faceit_link)
+             VALUES ($1, $2, $3, 'PENDING', $4, $5, $6, $7, $8, $9, $10)
+             RETURNING id`,
+            [
+              cleanPhone,
+              cleanFullName || "Игрок",
+              cleanNickname,
+              cleanSteamId,
+              hasFaceit ? resolvedFaceitElo : null,
+              hasFaceit ? resolvedFaceitLvl : null,
+              hasFaceit ? resolvedFaceitNick : null,
+              hasFaceit ? resolvedFaceitAvatar : null,
+              cleanDotaMmr,
+              resolvedFaceitLink,
+            ]
+          );
+          playerId = newPlayer.rows[0].id;
+        }
+
+        // Link with club balance
+        await client.query(
+          `INSERT INTO promo_player_balances (player_id, club_id, total_xp, bonus_balance)
+           VALUES ($1, $2, 0, 0)
+           ON CONFLICT (player_id, club_id) DO NOTHING`,
+          [playerId, parsedClubId]
+        );
+      }
+
+      return NextResponse.json({ success: true, playerId });
+    }
+
+    // Action: DELETE PARTICIPANT (Unlink from club)
+    if (action === "delete_participant") {
+      const { id } = body;
+      if (!id) {
+        return NextResponse.json({ error: "ID участника обязателен" }, { status: 400 });
+      }
+
+      await client.query(
+        `DELETE FROM promo_player_balances WHERE player_id = $1 AND club_id = $2`,
+        [id, parsedClubId]
+      );
+
+      return NextResponse.json({ success: true });
+    }
+
+    // Action: SAVE TEAM
+    if (action === "save_team") {
+      const { id, name, tag, formatType, captainPhone, members } = body;
+      if (!name || !name.trim()) {
+        return NextResponse.json({ error: "Укажите название команды" }, { status: 400 });
+      }
+      const cleanCapPhone = (captainPhone || "").replace(/[^0-9+]/g, "").trim();
+      if (!cleanCapPhone) {
+        return NextResponse.json({ error: "Укажите телефон капитана" }, { status: 400 });
+      }
+
+      await client.query("BEGIN");
+      let teamId = id ? parseInt(String(id)) : null;
+
+      if (teamId) {
+        await client.query(
+          `UPDATE promo_teams
+           SET name = $1, tag = $2, format_type = $3, captain_phone = $4
+           WHERE id = $5 AND club_id = $6`,
+          [name.trim(), tag ? tag.trim().toUpperCase() : null, formatType || '5vs5', cleanCapPhone, teamId, parsedClubId]
+        );
+      } else {
+        const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const newTeam = await client.query(
+          `INSERT INTO promo_teams (club_id, name, tag, format_type, captain_phone, join_code)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id`,
+          [parsedClubId, name.trim(), tag ? tag.trim().toUpperCase() : null, formatType || '5vs5', cleanCapPhone, joinCode]
+        );
+        teamId = newTeam.rows[0].id;
+      }
+
+      // Handle members
+      if (Array.isArray(members)) {
+        await client.query(`DELETE FROM promo_team_members WHERE team_id = $1`, [teamId]);
+
+        const uniquePhones = new Set<string>();
+        uniquePhones.add(cleanCapPhone);
+
+        // Ensure captain is in promo_players
+        const capPlayer = await client.query(`SELECT id FROM promo_players WHERE phone_number = $1`, [cleanCapPhone]);
+        if (capPlayer.rowCount === 0) {
+          await client.query(
+            `INSERT INTO promo_players (phone_number, full_name, pin_hash) VALUES ($1, $2, 'PENDING')`,
+            [cleanCapPhone, name.trim() + " Cap"]
+          );
+        }
+
+        await client.query(
+          `INSERT INTO promo_team_members (team_id, phone, role)
+           VALUES ($1, $2, 'captain')
+           ON CONFLICT (team_id, phone) DO UPDATE SET role = 'captain'`,
+          [teamId, cleanCapPhone]
+        );
+
+        for (const m of members) {
+          const mPhone = (typeof m === "string" ? m : m.phone || "").replace(/[^0-9+]/g, "").trim();
+          if (!mPhone || uniquePhones.has(mPhone)) continue;
+          uniquePhones.add(mPhone);
+
+          const mPlayer = await client.query(`SELECT id FROM promo_players WHERE phone_number = $1`, [mPhone]);
+          if (mPlayer.rowCount === 0) {
+            await client.query(
+              `INSERT INTO promo_players (phone_number, full_name, pin_hash) VALUES ($1, $2, 'PENDING')`,
+              [mPhone, "Игрок " + mPhone.slice(-4)]
+            );
+          }
+
+          await client.query(
+            `INSERT INTO promo_team_members (team_id, phone, role)
+             VALUES ($1, $2, 'player')
+             ON CONFLICT (team_id, phone) DO UPDATE SET role = 'player'`,
+            [teamId, mPhone]
+          );
+        }
+      }
+
+      await client.query("COMMIT");
+      return NextResponse.json({ success: true, teamId });
+    }
+
+    // Action: DELETE TEAM
+    if (action === "delete_team") {
+      const { id } = body;
+      if (!id) {
+        return NextResponse.json({ error: "ID команды обязателен" }, { status: 400 });
+      }
+
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM promo_team_members WHERE team_id = $1`, [id]);
+      await client.query(`DELETE FROM promo_teams WHERE id = $1 AND club_id = $2`, [id, parsedClubId]);
+      await client.query("COMMIT");
+
+      return NextResponse.json({ success: true });
+    }
+
+    // Action: REQUEST TEAM RENAME
+    if (action === "request_team_rename") {
+      const { teamId, reason } = body;
+      if (!teamId) {
+        return NextResponse.json({ error: "teamId обязателен" }, { status: 400 });
+      }
+      await client.query(
+        `UPDATE promo_teams
+         SET rename_requested = TRUE,
+             rename_reason = $1,
+             rename_requested_at = NOW()
+         WHERE id = $2 AND club_id = $3`,
+        [reason?.trim() || "Запрошена смена названия администратором клуба", teamId, parsedClubId]
+      );
+      return NextResponse.json({ success: true });
+    }
+
+    // Action: CANCEL TEAM RENAME
+    if (action === "cancel_team_rename") {
+      const { teamId } = body;
+      if (!teamId) {
+        return NextResponse.json({ error: "teamId обязателен" }, { status: 400 });
+      }
+      await client.query(
+        `UPDATE promo_teams
+         SET rename_requested = FALSE,
+             rename_reason = NULL,
+             rename_requested_at = NULL
+         WHERE id = $1 AND club_id = $2`,
+        [teamId, parsedClubId]
+      );
+      return NextResponse.json({ success: true });
+    }
 
     // Action: CREATE RULES TEMPLATE
     if (action === "create_rules_template") {
@@ -631,6 +1326,45 @@ export async function POST(
       );
 
       return NextResponse.json({ success: true });
+    }
+
+    // Action: PUBLISH / OPEN REGISTRATION
+    if (action === "publish" || action === "open_registration") {
+      const { id } = body;
+      const tournamentRes = await client.query(
+        `SELECT * FROM club_tournaments WHERE id = $1 AND club_id = $2`,
+        [id, parsedClubId]
+      );
+      if (tournamentRes.rowCount === 0) {
+        return NextResponse.json({ error: "Турнир не найден" }, { status: 404 });
+      }
+      await client.query(
+        `UPDATE club_tournaments SET status = 'REGISTRATION' WHERE id = $1`,
+        [id]
+      );
+      await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(id)]).catch(() => {});
+      return NextResponse.json({ success: true, status: "REGISTRATION" });
+    }
+
+    // Action: REVERT TO DRAFT
+    if (action === "revert_to_draft" || action === "unpublish") {
+      const { id } = body;
+      const tournamentRes = await client.query(
+        `SELECT * FROM club_tournaments WHERE id = $1 AND club_id = $2`,
+        [id, parsedClubId]
+      );
+      if (tournamentRes.rowCount === 0) {
+        return NextResponse.json({ error: "Турнир не найден" }, { status: 404 });
+      }
+      if (tournamentRes.rows[0].status === "ACTIVE") {
+        return NextResponse.json({ error: "Нельзя перевести в черновик запущенный турнир" }, { status: 400 });
+      }
+      await client.query(
+        `UPDATE club_tournaments SET status = 'DRAFT' WHERE id = $1`,
+        [id]
+      );
+      await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(id)]).catch(() => {});
+      return NextResponse.json({ success: true, status: "DRAFT" });
     }
 
     // Action: UPDATE RULES

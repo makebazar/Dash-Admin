@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Tournament, Competitor, Match, DashMatchAgentInfo, ActiveCs2MatchInfo } from "../types";
 import { parseCs2StatusPlayers } from "@/lib/cs2/utils";
+import { formatDotaGameMode } from "@/lib/dota/utils";
 
 interface MatchControlModalProps {
   isOpen: boolean;
@@ -484,16 +485,16 @@ export function MatchControlModal({
     : DEFAULT_MAP_OPTIONS.map((m) => m.id);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-slate-950/70 backdrop-blur-xs">
-      <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-[2rem] p-6 md:p-8 shadow-2xl space-y-6 text-slate-900 max-h-[92vh] overflow-y-auto custom-scrollbar">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs">
+      <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl p-6 md:p-7 shadow-xl space-y-5 text-slate-900 max-h-[92vh] overflow-y-auto custom-scrollbar">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
           <div>
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
-              <h3 className="text-lg font-extrabold tracking-tight text-slate-900">
-                Управление <span className="text-orange-600">{matchTitle}</span>
+              <span className="w-2 h-2 rounded-full bg-slate-900"></span>
+              <h3 className="text-base font-semibold tracking-tight text-slate-900">
+                Управление {matchTitle}
               </h3>
               {match.result?.isTechWin && (
                 <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
@@ -596,7 +597,7 @@ export function MatchControlModal({
                   </div>
 
                   <div className="text-[11px] text-slate-400 font-mono">
-                    {dotaLobby.gameMode || "Captains Mode"} • {dotaLobby.serverRegion || "Stockholm"}
+                    {formatDotaGameMode(dotaLobby.gameMode, tournament?.type, tournament?.config)} • {dotaLobby.serverRegion || "Stockholm"}
                   </div>
                 </div>
 

@@ -36,16 +36,16 @@ export function RebuildBracketModal({
   ).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/70 backdrop-blur-xs">
-      <div className="w-full max-w-lg bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-2xl space-y-6 text-slate-900 animate-in fade-in zoom-in-95 duration-150">
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center mx-auto text-orange-600 shadow-xs">
-            <RefreshCw className="w-6 h-6" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xs">
+      <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xl space-y-5 text-slate-900 animate-in fade-in zoom-in-95 duration-150">
+        <div className="text-center space-y-1.5">
+          <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center mx-auto text-slate-700">
+            <RefreshCw className="w-5 h-5" />
           </div>
-          <h3 className="text-lg font-black uppercase italic tracking-tight text-slate-900">
-            Пересобрать <span className="text-orange-500">Сетку Турнира</span>
+          <h3 className="text-base font-semibold text-slate-900">
+            Пересобрать сетку турнира
           </h3>
-          <p className="text-xs text-slate-500 font-medium leading-relaxed">
+          <p className="text-xs text-slate-500 font-normal leading-relaxed">
             Все текущие матчи и промежуточные счета будут сброшены. Новая сетка
             сформируется заново для всех подтвержденных участников.
           </p>

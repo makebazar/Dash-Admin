@@ -396,7 +396,7 @@ export function TournamentsFeedTab({
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
                   <span>LIVE • Идет турнир</span>
                 </div>
-              ) : activeTournament.status === "REGISTRATION" || activeTournament.status === "DRAFT" ? (
+              ) : activeTournament.status === "REGISTRATION" ? (
                 <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-emerald-400">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span>Регистрация открыта</span>
@@ -923,8 +923,8 @@ export function TournamentsFeedTab({
           )}
         </div>
 
-        {/* REGISTRATION DRAWER (if in REGISTRATION or DRAFT mode) */}
-        {(activeTournament.status === "REGISTRATION" || activeTournament.status === "DRAFT") && (
+        {/* REGISTRATION DRAWER (if in REGISTRATION mode) */}
+        {activeTournament.status === "REGISTRATION" && (
           <div className="bg-[#0c0c0e]/95 border border-white/5 rounded-[2.5rem] p-8 space-y-6 shadow-2xl">
             <div className="flex items-center justify-between">
               <div>
@@ -1023,13 +1023,14 @@ export function TournamentsFeedTab({
 
   // 2. TOURNAMENTS FEED LIST
   const filteredTournaments = tournaments.filter((t) => {
+    if (t.status === "DRAFT") return false;
     if (searchQuery && !t.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (statusFilter !== "all") {
       if (statusFilter === "registration") {
-        if (t.status !== "REGISTRATION" && t.status !== "DRAFT") return false;
+        if (t.status !== "REGISTRATION") return false;
       } else {
         const statusMap: Record<string, string> = { active: "ACTIVE", finished: "FINISHED" };
-        if (t.status !== statusMap[statusFilter]) return false;
+        if (t.status !== statusMap[statusFilter] && (statusFilter !== "finished" || t.status !== "COMPLETED")) return false;
       }
     }
     if (formatFilter !== "all") {
@@ -1272,12 +1273,12 @@ export function TournamentsFeedTab({
                               <span
                                 className={cn(
                                   "text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-xl border block text-center",
-                                  t.status === "REGISTRATION" || t.status === "DRAFT"
+                                  t.status === "REGISTRATION"
                                     ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
                                     : "bg-white/5 text-gray-400 border-white/10"
                                 )}
                               >
-                                {t.status === "REGISTRATION" || t.status === "DRAFT" ? "Регистрация" : "Завершен"}
+                                {t.status === "REGISTRATION" ? "Регистрация" : "Завершен"}
                               </span>
                             )}
                           </div>

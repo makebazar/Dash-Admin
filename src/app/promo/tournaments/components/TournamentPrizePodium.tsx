@@ -253,11 +253,12 @@ export function TournamentPrizePodium({
     );
   }, [activeMapPool, customMaps]);
 
-  // Nominations & Special Awards
+  // Nominations & Special Awards (CS2 only)
   const activeNominations = useMemo(() => {
+    if (tournament.discipline !== "cs2") return [];
     const rawNoms = tournament.prize_distribution?.nominations || [];
     return rawNoms.filter((n: any) => n.enabled);
-  }, [tournament.prize_distribution]);
+  }, [tournament.discipline, tournament.prize_distribution]);
 
   // Aggregate stats from all tournament matches for nominations
   const nominationWinners = useMemo(() => {

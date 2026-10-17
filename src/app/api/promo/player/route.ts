@@ -17,6 +17,20 @@ export async function GET(request: Request) {
     let result = await client.query(
       `SELECT p.id, p.full_name, p.nickname, p.avatar_url, p.faceit_avatar, p.faceit_lvl, p.faceit_elo, p.lft_status, p.phone_number, p.steam_id, p.steam_link, p.faceit_link,
               p.dota_rank_tier, p.dota_rank_name, p.dota_leaderboard_rank, p.dota_mmr, p.dota_winrate, p.dota_matches, p.dota_stats,
+              (
+                SELECT json_build_object(
+                  'teamId', pt.id,
+                  'currentName', pt.name,
+                  'currentTag', pt.tag,
+                  'reason', pt.rename_reason
+                )
+                FROM promo_teams pt
+                WHERE pt.captain_phone = p.phone_number
+                  AND pt.club_id = $2
+                  AND pt.rename_requested = TRUE
+                ORDER BY pt.rename_requested_at DESC NULLS LAST
+                LIMIT 1
+              ) as rename_request,
               b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
              FROM promo_players p
              JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
@@ -49,6 +63,20 @@ export async function GET(request: Request) {
         result = await client.query(
           `SELECT p.id, p.full_name, p.nickname, p.avatar_url, p.faceit_avatar, p.faceit_lvl, p.faceit_elo, p.lft_status, p.phone_number, p.steam_id, p.steam_link, p.faceit_link,
                   p.dota_rank_tier, p.dota_rank_name, p.dota_leaderboard_rank, p.dota_mmr, p.dota_winrate, p.dota_matches, p.dota_stats,
+                  (
+                    SELECT json_build_object(
+                      'teamId', pt.id,
+                      'currentName', pt.name,
+                      'currentTag', pt.tag,
+                      'reason', pt.rename_reason
+                    )
+                    FROM promo_teams pt
+                    WHERE pt.captain_phone = p.phone_number
+                      AND pt.club_id = $2
+                      AND pt.rename_requested = TRUE
+                    ORDER BY pt.rename_requested_at DESC NULLS LAST
+                    LIMIT 1
+                  ) as rename_request,
                   b.total_xp, b.bonus_balance, b.active_boost_percent, b.extra_withdraw_limit, b.limit_group_id, c.name as club_name, c.promo_settings
                  FROM promo_players p
                  JOIN promo_player_balances b ON p.id = b.player_id AND b.club_id = $2
@@ -253,6 +281,7 @@ export async function GET(request: Request) {
         steam_id: data.steam_id || data.steam_link || null,
         steam_link: data.steam_link || (data.steam_id ? `https://steamcommunity.com/profiles/${data.steam_id}` : null),
         faceit_link: data.faceit_link,
+        renameRequest: data.rename_request || null,
         dotaRankTier: data.dota_rank_tier || null,
         dotaRankName: data.dota_rank_name || null,
         dotaLeaderboardRank: data.dota_leaderboard_rank || null,

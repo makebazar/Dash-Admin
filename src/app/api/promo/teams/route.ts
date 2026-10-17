@@ -22,6 +22,9 @@ export async function GET(request: Request) {
       ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS tag VARCHAR(10);
       ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS logo_url TEXT;
       ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS format_type VARCHAR(20) DEFAULT '5vs5';
+      ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS rename_requested BOOLEAN DEFAULT FALSE;
+      ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS rename_reason TEXT;
+      ALTER TABLE promo_teams ADD COLUMN IF NOT EXISTS rename_requested_at TIMESTAMPTZ;
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS nickname VARCHAR(100);
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS lft_status VARCHAR(30) DEFAULT 'none';
       ALTER TABLE promo_players ADD COLUMN IF NOT EXISTS faceit_elo INTEGER;
@@ -75,6 +78,7 @@ export async function GET(request: Request) {
     // 1. Fetch player teams with full member stats and format_type
     const teamRes = await client.query(
       `SELECT t.id, t.name, t.tag, t.logo_url, COALESCE(t.format_type, '5vs5') as format_type, t.captain_phone, t.join_code, t.created_at,
+              t.rename_requested, t.rename_reason, t.rename_requested_at,
               (
                 SELECT json_agg(json_build_object(
                   'playerId', p.id,
@@ -156,6 +160,9 @@ export async function GET(request: Request) {
           maxMain,
           captainPhone: row.captain_phone,
           isCaptain: isUserCaptain,
+          renameRequested: Boolean(row.rename_requested),
+          renameReason: row.rename_reason || null,
+          renameRequestedAt: row.rename_requested_at || null,
           joinCode: row.join_code,
           createdAt: row.created_at,
           avgElo,
@@ -334,6 +341,50 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { action, teamId } = body;
+
+    // RENAME TEAM (Captain responds to club rename request or changes name)
+    if (action === "rename_team" || action === "accept_rename") {
+      const { newName, newTag } = body;
+      const targetTeamId = teamId || body.id;
+      if (!targetTeamId) {
+        return NextResponse.json({ error: "ID команды обязателен" }, { status: 400 });
+      }
+      if (!newName || newName.trim().length < 2) {
+        return NextResponse.json({ error: "Название команды должно содержать от 2 символов" }, { status: 400 });
+      }
+
+      const teamCheck = await client.query(
+        `SELECT id, captain_phone FROM promo_teams WHERE id = $1 AND club_id = $2`,
+        [targetTeamId, activeClubId]
+      );
+      if (teamCheck.rows.length === 0) {
+        return NextResponse.json({ error: "Команда не найдена" }, { status: 404 });
+      }
+      if (teamCheck.rows[0].captain_phone !== phone) {
+        return NextResponse.json({ error: "Только капитан команды может изменить название" }, { status: 403 });
+      }
+
+      const nameCheck = await client.query(
+        `SELECT id FROM promo_teams WHERE LOWER(name) = LOWER($1) AND club_id = $2 AND id != $3`,
+        [newName.trim(), activeClubId, targetTeamId]
+      );
+      if (nameCheck.rows.length > 0) {
+        return NextResponse.json({ error: "Команда с таким названием уже существует в клубе" }, { status: 400 });
+      }
+
+      await client.query(
+        `UPDATE promo_teams
+         SET name = $1,
+             tag = $2,
+             rename_requested = FALSE,
+             rename_reason = NULL,
+             rename_requested_at = NULL
+         WHERE id = $3`,
+        [newName.trim(), newTag ? newTag.trim().toUpperCase().slice(0, 8) : null, targetTeamId]
+      );
+
+      return NextResponse.json({ success: true, name: newName.trim() });
+    }
 
     // 1. CREATE TEAM (5x5 or 2x2)
     if (action === "create") {

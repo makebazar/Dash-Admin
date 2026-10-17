@@ -65,16 +65,30 @@ export interface Competitor {
   tournament_id: number;
   user_id?: string;
   team_id?: string;
+  promo_team_id?: number;
   display_name: string;
   type: "SOLO" | "TEAM";
   payment_status: "PENDING_PAYMENT" | "PAID" | "RESERVE";
   player_elo?: number;
+  player_name?: string;
+  player_phone?: string;
+  player_full_name?: string;
+  player_steam_id?: string;
+  player_dota_mmr?: number;
+  player_dota_rank_name?: string;
+  player_dota_rank_tier?: number;
   team_logo?: string;
   team_members?: Array<{
     id: string;
     fullName: string;
+    nickname?: string;
     phoneNumber?: string;
+    role?: string;
     elo?: number;
+    steamId?: string;
+    dotaMmr?: number;
+    dotaRankName?: string;
+    dotaRankTier?: number;
   }>;
   meta?: {
     isBot?: boolean;
@@ -82,6 +96,63 @@ export interface Competitor {
     paidPlayerIds?: string[];
     [key: string]: any;
   };
+}
+
+export interface TournamentParticipant {
+  id: string;
+  phone_number: string;
+  full_name: string;
+  nickname?: string;
+  steam_id?: string;
+  steam_link?: string;
+  avatar_url?: string;
+  faceit_elo?: number;
+  faceit_lvl?: number;
+  faceit_link?: string;
+  dota_mmr?: number;
+  dota_rank_name?: string;
+  dota_rank_tier?: number;
+  is_bot?: boolean;
+  created_at?: string;
+  team?: {
+    id: number;
+    name: string;
+    tag?: string;
+    role?: string;
+    logo_url?: string;
+  } | null;
+  tournaments_count: number;
+  matches_count: number;
+  total_payouts: number | string;
+}
+
+export interface PromoTeamMember {
+  phone: string;
+  role: "captain" | "player" | string;
+  playerId?: string;
+  fullName?: string;
+  nickname?: string;
+  faceitElo?: number;
+  faceitLvl?: number;
+  dotaMmr?: number;
+}
+
+export interface PromoTeam {
+  id: number;
+  club_id: number;
+  name: string;
+  tag?: string;
+  captain_phone: string;
+  captain_name?: string;
+  captain_nickname?: string;
+  logo_url?: string;
+  format_type: string;
+  join_code?: string;
+  rename_requested?: boolean;
+  rename_reason?: string;
+  rename_requested_at?: string;
+  created_at?: string;
+  members: PromoTeamMember[];
 }
 
 export interface Match {
@@ -114,6 +185,8 @@ export interface Payout {
   bonus_amount?: number;
   prize_type?: string;
   item_details?: string;
+  status?: string;
+  paid_at?: string;
   created_at?: string;
 }
 
@@ -124,6 +197,19 @@ export interface RulesTemplate {
   name: string;
   rules_text: string;
   created_at?: string;
+}
+
+export interface TournamentDiscipline {
+  id: number;
+  club_id: number;
+  key: string;
+  name: string;
+  badge: string;
+  formats: string[];
+  description?: string | null;
+  is_system: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Placement {

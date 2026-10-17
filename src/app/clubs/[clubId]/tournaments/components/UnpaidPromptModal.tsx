@@ -23,16 +23,16 @@ export function UnpaidPromptModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/70 backdrop-blur-xs">
-      <div className="w-full max-w-md bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-2xl space-y-6 text-slate-900 animate-in fade-in zoom-in-95 duration-150">
-        <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-600 shadow-xs">
-            <AlertTriangle className="w-6 h-6" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xs">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 sm:p-7 shadow-xl space-y-5 text-slate-900 animate-in fade-in zoom-in-95 duration-150">
+        <div className="text-center space-y-1.5">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center mx-auto text-amber-600">
+            <AlertTriangle className="w-5 h-5" />
           </div>
-          <h3 className="text-lg font-black uppercase italic tracking-tight text-slate-900">
-            Неоплаченные <span className="text-orange-500">Заявки</span>
+          <h3 className="text-base font-semibold text-slate-900">
+            Неоплаченные заявки
           </h3>
-          <p className="text-xs text-slate-500 font-medium leading-relaxed">
+          <p className="text-xs text-slate-500 font-normal leading-relaxed">
             В турнире зарегистрировано участников без подтверждения оплаты:{" "}
             <span className="font-bold text-slate-800">
               {unpaidList.length}
