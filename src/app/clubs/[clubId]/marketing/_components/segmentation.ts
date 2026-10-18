@@ -122,11 +122,13 @@ export interface ClubAnalytics {
   topChurned: ClientProfile[]; // крупные клиенты в оттоке
   atRisk: ClientProfile[];   // крупные клиенты, которые засыпают
 
-  // Report Period Metadata (from Table 3)
+  // Report Period Metadata (from Table 3 or date filter)
   hasSummaryReport: boolean;
   reportDateFrom?: Date | null;
   reportDateTo?: Date | null;
   reportDays?: number | null;
+  datasetDateFrom?: Date | null;
+  datasetDateTo?: Date | null;
 
   totalPlayedMinutes?: number;
   totalHoursPlayed?: number;
@@ -147,6 +149,59 @@ export interface ClubAnalytics {
   parsedAt: Date;
 }
 
+export interface DateFilter {
+  startDate: Date | null;
+  endDate: Date | null;
+  monthKey?: string;
+}
+
+export interface MonthOption {
+  key: string;
+  label: string;
+  shortLabel: string;
+  startDate: Date;
+  endDate: Date;
+}
+
+export function getAvailableMonths(from: Date, to: Date): MonthOption[] {
+  if (!from || !to || isNaN(from.getTime()) || isNaN(to.getTime())) return [];
+  const months: MonthOption[] = [];
+  const curr = new Date(from.getFullYear(), from.getMonth(), 1);
+  const end = new Date(to.getFullYear(), to.getMonth(), 1);
+
+  const monthNames = [
+    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+  ];
+  const shortRu = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
+
+  while (curr <= end) {
+    const year = curr.getFullYear();
+    const month = curr.getMonth();
+    const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+
+    const mStart = (year === from.getFullYear() && month === from.getMonth())
+      ? new Date(year, month, from.getDate(), 0, 0, 0, 0)
+      : new Date(year, month, 1, 0, 0, 0, 0);
+
+    const mEnd = (year === to.getFullYear() && month === to.getMonth())
+      ? new Date(year, month, to.getDate(), 23, 59, 59, 999)
+      : new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+    months.push({
+      key,
+      label: `${monthNames[month]} ${year}`,
+      shortLabel: `${shortRu[month]} ${year}`,
+      startDate: mStart,
+      endDate: mEnd,
+    });
+
+    curr.setMonth(curr.getMonth() + 1);
+  }
+
+  return months;
+}
+
 export function normalizePhone(raw: unknown): string {
   if (!raw) return "";
   const s = String(raw).replace(/<[^>]+>/g, "").trim();
@@ -157,6 +212,11 @@ export function normalizePhone(raw: unknown): string {
 
 export function parseDate(raw: unknown): Date | null {
   if (!raw) return null;
+  if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
+  if (typeof raw === "number" && raw > 20000 && raw < 60000) {
+    const d = new Date(Math.round((raw - 25569) * 86400 * 1000));
+    return isNaN(d.getTime()) ? null : d;
+  }
   const s = String(raw).trim().replace(/"/g, "");
   // Match DD.MM.YYYY HH:mm:ss or DD.MM.YYYY HH:mm or DD.MM.YY
   const m = s.match(/^(\d{2})\.(\d{2})\.(\d{2,4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
@@ -222,10 +282,14 @@ export function buildClubAnalytics(
   txRows: Record<string, unknown>[] = [],
   summaryRows: Record<string, unknown>[] = [],
   packageRows: Record<string, unknown>[] = [],
-  workstations: WorkstationInfo[] = []
+  workstations: WorkstationInfo[] = [],
+  dateFilter?: DateFilter | null
 ): ClubAnalytics {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
+  let rawMinDate: Date | null = null;
+  let rawMaxDate: Date | null = null;
 
   // Build lookup from workstation name to zone
   const wsZoneMap = new Map<string, string>();
@@ -274,6 +338,7 @@ export function buildClubAnalytics(
   let totalPackageRub = 0;
   let totalPackageBonus = 0;
   let totalPackageSessions = 0;
+  let totalPackageHours = 0;
 
   if (packageRows.length > 0) {
     const s = packageRows[0];
@@ -286,6 +351,18 @@ export function buildClubAnalytics(
     const colDate = detectCol(s, ["Дата покупки тарифа", "Дата покупки", "Дата активации сессии", "Дата"]);
 
     for (const row of packageRows) {
+      let rowDate: Date | null = null;
+      if (colDate && row[colDate]) {
+        rowDate = parseDate(row[colDate]);
+        if (rowDate && !isNaN(rowDate.getTime())) {
+          if (!rawMinDate || rowDate < rawMinDate) rawMinDate = rowDate;
+          if (!rawMaxDate || rowDate > rawMaxDate) rawMaxDate = rowDate;
+
+          if (dateFilter?.startDate && rowDate < dateFilter.startDate) continue;
+          if (dateFilter?.endDate && rowDate > dateFilter.endDate) continue;
+        }
+      }
+
       const phone = normalizePhone(row[colPhone ?? ""]);
       if (phone.length < 10) continue;
 
@@ -296,9 +373,19 @@ export function buildClubAnalytics(
       const bonus = parseNumber(row[colBonus ?? ""]);
       const zone = resolveZone(pc);
 
+      const lowerT = tariffName.toLowerCase();
+      let sessHours = 1;
+      if (lowerT.includes("ночь")) {
+        sessHours = 8;
+      } else {
+        const hm = lowerT.match(/(\d+)\s*(?:час|ч)/);
+        if (hm) sessHours = parseInt(hm[1], 10);
+      }
+
       totalPackageSessions += 1;
       totalPackageRub += rub;
       totalPackageBonus += bonus;
+      totalPackageHours += sessHours;
 
       // Club tariff aggregations
       const tKey = tariffName.toLowerCase();
@@ -346,7 +433,6 @@ export function buildClubAnalytics(
       clientPack.rub += rub;
       clientPack.bonus += bonus;
 
-      const lowerT = tariffName.toLowerCase();
       const isNight = lowerT.includes("ночь");
       if (isNight) clientPack.nightSessions += 1;
 
@@ -359,15 +445,12 @@ export function buildClubAnalytics(
         slot = "day";
       } else if (lowerT.includes("вечер")) {
         slot = "evening";
-      } else if (colDate && row[colDate]) {
-        const d = parseDate(row[colDate]);
-        if (d && !isNaN(d.getTime())) {
-          const h = d.getHours();
-          if (h >= 22 || h < 6) slot = "night";
-          else if (h >= 6 && h < 12) slot = "morning";
-          else if (h >= 12 && h < 17) slot = "day";
-          else slot = "evening";
-        }
+      } else if (rowDate) {
+        const h = rowDate.getHours();
+        if (h >= 22 || h < 6) slot = "night";
+        else if (h >= 6 && h < 12) slot = "morning";
+        else if (h >= 12 && h < 17) slot = "day";
+        else slot = "evening";
       }
       if (slot) {
         clientPack.timeSlots[slot] += 1;
@@ -409,8 +492,8 @@ export function buildClubAnalytics(
   }
   const summaryMap = new Map<string, SummaryData>();
 
-  let reportDateFrom: Date | null = null;
-  let reportDateTo: Date | null = null;
+  let rawReportDateFrom: Date | null = null;
+  let rawReportDateTo: Date | null = null;
 
   if (summaryRows.length > 0) {
     const s = summaryRows[0];
@@ -441,15 +524,18 @@ export function buildClubAnalytics(
         if (k.includes("дата от") || v.includes("Дата от")) {
           const nextVal = String(row[keys[j + 1]] ?? vals[j + 1] ?? "");
           const d = parseDate(nextVal);
-          if (d) reportDateFrom = d;
+          if (d) rawReportDateFrom = d;
         }
         if (k.includes("дата до") || v.includes("Дата до")) {
           const nextVal = String(row[keys[j + 1]] ?? vals[j + 1] ?? "");
           const d = parseDate(nextVal);
-          if (d) reportDateTo = d;
+          if (d) rawReportDateTo = d;
         }
       }
     }
+
+    if (rawReportDateFrom && (!rawMinDate || rawReportDateFrom < rawMinDate)) rawMinDate = rawReportDateFrom;
+    if (rawReportDateTo && (!rawMaxDate || rawReportDateTo > rawMaxDate)) rawMaxDate = rawReportDateTo;
 
     for (const row of summaryRows) {
       const phone = normalizePhone(row[colPhone ?? ""]);
@@ -507,8 +593,20 @@ export function buildClubAnalytics(
     const colBonus = detectCol(s, ["Бонусный баланс", "Бонус", "bonus"]);
     const colSource = detectCol(s, ["Источник", "источник", "Касса"]);
     const colName = detectCol(s, ["ФИО", "фио", "Имя"]);
+    const colDateTx = detectCol(s, ["Дата", "Дата транзакции", "Время", "date", "created_at"]);
 
     for (const row of txRows) {
+      if (colDateTx && row[colDateTx]) {
+        const d = parseDate(row[colDateTx]);
+        if (d && !isNaN(d.getTime())) {
+          if (!rawMinDate || d < rawMinDate) rawMinDate = d;
+          if (!rawMaxDate || d > rawMaxDate) rawMaxDate = d;
+
+          if (dateFilter?.startDate && d < dateFilter.startDate) continue;
+          if (dateFilter?.endDate && d > dateFilter.endDate) continue;
+        }
+      }
+
       const phone = normalizePhone(row[colPhone ?? ""]);
       if (phone.length < 10) continue;
 
@@ -589,6 +687,15 @@ export function buildClubAnalytics(
     }
   }
 
+  // Determine overall dataset bounds and filtered report period
+  const datasetDateFrom = rawReportDateFrom || rawMinDate;
+  const datasetDateTo = rawReportDateTo || rawMaxDate;
+
+  const reportDateFrom = dateFilter?.startDate || datasetDateFrom;
+  const reportDateTo = dateFilter?.endDate || datasetDateTo;
+  const reportDays = (reportDateFrom && reportDateTo) ? Math.max(1, daysBetween(reportDateFrom, reportDateTo)) : null;
+  const datasetDays = (datasetDateFrom && datasetDateTo) ? Math.max(1, daysBetween(datasetDateFrom, datasetDateTo)) : null;
+
   // Combine into single unified array
   const profiles: ClientProfile[] = [];
   const allPhones = new Set([
@@ -626,7 +733,15 @@ export function buildClubAnalytics(
 
     // REAL MONEY TOTAL SPENT (исключаем бонусы!)
     let totalSpent = 0;
-    if (sum) {
+    if (packageRows.length > 0) {
+      if (dateFilter) {
+        totalSpent = pack ? pack.rub : 0;
+      } else {
+        totalSpent = sum ? (sum.topupAdmin + sum.topupLK + sum.topupApp) : (pack ? pack.rub : (tx ? tx.realSpent : 0));
+      }
+    } else if (sum && dateFilter && datasetDays && reportDays) {
+      totalSpent = Math.round((sum.topupAdmin + sum.topupLK + sum.topupApp) * (reportDays / datasetDays));
+    } else if (sum) {
       totalSpent = sum.topupAdmin + sum.topupLK + sum.topupApp;
     } else if (tx) {
       totalSpent = tx.realSpent;
@@ -635,11 +750,26 @@ export function buildClubAnalytics(
     }
 
     // БОНУСЫ НАЧИСЛЕННЫЕ / ВЫДАННЫЕ КЛУБОМ
-    const bonusAccrued = sum?.bonusTopup || tx?.bonusTopup || 0;
-    // БОНУСЫ СПИСАННЫЕ
-    const bonusSpent = sum?.bonusSpent || pack?.bonus || 0;
+    let bonusAccrued = sum?.bonusTopup || tx?.bonusTopup || 0;
+    if (dateFilter && datasetDays && reportDays && bonusAccrued > 0) {
+      bonusAccrued = Math.round(bonusAccrued * (reportDays / datasetDays));
+    }
 
-    const txCount = tx?.txCount || sum?.visits || pack?.sessions || (totalSpent > 0 ? 1 : 0);
+    // БОНУСЫ СПИСАННЫЕ
+    let bonusSpent = 0;
+    if (packageRows.length > 0) {
+      if (dateFilter) {
+        bonusSpent = pack ? pack.bonus : 0;
+      } else {
+        bonusSpent = sum?.bonusSpent || pack?.bonus || 0;
+      }
+    } else if (sum && dateFilter && datasetDays && reportDays) {
+      bonusSpent = Math.round(sum.bonusSpent * (reportDays / datasetDays));
+    } else {
+      bonusSpent = sum?.bonusSpent || pack?.bonus || 0;
+    }
+
+    const txCount = pack?.sessions || (sum && dateFilter && datasetDays && reportDays ? Math.max(1, Math.round(sum.visits * (reportDays / datasetDays))) : (sum?.visits || tx?.txCount || (totalSpent > 0 ? 1 : 0)));
     const avgTx = txCount > 0 ? Math.round(totalSpent / txCount) : 0;
 
     let status: ClientProfile["status"] = "unknown";
@@ -868,12 +998,19 @@ export function buildClubAnalytics(
     }
   }
 
-  const totalHoursPlayed = totalPlayedMinutes > 0 ? Math.round(totalPlayedMinutes / 60) : 0;
-  const avgHourlyYield = (totalPlayedMinutes > 0 && totalRevenueInLog > 0)
-    ? Math.round(totalRevenueInLog / (totalPlayedMinutes / 60))
-    : 0;
+  let totalHoursPlayed = 0;
+  if (packageRows.length > 0 && totalPackageHours > 0) {
+    totalHoursPlayed = totalPackageHours;
+  } else if (totalPlayedMinutes > 0) {
+    const rawHours = Math.round(totalPlayedMinutes / 60);
+    totalHoursPlayed = (dateFilter && datasetDays && reportDays)
+      ? Math.round(rawHours * (reportDays / datasetDays))
+      : rawHours;
+  }
 
-  const reportDays = (reportDateFrom && reportDateTo) ? daysBetween(reportDateFrom, reportDateTo) : null;
+  const avgHourlyYield = (totalHoursPlayed > 0 && totalRevenueInLog > 0)
+    ? Math.round(totalRevenueInLog / totalHoursPlayed)
+    : (totalPlayedMinutes > 0 && totalRevenueInLog > 0 ? Math.round(totalRevenueInLog / (totalPlayedMinutes / 60)) : 0);
 
   const whales = profiles
     .filter((p) => p.isWhale || p.totalSpent >= 2000)
@@ -953,6 +1090,8 @@ export function buildClubAnalytics(
     reportDateFrom,
     reportDateTo,
     reportDays,
+    datasetDateFrom,
+    datasetDateTo,
 
     totalPlayedMinutes,
     totalHoursPlayed,

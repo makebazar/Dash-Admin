@@ -28,10 +28,12 @@ import {
   Gamepad2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type ClubAnalytics, type ClientProfile } from "./segmentation";
+import { type ClubAnalytics, type ClientProfile, type DateFilter, getAvailableMonths, type MonthOption } from "./segmentation";
 
 interface Props {
   analytics: ClubAnalytics | null;
+  dateFilter?: DateFilter | null;
+  onDateFilterChange?: (filter: DateFilter | null) => void;
 }
 
 type ViewMode = "whales" | "churned" | "atRisk" | "bonusHeavy" | "all";
@@ -98,13 +100,75 @@ export interface SortRule {
   desc: boolean;
 }
 
-export function AnalyticsTab({ analytics }: Props) {
+export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("whales");
   const [search, setSearch] = useState("");
   const [minSpent, setMinSpent] = useState<number>(0);
   const [selectedZone, setSelectedZone] = useState<string>("all");
   const [selectedPersona, setSelectedPersona] = useState<string>("all");
   const [selectedTime, setSelectedTime] = useState<string>("all");
+
+  const datasetFrom = analytics?.datasetDateFrom || analytics?.reportDateFrom;
+  const datasetTo = analytics?.datasetDateTo || analytics?.reportDateTo;
+
+  const availableMonths = useMemo(() => {
+    if (!datasetFrom || !datasetTo) return [];
+    return getAvailableMonths(datasetFrom, datasetTo);
+  }, [datasetFrom, datasetTo]);
+
+  const totalDatasetDays = useMemo(() => {
+    if (!datasetFrom || !datasetTo) return analytics?.reportDays || 0;
+    return Math.max(1, Math.round(Math.abs(datasetTo.getTime() - datasetFrom.getTime()) / 86_400_000));
+  }, [datasetFrom, datasetTo, analytics?.reportDays]);
+
+  const datasetStartIso = useMemo(() => {
+    if (!datasetFrom || isNaN(datasetFrom.getTime())) return "";
+    return datasetFrom.toISOString().slice(0, 10);
+  }, [datasetFrom]);
+
+  const datasetEndIso = useMemo(() => {
+    if (!datasetTo || isNaN(datasetTo.getTime())) return "";
+    return datasetTo.toISOString().slice(0, 10);
+  }, [datasetTo]);
+
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+
+  useEffect(() => {
+    if (dateFilter?.startDate && dateFilter?.endDate) {
+      setCustomStart(dateFilter.startDate.toISOString().slice(0, 10));
+      setCustomEnd(dateFilter.endDate.toISOString().slice(0, 10));
+    } else if (analytics?.reportDateFrom && analytics?.reportDateTo) {
+      setCustomStart(analytics.reportDateFrom.toISOString().slice(0, 10));
+      setCustomEnd(analytics.reportDateTo.toISOString().slice(0, 10));
+    }
+  }, [dateFilter, analytics?.reportDateFrom, analytics?.reportDateTo]);
+
+  const isFiltered = !!dateFilter;
+
+  const handleSelectMonth = (m: MonthOption) => {
+    onDateFilterChange?.({
+      startDate: m.startDate,
+      endDate: m.endDate,
+      monthKey: m.key,
+    });
+  };
+
+  const handleSelectAllPeriod = () => {
+    onDateFilterChange?.(null);
+  };
+
+  const handleApplyCustomRange = () => {
+    if (!customStart || !customEnd) return;
+    const s = new Date(`${customStart}T00:00:00`);
+    const e = new Date(`${customEnd}T23:59:59`);
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) return;
+    onDateFilterChange?.({
+      startDate: s,
+      endDate: e,
+      monthKey: undefined,
+    });
+  };
 
   // Multi-column sort rules
   const [sortRules, setSortRules] = useState<SortRule[]>([
@@ -362,21 +426,125 @@ export function AnalyticsTab({ analytics }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Period Banner */}
-      {analytics.hasSummaryReport && analytics.reportDateFrom && analytics.reportDateTo && (
-        <div className="bg-slate-900 text-white rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <span className="text-xs text-slate-400">Период выгрузки:</span>
-            <span className="text-xs font-semibold text-white">
-              {formatDate(analytics.reportDateFrom)} — {formatDate(analytics.reportDateTo)}
-              {analytics.reportDays ? ` (${analytics.reportDays} дн.)` : ""}
-            </span>
+      {/* Period Banner with Quick Month Selector and Custom Date Range */}
+      {analytics.reportDateFrom && analytics.reportDateTo && (
+        <div className="bg-slate-900 text-white rounded-2xl p-4 md:p-5 shadow-sm space-y-3.5">
+          {/* Top Line: Active dates, days, monthly revenue/hours metrics, and reset button */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <Calendar className="w-4 h-4 text-violet-400" />
+              <span className="text-xs text-slate-400">Период выгрузки:</span>
+              <span className="text-xs font-semibold text-white">
+                {formatDate(analytics.reportDateFrom)} — {formatDate(analytics.reportDateTo)}
+                {analytics.reportDays ? ` (${analytics.reportDays} дн.)` : ""}
+              </span>
+              {isFiltered && (
+                <button
+                  type="button"
+                  onClick={handleSelectAllPeriod}
+                  className="ml-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-violet-300 hover:text-white bg-violet-950/80 hover:bg-violet-900 border border-violet-700/60 px-2.5 py-1 rounded-lg transition-colors shadow-sm"
+                  title="Сбросить на весь период выгрузки"
+                >
+                  <RotateCcw className="w-3 h-3 text-violet-400" />
+                  <span>Весь период ({totalDatasetDays} дн.)</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 text-xs text-slate-300 flex-wrap">
+              <span>
+                Выручка в месяц:{" "}
+                <b className="text-white font-semibold">
+                  {analytics.reportDays
+                    ? Math.round(analytics.totalRevenueInLog / (analytics.reportDays / 30)).toLocaleString("ru")
+                    : 0}{" "}
+                  ₽
+                </b>
+              </span>
+              <span>·</span>
+              <span>
+                Часов в месяц:{" "}
+                <b className="text-white font-semibold">
+                  {analytics.reportDays && analytics.totalHoursPlayed
+                    ? Math.round(analytics.totalHoursPlayed / (analytics.reportDays / 30)).toLocaleString("ru")
+                    : 0}{" "}
+                  ч
+                </b>
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-4 text-xs text-slate-300">
-            <span>Выручка в месяц: <b className="text-white font-semibold">{analytics.reportDays ? Math.round(analytics.totalRevenueInLog / (analytics.reportDays / 30)).toLocaleString("ru") : 0} ₽</b></span>
-            <span>·</span>
-            <span>Часов в месяц: <b className="text-white font-semibold">{analytics.reportDays && analytics.totalHoursPlayed ? Math.round(analytics.totalHoursPlayed / (analytics.reportDays / 30)).toLocaleString("ru") : 0} ч</b></span>
+
+          {/* Bottom Line: Quick Month Pills + Custom Date Range Inputs */}
+          <div className="pt-3 border-t border-slate-800/90 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            {/* Quick Month Selector */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-medium text-slate-400 mr-1">Быстрый выбор:</span>
+
+              <button
+                type="button"
+                onClick={handleSelectAllPeriod}
+                className={cn(
+                  "text-xs px-2.5 py-1 rounded-lg font-medium transition-all",
+                  !isFiltered
+                    ? "bg-violet-600 text-white shadow-sm ring-1 ring-violet-400 font-semibold"
+                    : "bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60"
+                )}
+              >
+                Все ({totalDatasetDays} дн.)
+              </button>
+
+              {availableMonths.map((m) => {
+                const isSelected = dateFilter?.monthKey === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => handleSelectMonth(m)}
+                    className={cn(
+                      "text-xs px-2.5 py-1 rounded-lg font-medium transition-all",
+                      isSelected
+                        ? "bg-violet-600 text-white shadow-sm ring-1 ring-violet-400 font-semibold"
+                        : "bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60"
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Custom Range Picker */}
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <span className="text-[11px] text-slate-400">Диапазон:</span>
+              <div className="flex items-center gap-1.5 bg-slate-800/90 border border-slate-700/80 rounded-lg px-2.5 py-1">
+                <span className="text-[11px] text-slate-400">С</span>
+                <input
+                  type="date"
+                  value={customStart}
+                  min={datasetStartIso}
+                  max={datasetEndIso}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  className="bg-transparent text-white text-xs outline-none cursor-pointer [color-scheme:dark]"
+                />
+                <span className="text-[11px] text-slate-400">По</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  min={customStart || datasetStartIso}
+                  max={datasetEndIso}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  className="bg-transparent text-white text-xs outline-none cursor-pointer [color-scheme:dark]"
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyCustomRange}
+                  disabled={!customStart || !customEnd}
+                  className="ml-1 px-2.5 py-0.5 rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-medium text-[11px] transition-colors"
+                >
+                  ОК
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

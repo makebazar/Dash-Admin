@@ -16,7 +16,7 @@ import {
   Calendar,
   Sparkles
 } from "lucide-react";
-import { buildClubAnalytics, type ClubAnalytics, type WorkstationInfo, type ClientProfile } from "./_components/segmentation";
+import { buildClubAnalytics, type ClubAnalytics, type WorkstationInfo, type ClientProfile, type DateFilter } from "./_components/segmentation";
 import { detectPeriod } from "./_components/periodDetection";
 import type { SnapshotFull } from "./_components/types";
 
@@ -40,6 +40,9 @@ export default function MarketingPage() {
 
   // Active saved snapshot (if loaded from history)
   const [activeSnapshot, setActiveSnapshot] = useState<SnapshotFull | null>(null);
+
+  // Active date filter (selected month or custom date range)
+  const [dateFilter, setDateFilter] = useState<DateFilter | null>(null);
 
   // Raw file rows uploaded in session
   const [guestRows, setGuestRows] = useState<Record<string, unknown>[] | null>(null);
@@ -121,7 +124,8 @@ export default function MarketingPage() {
         txRows || [],
         summaryRows || [],
         packageRows || [],
-        workstations
+        workstations,
+        dateFilter
       );
     }
 
@@ -268,11 +272,23 @@ export default function MarketingPage() {
       const abandonedBonus = sm.abandonedBonus ?? (sm as any).churnedBonus ?? computedAbandonedBonus;
       const totalBonusSpent = sm.totalBonusSpent ?? computedBonusSpent;
 
-      const reportDateFrom = activeSnapshot.period_start ? new Date(activeSnapshot.period_start) : null;
-      const reportDateTo = activeSnapshot.period_end ? new Date(activeSnapshot.period_end) : null;
+      const fullDateFrom = activeSnapshot.period_start ? new Date(activeSnapshot.period_start) : null;
+      const fullDateTo = activeSnapshot.period_end ? new Date(activeSnapshot.period_end) : null;
+      const datasetDateFrom = fullDateFrom;
+      const datasetDateTo = fullDateTo;
+
+      const reportDateFrom = dateFilter?.startDate || datasetDateFrom;
+      const reportDateTo = dateFilter?.endDate || datasetDateTo;
+
+      const fullDays = (fullDateFrom && fullDateTo && !isNaN(fullDateFrom.getTime()) && !isNaN(fullDateTo.getTime()))
+        ? Math.max(1, Math.round((fullDateTo.getTime() - fullDateFrom.getTime()) / (1000 * 60 * 60 * 24)))
+        : null;
+
       const reportDays = (reportDateFrom && reportDateTo && !isNaN(reportDateFrom.getTime()) && !isNaN(reportDateTo.getTime()))
         ? Math.max(1, Math.round((reportDateTo.getTime() - reportDateFrom.getTime()) / (1000 * 60 * 60 * 24)))
         : null;
+
+      const scaleRatio = (dateFilter && fullDays && reportDays) ? (reportDays / fullDays) : 1;
 
       const whales = enrichedProfiles
         .filter((p) => p.isWhale || p.totalSpent >= 2000)
@@ -290,7 +306,7 @@ export default function MarketingPage() {
         profiles: enrichedProfiles,
         clubPcStats: pc,
         totalGuests: sm.totalGuests || enrichedProfiles.length,
-        totalRevenueInLog: sm.totalRevenueInLog || 0,
+        totalRevenueInLog: Math.round((sm.totalRevenueInLog || 0) * scaleRatio),
         totalBonusAccrued,
         totalBonusSpent,
         overallBonusEmissionRate: sm.overallBonusEmissionRate || (sm.totalRevenueInLog > 0 ? Math.round((totalBonusAccrued / sm.totalRevenueInLog) * 1000) / 10 : 0),
@@ -308,11 +324,13 @@ export default function MarketingPage() {
         reportDateFrom,
         reportDateTo,
         reportDays,
-        totalPlayedMinutes: (sm.totalHoursPlayed || 0) * 60,
-        totalHoursPlayed: sm.totalHoursPlayed || 0,
-        totalVisits: sm.totalVisits || 0,
+        datasetDateFrom,
+        datasetDateTo,
+        totalPlayedMinutes: (sm.totalHoursPlayed || 0) * 60 * scaleRatio,
+        totalHoursPlayed: Math.round((sm.totalHoursPlayed || 0) * scaleRatio),
+        totalVisits: Math.round((sm.totalVisits || 0) * scaleRatio),
         hasPackagesReport: pc.length > 0,
-        totalPackageRub: sm.totalPackageRub || 0,
+        totalPackageRub: Math.round((sm.totalPackageRub || 0) * scaleRatio),
         clubZoneStats,
         clubTariffStats,
         parsedAt: new Date(activeSnapshot.created_at),
@@ -320,7 +338,7 @@ export default function MarketingPage() {
     }
 
     return null;
-  }, [guestRows, txRows, summaryRows, packageRows, workstations, activeSnapshot]);
+  }, [guestRows, txRows, summaryRows, packageRows, workstations, activeSnapshot, dateFilter]);
 
   const handleClearAll = () => {
     setGuestRows(null);
@@ -332,6 +350,7 @@ export default function MarketingPage() {
     setPackageRows(null);
     setPackageFileName(null);
     setActiveSnapshot(null);
+    setDateFilter(null);
   };
 
   const handleSelectSnapshot = (snapshot: SnapshotFull) => {
@@ -346,6 +365,7 @@ export default function MarketingPage() {
     setPackageFileName(null);
 
     setActiveSnapshot(snapshot);
+    setDateFilter(null);
     handleTabChange("analytics");
   };
 
@@ -448,7 +468,11 @@ export default function MarketingPage() {
         )}
 
         {activeTab === "analytics" && (
-          <AnalyticsTab analytics={analytics} />
+          <AnalyticsTab 
+            analytics={analytics} 
+            dateFilter={dateFilter}
+            onDateFilterChange={setDateFilter}
+          />
         )}
 
         {activeTab === "hardware" && (
