@@ -151,7 +151,23 @@ export default function MarketingPage() {
         ? Math.max(1, Math.round((reportDateTo.getTime() - reportDateFrom.getTime()) / (1000 * 60 * 60 * 24)))
         : null;
 
-      const scaleRatio = (dateFilter && fullDays && reportDays) ? Math.min(1, reportDays / fullDays) : 1;
+      const dStart = dateFilter?.startDate;
+      const dEnd = dateFilter?.endDate;
+      const filterYm = (dStart && dEnd)
+        ? `${dStart.getFullYear()}-${String(dStart.getMonth() + 1).padStart(2, "0")}`
+        : null;
+
+      // Check if filter is a full month
+      const isMonthFilter = Boolean(filterYm && dStart && dEnd && 
+        dStart.getDate() === 1 && 
+        (new Date(dStart.getFullYear(), dStart.getMonth() + 1, 0).getDate() === dEnd.getDate()));
+
+      const monthData = (isMonthFilter && sm.monthlyBreakdown && filterYm) ? sm.monthlyBreakdown[filterYm] : null;
+
+      const scaleRatio = monthData
+        ? (monthData.rub / (sm.totalPackageRub || sm.totalRevenueInLog || 1))
+        : ((dateFilter && fullDays && reportDays) ? Math.min(1, reportDays / fullDays) : 1);
+
       const whaleThreshold = (dateFilter && fullDays && reportDays)
         ? Math.max(500, Math.round(2000 * scaleRatio))
         : 2000;
@@ -347,9 +363,18 @@ export default function MarketingPage() {
         .filter((p) => p.status === "cooling" && (p.totalSpent > 0 || p.balance > 100))
         .sort((a, b) => b.totalSpent - a.totalSpent);
 
-      const totalRevenueInLog = Math.round((sm.totalRevenueInLog || 0) * scaleRatio);
-      const totalHoursPlayed = Math.round((sm.totalHoursPlayed || 0) * scaleRatio);
-      const totalVisits = Math.round((sm.totalVisits || 0) * scaleRatio);
+      const totalRevenueInLog = monthData
+        ? (monthData.shiftRev || monthData.rub)
+        : Math.round((sm.totalRevenueInLog || 0) * scaleRatio);
+      const totalHoursPlayed = monthData
+        ? monthData.hours
+        : Math.round((sm.totalHoursPlayed || 0) * scaleRatio);
+      const totalVisits = monthData
+        ? monthData.sessions
+        : Math.round((sm.totalVisits || 0) * scaleRatio);
+      const totalPackageRub = monthData
+        ? monthData.rub
+        : Math.round((sm.totalPackageRub || 0) * scaleRatio);
       const avgHourlyYield = (totalHoursPlayed > 0 && totalRevenueInLog > 0)
         ? Math.round(totalRevenueInLog / totalHoursPlayed)
         : (sm.avgHourlyYield || 0);
@@ -382,7 +407,7 @@ export default function MarketingPage() {
         totalHoursPlayed,
         totalVisits,
         hasPackagesReport: clubPcStats.length > 0,
-        totalPackageRub: Math.round((sm.totalPackageRub || 0) * scaleRatio),
+        totalPackageRub,
         clubZoneStats,
         clubTariffStats,
         parsedAt: new Date(activeSnapshot.created_at),

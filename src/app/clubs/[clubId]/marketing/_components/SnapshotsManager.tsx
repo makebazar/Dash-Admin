@@ -126,6 +126,35 @@ export function SnapshotsManager({
         return item;
       });
 
+      // Compute monthlyBreakdown if packageRows are available
+      const monthlyBreakdown: Record<string, { rub: number; bonus: number; sessions: number; hours: number }> = {};
+      if (packageRows && packageRows.length > 0) {
+        for (const row of packageRows) {
+          const rawDate = row["Дата покупки тарифа"] || row["Дата покупки"] || row["Дата"];
+          if (!rawDate) continue;
+          const s = String(rawDate);
+          const m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+          if (!m) continue;
+          const ym = `${m[3]}-${m[2]}`;
+          if (!monthlyBreakdown[ym]) {
+            monthlyBreakdown[ym] = { rub: 0, bonus: 0, sessions: 0, hours: 0 };
+          }
+          const rub = parseFloat(String(row["Списано рублей"] || 0).replace(/\s/g, "").replace(",", ".")) || 0;
+          const bonus = parseFloat(String(row["Списано бонусов"] || 0).replace(/\s/g, "").replace(",", ".")) || 0;
+          const tariff = String(row["Название тарифа"] || "").toLowerCase();
+          let hrs = 1;
+          if (tariff.includes("ночь")) hrs = 8;
+          else {
+            const hm = tariff.match(/(\d+)\s*(?:час|ч)/);
+            if (hm) hrs = parseInt(hm[1], 10);
+          }
+          monthlyBreakdown[ym].rub = Math.round(monthlyBreakdown[ym].rub + rub);
+          monthlyBreakdown[ym].bonus = Math.round(monthlyBreakdown[ym].bonus + bonus);
+          monthlyBreakdown[ym].sessions += 1;
+          monthlyBreakdown[ym].hours += hrs;
+        }
+      }
+
       const payload = {
         name: (snapshotName || detected.name || "Срез данных").trim(),
         period_start: startDate || detected.periodStart || null,
@@ -145,6 +174,7 @@ export function SnapshotsManager({
           overallBonusEmissionRate: analytics.overallBonusEmissionRate,
           abandonedBalance: analytics.abandonedBalance,
           abandonedBonus: analytics.abandonedBonus,
+          monthlyBreakdown: Object.keys(monthlyBreakdown).length > 0 ? monthlyBreakdown : undefined,
         },
         guests_data: compactProfiles,
         pc_data: analytics.clubPcStats || [],
