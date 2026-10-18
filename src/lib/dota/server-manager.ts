@@ -157,11 +157,42 @@ export async function launchDotaMatch(
   // 3. Resolve Game Mode & Server Region
   const tConfig = matchData.tournament_config || {};
   const tSettings = tConfig.settings || tConfig;
-  const tourneyType = String(matchData.tournament_type || "").toLowerCase();
+  const tourneyType = String(matchData.tournament_type || tConfig.type || tSettings.type || "").toLowerCase().trim();
+  const is1v1 =
+    tourneyType === "1vs1" ||
+    tourneyType === "1v1" ||
+    tourneyType === "solo" ||
+    tourneyType.includes("1v1") ||
+    tourneyType.includes("1vs1") ||
+    tourneyType.includes("solo") ||
+    tourneyType.includes("1на1") ||
+    tourneyType.includes("1x1");
 
-  let resolvedGameMode = options?.gameMode || tSettings.gameMode || "CM";
-  if (tourneyType === "1vs1" || tourneyType === "solo") {
+  const rawMode = String(options?.gameMode || tSettings.gameMode || tConfig.gameMode || "").toUpperCase().trim();
+  let resolvedGameMode = "CM";
+
+  if (
+    is1v1 ||
+    rawMode === "1V1" ||
+    rawMode === "1V1MID" ||
+    rawMode === "1VS1" ||
+    rawMode === "MID_ONLY" ||
+    rawMode.includes("1V1") ||
+    rawMode.includes("1VS1") ||
+    rawMode.includes("1X1") ||
+    rawMode.includes("SOLO")
+  ) {
     resolvedGameMode = "1V1MID";
+  } else if (rawMode === "AP" || rawMode === "ALL_PICK" || rawMode === "ALLPICK") {
+    resolvedGameMode = "AP";
+  } else if (rawMode === "TURBO") {
+    resolvedGameMode = "TURBO";
+  } else if (rawMode === "CD" || rawMode === "CAPTAINS_DRAFT") {
+    resolvedGameMode = "CD";
+  } else if (rawMode === "RD" || rawMode === "RANDOM_DRAFT") {
+    resolvedGameMode = "RD";
+  } else {
+    resolvedGameMode = "CM";
   }
   const resolvedRegion = options?.serverRegion || tSettings.serverRegion || "Stockholm";
 

@@ -48,11 +48,15 @@ export async function GET(
       ALTER TABLE club_cs2_matches ADD COLUMN IF NOT EXISTS rcon_last_command VARCHAR(255);
       ALTER TABLE club_cs2_matches ADD COLUMN IF NOT EXISTS rcon_last_response TEXT;
       ALTER TABLE club_cs2_matches ADD COLUMN IF NOT EXISTS config_data JSONB DEFAULT '{}'::jsonb;
+
+      ALTER TABLE club_cs2_agents ADD COLUMN IF NOT EXISTS dota_bots JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE club_cs2_agents ADD COLUMN IF NOT EXISTS dota_total_bots INT DEFAULT 0;
+      ALTER TABLE club_cs2_agents ADD COLUMN IF NOT EXISTS dota_available_bots INT DEFAULT 0;
     `);
 
     // 1. Fetch agent state (pick freshest active agent for this club)
     const agentRes = await query(
-      `SELECT club_id, lan_ip, base_port, max_instances, instances_data, last_heartbeat,
+      `SELECT club_id, lan_ip, base_port, max_instances, instances_data, dota_bots, dota_total_bots, dota_available_bots, last_heartbeat,
               (last_heartbeat > NOW() - INTERVAL '60 seconds') as is_online
        FROM club_cs2_agents
        WHERE club_id = $1
@@ -61,23 +65,45 @@ export async function GET(
       [parsedClubId]
     );
 
+    const activeDotaRes = await query(
+      `SELECT count(*)::int as count FROM club_dota_matches WHERE club_id = $1 AND status IN ('starting', 'lobby_ready', 'live')`,
+      [parsedClubId]
+    ).catch(() => ({ rows: [{ count: 0 }] }));
+    const activeDotaCount = activeDotaRes.rows[0]?.count || 0;
+
     let agentData = {
       is_online: false,
       lan_ip: "",
       base_port: 27015,
       max_instances: 4,
       instances: [] as any[],
+      dota_total_bots: 0,
+      dota_available_bots: 0,
+      dota_bots: [] as any[],
       last_heartbeat: null as string | null,
     };
 
     if (agentRes.rowCount && agentRes.rowCount > 0) {
       const a = agentRes.rows[0];
+      const isOnline = Boolean(a.is_online);
+      const reportedTotal = typeof a.dota_total_bots === "number" && a.dota_total_bots > 0
+        ? a.dota_total_bots
+        : (Array.isArray(a.dota_bots) && a.dota_bots.length > 0 ? a.dota_bots.length : 1);
+      const reportedAvailable = typeof a.dota_available_bots === "number" ? a.dota_available_bots : reportedTotal;
+      const computedAvailable = Math.max(0, reportedTotal - activeDotaCount);
+      const effectiveAvailable = isOnline
+        ? Math.min(reportedAvailable, computedAvailable)
+        : 0;
+
       agentData = {
-        is_online: Boolean(a.is_online),
+        is_online: isOnline,
         lan_ip: a.lan_ip || "",
         base_port: a.base_port || 27015,
         max_instances: a.max_instances || 4,
         instances: a.instances_data || [],
+        dota_total_bots: reportedTotal,
+        dota_available_bots: effectiveAvailable,
+        dota_bots: a.dota_bots || [],
         last_heartbeat: a.last_heartbeat,
       };
     }
@@ -97,10 +123,22 @@ export async function GET(
       [parsedClubId]
     );
 
+    // 3. Fetch Dota matches (last 20)
+    const dotaMatchesRes = await query(
+      `SELECT id, tournament_match_id, lobby_id, game_name, game_mode, server_region, status,
+              team1_name, team2_name, score1, score2, bot_id, created_at, updated_at
+       FROM club_dota_matches
+       WHERE club_id = $1
+       ORDER BY updated_at DESC
+       LIMIT 20`,
+      [parsedClubId]
+    ).catch(() => ({ rows: [] }));
+
     return NextResponse.json({
       success: true,
       agent: agentData,
       matches: matchesRes.rows || [],
+      dota_matches: dotaMatchesRes.rows || [],
     });
   } catch (error: any) {
     const status = error?.status;

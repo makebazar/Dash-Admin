@@ -389,11 +389,23 @@ export function DashMatchServerTab({ clubId }: DashMatchServerTabProps) {
             </div>
           </div>
           <p className="text-xs text-slate-500 font-medium">
-            {isAgentOnline
-              ? `Локальный IP: ${agent?.lan_ip || "127.0.0.1"} • Порты: ${agent?.base_port || 27015}..${
-                  (agent?.base_port || 27015) + (agent?.max_instances || 4) - 1
-                } • Слотов доступно: ${agent?.max_instances || 4}`
-              : "Запустите dashmatch.exe на выделенном ПК клуба для автоматического старта серверов CS2"}
+            {isAgentOnline ? (
+              <span>
+                Локальный IP: {agent?.lan_ip || "127.0.0.1"} • Порты: {agent?.base_port || 27015}..
+                {(agent?.base_port || 27015) + (agent?.max_instances || 4) - 1} • Слотов CS2 доступно: {agent?.max_instances || 4} • Ботов Dota 2 доступно:{" "}
+                <span className={cn(
+                  "font-semibold",
+                  (agent?.dota_available_bots ?? 0) > 0 ? "text-emerald-600" : "text-amber-600"
+                )}>
+                  {agent?.dota_available_bots ?? 0}
+                </span>
+                {typeof agent?.dota_total_bots === "number" && agent.dota_total_bots > 1
+                  ? ` из ${agent.dota_total_bots}`
+                  : ""}
+              </span>
+            ) : (
+              "Запустите dashmatch.exe на выделенном ПК клуба для автоматического старта серверов CS2 и лобби Dota 2"
+            )}
           </p>
         </div>
 

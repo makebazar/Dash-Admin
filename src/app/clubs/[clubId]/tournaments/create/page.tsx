@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, use } from "react";
+import React from "react";
+
+const useState = React.useState;
+const useEffect = React.useEffect;
+const useMemo = React.useMemo;
+const useCallback = React.useCallback;
+const use = (React as any).use;
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -22,9 +28,11 @@ import {
   Award,
   Swords,
   Loader2,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { TournamentPackage } from "../types";
 
 const CS2_5V5_MAP_POOL = [
   "de_mirage",
@@ -237,6 +245,12 @@ export default function CreateTournamentPage({
   const [fixedPrizeAmount, setFixedPrizeAmount] = useState(10000);
   const [rules, setRules] = useState("");
   const [entryFeeType, setEntryFeeType] = useState<"player" | "team">("player");
+  const [entryFeeMode, setEntryFeeMode] = useState<"cash" | "package" | "free">("cash");
+  const [clubPackages, setClubPackages] = useState<TournamentPackage[]>([]);
+  const [selectedPackageId, setSelectedPackageId] = useState<string>("");
+  const [selectedPackageName, setSelectedPackageName] = useState<string>("");
+  const [selectedPackagePrice, setSelectedPackagePrice] = useState<number>(0);
+  const [selectedPackageDuration, setSelectedPackageDuration] = useState<string>("");
   const [autoDistributeBonuses, setAutoDistributeBonuses] = useState(true);
   const [bracketType, setBracketType] = useState<
     "single_elimination" | "double_elimination" | "round_robin"
@@ -351,6 +365,18 @@ export default function CreateTournamentPage({
           setEntryFeeType(cfg.entryFeeType || "player");
           setBracketType(cfg.bracketType || "single_elimination");
 
+          if (cfg.entryFeeMode === "package") {
+            setEntryFeeMode("package");
+            setSelectedPackageId(cfg.packageId ? String(cfg.packageId) : "");
+            setSelectedPackageName(cfg.packageName || "");
+            setSelectedPackagePrice(cfg.packagePrice || parseFloat(t.entry_fee || 0));
+            setSelectedPackageDuration(cfg.packageDuration || "");
+          } else if (parseFloat(t.entry_fee || 0) === 0) {
+            setEntryFeeMode("free");
+          } else {
+            setEntryFeeMode("cash");
+          }
+
           // Formats
           setMatchFormat(cfg.matchFormat || cfg.match_format || "bo1");
           setSemiFinalFormat(
@@ -430,6 +456,23 @@ export default function CreateTournamentPage({
     loadDisciplines();
   }, [clubId]);
 
+  useEffect(() => {
+    async function loadPackages() {
+      try {
+        const res = await fetch(`/api/clubs/${clubId}/tournaments?action=packages`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.packages && Array.isArray(data.packages)) {
+            setClubPackages(data.packages);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load tournament packages:", e);
+      }
+    }
+    loadPackages();
+  }, [clubId]);
+
   const displayDisciplines = useMemo(() => {
     if (clubDisciplines.length > 0) {
       return clubDisciplines.map((d) => ({
@@ -507,53 +550,51 @@ export default function CreateTournamentPage({
   // Handlers for switching discipline and format
   const handleDisciplineChange = (newDiscipline: string) => {
     setDiscipline(newDiscipline);
-    if (!editTournamentId) {
-      if (newDiscipline === "dota2") {
-        if (type === "1vs1") {
-          setDotaGameMode("1V1MID");
-        } else if (type === "5vs5" || type === "mix_5vs5") {
-          if (dotaGameMode === "1V1MID") setDotaGameMode("CM");
-        } else {
-          setType("5vs5");
-          setDotaGameMode("CM");
-        }
-      } else if (newDiscipline === "cs2") {
-        if (type === "1vs1") {
-          setMapPool(CS2_AIM_1V1_MAP_POOL);
-          setMapFilter("1v1");
-        } else if (type === "2vs2" || type === "mix_2vs2") {
-          setMapPool(CS2_WINGMAN_MAP_POOL);
-          setMapFilter("wingman");
-        } else {
-          setMapPool(CS2_5V5_MAP_POOL);
-          setMapFilter("5v5");
-        }
+    if (newDiscipline === "dota2") {
+      const is1v1 = type === "1vs1" || type === "1v1" || type === "solo";
+      if (is1v1) {
+        setDotaGameMode("1V1MID");
+      } else if (type === "5vs5" || type === "mix_5vs5") {
+        if (dotaGameMode === "1V1MID") setDotaGameMode("CM");
+      } else {
+        setType("5vs5");
+        setDotaGameMode("CM");
+      }
+    } else if (newDiscipline === "cs2") {
+      if (type === "1vs1") {
+        setMapPool(CS2_AIM_1V1_MAP_POOL);
+        setMapFilter("1v1");
+      } else if (type === "2vs2" || type === "mix_2vs2") {
+        setMapPool(CS2_WINGMAN_MAP_POOL);
+        setMapFilter("wingman");
+      } else {
+        setMapPool(CS2_5V5_MAP_POOL);
+        setMapFilter("5v5");
       }
     }
   };
 
   const handleTypeChange = (newType: string) => {
     setType(newType);
-    if (!editTournamentId) {
-      if (discipline === "dota2") {
-        if (newType === "1vs1") {
-          setDotaGameMode("1V1MID");
-        } else {
-          if (dotaGameMode === "1V1MID") {
-            setDotaGameMode("CM");
-          }
+    if (discipline === "dota2") {
+      const is1v1 = newType === "1vs1" || newType === "1v1" || newType === "solo";
+      if (is1v1) {
+        setDotaGameMode("1V1MID");
+      } else {
+        if (dotaGameMode === "1V1MID") {
+          setDotaGameMode("CM");
         }
-      } else if (discipline === "cs2") {
-        if (newType === "1vs1") {
-          setMapPool(CS2_AIM_1V1_MAP_POOL);
-          setMapFilter("1v1");
-        } else if (newType === "2vs2" || newType === "mix_2vs2") {
-          setMapPool(CS2_WINGMAN_MAP_POOL);
-          setMapFilter("wingman");
-        } else {
-          setMapPool(CS2_5V5_MAP_POOL);
-          setMapFilter("5v5");
-        }
+      }
+    } else if (discipline === "cs2") {
+      if (newType === "1vs1") {
+        setMapPool(CS2_AIM_1V1_MAP_POOL);
+        setMapFilter("1v1");
+      } else if (newType === "2vs2" || newType === "mix_2vs2") {
+        setMapPool(CS2_WINGMAN_MAP_POOL);
+        setMapFilter("wingman");
+      } else {
+        setMapPool(CS2_5V5_MAP_POOL);
+        setMapFilter("5v5");
       }
     }
   };
@@ -564,14 +605,20 @@ export default function CreateTournamentPage({
       const nextType = allowed[0] || "1vs1";
       setType(nextType);
       if (discipline === "dota2") {
-        if (nextType === "1vs1") {
+        if (nextType === "1vs1" || nextType === "1v1" || nextType === "solo") {
           setDotaGameMode("1V1MID");
         } else {
           setDotaGameMode("CM");
         }
       }
+    } else if (discipline === "dota2") {
+      if (type === "1vs1" || type === "1v1" || type === "solo") {
+        if (dotaGameMode !== "1V1MID") {
+          setDotaGameMode("1V1MID");
+        }
+      }
     }
-  }, [discipline, formatOptions, type]);
+  }, [discipline, formatOptions, type, dotaGameMode]);
 
   // Auto distribute bonuses
   const cashPctKey = placements.map((p) => p.cashPct).join(",");
@@ -775,7 +822,7 @@ export default function CreateTournamentPage({
         name: name.trim(),
         discipline,
         type,
-        entryFee,
+        entryFee: entryFeeMode === "free" ? 0 : entryFee,
         clubSharePct,
         prizeType: "combined",
         prizePoolMode,
@@ -786,6 +833,11 @@ export default function CreateTournamentPage({
         settings: {
           maxParticipants: maxParticipants > 0 ? maxParticipants : null,
           entryFeeType,
+          entryFeeMode,
+          packageId: entryFeeMode === "package" && selectedPackageId ? parseInt(selectedPackageId, 10) : undefined,
+          packageName: entryFeeMode === "package" ? selectedPackageName : undefined,
+          packagePrice: entryFeeMode === "package" ? selectedPackagePrice : undefined,
+          packageDuration: entryFeeMode === "package" ? selectedPackageDuration : undefined,
           mapPool: discipline === "cs2" ? mapPool : [],
           customMaps: discipline === "cs2" ? customClubMaps : [],
           itemPool,
@@ -793,7 +845,12 @@ export default function CreateTournamentPage({
           matchFormat,
           semiFinalFormat,
           grandFinalFormat,
-          gameMode: discipline === "dota2" ? dotaGameMode : undefined,
+          gameMode:
+            discipline === "dota2"
+              ? type === "1vs1" || type === "1v1" || type === "solo"
+                ? "1V1MID"
+                : dotaGameMode || "CM"
+              : undefined,
           serverRegion: discipline === "dota2" ? dotaServerRegion : undefined,
         },
       };
@@ -1438,6 +1495,228 @@ export default function CreateTournamentPage({
                 </p>
               </div>
 
+              {/* Entry Fee Basis Selector */}
+              <div className="space-y-3">
+                <label className="text-xs font-semibold text-slate-700 block">
+                  Тип и основа взноса
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEntryFeeMode("cash");
+                      if (entryFee === 0) setEntryFee(500);
+                    }}
+                    className={cn(
+                      "p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3",
+                      entryFeeMode === "cash"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm",
+                        entryFeeMode === "cash"
+                          ? "bg-white/10 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      )}
+                    >
+                      💵
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold leading-tight">
+                        Денежный взнос
+                      </div>
+                      <div
+                        className={cn(
+                          "text-[10px] mt-0.5",
+                          entryFeeMode === "cash" ? "text-slate-300" : "text-slate-400"
+                        )}
+                      >
+                        Фиксированная сумма в рублях
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEntryFeeMode("package");
+                      if (!selectedPackageId && clubPackages.length > 0) {
+                        const firstActive = clubPackages.find((p) => p.is_active) || clubPackages[0];
+                        setSelectedPackageId(String(firstActive.id));
+                        setSelectedPackageName(firstActive.name);
+                        setSelectedPackagePrice(firstActive.price);
+                        setSelectedPackageDuration(firstActive.duration || "");
+                        setEntryFee(firstActive.price);
+                      }
+                    }}
+                    className={cn(
+                      "p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3",
+                      entryFeeMode === "package"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm",
+                        entryFeeMode === "package"
+                          ? "bg-white/10 text-white"
+                          : "bg-amber-50 text-amber-600"
+                      )}
+                    >
+                      📦
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold leading-tight">
+                        Покупка пакета в клубе
+                      </div>
+                      <div
+                        className={cn(
+                          "text-[10px] mt-0.5",
+                          entryFeeMode === "package" ? "text-slate-300" : "text-slate-400"
+                        )}
+                      >
+                        Взнос покупкой клубного тарифа
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEntryFeeMode("free");
+                      setEntryFee(0);
+                    }}
+                    className={cn(
+                      "p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3",
+                      entryFeeMode === "free"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm",
+                        entryFeeMode === "free"
+                          ? "bg-white/10 text-white"
+                          : "bg-emerald-50 text-emerald-600"
+                      )}
+                    >
+                      🎁
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold leading-tight">
+                        Бесплатный турнир
+                      </div>
+                      <div
+                        className={cn(
+                          "text-[10px] mt-0.5",
+                          entryFeeMode === "free" ? "text-slate-300" : "text-slate-400"
+                        )}
+                      >
+                        Без взноса (0 ₽)
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Package selection details when entryFeeMode === 'package' */}
+              {entryFeeMode === "package" && (
+                <div className="bg-amber-500/5 border border-amber-500/25 p-5 rounded-2xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                        <Package className="w-4 h-4 text-amber-600" />
+                        <span>Выберите клубный пакет для допуска к турниру</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Участник допускается к матчу после покупки указанного пакета в клубе
+                      </p>
+                    </div>
+
+                    <Link
+                      href={`/clubs/${clubId}/tournaments?tab=settings`}
+                      target="_blank"
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 shrink-0 hover:underline"
+                    >
+                      <span>Настроить пакеты в клубе</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+
+                  {clubPackages.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-white border border-amber-200 text-center space-y-2">
+                      <p className="text-xs text-slate-600 font-medium">
+                        В клубе еще не создано ни одного пакета взносов.
+                      </p>
+                      <Link
+                        href={`/clubs/${clubId}/tournaments?tab=settings`}
+                        target="_blank"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Добавить пакет во вкладке «Настройки»</span>
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
+                          Клубный пакет *
+                        </label>
+                        <select
+                          value={selectedPackageId}
+                          onChange={(e) => {
+                            const pId = e.target.value;
+                            setSelectedPackageId(pId);
+                            const found = clubPackages.find((p) => String(p.id) === pId);
+                            if (found) {
+                              setSelectedPackageName(found.name);
+                              setSelectedPackagePrice(found.price);
+                              setSelectedPackageDuration(found.duration || "");
+                              setEntryFee(found.price);
+                            }
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 transition-all cursor-pointer"
+                        >
+                          <option value="">-- Выберите пакет из списка --</option>
+                          {clubPackages.map((p) => (
+                            <option key={p.id} value={String(p.id)}>
+                              {p.name} — {p.price} ₽ {p.duration ? `(${p.duration})` : ""} {!p.is_active ? "[Отключен]" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {selectedPackageName && (
+                        <div className="p-3.5 rounded-xl bg-white border border-slate-200/80 flex items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <span className="text-xs font-black text-slate-900 block">
+                              📦 {selectedPackageName}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium block">
+                              {selectedPackageDuration ? `Длительность: ${selectedPackageDuration}` : "Клубный игровой пакет"}
+                            </span>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">
+                              Стоимость
+                            </span>
+                            <span className="text-base font-black text-slate-900 font-mono">
+                              {selectedPackagePrice} ₽
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Limits and Fees Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
@@ -1456,21 +1735,36 @@ export default function CreateTournamentPage({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700 block">
-                    {isTeamFormat
-                      ? `Взнос ${
-                          entryFeeType === "player" ? "с игрока" : "с команды"
-                        } (₽)`
-                      : "Взнос с игрока (₽)"}
+                  <label className="text-xs font-semibold text-slate-700 block flex items-center justify-between">
+                    <span>
+                      {entryFeeMode === "free"
+                        ? "Взнос за участие"
+                        : entryFeeMode === "package"
+                        ? `Взнос ${isTeamFormat && entryFeeType === "team" ? "с команды" : "с игрока"} (цена пакета, ₽)`
+                        : isTeamFormat
+                        ? `Взнос ${entryFeeType === "player" ? "с игрока" : "с команды"} (₽)`
+                        : "Взнос с игрока (₽)"}
+                    </span>
+                    {entryFeeMode === "package" && (
+                      <span className="text-[10px] text-amber-600 font-bold">
+                        Из пакета
+                      </span>
+                    )}
                   </label>
                   <input
                     type="number"
                     min={0}
+                    disabled={entryFeeMode === "free"}
                     value={entryFee}
                     onChange={(e) =>
                       setEntryFee(parseInt(e.target.value, 10) || 0)
                     }
-                    className="w-full bg-slate-50/50 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition-all font-normal"
+                    className={cn(
+                      "w-full border rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 focus:border-slate-900 transition-all font-normal font-mono",
+                      entryFeeMode === "free"
+                        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                        : "bg-slate-50/50 hover:bg-slate-50 focus:bg-white border-slate-200"
+                    )}
                   />
                 </div>
 

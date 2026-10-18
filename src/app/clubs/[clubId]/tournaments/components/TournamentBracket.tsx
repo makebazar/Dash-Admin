@@ -15,6 +15,101 @@ import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Match, Competitor, Tournament, DashMatchAgentInfo, ActiveCs2MatchInfo } from "../types";
+import { formatDotaGameMode } from "@/lib/dota/utils";
+
+function getMatchFormat(
+  match: Match,
+  maxRound?: number,
+  tournament?: Tournament
+): "BO1" | "BO3" | "BO5" {
+  const cfg = tournament?.config || {};
+  const normalize = (val?: string): "BO1" | "BO3" | "BO5" | null => {
+    if (!val) return null;
+    const upper = String(val).toUpperCase().trim();
+    if (upper === "BO3" || upper === "BO5" || upper === "BO1") return upper as any;
+    return null;
+  };
+
+  if (match.result?.format && normalize(match.result.format)) return normalize(match.result.format)!;
+  if (match.result?.matchFormat && normalize(match.result.matchFormat)) return normalize(match.result.matchFormat)!;
+  if (match.result?.series_format && normalize(match.result.series_format)) return normalize(match.result.series_format)!;
+
+  const baseFormat = normalize(cfg.matchFormat) || normalize(cfg.match_format) || normalize(cfg.format) || "BO1";
+  const semiFormat = normalize(cfg.semiFinalFormat) || normalize(cfg.semi_final_format) || normalize(cfg.semiFinal) || baseFormat;
+  const grandFormat = normalize(cfg.grandFinalFormat) || normalize(cfg.grand_final_format) || normalize(cfg.grandFinal) || baseFormat;
+
+  const stage = match.result?.stage;
+  if ((stage === "final" || stage === "grand_final" || match.round === 200) && !match.result?.isThirdPlace) {
+    return grandFormat;
+  }
+  if (stage === "semifinal" || stage === "wb_final" || stage === "lb_final" || stage === "bronze" || match.result?.isThirdPlace) {
+    return semiFormat;
+  }
+
+  if (maxRound && maxRound > 0) {
+    if (match.round === maxRound && !match.result?.isThirdPlace) return grandFormat;
+    if (match.round === maxRound && match.result?.isThirdPlace) return semiFormat;
+    if (match.round === maxRound - 1 && maxRound >= 2) return semiFormat;
+  }
+
+  return baseFormat;
+}
+
+function getMatchStatusDisplay(status?: string, result?: any, isBye?: boolean) {
+  if (result?.isTechWin) {
+    return {
+      text: "Тех. победа (ТП)",
+      badgeClass: "bg-rose-50 text-rose-700 border-rose-200/80 font-bold",
+    };
+  }
+  if (isBye) {
+    return {
+      text: "Автопроход (BYE)",
+      badgeClass: "bg-blue-50 text-blue-700 border-blue-200/80 font-bold",
+    };
+  }
+
+  const s = (status || "").toLowerCase().trim();
+  switch (s) {
+    case "finished":
+    case "completed":
+      return {
+        text: "Завершен",
+        badgeClass: "bg-slate-100 text-slate-600 border-slate-200/80 font-semibold",
+      };
+    case "live":
+    case "in_progress":
+      return {
+        text: "● LIVE",
+        badgeClass: "bg-red-50 text-red-600 border-red-200 font-black animate-pulse",
+      };
+    case "starting":
+      return {
+        text: "Запуск...",
+        badgeClass: "bg-amber-50 text-amber-700 border-amber-200 font-bold animate-pulse",
+      };
+    case "waiting_server":
+    case "waiting_bot":
+      return {
+        text: "В очереди",
+        badgeClass: "bg-purple-50 text-purple-700 border-purple-200 font-bold",
+      };
+    case "ready":
+      return {
+        text: "Готов",
+        badgeClass: "bg-blue-50 text-blue-700 border-blue-200 font-bold",
+      };
+    case "scheduled":
+    case "pending":
+    case "draft":
+    case "waiting":
+    default:
+      return {
+        text: "Ожидание",
+        badgeClass: "bg-slate-100/90 text-slate-500 border-slate-200/60 font-medium",
+      };
+  }
+}
 
 interface TournamentBracketProps {
   tournament?: Tournament;
@@ -220,53 +315,200 @@ export function TournamentBracket({
                         const compB = competitors.find(
                           (c) => c.id === m.competitor_b_id
                         );
-                        const isServerRunning = activeCs2Matches?.some(
+                        const statusLower = m.status?.toLowerCase();
+                        const isFinished = statusLower === "finished" || statusLower === "completed";
+                        const isBye =
+                          m.result?.isBye ||
+                          (!m.competitor_b_id &&
+                            Boolean(m.competitor_a_id) &&
+                            isFinished);
+
+                        const runningCs2Match = activeCs2Matches?.find(
                           (cm) => cm.id === `dm-tourney-${m.id}` || cm.id === m.cs2_server_id
                         );
+                        const isServerRunning = Boolean(runningCs2Match);
+
+                        const runningDotaBot = dashmatchAgent?.dota_bots?.find(
+                          (b) =>
+                            b.active_match === String(m.id) ||
+                            b.active_match === `dm-tourney-${m.id}` ||
+                            b.active_match === `dm-${tournament?.id}-${m.id}`
+                        );
+
+                        const isDota = tournament?.discipline?.toLowerCase().includes("dota");
+                        const isCs2 = tournament?.discipline?.toLowerCase().includes("cs");
+                        const matchFormat = getMatchFormat(m, 0, tournament);
+                        const statusInfo = getMatchStatusDisplay(m.status, m.result, isBye);
+
+                        const isWinnerA =
+                          Boolean(m.winner_competitor_id && m.winner_competitor_id === m.competitor_a_id) ||
+                          (isFinished && m.score1 > m.score2);
+                        const isWinnerB =
+                          Boolean(m.winner_competitor_id && m.winner_competitor_id === m.competitor_b_id) ||
+                          (isFinished && m.score2 > m.score1);
+
+                        let disciplineContext = "";
+                        if (isDota) {
+                          disciplineContext = formatDotaGameMode(
+                            m.result?.gameMode,
+                            tournament?.type,
+                            tournament?.config
+                          );
+                        } else if (isCs2) {
+                          const mapName = m.result?.map || runningCs2Match?.map_name;
+                          if (mapName) {
+                            disciplineContext = `Карта: ${mapName.replace(/^de_/, "")}`;
+                          }
+                        }
 
                         return (
                           <div
                             key={m.id}
                             onClick={() => handleMatchClick(m)}
-                            className="flex flex-col gap-2 bg-white border border-slate-200 p-3.5 rounded-2xl text-xs cursor-pointer hover:border-orange-400 transition-all shadow-xs"
+                            className={cn(
+                              "bg-white border p-3.5 rounded-2xl space-y-2.5 shadow-xs relative transition-all cursor-pointer hover:border-orange-400 hover:shadow-md",
+                              isFinished
+                                ? "border-slate-200 bg-slate-50/40"
+                                : statusLower === "live" || isServerRunning
+                                ? "border-red-400 ring-2 ring-red-400/20 shadow-md shadow-red-500/10"
+                                : "border-slate-200"
+                            )}
                           >
-                            <div className="flex justify-between items-center text-[8px] font-black uppercase tracking-wider text-slate-400">
-                              <div className="flex items-center gap-1.5">
-                                <span>
+                            <div className="flex justify-between items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-slate-400">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="font-bold text-slate-700">
                                   {m.result?.matchNumber
                                     ? `Матч ${m.result.matchNumber}`
                                     : `Матч #${m.id}`}
                                 </span>
-                                {isServerRunning && (
+                                <span
+                                  className={cn(
+                                    "px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider border",
+                                    matchFormat === "BO3"
+                                      ? "bg-purple-50 text-purple-700 border-purple-200"
+                                      : matchFormat === "BO5"
+                                      ? "bg-amber-50 text-amber-700 border-amber-300"
+                                      : "bg-slate-100 text-slate-600 border-slate-200"
+                                  )}
+                                >
+                                  {matchFormat}
+                                </span>
+                                {runningCs2Match && (
                                   <span className="bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider animate-pulse">
-                                    ● CS2 Сервер
+                                    ● CS2 :{runningCs2Match.port}
+                                  </span>
+                                )}
+                                {runningDotaBot && (
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
+                                    ● Бот {runningDotaBot.bot_name || runningDotaBot.account_name || runningDotaBot.bot_id}
                                   </span>
                                 )}
                               </div>
-                              {m.scheduled_at && (
-                                <span className="text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded text-[8px] flex items-center gap-0.5">
-                                  <Clock className="w-2.5 h-2.5" />
-                                  {new Date(m.scheduled_at).toLocaleTimeString(
-                                    "ru-RU",
-                                    { hour: "2-digit", minute: "2-digit" }
-                                  )}
-                                </span>
-                              )}
+                              <span
+                                className={cn(
+                                  "px-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0",
+                                  statusInfo.badgeClass
+                                )}
+                              >
+                                {statusInfo.text}
+                              </span>
                             </div>
-                            <div className="grid grid-cols-2 gap-2 font-bold text-slate-700">
-                              <div className="flex justify-between items-center bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                <span className="truncate pr-1">
-                                  {compA?.display_name || "Ожидает..."}
+
+                            {(disciplineContext || m.scheduled_at || m.result?.duration) && (
+                              <div className="flex items-center justify-between gap-1 text-[8px] text-slate-400 font-medium px-0.5">
+                                <span className="truncate text-slate-500 font-medium">
+                                  {disciplineContext}
                                 </span>
-                                <span className="font-black text-orange-500 font-mono">
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {m.result?.duration ? (
+                                    <span className="text-slate-500 font-medium flex items-center gap-0.5">
+                                      <Clock className="w-2.5 h-2.5 text-slate-400" />
+                                      {m.result.duration} мин
+                                    </span>
+                                  ) : m.scheduled_at ? (
+                                    <span className="text-slate-500 font-medium flex items-center gap-0.5">
+                                      <Clock className="w-2.5 h-2.5 text-slate-400" />
+                                      {new Date(m.scheduled_at).toLocaleTimeString("ru-RU", {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="space-y-1.5">
+                              <div
+                                className={cn(
+                                  "flex justify-between items-center p-2 rounded-xl text-xs transition-colors",
+                                  isWinnerA
+                                    ? "bg-emerald-50 text-emerald-900 border border-emerald-300 font-bold shadow-xs"
+                                    : isFinished
+                                    ? "bg-slate-50/60 text-slate-400 border border-slate-100"
+                                    : "bg-slate-50 text-slate-700 border border-slate-100 font-medium"
+                                )}
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
+                                  {isDota && (
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100/70 border border-emerald-300/60 px-1 py-0.5 rounded shrink-0">
+                                      RAD
+                                    </span>
+                                  )}
+                                  <span className="truncate">
+                                    {compA?.display_name || "Ожидает..."}
+                                  </span>
+                                  {compA?.player_elo && !isFinished && (
+                                    <span className="text-[9px] font-mono text-slate-400 shrink-0">
+                                      {compA.player_elo}
+                                    </span>
+                                  )}
+                                </div>
+                                <span
+                                  className={cn(
+                                    "font-mono font-black text-xs px-2 py-0.5 rounded-lg shrink-0",
+                                    isWinnerA
+                                      ? "bg-emerald-500 text-white shadow-xs"
+                                      : "text-slate-700 bg-slate-100"
+                                  )}
+                                >
                                   {m.score1}
                                 </span>
                               </div>
-                              <div className="flex justify-between items-center bg-slate-50 p-2 rounded-xl border border-slate-100">
-                                <span className="truncate pr-1">
-                                  {compB?.display_name || "Ожидает..."}
-                                </span>
-                                <span className="font-black text-orange-500 font-mono">
+
+                              <div
+                                className={cn(
+                                  "flex justify-between items-center p-2 rounded-xl text-xs transition-colors",
+                                  isWinnerB
+                                    ? "bg-emerald-50 text-emerald-900 border border-emerald-300 font-bold shadow-xs"
+                                    : isFinished
+                                    ? "bg-slate-50/60 text-slate-400 border border-slate-100"
+                                    : "bg-slate-50 text-slate-700 border border-slate-100 font-medium"
+                                )}
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
+                                  {isDota && (
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-rose-700 bg-rose-100/70 border border-rose-300/60 px-1 py-0.5 rounded shrink-0">
+                                      DIRE
+                                    </span>
+                                  )}
+                                  <span className="truncate">
+                                    {compB?.display_name || "Ожидает..."}
+                                  </span>
+                                  {compB?.player_elo && !isFinished && (
+                                    <span className="text-[9px] font-mono text-slate-400 shrink-0">
+                                      {compB.player_elo}
+                                    </span>
+                                  )}
+                                </div>
+                                <span
+                                  className={cn(
+                                    "font-mono font-black text-xs px-2 py-0.5 rounded-lg shrink-0",
+                                    isWinnerB
+                                      ? "bg-emerald-500 text-white shadow-xs"
+                                      : "text-slate-700 bg-slate-100"
+                                  )}
+                                >
                                   {m.score2}
                                 </span>
                               </div>
@@ -345,118 +587,213 @@ export function TournamentBracket({
                         (c) => c.id === m.competitor_b_id
                       );
                       const statusLower = m.status?.toLowerCase();
+                      const isFinished = statusLower === "finished" || statusLower === "completed";
                       const isBye =
                         m.result?.isBye ||
                         (!m.competitor_b_id &&
                           Boolean(m.competitor_a_id) &&
-                          statusLower === "finished");
+                          isFinished);
 
-                      const isServerRunning = activeCs2Matches?.some(
+                      const runningCs2Match = activeCs2Matches?.find(
                         (cm) => cm.id === `dm-tourney-${m.id}` || cm.id === m.cs2_server_id
                       );
+                      const isServerRunning = Boolean(runningCs2Match);
+
+                      const runningDotaBot = dashmatchAgent?.dota_bots?.find(
+                        (b) =>
+                          b.active_match === String(m.id) ||
+                          b.active_match === `dm-tourney-${m.id}` ||
+                          b.active_match === `dm-${tournament?.id}-${m.id}`
+                      );
+
+                      const isDota = tournament?.discipline?.toLowerCase().includes("dota");
+                      const isCs2 = tournament?.discipline?.toLowerCase().includes("cs");
+                      const maxPlayoffRound = sortedRounds.length > 0 ? Math.max(...sortedRounds) : 1;
+                      const matchFormat = getMatchFormat(m, maxPlayoffRound, tournament);
+                      const statusInfo = getMatchStatusDisplay(m.status, m.result, isBye);
+
+                      const isWinnerA =
+                        Boolean(m.winner_competitor_id && m.winner_competitor_id === m.competitor_a_id) ||
+                        (isFinished && m.score1 > m.score2);
+                      const isWinnerB =
+                        Boolean(m.winner_competitor_id && m.winner_competitor_id === m.competitor_b_id) ||
+                        (isFinished && m.score2 > m.score1);
+
+                      let disciplineContext = "";
+                      if (isDota) {
+                        disciplineContext = formatDotaGameMode(
+                          m.result?.gameMode,
+                          tournament?.type,
+                          tournament?.config
+                        );
+                      } else if (isCs2) {
+                        const mapName = m.result?.map || runningCs2Match?.map_name;
+                        if (mapName) {
+                          disciplineContext = `Карта: ${mapName.replace(/^de_/, "")}`;
+                        }
+                      }
 
                       return (
                         <div
                           key={m.id}
                           onClick={() => handleMatchClick(m)}
                           className={cn(
-                            "bg-white border p-4 rounded-3xl space-y-3 shadow-xs relative transition-all cursor-pointer hover:border-orange-400 hover:shadow-md",
-                            statusLower === "finished"
-                              ? "border-slate-200 bg-slate-50/50"
+                            "bg-white border p-3.5 rounded-3xl space-y-2.5 shadow-xs relative transition-all cursor-pointer hover:border-orange-400 hover:shadow-md",
+                            isFinished
+                              ? "border-slate-200 bg-slate-50/40"
                               : statusLower === "live" || isServerRunning
                               ? "border-red-400 ring-2 ring-red-400/20 shadow-md shadow-red-500/10"
                               : "border-slate-200"
                           )}
                         >
-                          <div className="flex justify-between items-center text-[8px] font-black uppercase tracking-wider text-slate-400">
+                          <div className="flex justify-between items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-slate-400">
                             <div className="flex items-center gap-1.5 truncate pr-1">
-                              <span>
+                              <span className="font-bold text-slate-700">
                                 {m.result?.matchNumber
                                   ? `Матч ${m.result.matchNumber}`
                                   : `Матч #${m.id}`}
                               </span>
+                              <span
+                                className={cn(
+                                  "px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider border",
+                                  matchFormat === "BO3"
+                                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                                    : matchFormat === "BO5"
+                                    ? "bg-amber-50 text-amber-700 border-amber-300"
+                                    : "bg-slate-100 text-slate-600 border-slate-200"
+                                )}
+                              >
+                                {matchFormat}
+                              </span>
                               {(m.result?.isThirdPlace || m.result?.stage === "bronze") && (
                                 <span className="bg-amber-500/10 text-amber-700 border border-amber-300 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
-                                  🥉 За 3-е место
+                                  🥉 3-е место
                                 </span>
                               )}
-                              {isServerRunning && (
+                              {runningCs2Match && (
                                 <span className="bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider animate-pulse">
-                                  ● CS2
+                                  ● CS2 :{runningCs2Match.port}
                                 </span>
                               )}
-                              {m.scheduled_at && (
-                                <span className="text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded text-[8px] flex items-center gap-0.5">
-                                  <Clock className="w-2.5 h-2.5" />
-                                  {new Date(m.scheduled_at).toLocaleTimeString(
-                                    "ru-RU",
-                                    { hour: "2-digit", minute: "2-digit" }
-                                  )}
+                              {runningDotaBot && (
+                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">
+                                  ● Бот {runningDotaBot.bot_name || runningDotaBot.account_name || runningDotaBot.bot_id}
                                 </span>
                               )}
                             </div>
+
                             <span
                               className={cn(
-                                "font-mono",
-                                statusLower === "finished"
-                                  ? isBye
-                                    ? "text-blue-500 font-bold"
-                                    : "text-slate-400 font-bold"
-                                  : statusLower === "live"
-                                  ? "text-red-500 font-black animate-pulse"
-                                  : "text-blue-500 font-bold"
+                                "px-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0",
+                                statusInfo.badgeClass
                               )}
                             >
-                              {m.result?.isTechWin
-                                ? "ТП"
-                                : isBye
-                                ? "Автопроход (BYE)"
-                                : statusLower === "scheduled"
-                                ? "ожидание"
-                                : statusLower === "live"
-                                ? "● LIVE"
-                                : statusLower}
+                              {statusInfo.text}
                             </span>
                           </div>
+
+                          {(disciplineContext || m.scheduled_at || m.result?.duration) && (
+                            <div className="flex items-center justify-between gap-1 text-[8px] text-slate-400 font-medium px-0.5">
+                              <span className="truncate text-slate-500 font-medium">
+                                {disciplineContext}
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {m.result?.duration ? (
+                                  <span className="text-slate-500 font-medium flex items-center gap-0.5">
+                                    <Clock className="w-2.5 h-2.5 text-slate-400" />
+                                    {m.result.duration} мин
+                                  </span>
+                                ) : m.scheduled_at ? (
+                                  <span className="text-slate-500 font-medium flex items-center gap-0.5">
+                                    <Clock className="w-2.5 h-2.5 text-slate-400" />
+                                    {new Date(m.scheduled_at).toLocaleTimeString("ru-RU", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          )}
 
                           <div className="space-y-1.5">
                             <div
                               className={cn(
-                                "flex justify-between items-center p-2.5 rounded-2xl text-xs font-bold transition-colors",
-                                m.winner_competitor_id &&
-                                  m.winner_competitor_id === m.competitor_a_id
-                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-black"
-                                  : "bg-slate-50 text-slate-700 border border-slate-100"
+                                "flex justify-between items-center p-2 rounded-2xl text-xs transition-colors",
+                                isWinnerA
+                                  ? "bg-emerald-50 text-emerald-900 border border-emerald-300 font-bold shadow-xs"
+                                  : isFinished
+                                  ? "bg-slate-50/60 text-slate-400 border border-slate-100"
+                                  : "bg-slate-50 text-slate-700 border border-slate-100 font-medium"
                               )}
                             >
-                              <span className="truncate flex-1 pr-2">
-                                {compA?.display_name || "Ожидает пару..."}
-                              </span>
-                              <span className="font-black text-sm font-mono">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
+                                {isDota && (
+                                  <span className="text-[8px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100/70 border border-emerald-300/60 px-1 py-0.5 rounded shrink-0">
+                                    RAD
+                                  </span>
+                                )}
+                                <span className="truncate">
+                                  {compA?.display_name || "Ожидает пару..."}
+                                </span>
+                                {compA?.player_elo && !isFinished && (
+                                  <span className="text-[9px] font-mono text-slate-400 shrink-0">
+                                    {compA.player_elo}
+                                  </span>
+                                )}
+                              </div>
+                              <span
+                                className={cn(
+                                  "font-mono font-black text-xs px-2 py-0.5 rounded-lg shrink-0",
+                                  isWinnerA
+                                    ? "bg-emerald-500 text-white shadow-xs"
+                                    : "text-slate-700 bg-slate-100"
+                                )}
+                              >
                                 {isBye ? "—" : m.score1}
                               </span>
                             </div>
 
                             <div
                               className={cn(
-                                "flex justify-between items-center p-2.5 rounded-2xl text-xs font-bold transition-colors",
-                                m.winner_competitor_id &&
-                                  m.winner_competitor_id === m.competitor_b_id
-                                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-black"
-                                  : "bg-slate-50 text-slate-700 border border-slate-100"
+                                "flex justify-between items-center p-2 rounded-2xl text-xs transition-colors",
+                                isWinnerB
+                                  ? "bg-emerald-50 text-emerald-900 border border-emerald-300 font-bold shadow-xs"
+                                  : isFinished
+                                  ? "bg-slate-50/60 text-slate-400 border border-slate-100"
+                                  : "bg-slate-50 text-slate-700 border border-slate-100 font-medium"
                               )}
                             >
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
+                                {isDota && (
+                                  <span className="text-[8px] font-black uppercase tracking-wider text-rose-700 bg-rose-100/70 border border-rose-300/60 px-1 py-0.5 rounded shrink-0">
+                                    DIRE
+                                  </span>
+                                )}
+                                <span
+                                  className={cn(
+                                    "truncate",
+                                    isBye && "text-blue-500 italic text-[11px]"
+                                  )}
+                                >
+                                  {isBye
+                                    ? "Автопроход (BYE)"
+                                    : compB?.display_name || "Ожидает пару..."}
+                                </span>
+                                {compB?.player_elo && !isFinished && !isBye && (
+                                  <span className="text-[9px] font-mono text-slate-400 shrink-0">
+                                    {compB.player_elo}
+                                  </span>
+                                )}
+                              </div>
                               <span
                                 className={cn(
-                                  "truncate flex-1 pr-2",
-                                  isBye && "text-blue-500 italic text-[11px]"
+                                  "font-mono font-black text-xs px-2 py-0.5 rounded-lg shrink-0",
+                                  isWinnerB
+                                    ? "bg-emerald-500 text-white shadow-xs"
+                                    : "text-slate-700 bg-slate-100"
                                 )}
                               >
-                                {isBye
-                                  ? "Автопроход (BYE)"
-                                  : compB?.display_name || "Ожидает пару..."}
-                              </span>
-                              <span className="font-black text-sm font-mono">
                                 {isBye ? "—" : m.score2}
                               </span>
                             </div>

@@ -15,6 +15,11 @@ export interface Tournament {
   config?: {
     maxParticipants?: number;
     entryFeeType?: "player" | "team";
+    entryFeeMode?: "cash" | "package" | "free";
+    packageId?: number;
+    packageName?: string;
+    packagePrice?: number;
+    packageDuration?: string;
     mapPool?: string[];
     itemPool?: Array<{ id: string; name: string; cost: number }>;
     bracketType?: "single_elimination" | "double_elimination" | "round_robin";
@@ -24,6 +29,19 @@ export interface Tournament {
     [key: string]: any;
   };
   created_at?: string;
+}
+
+export interface TournamentPackage {
+  id: number;
+  club_id: number;
+  name: string;
+  price: number;
+  duration?: string;
+  description?: string;
+  smartshell_tariff_id?: number | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DashMatchAgentInfo {
@@ -40,6 +58,19 @@ export interface DashMatchAgentInfo {
     pid: number;
   }>;
   last_heartbeat?: string | null;
+  dota_total_bots?: number;
+  dota_available_bots?: number;
+  dota_bots?: Array<{
+    bot_id: string;
+    bot_name?: string;
+    account_name?: string;
+    enabled?: boolean;
+    running?: boolean;
+    steam_ready?: boolean;
+    gc_ready?: boolean;
+    active_match?: string;
+    is_available?: boolean;
+  }>;
 }
 
 export interface ActiveCs2MatchInfo {

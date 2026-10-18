@@ -131,18 +131,31 @@ export function TournamentInfoTab({
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
               Взнос за участие
             </span>
-            <span className="text-sm font-black uppercase text-slate-900 block">
-              {parseFloat(String(tournament.entry_fee || 0)) > 0
-                ? `${tournament.entry_fee} ₽`
-                : "Бесплатно"}
-            </span>
-            <span className="text-[10px] text-slate-500 font-medium">
-              {isTeam
-                ? feeType === "team"
-                  ? "С команды целиком"
-                  : "С каждого игрока"
-                : "С одного участника"}
-            </span>
+            {tournament.config?.entryFeeMode === "package" ? (
+              <>
+                <span className="text-sm font-black uppercase text-slate-900 block truncate" title={tournament.config?.packageName || "Пакет клуба"}>
+                  {tournament.config?.packageName || "Пакет клуба"} ({tournament.entry_fee || 0} ₽)
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium block">
+                  Покупка тарифа в клубе {tournament.config?.packageDuration ? `• ${tournament.config.packageDuration} мин.` : ""}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-sm font-black uppercase text-slate-900 block">
+                  {parseFloat(String(tournament.entry_fee || 0)) > 0
+                    ? `${tournament.entry_fee} ₽`
+                    : "Бесплатно"}
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  {isTeam
+                    ? feeType === "team"
+                      ? "С команды целиком"
+                      : "С каждого игрока"
+                    : "С одного участника"}
+                </span>
+              </>
+            )}
           </div>
 
           {/* Club Share */}

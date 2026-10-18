@@ -1,10 +1,33 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { X, Loader2 } from "lucide-react";
+import React from "react";
+
+const useState = React.useState;
+const useEffect = React.useEffect;
+const useMemo = React.useMemo;
+import {
+  X,
+  Loader2,
+  Package,
+  Gamepad2,
+  Plus,
+  Edit2,
+  Trash2,
+  Search,
+  Check,
+  Download,
+  Clock,
+  Sparkles,
+  Layers,
+  ArrowRight,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { TournamentDiscipline, formatTypeLabel } from "../types";
+import { Switch } from "@/components/ui/switch";
+import { TournamentDiscipline, TournamentPackage, formatTypeLabel } from "../types";
 
 interface TournamentSettingsTabProps {
   clubId: string;
@@ -20,17 +43,21 @@ const COMMON_FORMATS = [
 ];
 
 export function TournamentSettingsTab({ clubId }: TournamentSettingsTabProps) {
+  // Sub-tabs switcher: disciplines vs packages
+  const [settingsSubTab, setSettingsSubTab] = useState<"disciplines" | "packages">("disciplines");
+
+  // Disciplines state
   const [disciplines, setDisciplines] = useState<TournamentDiscipline[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<"all" | "system" | "custom">("all");
 
-  // Modal states
+  // Modal states for disciplines
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingDiscipline, setEditingDiscipline] = useState<TournamentDiscipline | null>(null);
 
-  // Form states
+  // Form states for disciplines
   const [formName, setFormName] = useState("");
   const [formKey, setFormKey] = useState("");
   const [formBadge, setFormBadge] = useState("Ручной ввод");
@@ -38,6 +65,29 @@ export function TournamentSettingsTab({ clubId }: TournamentSettingsTabProps) {
   const [formDescription, setFormDescription] = useState("");
   const [customFormatInput, setCustomFormatInput] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Packages state
+  const [packages, setPackages] = useState<TournamentPackage[]>([]);
+  const [packagesLoading, setPackagesLoading] = useState(false);
+  const [smartshellTariffs, setSmartshellTariffs] = useState<Array<{ id: number; title: string; duration?: number; is_active?: boolean; description?: string }>>([]);
+  const [packageSearch, setPackageSearch] = useState("");
+  const [packageFilter, setPackageFilter] = useState<"all" | "active" | "inactive">("all");
+
+  // Modal state for package create / edit
+  const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
+  const [isPackageSubmitting, setIsPackageSubmitting] = useState(false);
+  const [editingPackage, setEditingPackage] = useState<TournamentPackage | null>(null);
+  const [pkgName, setPkgName] = useState("");
+  const [pkgPrice, setPkgPrice] = useState("400");
+  const [pkgDuration, setPkgDuration] = useState("3 часа");
+  const [pkgDescription, setPkgDescription] = useState("");
+  const [pkgIsActive, setPkgIsActive] = useState(true);
+  const [packageErrorMessage, setPackageErrorMessage] = useState<string | null>(null);
+
+  // Modal state for SmartShell import
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [selectedTariffIds, setSelectedTariffIds] = useState<number[]>([]);
 
   const fetchDisciplines = async () => {
     try {
@@ -54,8 +104,25 @@ export function TournamentSettingsTab({ clubId }: TournamentSettingsTabProps) {
     }
   };
 
+  const fetchPackages = async () => {
+    try {
+      setPackagesLoading(true);
+      const res = await fetch(`/api/clubs/${clubId}/tournaments?action=packages`);
+      if (res.ok) {
+        const data = await res.json();
+        setPackages(data.packages || []);
+        setSmartshellTariffs(data.smartshellTariffs || []);
+      }
+    } catch (e) {
+      console.error("Failed to load packages:", e);
+    } finally {
+      setPackagesLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchDisciplines();
+    fetchPackages();
   }, [clubId]);
 
   const handleOpenCreate = () => {
@@ -183,6 +250,176 @@ export function TournamentSettingsTab({ clubId }: TournamentSettingsTabProps) {
     }
   };
 
+  // Package handlers
+  const handleOpenCreatePackage = () => {
+    setEditingPackage(null);
+    setPkgName("");
+    setPkgPrice("400");
+    setPkgDuration("3 часа");
+    setPkgDescription("");
+    setPkgIsActive(true);
+    setPackageErrorMessage(null);
+    setIsPackageModalOpen(true);
+  };
+
+  const handleOpenEditPackage = (pkg: TournamentPackage) => {
+    setEditingPackage(pkg);
+    setPkgName(pkg.name);
+    setPkgPrice(String(pkg.price));
+    setPkgDuration(pkg.duration || "");
+    setPkgDescription(pkg.description || "");
+    setPkgIsActive(pkg.is_active);
+    setPackageErrorMessage(null);
+    setIsPackageModalOpen(true);
+  };
+
+  const handleTogglePackageActive = async (pkg: TournamentPackage) => {
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_package",
+          id: pkg.id,
+          name: pkg.name,
+          price: pkg.price,
+          duration: pkg.duration,
+          description: pkg.description,
+          is_active: !pkg.is_active,
+          smartshell_tariff_id: pkg.smartshell_tariff_id,
+        }),
+      });
+      if (res.ok) {
+        await fetchPackages();
+      }
+    } catch (e) {
+      console.error("Failed to toggle package active:", e);
+    }
+  };
+
+  const handleDeletePackage = async (pkg: TournamentPackage) => {
+    if (!confirm(`Вы уверены, что хотите удалить пакет "${pkg.name}"?`)) return;
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete_package",
+          id: pkg.id,
+        }),
+      });
+      if (res.ok) {
+        await fetchPackages();
+      }
+    } catch (e) {
+      console.error("Failed to delete package:", e);
+    }
+  };
+
+  const handleSubmitPackage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pkgName.trim()) {
+      setPackageErrorMessage("Укажите название пакета");
+      return;
+    }
+    const numPrice = parseFloat(pkgPrice);
+    if (isNaN(numPrice) || numPrice < 0) {
+      setPackageErrorMessage("Укажите корректную стоимость");
+      return;
+    }
+
+    setIsPackageSubmitting(true);
+    setPackageErrorMessage(null);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_package",
+          id: editingPackage?.id,
+          name: pkgName.trim(),
+          price: numPrice,
+          duration: pkgDuration.trim() || undefined,
+          description: pkgDescription.trim() || undefined,
+          is_active: pkgIsActive,
+          smartshell_tariff_id: editingPackage?.smartshell_tariff_id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPackageErrorMessage(data.error || "Ошибка сохранения пакета");
+        return;
+      }
+      setIsPackageModalOpen(false);
+      await fetchPackages();
+    } catch (err) {
+      setPackageErrorMessage("Ошибка сети при сохранении пакета");
+    } finally {
+      setIsPackageSubmitting(false);
+    }
+  };
+
+  const handleOpenImportModal = () => {
+    setSelectedTariffIds(smartshellTariffs.map((t) => t.id));
+    setIsImportModalOpen(true);
+  };
+
+  const handleImportSmartshell = async () => {
+    if (selectedTariffIds.length === 0) {
+      alert("Выберите хотя бы один тариф для импорта");
+      return;
+    }
+    const tariffsToImport = smartshellTariffs
+      .filter((t) => selectedTariffIds.includes(t.id))
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        duration: t.duration,
+        price: 0,
+        description: t.description || undefined,
+      }));
+
+    setIsImporting(true);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "import_smartshell_packages",
+          tariffs: tariffsToImport,
+        }),
+      });
+      if (res.ok) {
+        setIsImportModalOpen(false);
+        await fetchPackages();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Не удалось импортировать тарифы");
+      }
+    } catch (e) {
+      console.error("Failed to import tariffs:", e);
+      alert("Ошибка сети при импорте тарифов");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const filteredPackages = useMemo(() => {
+    return packages.filter((pkg) => {
+      const q = packageSearch.toLowerCase().trim();
+      const matchQuery =
+        !q ||
+        pkg.name.toLowerCase().includes(q) ||
+        (pkg.duration && pkg.duration.toLowerCase().includes(q)) ||
+        (pkg.description && pkg.description.toLowerCase().includes(q));
+
+      if (packageFilter === "active" && !pkg.is_active) return false;
+      if (packageFilter === "inactive" && pkg.is_active) return false;
+
+      return matchQuery;
+    });
+  }, [packages, packageSearch, packageFilter]);
+
   // Filtered disciplines
   const filteredDisciplines = useMemo(() => {
     return disciplines.filter((d) => {
@@ -208,12 +445,65 @@ export function TournamentSettingsTab({ clubId }: TournamentSettingsTabProps) {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Top Banner & Actions */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1.5">
-          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 uppercase">
-            Настройки дисциплин
-          </h2>
+      {/* Settings Sub-Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-4 overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => setSettingsSubTab("disciplines")}
+          className={cn(
+            "flex items-center gap-2.5 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap",
+            settingsSubTab === "disciplines"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200/60"
+          )}
+        >
+          <Gamepad2 className="w-4 h-4" />
+          <span>Дисциплины</span>
+          <span
+            className={cn(
+              "text-[10px] px-2 py-0.5 rounded-full font-black",
+              settingsSubTab === "disciplines"
+                ? "bg-white/20 text-white"
+                : "bg-slate-100 text-slate-600"
+            )}
+          >
+            {disciplines.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSettingsSubTab("packages")}
+          className={cn(
+            "flex items-center gap-2.5 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap",
+            settingsSubTab === "packages"
+              ? "bg-slate-900 text-white shadow-sm"
+              : "bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200/60"
+          )}
+        >
+          <Package className="w-4 h-4" />
+          <span>Пакеты взносов</span>
+          <span
+            className={cn(
+              "text-[10px] px-2 py-0.5 rounded-full font-black",
+              settingsSubTab === "packages"
+                ? "bg-white/20 text-white"
+                : "bg-slate-100 text-slate-600"
+            )}
+          >
+            {packages.length}
+          </span>
+        </button>
+      </div>
+
+      {settingsSubTab === "disciplines" && (
+        <div className="space-y-8 animate-in fade-in duration-300">
+          {/* Top Banner & Actions */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-1.5">
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 uppercase">
+                Настройки дисциплин
+              </h2>
           <p className="text-xs sm:text-sm text-slate-500 max-w-2xl font-medium">
             Управляйте киберспортивными дисциплинами клуба. Системные дисциплины (CS2 и Dota 2)
             интегрированы с игровыми серверами, а для кастомных можно задавать свои форматы и правила.
@@ -649,6 +939,546 @@ export function TournamentSettingsTab({ clubId }: TournamentSettingsTabProps) {
           </div>
         </div>
       )}
+    </div>
+  )}
+
+  {/* PACKAGES SUB-TAB */}
+  {settingsSubTab === "packages" && (
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Top Banner & Actions */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-1.5">
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2.5 flex-wrap">
+            <span>Пакеты взносов в турниры</span>
+            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/80">
+              Клубные тарифы
+            </span>
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 max-w-2xl font-medium">
+            Настройте клубные пакеты игрового времени. При создании турнира можно указать покупку определенного пакета как обязательное условие участия (взнос).
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          {smartshellTariffs.length > 0 && (
+            <Button
+              type="button"
+              onClick={handleOpenImportModal}
+              variant="outline"
+              className="h-11 sm:h-12 rounded-2xl px-4 border-slate-200 hover:bg-slate-50 text-slate-700 font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer text-xs sm:text-sm"
+            >
+              <Download className="w-4 h-4 text-blue-600" />
+              <span>Импорт из SmartShell</span>
+              <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                {smartshellTariffs.length}
+              </span>
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            onClick={handleOpenCreatePackage}
+            className="h-11 sm:h-12 rounded-2xl px-5 bg-slate-900 text-white hover:bg-slate-800 font-bold transition-all shadow-sm shrink-0 cursor-pointer flex items-center gap-2 text-xs sm:text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Создать пакет</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+            Всего пакетов
+          </span>
+          <div className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 font-mono">
+            {packages.length}
+          </div>
+          <span className="text-[10px] text-slate-400 font-medium">
+            Сконфигурировано в клубе
+          </span>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 block">
+            Активных для взноса
+          </span>
+          <div className="text-2xl sm:text-3xl font-black text-emerald-700 mt-2 font-mono">
+            {packages.filter((p) => p.is_active).length}
+          </div>
+          <span className="text-[10px] text-slate-400 font-medium">
+            Доступно при создании турнира
+          </span>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 block">
+            Интеграция SmartShell
+          </span>
+          <div className="text-2xl sm:text-3xl font-black text-blue-700 mt-2 flex items-center gap-2 font-mono">
+            {smartshellTariffs.length > 0 ? (
+              <>
+                <span>{smartshellTariffs.length}</span>
+                <span className="text-xs font-semibold text-blue-600 font-sans">тарифов найдено</span>
+              </>
+            ) : (
+              <span className="text-base font-bold text-slate-400 font-sans">Ручной ввод</span>
+            )}
+          </div>
+          <span className="text-[10px] text-slate-400 font-medium">
+            {smartshellTariffs.length > 0
+              ? "Синхронизация с тарифами клуба"
+              : "Тарифы добавляются вручную"}
+          </span>
+        </div>
+      </div>
+
+      {/* Search & Status Filters */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Поиск пакета по названию, стоимости или описанию..."
+              value={packageSearch}
+              onChange={(e) => setPackageSearch(e.target.value)}
+              className="w-full bg-slate-50/50 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-900 transition-all font-medium"
+            />
+          </div>
+
+          <div className="flex bg-slate-100/70 p-1 rounded-xl border border-slate-200/60 overflow-x-auto shrink-0 gap-1">
+            {[
+              { id: "all", label: "Все", count: packages.length },
+              { id: "active", label: "Активные", count: packages.filter((p) => p.is_active).length },
+              { id: "inactive", label: "Отключенные", count: packages.filter((p) => !p.is_active).length },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setPackageFilter(tab.id as any)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5",
+                  packageFilter === tab.id
+                    ? "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-500 hover:text-slate-800"
+                )}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    "text-[10px] px-1.5 py-0.2 rounded-full",
+                    packageFilter === tab.id ? "bg-slate-100 text-slate-900" : "text-slate-400"
+                  )}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Packages List / Grid */}
+      {packagesLoading ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+          <span className="text-xs font-medium text-slate-500">Загрузка пакетов клуба...</span>
+        </div>
+      ) : filteredPackages.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center shadow-xs space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center mx-auto text-amber-600">
+            <Package className="w-7 h-7" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h3 className="text-base font-bold text-slate-900">
+              {packageSearch ? "Ничего не найдено" : "В клубе пока нет пакетов взносов"}
+            </h3>
+            <p className="text-xs text-slate-500 font-medium">
+              {packageSearch
+                ? "Попробуйте изменить поисковый запрос"
+                : "Добавьте пакеты (например: «Пакет 3 часа — 400 ₽»), чтобы участники могли оплачивать участие в турнирах покупкой игрового времени."}
+            </p>
+          </div>
+          {!packageSearch && (
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button
+                type="button"
+                onClick={handleOpenCreatePackage}
+                className="h-10 rounded-xl px-4 bg-slate-900 text-white font-bold text-xs cursor-pointer"
+              >
+                + Создать пакет
+              </Button>
+              {smartshellTariffs.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleOpenImportModal}
+                  className="h-10 rounded-xl px-4 text-xs font-bold cursor-pointer"
+                >
+                  Импорт из SmartShell
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredPackages.map((pkg) => (
+            <div
+              key={pkg.id}
+              className={cn(
+                "bg-white border rounded-3xl p-6 shadow-xs transition-all flex flex-col justify-between gap-5 relative overflow-hidden group hover:border-slate-300",
+                pkg.is_active ? "border-slate-200" : "border-slate-200/60 opacity-60 bg-slate-50/50"
+              )}
+            >
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 shrink-0">
+                      <Package className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900 leading-tight">
+                        {pkg.name}
+                      </h4>
+                      <span className="text-[11px] text-slate-400 font-medium block mt-0.5">
+                        {pkg.duration ? `⏱️ ${pkg.duration}` : "Длительность не указана"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {pkg.smartshell_tariff_id && (
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                        SmartShell
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        "text-[10px] font-black uppercase px-2 py-0.5 rounded-full border",
+                        pkg.is_active
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-slate-100 text-slate-500 border-slate-200"
+                      )}
+                    >
+                      {pkg.is_active ? "Активен" : "Отключен"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 flex items-baseline justify-between">
+                  <span className="text-xs font-semibold text-slate-400">Стоимость взноса:</span>
+                  <div className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+                    {pkg.price} ₽
+                  </div>
+                </div>
+
+                {pkg.description && (
+                  <p className="text-xs text-slate-500 font-normal line-clamp-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    {pkg.description}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={pkg.is_active}
+                    onCheckedChange={() => handleTogglePackageActive(pkg)}
+                  />
+                  <span className="text-[11px] font-medium text-slate-500 select-none">
+                    {pkg.is_active ? "Для турниров" : "Скрыт"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleOpenEditPackage(pkg)}
+                    className="h-8 px-2.5 text-slate-600 hover:text-slate-900 rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 mr-1" />
+                    <span>Изменить</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeletePackage(pkg)}
+                    className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 rounded-lg cursor-pointer"
+                    title="Удалить пакет"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Package Create / Edit Modal */}
+      {isPackageModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md shadow-2xl p-6 sm:p-7 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {editingPackage ? "Редактировать пакет" : "Новый пакет взноса"}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Клубный пакет игрового времени
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsPackageModalOpen(false)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {packageErrorMessage && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{packageErrorMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitPackage} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block">
+                  Название пакета *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Например: Пакет 3 часа, Пакет Ночь, 5 часов VIP"
+                  value={pkgName}
+                  onChange={(e) => setPkgName(e.target.value)}
+                  className="w-full bg-slate-50 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-slate-900 transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block">
+                    Стоимость (₽) *
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    required
+                    placeholder="400"
+                    value={pkgPrice}
+                    onChange={(e) => setPkgPrice(e.target.value)}
+                    className="w-full bg-slate-50 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-slate-900 transition-all font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block">
+                    Длительность
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="3 часа / 180 мин"
+                    value={pkgDuration}
+                    onChange={(e) => setPkgDuration(e.target.value)}
+                    className="w-full bg-slate-50 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-slate-900 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block">
+                  Описание / Условия пакета
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Например: Стандартный игровой пакет, действует на все ПК клуба..."
+                  value={pkgDescription}
+                  onChange={(e) => setPkgDescription(e.target.value)}
+                  className="w-full bg-slate-50 hover:bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-slate-900 transition-all resize-none"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">
+                    Активен для турниров
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal block">
+                    Отображать этот пакет при создании турнира
+                  </span>
+                </div>
+                <Switch checked={pkgIsActive} onCheckedChange={setPkgIsActive} />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsPackageModalOpen(false)}
+                  disabled={isPackageSubmitting}
+                  className="rounded-xl px-4 h-10 text-xs font-bold"
+                >
+                  Отмена
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isPackageSubmitting}
+                  className="rounded-xl px-5 h-10 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+                >
+                  {isPackageSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Сохранение...</span>
+                    </>
+                  ) : (
+                    <span>{editingPackage ? "Сохранить" : "Создать пакет"}</span>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SmartShell Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl p-6 sm:p-7 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+                  <Download className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Импорт тарифов из SmartShell
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Выберите тарифы для добавления в пакеты турниров
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-500 px-1">
+                <span>Доступные тарифы клуба ({smartshellTariffs.length})</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedTariffIds.length === smartshellTariffs.length) {
+                      setSelectedTariffIds([]);
+                    } else {
+                      setSelectedTariffIds(smartshellTariffs.map((t) => t.id));
+                    }
+                  }}
+                  className="text-blue-600 hover:underline cursor-pointer"
+                >
+                  {selectedTariffIds.length === smartshellTariffs.length
+                    ? "Снять выбор"
+                    : "Выбрать все"}
+                </button>
+              </div>
+
+              <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                {smartshellTariffs.map((t) => {
+                  const isSelected = selectedTariffIds.includes(t.id);
+                  const durationMin = t.duration ? Math.round(t.duration / 60) : 0;
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => {
+                        setSelectedTariffIds((prev) =>
+                          prev.includes(t.id) ? prev.filter((id) => id !== t.id) : [...prev, t.id]
+                        );
+                      }}
+                      className={cn(
+                        "p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 select-none",
+                        isSelected
+                          ? "bg-blue-50/60 border-blue-300 text-slate-900"
+                          : "bg-slate-50/50 border-slate-200/80 hover:bg-slate-50 text-slate-600"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            "w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0",
+                            isSelected
+                              ? "bg-blue-600 border-blue-600 text-white"
+                              : "border-slate-300 bg-white"
+                          )}
+                        >
+                          {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold block text-slate-900">
+                            {t.title}
+                          </span>
+                          {durationMin > 0 && (
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              ⏱️ Длительность: {durationMin} мин
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsImportModalOpen(false)}
+                disabled={isImporting}
+                className="rounded-xl px-4 h-10 text-xs font-bold"
+              >
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                onClick={handleImportSmartshell}
+                disabled={isImporting || selectedTariffIds.length === 0}
+                className="rounded-xl px-5 h-10 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Импорт...</span>
+                  </>
+                ) : (
+                  <span>Импортировать ({selectedTariffIds.length})</span>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )}
     </div>
   );
 }

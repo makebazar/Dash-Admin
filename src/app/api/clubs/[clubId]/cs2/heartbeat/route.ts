@@ -18,6 +18,9 @@ export async function POST(
     const maxInstances = body.max_instances || 4;
     const instances = JSON.stringify(body.instances || []);
     const agentId = body.agent_id || (lanIp ? `agent_${lanIp.replace(/[^a-zA-Z0-9]/g, "_")}` : "default");
+    const dotaBots = JSON.stringify(body.dota_bots || []);
+    const dotaTotalBots = typeof body.dota_total_bots === "number" ? body.dota_total_bots : (Array.isArray(body.dota_bots) ? body.dota_bots.length : 0);
+    const dotaAvailableBots = typeof body.dota_available_bots === "number" ? body.dota_available_bots : 0;
 
     // 1. Ensure required tables exist with multi-agent columns
     await query(`
@@ -29,11 +32,17 @@ export async function POST(
         base_port INT DEFAULT 27015,
         max_instances INT DEFAULT 4,
         instances_data JSONB DEFAULT '[]'::jsonb,
+        dota_bots JSONB DEFAULT '[]'::jsonb,
+        dota_total_bots INT DEFAULT 0,
+        dota_available_bots INT DEFAULT 0,
         last_heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         PRIMARY KEY (club_id, agent_id)
       );
       ALTER TABLE club_cs2_agents ADD COLUMN IF NOT EXISTS agent_id VARCHAR(64) DEFAULT 'default';
+      ALTER TABLE club_cs2_agents ADD COLUMN IF NOT EXISTS dota_bots JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE club_cs2_agents ADD COLUMN IF NOT EXISTS dota_total_bots INT DEFAULT 0;
+      ALTER TABLE club_cs2_agents ADD COLUMN IF NOT EXISTS dota_available_bots INT DEFAULT 0;
 
       CREATE TABLE IF NOT EXISTS club_cs2_matches (
         id VARCHAR(64) PRIMARY KEY,
@@ -84,17 +93,20 @@ export async function POST(
 
     // 2. Upsert agent state
     await query(
-      `INSERT INTO club_cs2_agents (club_id, agent_id, status, lan_ip, base_port, max_instances, instances_data, last_heartbeat, updated_at)
-       VALUES ($1, $2, 'online', $3, $4, $5, $6::jsonb, NOW(), NOW())
+      `INSERT INTO club_cs2_agents (club_id, agent_id, status, lan_ip, base_port, max_instances, instances_data, dota_bots, dota_total_bots, dota_available_bots, last_heartbeat, updated_at)
+       VALUES ($1, $2, 'online', $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, NOW(), NOW())
        ON CONFLICT (club_id, agent_id) DO UPDATE SET
          status = 'online',
          lan_ip = EXCLUDED.lan_ip,
          base_port = EXCLUDED.base_port,
          max_instances = EXCLUDED.max_instances,
          instances_data = EXCLUDED.instances_data,
+         dota_bots = EXCLUDED.dota_bots,
+         dota_total_bots = EXCLUDED.dota_total_bots,
+         dota_available_bots = EXCLUDED.dota_available_bots,
          last_heartbeat = NOW(),
          updated_at = NOW()`,
-      [parsedClubId, agentId, lanIp, basePort, maxInstances, instances]
+      [parsedClubId, agentId, lanIp, basePort, maxInstances, instances, dotaBots, dotaTotalBots, dotaAvailableBots]
     );
 
     // Clean up old stale agent rows for this club (> 60 seconds inactive) so queries never pick ghost records

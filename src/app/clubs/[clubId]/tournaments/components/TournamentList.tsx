@@ -15,8 +15,15 @@ export function TournamentList({ tournaments, onSelect }: TournamentListProps) {
 
   const filteredTournaments = useMemo(() => {
     return tournaments.filter((t) => {
-      if (statusFilter !== "ALL" && t.status !== statusFilter) {
-        return false;
+      if (statusFilter !== "ALL") {
+        const tStatus = String(t.status || "").toUpperCase();
+        if (statusFilter === "COMPLETED") {
+          if (tStatus !== "COMPLETED" && tStatus !== "FINISHED") return false;
+        } else if (statusFilter === "ACTIVE") {
+          if (tStatus !== "ACTIVE" && tStatus !== "LIVE" && tStatus !== "IN_PROGRESS") return false;
+        } else if (tStatus !== statusFilter) {
+          return false;
+        }
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -40,8 +47,11 @@ export function TournamentList({ tournaments, onSelect }: TournamentListProps) {
   };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    const s = String(status || "").toUpperCase();
+    switch (s) {
       case "ACTIVE":
+      case "LIVE":
+      case "IN_PROGRESS":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -63,6 +73,7 @@ export function TournamentList({ tournaments, onSelect }: TournamentListProps) {
           </span>
         );
       case "COMPLETED":
+      case "FINISHED":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
@@ -70,10 +81,19 @@ export function TournamentList({ tournaments, onSelect }: TournamentListProps) {
           </span>
         );
       case "CANCELLED":
+      case "CANCELED":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-500">
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
             Отменен
+          </span>
+        );
+      case "PENDING":
+      case "SCHEDULED":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+            Ожидает начала
           </span>
         );
       default:
@@ -147,7 +167,10 @@ export function TournamentList({ tournaments, onSelect }: TournamentListProps) {
           {/* Mobile Card List (md:hidden) */}
           <div className="md:hidden space-y-3">
             {filteredTournaments.map((t) => {
-              const fee = Number(t.entry_fee) > 0 ? `${t.entry_fee} ₽` : "Бесплатно";
+              const isPackage = t.config?.entryFeeMode === "package";
+              const fee = isPackage
+                ? (t.config?.packageName ? `📦 ${t.config.packageName} (${t.entry_fee || 0} ₽)` : `Пакет клуба (${t.entry_fee || 0} ₽)`)
+                : (Number(t.entry_fee) > 0 ? `${t.entry_fee} ₽` : "Бесплатно");
               const startsText = t.starts_at
                 ? new Date(t.starts_at).toLocaleDateString("ru-RU", {
                     day: "numeric",
@@ -223,7 +246,10 @@ export function TournamentList({ tournaments, onSelect }: TournamentListProps) {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredTournaments.map((t) => {
-                    const fee = Number(t.entry_fee) > 0 ? `${t.entry_fee} ₽` : "Бесплатно";
+                    const isPackage = t.config?.entryFeeMode === "package";
+                    const fee = isPackage
+                      ? (t.config?.packageName ? `📦 ${t.config.packageName} (${t.entry_fee || 0} ₽)` : `Пакет клуба (${t.entry_fee || 0} ₽)`)
+                      : (Number(t.entry_fee) > 0 ? `${t.entry_fee} ₽` : "Бесплатно");
                     const startsText = t.starts_at
                       ? `${new Date(t.starts_at).toLocaleDateString("ru-RU", {
                           day: "numeric",

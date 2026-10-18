@@ -91,8 +91,11 @@ export function TournamentDetailHeader({
     tournament.status === "REGISTRATION" || tournament.status === "DRAFT";
 
   const getStatusBadge = () => {
-    switch (tournament.status) {
+    const s = String(tournament.status || "").toUpperCase();
+    switch (s) {
       case "ACTIVE":
+      case "LIVE":
+      case "IN_PROGRESS":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600">
             <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
@@ -114,6 +117,7 @@ export function TournamentDetailHeader({
           </span>
         );
       case "COMPLETED":
+      case "FINISHED":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
             <span className="w-2 h-2 rounded-full bg-slate-400" />
@@ -121,10 +125,19 @@ export function TournamentDetailHeader({
           </span>
         );
       case "CANCELLED":
+      case "CANCELED":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400">
             <span className="w-2 h-2 rounded-full bg-slate-400" />
             <span>Отменен</span>
+          </span>
+        );
+      case "PENDING":
+      case "SCHEDULED":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+            <span className="w-2 h-2 rounded-full bg-slate-400" />
+            <span>Ожидает начала</span>
           </span>
         );
       default:

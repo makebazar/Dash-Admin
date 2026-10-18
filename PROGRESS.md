@@ -1,6 +1,7 @@
-# Progress: Интеграция DashMatch с Турнирами
+# Marketing Analytics Build Progress
 
-- [x] **01-tournaments-backend-dashmatch**: Backend API поддержка DashMatch для турниров (`done`)
-- [x] **02-match-control-modal-dashmatch**: Интеграция DashMatch в MatchControlModal (`done`)
-- [x] **03-tournament-header-agent-status**: Индикатор статуса DashMatch в заголовке и сетке турнира (`done`)
-- [x] **04-testing-and-validation**: Сквозное тестирование и валидация (`done`)
+- [x] 01: База данных срезов и серверный API для сохранения периодов (`done`)
+- [x] 02: Автоопределение периода из отчетов и сохранение/выбор срезов (`done`)
+- [x] 03: Экономика зон и ПК со связкой с поломками/чистками из оборудования (`done`)
+- [x] 04: Центр удержания: детектор оттока, потерянная выручка и миграция активности (`done`)
+- [x] 05: Сквозная навигация, синхронизация активного среза и финальная проверка (`done`)

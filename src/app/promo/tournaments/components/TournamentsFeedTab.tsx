@@ -1028,9 +1028,11 @@ export function TournamentsFeedTab({
     if (statusFilter !== "all") {
       if (statusFilter === "registration") {
         if (t.status !== "REGISTRATION") return false;
+      } else if (statusFilter === "finished") {
+        if (t.status !== "FINISHED" && t.status !== "COMPLETED") return false;
       } else {
-        const statusMap: Record<string, string> = { active: "ACTIVE", finished: "FINISHED" };
-        if (t.status !== statusMap[statusFilter] && (statusFilter !== "finished" || t.status !== "COMPLETED")) return false;
+        const statusMap: Record<string, string> = { active: "ACTIVE" };
+        if (t.status !== statusMap[statusFilter]) return false;
       }
     }
     if (formatFilter !== "all") {

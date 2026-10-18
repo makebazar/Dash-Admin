@@ -30,6 +30,20 @@ async function ensureTournamentsSchema(client: any) {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS tournament_packages (
+        id SERIAL PRIMARY KEY,
+        club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+        duration VARCHAR(100),
+        description TEXT,
+        smartshell_tariff_id INTEGER,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_tournament_packages_club_id ON tournament_packages(club_id);
+
       CREATE TABLE IF NOT EXISTS tournament_disciplines (
         id SERIAL PRIMARY KEY,
         club_id INTEGER NOT NULL,
@@ -273,6 +287,35 @@ export async function GET(
       queryStr += ` ORDER BY name ASC`;
       const templatesRes = await client.query(queryStr, paramsArr);
       return NextResponse.json({ templates: templatesRes.rows });
+    }
+
+    // 0. Fetch tournament packages (and available SmartShell tariffs)
+    if (action === "packages") {
+      const packagesRes = await client.query(
+        `SELECT id, club_id, name, price, duration, description, smartshell_tariff_id, is_active, created_at, updated_at
+         FROM tournament_packages
+         WHERE club_id = $1
+         ORDER BY is_active DESC, price ASC, id ASC`,
+        [parsedClubId]
+      );
+
+      // Fetch SmartShell tariffs if configured
+      let smartshellTariffs: Array<{ id: number; title: string; duration?: number; is_active?: boolean; description?: string }> = [];
+      try {
+        const { getSmartShellClientForClub } = await import("@/lib/smartshell/shift-sync");
+        const ssClient = await getSmartShellClientForClub(parsedClubId);
+        if (ssClient) {
+          const rawTariffs = await ssClient.getTariffs();
+          smartshellTariffs = (rawTariffs || []).filter((t: any) => t.is_active !== false);
+        }
+      } catch (ssErr) {
+        // SmartShell integration not configured or errored - non fatal
+      }
+
+      return NextResponse.json({
+        packages: packagesRes.rows,
+        smartshellTariffs,
+      });
     }
 
     // 0.1 Fetch participants of the club
@@ -834,6 +877,94 @@ export async function POST(
         [id, parsedClubId]
       );
       return NextResponse.json({ success: true });
+    }
+
+    // Action: SAVE TOURNAMENT PACKAGE
+    if (action === "save_package") {
+      const { id, name, price, duration, description, is_active, smartshell_tariff_id } = body;
+      if (!name || !name.trim()) {
+        return NextResponse.json({ error: "Укажите название пакета" }, { status: 400 });
+      }
+      const numPrice = parseFloat(price);
+      if (isNaN(numPrice) || numPrice < 0) {
+        return NextResponse.json({ error: "Укажите корректную стоимость пакета" }, { status: 400 });
+      }
+
+      if (id) {
+        const updateRes = await client.query(
+          `UPDATE tournament_packages
+           SET name = $1, price = $2, duration = $3, description = $4, is_active = $5,
+               smartshell_tariff_id = $6, updated_at = NOW()
+           WHERE id = $7 AND club_id = $8
+           RETURNING *`,
+          [
+            name.trim(),
+            numPrice,
+            duration ? String(duration).trim() : null,
+            description ? String(description).trim() : null,
+            is_active !== undefined ? Boolean(is_active) : true,
+            smartshell_tariff_id ? parseInt(smartshell_tariff_id) : null,
+            id,
+            parsedClubId
+          ]
+        );
+        return NextResponse.json({ success: true, package: updateRes.rows[0] });
+      } else {
+        const insertRes = await client.query(
+          `INSERT INTO tournament_packages (club_id, name, price, duration, description, is_active, smartshell_tariff_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING *`,
+          [
+            parsedClubId,
+            name.trim(),
+            numPrice,
+            duration ? String(duration).trim() : null,
+            description ? String(description).trim() : null,
+            is_active !== undefined ? Boolean(is_active) : true,
+            smartshell_tariff_id ? parseInt(smartshell_tariff_id) : null
+          ]
+        );
+        return NextResponse.json({ success: true, package: insertRes.rows[0] });
+      }
+    }
+
+    // Action: DELETE TOURNAMENT PACKAGE
+    if (action === "delete_package") {
+      const { id } = body;
+      if (!id) {
+        return NextResponse.json({ error: "Не указан ID пакета" }, { status: 400 });
+      }
+      await client.query(
+        `DELETE FROM tournament_packages WHERE id = $1 AND club_id = $2`,
+        [id, parsedClubId]
+      );
+      return NextResponse.json({ success: true });
+    }
+
+    // Action: IMPORT SMARTSHELL PACKAGES
+    if (action === "import_smartshell_packages") {
+      const { tariffs } = body; // Array of { id, title, duration, price? }
+      let imported = 0;
+      if (Array.isArray(tariffs) && tariffs.length > 0) {
+        for (const t of tariffs) {
+          if (!t.title) continue;
+          const durationStr = t.duration ? `${Math.round(t.duration / 60)} мин` : undefined;
+          await client.query(
+            `INSERT INTO tournament_packages (club_id, name, price, duration, description, smartshell_tariff_id, is_active)
+             VALUES ($1, $2, $3, $4, $5, $6, TRUE)`,
+            [
+              parsedClubId,
+              t.title.trim(),
+              parseFloat(t.price || 0) || 0,
+              durationStr,
+              t.description || "Тариф импортирован из SmartShell",
+              t.id ? parseInt(t.id) : null
+            ]
+          );
+          imported++;
+        }
+      }
+      return NextResponse.json({ success: true, importedCount: imported });
     }
 
     // Action: SAVE PARTICIPANT

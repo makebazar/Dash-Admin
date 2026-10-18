@@ -32,6 +32,7 @@ import {
   Swords,
   Gamepad2,
   Trophy,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -244,6 +245,15 @@ export function ClubSidebarContent({
       label: "Турниры",
       icon: (
         <Trophy className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
+      ),
+      visible:
+        !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
+    },
+    {
+      href: `/clubs/${clubId}/marketing`,
+      label: "Маркетинг",
+      icon: (
+        <Megaphone className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
       ),
       visible:
         !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
