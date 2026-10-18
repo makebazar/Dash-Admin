@@ -26,6 +26,13 @@ import {
   ChevronUp,
   ChevronDown,
   Gamepad2,
+  Moon,
+  Sun,
+  Sunrise,
+  Sunset,
+  ChevronLeft,
+  ChevronRight,
+  ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ClubAnalytics, type ClientProfile, type DateFilter, getAvailableMonths, type MonthOption } from "./segmentation";
@@ -67,30 +74,31 @@ interface ColumnMeta {
   align: "left" | "right";
   sortable: boolean;
   defaultVisible: boolean;
+  minWidth: string;
 }
 
 const ALL_COLUMNS: ColumnMeta[] = [
-  { id: "name", label: "Клиент", align: "left", sortable: true, defaultVisible: true },
-  { id: "phone", label: "Телефон", align: "left", sortable: false, defaultVisible: true },
-  { id: "spent", label: "Реальная выручка", align: "right", sortable: true, defaultVisible: true },
-  { id: "preferredTime", label: "Время визитов", align: "left", sortable: true, defaultVisible: true },
-  { id: "favoriteZone", label: "Любимая зона", align: "left", sortable: true, defaultVisible: true },
-  { id: "favoriteTariff", label: "Любимый тариф", align: "left", sortable: true, defaultVisible: true },
-  { id: "favoriteSeat", label: "Любимый ПК/ТВ", align: "left", sortable: true, defaultVisible: false },
-  { id: "packageSpentRub", label: "Тарифы (₽)", align: "right", sortable: true, defaultVisible: false },
-  { id: "packageSpentBonus", label: "Бонусы на тарифы", align: "right", sortable: true, defaultVisible: false },
-  { id: "topupAdmin", label: "Касса (₽)", align: "right", sortable: true, defaultVisible: false },
-  { id: "topupLK", label: "Через ЛК (₽)", align: "right", sortable: true, defaultVisible: false },
-  { id: "topupApp", label: "Моб. прил. (₽)", align: "right", sortable: true, defaultVisible: false },
-  { id: "hourlyYield", label: "Доходность (₽/ч)", align: "right", sortable: true, defaultVisible: true },
-  { id: "bonusAccrued", label: "Выдано бонусов", align: "right", sortable: true, defaultVisible: true },
-  { id: "bonusSpent", label: "Списано бонусов", align: "right", sortable: true, defaultVisible: true },
-  { id: "bonusBalance", label: "Бонусный баланс", align: "right", sortable: true, defaultVisible: true },
-  { id: "visits", label: "Визитов", align: "right", sortable: true, defaultVisible: true },
-  { id: "hours", label: "Часов в ПК", align: "right", sortable: true, defaultVisible: true },
-  { id: "balance", label: "Баланс (Руб)", align: "right", sortable: true, defaultVisible: true },
-  { id: "days", label: "Последний визит", align: "left", sortable: true, defaultVisible: true },
-  { id: "category", label: "Категория", align: "left", sortable: false, defaultVisible: true },
+  { id: "name", label: "Клиент", align: "left", sortable: true, defaultVisible: true, minWidth: "min-w-[190px]" },
+  { id: "phone", label: "Телефон", align: "left", sortable: false, defaultVisible: true, minWidth: "min-w-[130px]" },
+  { id: "spent", label: "Реальная выручка", align: "right", sortable: true, defaultVisible: true, minWidth: "min-w-[150px]" },
+  { id: "preferredTime", label: "Время визитов", align: "left", sortable: true, defaultVisible: true, minWidth: "min-w-[160px]" },
+  { id: "favoriteZone", label: "Любимая зона", align: "left", sortable: true, defaultVisible: true, minWidth: "min-w-[130px]" },
+  { id: "favoriteTariff", label: "Любимый тариф", align: "left", sortable: true, defaultVisible: true, minWidth: "min-w-[175px]" },
+  { id: "favoriteSeat", label: "Любимый ПК/ТВ", align: "left", sortable: true, defaultVisible: false, minWidth: "min-w-[110px]" },
+  { id: "packageSpentRub", label: "Тарифы (₽)", align: "right", sortable: true, defaultVisible: false, minWidth: "min-w-[120px]" },
+  { id: "packageSpentBonus", label: "Бонусы на тарифы", align: "right", sortable: true, defaultVisible: false, minWidth: "min-w-[135px]" },
+  { id: "topupAdmin", label: "Касса (₽)", align: "right", sortable: true, defaultVisible: false, minWidth: "min-w-[115px]" },
+  { id: "topupLK", label: "Через ЛК (₽)", align: "right", sortable: true, defaultVisible: false, minWidth: "min-w-[115px]" },
+  { id: "topupApp", label: "Моб. прил. (₽)", align: "right", sortable: true, defaultVisible: false, minWidth: "min-w-[125px]" },
+  { id: "hourlyYield", label: "Доходность (₽/ч)", align: "right", sortable: true, defaultVisible: true, minWidth: "min-w-[130px]" },
+  { id: "bonusAccrued", label: "Выдано бонусов", align: "right", sortable: true, defaultVisible: true, minWidth: "min-w-[135px]" },
+  { id: "bonusSpent", label: "Списано бонусов", align: "right", sortable: true, defaultVisible: true, minWidth: "min-w-[130px]" },
+  { id: "bonusBalance", label: "Бонусный баланс", align: "right", sortable: true, defaultVisible: true, minWidth: "min-w-[130px]" },
+  { id: "visits", label: "Визитов", align: "right", sortable: true, defaultVisible: true, minWidth: "min-w-[100px]" },
+  { id: "hours", label: "Часов в ПК", align: "right", sortable: true, defaultVisible: true, minWidth: "min-w-[115px]" },
+  { id: "balance", label: "Баланс (Руб)", align: "right", sortable: true, defaultVisible: true, minWidth: "min-w-[120px]" },
+  { id: "days", label: "Последний визит", align: "left", sortable: true, defaultVisible: true, minWidth: "min-w-[150px]" },
+  { id: "category", label: "Категория", align: "left", sortable: false, defaultVisible: true, minWidth: "min-w-[125px]" },
 ];
 
 const DEFAULT_ORDER: ColumnId[] = ALL_COLUMNS.map((c) => c.id);
@@ -207,6 +215,14 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
   const colSettingsRef = useRef<HTMLDivElement>(null);
   const sortSettingsRef = useRef<HTMLDivElement>(null);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  const scrollTable = (direction: "left" | "right") => {
+    if (tableContainerRef.current) {
+      const amount = direction === "left" ? -450 : 450;
+      tableContainerRef.current.scrollBy({ left: amount, behavior: "smooth" });
+    }
+  };
 
   // Close popovers on click outside
   useEffect(() => {
@@ -789,25 +805,29 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
             <div className="flex items-center gap-1 border-l pl-3 border-slate-200">
               <span className="text-[11px] text-slate-400 font-medium mr-0.5">Время:</span>
               {[
-                { id: "all", label: "Все" },
-                { id: "night", label: "🌙 Ночь" },
-                { id: "evening", label: "🌆 Вечер" },
-                { id: "day", label: "☀️ День" },
-                { id: "morning", label: "🌅 Утро" },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => setSelectedTime(opt.id)}
-                  className={cn(
-                    "px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
-                    selectedTime === opt.id
-                      ? "bg-slate-900 text-white font-semibold"
-                      : "text-slate-600 hover:bg-slate-100"
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
+                { id: "all", label: "Все", icon: null, color: "" },
+                { id: "night", label: "Ночь", icon: Moon, color: "text-indigo-500" },
+                { id: "evening", label: "Вечер", icon: Sunset, color: "text-purple-500" },
+                { id: "day", label: "День", icon: Sun, color: "text-amber-500" },
+                { id: "morning", label: "Утро", icon: Sunrise, color: "text-emerald-500" },
+              ].map((opt) => {
+                const Icon = opt.icon;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => setSelectedTime(opt.id)}
+                    className={cn(
+                      "px-2 py-1 rounded-md text-[11px] font-medium transition-colors flex items-center gap-1",
+                      selectedTime === opt.id
+                        ? "bg-slate-900 text-white font-semibold"
+                        : "text-slate-600 hover:bg-slate-100"
+                    )}
+                  >
+                    {Icon && <Icon className={cn("w-3 h-3 shrink-0", selectedTime === opt.id ? "text-white" : opt.color)} />}
+                    <span>{opt.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1009,30 +1029,57 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
               );
             })}
           </div>
-          <span className="text-[11px] text-slate-400 hidden sm:inline">
-            Совет: зажмите <b>Shift</b> и кликните по колонке для добавления уровня
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-slate-400 hidden lg:inline">
+              Совет: зажмите <b>Shift</b> и кликните по колонке для мульти-сортировки
+            </span>
+            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => scrollTable("left")}
+                className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
+                title="Прокрутить таблицу влево"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-[10px] text-slate-400 px-1 select-none flex items-center gap-1 font-medium">
+                <ArrowLeftRight className="w-2.5 h-2.5" />
+                <span>Прокрутка</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => scrollTable("right")}
+                className="p-1 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
+                title="Прокрутить таблицу вправо"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 text-slate-500 border-b border-slate-200">
+        <div ref={tableContainerRef} className="overflow-x-auto relative scrollbar-thin">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-slate-50/90 text-slate-500 border-b border-slate-200">
               <tr>
                 {activeColumns.map((col) => {
                   const sortIdx = sortRules.findIndex((r) => r.key === col.id);
                   const isSorted = sortIdx !== -1;
                   const currentRule = isSorted ? sortRules[sortIdx] : null;
+                  const isNameCol = col.id === "name";
 
                   return (
                     <th
                       key={col.id}
                       onClick={(e) => col.sortable && handleHeaderClick(col.id, e.shiftKey)}
                       className={cn(
-                        "py-3 px-3.5 text-xs font-semibold select-none",
+                        "py-3 px-3.5 text-xs font-semibold select-none whitespace-nowrap",
+                        col.minWidth,
                         col.align === "right" ? "text-right" : "text-left",
                         col.sortable ? "cursor-pointer hover:text-slate-900 transition-colors" : "",
-                        isSorted ? "text-slate-900 bg-slate-100/50" : ""
+                        isSorted ? "text-slate-900 bg-slate-100/70" : "",
+                        isNameCol ? "sticky left-0 z-20 bg-slate-50 border-r border-slate-200/80 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]" : ""
                       )}
                     >
                       <div className={cn("inline-flex items-center gap-1", col.align === "right" ? "justify-end" : "justify-start")}>
@@ -1094,27 +1141,30 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
                 return (
                   <tr
                     key={client.phone + idx}
-                    className="hover:bg-slate-50/70 transition-colors"
+                    className="group hover:bg-slate-50/70 transition-colors"
                   >
                     {activeColumns.map((col) => {
                       switch (col.id) {
                         case "name":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 font-medium text-slate-900">
+                            <td
+                              key={col.id}
+                              className="py-3 px-3.5 font-medium text-slate-900 whitespace-nowrap sticky left-0 z-10 bg-white group-hover:bg-slate-50 border-r border-slate-200/80 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]"
+                            >
                               {client.name || "Гость"}
                             </td>
                           );
 
                         case "phone":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 font-mono text-[11px] text-slate-500 tabular-nums">
+                            <td key={col.id} className="py-3 px-3.5 font-mono text-[11px] text-slate-500 tabular-nums whitespace-nowrap">
                               {client.phone ? `+7 ${client.phone}` : "—"}
                             </td>
                           );
 
                         case "spent":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums whitespace-nowrap">
                               {client.totalSpent > 0 ? (
                                 <div title={channelTooltip}>
                                   <span className="font-semibold text-slate-900">
@@ -1134,22 +1184,26 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "preferredTime":
                           return (
-                            <td key={col.id} className="py-3 px-3.5">
+                            <td key={col.id} className="py-3 px-3.5 whitespace-nowrap">
                               {client.preferredTime === "night" ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                  🌙 Ночь (22–06)
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-indigo-50/80 text-indigo-700 border border-indigo-200/60">
+                                  <Moon className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                  <span>Ночь <span className="text-[10px] text-indigo-500/80 font-normal">(22–06)</span></span>
                                 </span>
                               ) : client.preferredTime === "evening" ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                                  🌆 Вечер (17–22)
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-purple-50/80 text-purple-700 border border-purple-200/60">
+                                  <Sunset className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                                  <span>Вечер <span className="text-[10px] text-purple-500/80 font-normal">(17–22)</span></span>
                                 </span>
                               ) : client.preferredTime === "day" ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
-                                  ☀️ День (12–17)
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-amber-50/80 text-amber-700 border border-amber-200/60">
+                                  <Sun className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                  <span>День <span className="text-[10px] text-amber-500/80 font-normal">(12–17)</span></span>
                                 </span>
                               ) : client.preferredTime === "morning" ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                  🌅 Утро (06–12)
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50/80 text-emerald-700 border border-emerald-200/60">
+                                  <Sunrise className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                  <span>Утро <span className="text-[10px] text-emerald-500/80 font-normal">(06–12)</span></span>
                                 </span>
                               ) : (
                                 <span className="text-slate-300 text-xs">—</span>
@@ -1159,28 +1213,28 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "topupAdmin":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-slate-700">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-slate-700 whitespace-nowrap">
                               {adminVal > 0 ? `${Math.round(adminVal).toLocaleString("ru")} ₽` : <span className="text-slate-300">0 ₽</span>}
                             </td>
                           );
 
                         case "topupLK":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-slate-700">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-slate-700 whitespace-nowrap">
                               {lkVal > 0 ? `${Math.round(lkVal).toLocaleString("ru")} ₽` : <span className="text-slate-300">0 ₽</span>}
                             </td>
                           );
 
                         case "topupApp":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-slate-700">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-slate-700 whitespace-nowrap">
                               {appVal > 0 ? `${Math.round(appVal).toLocaleString("ru")} ₽` : <span className="text-slate-300">0 ₽</span>}
                             </td>
                           );
 
                         case "hourlyYield":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums whitespace-nowrap">
                               {client.hourlyYield !== undefined ? (
                                 <span className={cn(
                                   "font-semibold",
@@ -1200,7 +1254,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "favoriteZone":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-xs">
+                            <td key={col.id} className="py-3 px-3.5 text-xs whitespace-nowrap">
                               {client.favoriteZone ? (
                                 <span className="font-medium text-slate-800">
                                   {client.favoriteZone}
@@ -1213,7 +1267,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "favoriteTariff":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-xs text-slate-700">
+                            <td key={col.id} className="py-3 px-3.5 text-xs text-slate-700 whitespace-nowrap">
                               {client.favoriteTariff ? (
                                 <div className="flex items-center gap-1.5">
                                   <span className="font-medium text-slate-800">{client.favoriteTariff}</span>
@@ -1229,14 +1283,14 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "favoriteSeat":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 font-mono text-xs text-slate-700">
+                            <td key={col.id} className="py-3 px-3.5 font-mono text-xs text-slate-700 whitespace-nowrap">
                               {client.favoriteSeat || <span className="text-slate-300">—</span>}
                             </td>
                           );
 
                         case "packageSpentRub":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-slate-800">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-slate-800 whitespace-nowrap">
                               {client.packageSpentRub !== undefined && client.packageSpentRub > 0
                                 ? `${Math.round(client.packageSpentRub).toLocaleString("ru")} ₽`
                                 : <span className="text-slate-300">—</span>}
@@ -1245,7 +1299,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "packageSpentBonus":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-amber-700">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium text-amber-700 whitespace-nowrap">
                               {client.packageSpentBonus !== undefined && client.packageSpentBonus > 0
                                 ? `${Math.round(client.packageSpentBonus).toLocaleString("ru")} Б`
                                 : <span className="text-slate-300">—</span>}
@@ -1254,7 +1308,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "bonusAccrued":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums whitespace-nowrap">
                               {client.bonusAccrued > 0 ? (
                                 <div>
                                   <span className="font-medium text-amber-700">
@@ -1277,7 +1331,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "bonusSpent":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums whitespace-nowrap">
                               {client.bonusSpent > 0 ? (
                                 <span className="text-slate-700 font-medium">
                                   {Math.round(client.bonusSpent).toLocaleString("ru")} Б
@@ -1290,7 +1344,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "bonusBalance":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums whitespace-nowrap">
                               {client.bonusBalance > 0 ? (
                                 <span className="font-semibold text-slate-800">
                                   {Math.round(client.bonusBalance).toLocaleString("ru")} Б
@@ -1303,7 +1357,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "visits":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums whitespace-nowrap">
                               {client.visits !== undefined ? (
                                 <span className="font-medium text-slate-800">
                                   {client.visits} виз.
@@ -1318,7 +1372,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "hours":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums whitespace-nowrap">
                               {client.playedHours !== undefined ? (
                                 <div>
                                   <span className="font-medium text-slate-900">
@@ -1338,7 +1392,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "balance":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium">
+                            <td key={col.id} className="py-3 px-3.5 text-right tabular-nums font-medium whitespace-nowrap">
                               {client.balance > 0 ? (
                                 <span className="text-slate-900">
                                   {Math.round(client.balance).toLocaleString("ru")} ₽
@@ -1351,7 +1405,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "days":
                           return (
-                            <td key={col.id} className="py-3 px-3.5 tabular-nums text-slate-600">
+                            <td key={col.id} className="py-3 px-3.5 tabular-nums text-slate-600 whitespace-nowrap">
                               <div>{formatDate(client.lastAuth)}</div>
                               {client.daysSince !== null && (
                                 <span className={cn(
@@ -1372,7 +1426,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
                         case "category":
                           return (
-                            <td key={col.id} className="py-3 px-3.5">
+                            <td key={col.id} className="py-3 px-3.5 whitespace-nowrap">
                               {client.valueCategory === "diamond" && (
                                 <span className="inline-flex items-center gap-1.5 text-amber-700 font-semibold text-[11px]">
                                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
