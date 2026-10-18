@@ -165,6 +165,28 @@ export default function MarketingPage() {
 
         const isWhale = p.isWhale || totalSpent >= 2000;
 
+        let preferredTime: ClientProfile["preferredTime"] = p.preferredTime;
+        if (!preferredTime) {
+          if (p.gamerPersona === "night_owl" || (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("ночь"))) {
+            preferredTime = "night";
+          } else if (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("утро")) {
+            preferredTime = "morning";
+          } else if (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("день")) {
+            preferredTime = "day";
+          } else if (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("вечер")) {
+            preferredTime = "evening";
+          } else if (p.lastAuth) {
+            const d = new Date(p.lastAuth);
+            if (!isNaN(d.getTime())) {
+              const h = d.getHours();
+              if (h >= 22 || h < 6) preferredTime = "night";
+              else if (h >= 6 && h < 12) preferredTime = "morning";
+              else if (h >= 12 && h < 17) preferredTime = "day";
+              else preferredTime = "evening";
+            }
+          }
+        }
+
         return {
           ...p,
           totalSpent,
@@ -178,18 +200,20 @@ export default function MarketingPage() {
           cashShare,
           valueCategory,
           isWhale,
+          preferredTime,
           lastAuth: p.lastAuth ? new Date(p.lastAuth) : null,
           regDate: p.regDate ? new Date(p.regDate) : null,
         };
       });
 
       // Reconstruct zone stats from PC stats if available
-      const zoneMap = new Map<string, { rub: number; sessions: number }>();
+      const zoneMap = new Map<string, { rub: number; bonus: number; sessions: number }>();
       let totalRub = sm.totalRevenueInLog || 0;
       for (const p of pc) {
-        const existing = zoneMap.get(p.zone) || { rub: 0, sessions: 0 };
-        existing.rub += p.rub;
-        existing.sessions += p.sessions;
+        const existing = zoneMap.get(p.zone) || { rub: 0, bonus: 0, sessions: 0 };
+        existing.rub += (p.rub || 0);
+        existing.bonus += (p.bonus || 0);
+        existing.sessions += (p.sessions || 0);
         zoneMap.set(p.zone, existing);
       }
 
@@ -197,7 +221,7 @@ export default function MarketingPage() {
         zone,
         sessions: d.sessions,
         rub: d.rub,
-        bonus: 0,
+        bonus: d.bonus,
         percentOfRub: totalRub > 0 ? Math.round((d.rub / totalRub) * 1000) / 10 : 0,
         uniqueGuests: 0,
       }));

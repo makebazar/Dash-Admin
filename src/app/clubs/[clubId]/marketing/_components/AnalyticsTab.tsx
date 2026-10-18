@@ -40,6 +40,7 @@ export type ColumnId =
   | "name"
   | "phone"
   | "spent"
+  | "preferredTime"
   | "topupAdmin"
   | "topupLK"
   | "topupApp"
@@ -70,6 +71,7 @@ const ALL_COLUMNS: ColumnMeta[] = [
   { id: "name", label: "Клиент", align: "left", sortable: true, defaultVisible: true },
   { id: "phone", label: "Телефон", align: "left", sortable: false, defaultVisible: true },
   { id: "spent", label: "Реальная выручка", align: "right", sortable: true, defaultVisible: true },
+  { id: "preferredTime", label: "Время визитов", align: "left", sortable: true, defaultVisible: true },
   { id: "favoriteZone", label: "Любимая зона", align: "left", sortable: true, defaultVisible: true },
   { id: "favoriteTariff", label: "Любимый тариф", align: "left", sortable: true, defaultVisible: true },
   { id: "favoriteSeat", label: "Любимый ПК/ТВ", align: "left", sortable: true, defaultVisible: false },
@@ -102,6 +104,7 @@ export function AnalyticsTab({ analytics }: Props) {
   const [minSpent, setMinSpent] = useState<number>(0);
   const [selectedZone, setSelectedZone] = useState<string>("all");
   const [selectedPersona, setSelectedPersona] = useState<string>("all");
+  const [selectedTime, setSelectedTime] = useState<string>("all");
 
   // Multi-column sort rules
   const [sortRules, setSortRules] = useState<SortRule[]>([
@@ -112,23 +115,27 @@ export function AnalyticsTab({ analytics }: Props) {
   const [columnOrder, setColumnOrder] = useState<ColumnId[]>(() => {
     if (typeof window !== "undefined") {
       try {
-        const saved = localStorage.getItem("dashadmin_marketing_columns_order_v2");
-        if (saved) return JSON.parse(saved);
+        const saved = localStorage.getItem("dashadmin_marketing_columns_order_v3");
+        if (saved) {
+          const parsed: ColumnId[] = JSON.parse(saved);
+          const missing = DEFAULT_ORDER.filter((c) => !parsed.includes(c));
+          return [...parsed, ...missing];
+        }
       } catch {}
     }
     return DEFAULT_ORDER;
   });
 
   const [visibleColumns, setVisibleColumns] = useState<Record<ColumnId, boolean>>(() => {
+    const allVis: Record<string, boolean> = {};
+    ALL_COLUMNS.forEach((c) => { allVis[c.id] = c.defaultVisible; });
     if (typeof window !== "undefined") {
       try {
-        const saved = localStorage.getItem("dashadmin_marketing_columns_vis_v2");
-        if (saved) return JSON.parse(saved);
+        const saved = localStorage.getItem("dashadmin_marketing_columns_vis_v3");
+        if (saved) return { ...allVis, ...JSON.parse(saved) };
       } catch {}
     }
-    const initial: Record<string, boolean> = {};
-    ALL_COLUMNS.forEach((c) => { initial[c.id] = c.defaultVisible; });
-    return initial as Record<ColumnId, boolean>;
+    return allVis as Record<ColumnId, boolean>;
   });
 
   const [showColSettings, setShowColSettings] = useState(false);
@@ -156,8 +163,8 @@ export function AnalyticsTab({ analytics }: Props) {
     setColumnOrder(newOrder);
     setVisibleColumns(newVis);
     try {
-      localStorage.setItem("dashadmin_marketing_columns_order_v2", JSON.stringify(newOrder));
-      localStorage.setItem("dashadmin_marketing_columns_vis_v2", JSON.stringify(newVis));
+      localStorage.setItem("dashadmin_marketing_columns_order_v3", JSON.stringify(newOrder));
+      localStorage.setItem("dashadmin_marketing_columns_vis_v3", JSON.stringify(newVis));
     } catch {}
   };
 
@@ -265,6 +272,10 @@ export function AnalyticsTab({ analytics }: Props) {
       list = list.filter((p) => p.gamerPersona === selectedPersona);
     }
 
+    if (selectedTime !== "all") {
+      list = list.filter((p) => p.preferredTime === selectedTime);
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       list = list.filter(
@@ -282,6 +293,7 @@ export function AnalyticsTab({ analytics }: Props) {
       switch (key) {
         case "name": return p.name.toLowerCase();
         case "spent": return p.totalSpent;
+        case "preferredTime": return p.preferredTime ?? "";
         case "topupAdmin": return p.topupAdmin ?? 0;
         case "topupLK": return p.topupLK ?? 0;
         case "topupApp": return p.topupApp ?? 0;
@@ -320,7 +332,7 @@ export function AnalyticsTab({ analytics }: Props) {
       }
       return 0;
     });
-  }, [analytics, viewMode, search, sortRules, bonusHeavyClients, minSpent, selectedZone, selectedPersona]);
+  }, [analytics, viewMode, search, sortRules, bonusHeavyClients, minSpent, selectedZone, selectedPersona, selectedTime]);
 
   const formatDate = (d: Date | string | null | undefined) => {
     if (!d) return "—";
@@ -427,7 +439,11 @@ export function AnalyticsTab({ analytics }: Props) {
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-slate-500">
                       <span>{z.sessions.toLocaleString("ru")} сесс.</span>
-                      <span className="text-amber-600 font-medium">-{Math.round(z.bonus).toLocaleString("ru")} Б</span>
+                      {z.bonus > 0 ? (
+                        <span className="text-amber-600 font-medium">-{Math.round(z.bonus).toLocaleString("ru")} Б</span>
+                      ) : (
+                        <span className="text-slate-400 font-medium">0 Б</span>
+                      )}
                     </div>
                   </div>
 
@@ -597,6 +613,31 @@ export function AnalyticsTab({ analytics }: Props) {
                 ))}
               </div>
             )}
+
+            {/* Preferred Time Filter */}
+            <div className="flex items-center gap-1 border-l pl-3 border-slate-200">
+              <span className="text-[11px] text-slate-400 font-medium mr-0.5">Время:</span>
+              {[
+                { id: "all", label: "Все" },
+                { id: "night", label: "🌙 Ночь" },
+                { id: "evening", label: "🌆 Вечер" },
+                { id: "day", label: "☀️ День" },
+                { id: "morning", label: "🌅 Утро" },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setSelectedTime(opt.id)}
+                  className={cn(
+                    "px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+                    selectedTime === opt.id
+                      ? "bg-slate-900 text-white font-semibold"
+                      : "text-slate-600 hover:bg-slate-100"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Right Tools: Search, Multi-Sort & Column Manager */}
@@ -854,10 +895,11 @@ export function AnalyticsTab({ analytics }: Props) {
                 let channelLabel = "";
                 let channelTooltip = "";
 
-                if (totalReal > 0) {
-                  const adminPct = Math.round((adminVal / totalReal) * 100);
-                  const lkPct = Math.round((lkVal / totalReal) * 100);
-                  const appPct = Math.round((appVal / totalReal) * 100);
+                const totalChannels = adminVal + lkVal + appVal;
+                if (totalChannels > 0) {
+                  const adminPct = Math.round((adminVal / totalChannels) * 100);
+                  const lkPct = Math.round((lkVal / totalChannels) * 100);
+                  const appPct = Math.round((appVal / totalChannels) * 100);
 
                   if (adminPct === 100) channelLabel = "только касса";
                   else if (lkPct === 100) channelLabel = "только ЛК";
@@ -867,6 +909,15 @@ export function AnalyticsTab({ analytics }: Props) {
                   else if (appPct >= adminPct && appPct >= lkPct) channelLabel = `моб. прил. ${appPct}%`;
 
                   channelTooltip = `Касса: ${Math.round(adminVal).toLocaleString()} ₽ | ЛК: ${Math.round(lkVal).toLocaleString()} ₽ | Моб. прил.: ${Math.round(appVal).toLocaleString()} ₽`;
+                } else if (totalReal > 0) {
+                  const cashPct = client.cashShare ?? 100;
+                  if (cashPct >= 99) {
+                    channelLabel = "100% рубли";
+                    channelTooltip = "Все пополнения чистыми деньгами, без начисленных бонусов";
+                  } else {
+                    channelLabel = `рубли ${cashPct}%`;
+                    channelTooltip = `Доля реальных денег: ${cashPct}% | Выдано бонусов: ${client.bonusAccrued} Б (${client.bonusGivenRatio}% к тратам)`;
+                  }
                 }
 
                 return (
@@ -906,6 +957,31 @@ export function AnalyticsTab({ analytics }: Props) {
                                 </div>
                               ) : (
                                 <span className="text-slate-300">0 ₽</span>
+                              )}
+                            </td>
+                          );
+
+                        case "preferredTime":
+                          return (
+                            <td key={col.id} className="py-3 px-3.5">
+                              {client.preferredTime === "night" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  🌙 Ночь (22–06)
+                                </span>
+                              ) : client.preferredTime === "evening" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                  🌆 Вечер (17–22)
+                                </span>
+                              ) : client.preferredTime === "day" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                                  ☀️ День (12–17)
+                                </span>
+                              ) : client.preferredTime === "morning" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                  🌅 Утро (06–12)
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 text-xs">—</span>
                               )}
                             </td>
                           );

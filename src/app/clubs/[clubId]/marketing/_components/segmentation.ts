@@ -67,6 +67,7 @@ export interface ClientProfile {
   packageSpentBonus?: number;
   nightSessionsCount?: number;
   gamerPersona?: "night_owl" | "console" | "bootcamp" | "regular";
+  preferredTime?: "morning" | "day" | "evening" | "night";
 }
 
 export interface ClubZoneStat {
@@ -263,6 +264,7 @@ export function buildClubAnalytics(
     tariffs: Map<string, { count: number; rub: number; bonus: number }>;
     zones: Map<string, number>;
     seats: Map<string, number>;
+    timeSlots: { morning: number; day: number; evening: number; night: number };
   }
   const clientPackageMap = new Map<string, ClientPackageStats>();
   const clubZoneMap = new Map<string, { sessions: number; rub: number; bonus: number; guests: Set<string> }>();
@@ -281,6 +283,7 @@ export function buildClubAnalytics(
     const colPC = detectCol(s, ["ПК", "pc", "Место"]);
     const colRub = detectCol(s, ["Списано рублей"]);
     const colBonus = detectCol(s, ["Списано бонусов"]);
+    const colDate = detectCol(s, ["Дата покупки тарифа", "Дата покупки", "Дата активации сессии", "Дата"]);
 
     for (const row of packageRows) {
       const phone = normalizePhone(row[colPhone ?? ""]);
@@ -334,6 +337,7 @@ export function buildClubAnalytics(
           tariffs: new Map(),
           zones: new Map(),
           seats: new Map(),
+          timeSlots: { morning: 0, day: 0, evening: 0, night: 0 },
         };
         clientPackageMap.set(phone, clientPack);
       }
@@ -342,8 +346,32 @@ export function buildClubAnalytics(
       clientPack.rub += rub;
       clientPack.bonus += bonus;
 
-      const isNight = tariffName.toLowerCase().includes("ночь");
+      const lowerT = tariffName.toLowerCase();
+      const isNight = lowerT.includes("ночь");
       if (isNight) clientPack.nightSessions += 1;
+
+      let slot: "morning" | "day" | "evening" | "night" | null = null;
+      if (isNight) {
+        slot = "night";
+      } else if (lowerT.includes("утро")) {
+        slot = "morning";
+      } else if (lowerT.includes("день")) {
+        slot = "day";
+      } else if (lowerT.includes("вечер")) {
+        slot = "evening";
+      } else if (colDate && row[colDate]) {
+        const d = parseDate(row[colDate]);
+        if (d && !isNaN(d.getTime())) {
+          const h = d.getHours();
+          if (h >= 22 || h < 6) slot = "night";
+          else if (h >= 6 && h < 12) slot = "morning";
+          else if (h >= 12 && h < 17) slot = "day";
+          else slot = "evening";
+        }
+      }
+      if (slot) {
+        clientPack.timeSlots[slot] += 1;
+      }
 
       const tStat = clientPack.tariffs.get(tariffName) || { count: 0, rub: 0, bonus: 0 };
       tStat.count += 1;
@@ -713,6 +741,26 @@ export function buildClubAnalytics(
       }
     }
 
+    let preferredTime: ClientProfile["preferredTime"] = undefined;
+    if (pack) {
+      const ts = pack.timeSlots;
+      const maxSlot = (Object.entries(ts) as [NonNullable<ClientProfile["preferredTime"]>, number][])
+        .sort((a, b) => b[1] - a[1])[0];
+      if (maxSlot && maxSlot[1] > 0) {
+        preferredTime = maxSlot[0];
+      }
+    }
+    if (!preferredTime && (gamerPersona === "night_owl" || favoriteTariff?.toLowerCase().includes("ночь"))) {
+      preferredTime = "night";
+    }
+    if (!preferredTime && lastAuth && !isNaN(lastAuth.getTime())) {
+      const h = lastAuth.getHours();
+      if (h >= 22 || h < 6) preferredTime = "night";
+      else if (h >= 6 && h < 12) preferredTime = "morning";
+      else if (h >= 12 && h < 17) preferredTime = "day";
+      else preferredTime = "evening";
+    }
+
     profiles.push({
       name,
       phone,
@@ -756,6 +804,7 @@ export function buildClubAnalytics(
       packageSpentBonus: pack?.bonus,
       nightSessionsCount: pack?.nightSessions,
       gamerPersona,
+      preferredTime,
     });
   }
 
