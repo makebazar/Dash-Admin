@@ -17,12 +17,10 @@ import {
   Wallet,
   ShieldCheck,
   RefreshCw,
-  Trash2,
-  Share2
+  Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ClientProfile, ClubAnalytics } from "./segmentation";
-import { CampaignsManager } from "./CampaignsManager";
 
 export interface MarketingTask {
   id: string;
@@ -51,12 +49,9 @@ interface Props {
   clubId: string;
   analytics: ClubAnalytics | null;
   excludedPhones: string[];
-  onOpenSms?: () => void;
-  onOpenVk?: () => void;
 }
 
-export function TasksTab({ clubId, analytics, excludedPhones, onOpenSms, onOpenVk }: Props) {
-  const [activeSubTab, setActiveSubTab] = useState<"tasks" | "campaigns">("tasks");
+export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
   const [tasks, setTasks] = useState<MarketingTask[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "completed" | "rejected">("pending");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -249,83 +244,8 @@ export function TasksTab({ clubId, analytics, excludedPhones, onOpenSms, onOpenV
 
   return (
     <div className="space-y-6">
-      {/* Subtab Navigation (Задачи смене vs Кампании и Сквозная аналитика) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveSubTab("tasks")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all",
-              activeSubTab === "tasks"
-                ? "bg-slate-900 text-white shadow-sm"
-                : "bg-white text-slate-500 hover:text-slate-900 border border-slate-200"
-            )}
-          >
-            <CheckSquare className="w-4 h-4" />
-            <span>Задачи для смены</span>
-            {pendingCount > 0 && (
-              <span className={cn(
-                "px-2 py-0.5 rounded-full text-[10px] font-black",
-                activeSubTab === "tasks" ? "bg-rose-500 text-white" : "bg-slate-100 text-slate-700"
-              )}>
-                {pendingCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSubTab("campaigns")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all",
-              activeSubTab === "campaigns"
-                ? "bg-slate-900 text-white shadow-sm"
-                : "bg-white text-slate-500 hover:text-slate-900 border border-slate-200"
-            )}
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Кампании & Сквозная аналитика</span>
-          </button>
-        </div>
-
-        {(onOpenSms || onOpenVk) && (
-          <div className="flex items-center gap-2">
-            {onOpenSms && (
-              <button
-                type="button"
-                onClick={onOpenSms}
-                className="px-3 py-1.5 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>+ SMS-рассылка</span>
-              </button>
-            )}
-            {onOpenVk && (
-              <button
-                type="button"
-                onClick={onOpenVk}
-                className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>+ VK Таргет</span>
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {activeSubTab === "campaigns" ? (
-        <CampaignsManager
-          clubId={clubId}
-          analytics={analytics}
-          onOpenSms={onOpenSms || (() => {})}
-          onOpenVk={onOpenVk || (() => {})}
-        />
-      ) : (
-        <>
-          {/* Top Banner & Quick Generator */}
-          <div className="bg-slate-900 text-white rounded-2xl p-5 md:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Top Banner & Quick Generator */}
+      <div className="bg-slate-900 text-white rounded-2xl p-5 md:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-xl bg-violet-600/30 text-violet-400 border border-violet-500/30">
@@ -580,8 +500,6 @@ export function TasksTab({ clubId, analytics, excludedPhones, onOpenSms, onOpenV
             );
           })}
         </div>
-      )}
-        </>
       )}
     </div>
   );
