@@ -16,7 +16,7 @@ import {
   Calendar,
   Sparkles
 } from "lucide-react";
-import { buildClubAnalytics, type ClubAnalytics, type WorkstationInfo, type ClientProfile, type DateFilter } from "./_components/segmentation";
+import { buildClubAnalytics, type ClubAnalytics, type WorkstationInfo, type ClientProfile, type DateFilter, type ClubPcStat } from "./_components/segmentation";
 import { detectPeriod } from "./_components/periodDetection";
 import type { SnapshotFull } from "./_components/types";
 
@@ -135,90 +135,45 @@ export default function MarketingPage() {
       const pc = activeSnapshot.pc_data || [];
       const sm = activeSnapshot.summary_metrics || {};
 
-      // Enrich profiles with properly computed ratios and categories
-      const enrichedProfiles: ClientProfile[] = rawGuests.map((p) => {
-        const totalSpent = p.totalSpent || 0;
-        const bonusAccrued = p.bonusAccrued || 0;
-        const bonusSpent = p.bonusSpent || 0;
-        const bonusBalance = p.bonusBalance || 0;
-        const balance = p.balance || 0;
-        const txCount = p.txCount || (totalSpent > 0 ? 1 : 0);
-        const avgTx = p.avgTx || (txCount > 0 ? Math.round(totalSpent / txCount) : 0);
+      const fullDateFrom = activeSnapshot.period_start ? new Date(activeSnapshot.period_start) : null;
+      const fullDateTo = activeSnapshot.period_end ? new Date(activeSnapshot.period_end) : null;
+      const datasetDateFrom = fullDateFrom;
+      const datasetDateTo = fullDateTo;
 
-        const bonusGivenRatio = p.bonusGivenRatio ?? (
-          totalSpent > 0
-            ? Math.round((bonusAccrued / totalSpent) * 100)
-            : (bonusAccrued > 0 ? 999 : 0)
-        );
+      const reportDateFrom = dateFilter?.startDate || datasetDateFrom;
+      const reportDateTo = dateFilter?.endDate || datasetDateTo;
 
-        const totalAdditions = totalSpent + bonusAccrued;
-        const cashShare = p.cashShare ?? (
-          totalAdditions > 0 ? Math.round((totalSpent / totalAdditions) * 100) : 100
-        );
+      const fullDays = (fullDateFrom && fullDateTo && !isNaN(fullDateFrom.getTime()) && !isNaN(fullDateTo.getTime()))
+        ? Math.max(1, Math.round((fullDateTo.getTime() - fullDateFrom.getTime()) / (1000 * 60 * 60 * 24)))
+        : null;
 
-        let valueCategory: ClientProfile["valueCategory"] = p.valueCategory || "standard";
-        if (!p.valueCategory) {
-          if (bonusAccrued >= 200 && (bonusGivenRatio >= 40 || totalSpent === 0)) {
-            valueCategory = "bonus_heavy";
-          } else if (bonusGivenRatio <= 10 && totalSpent >= 2000) {
-            valueCategory = "diamond";
-          } else if (bonusGivenRatio <= 25 && totalSpent >= 1000) {
-            valueCategory = "loyal";
-          }
-        }
+      const reportDays = (reportDateFrom && reportDateTo && !isNaN(reportDateFrom.getTime()) && !isNaN(reportDateTo.getTime()))
+        ? Math.max(1, Math.round((reportDateTo.getTime() - reportDateFrom.getTime()) / (1000 * 60 * 60 * 24)))
+        : null;
 
-        const isWhale = p.isWhale || totalSpent >= 2000;
+      const scaleRatio = (dateFilter && fullDays && reportDays) ? Math.min(1, reportDays / fullDays) : 1;
+      const whaleThreshold = (dateFilter && fullDays && reportDays)
+        ? Math.max(500, Math.round(2000 * scaleRatio))
+        : 2000;
 
-        let preferredTime: ClientProfile["preferredTime"] = p.preferredTime;
-        if (!preferredTime) {
-          if (p.gamerPersona === "night_owl" || (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("ночь"))) {
-            preferredTime = "night";
-          } else if (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("утро")) {
-            preferredTime = "morning";
-          } else if (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("день")) {
-            preferredTime = "day";
-          } else if (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("вечер")) {
-            preferredTime = "evening";
-          } else if (p.lastAuth) {
-            const d = new Date(p.lastAuth);
-            if (!isNaN(d.getTime())) {
-              const h = d.getHours();
-              if (h >= 22 || h < 6) preferredTime = "night";
-              else if (h >= 6 && h < 12) preferredTime = "morning";
-              else if (h >= 12 && h < 17) preferredTime = "day";
-              else preferredTime = "evening";
-            }
-          }
-        }
+      // Scaled PC stats
+      const clubPcStats: ClubPcStat[] = pc.map((item) => ({
+        ...item,
+        rub: Math.round((item.rub || 0) * scaleRatio),
+        bonus: Math.round((item.bonus || 0) * scaleRatio),
+        sessions: Math.max(0, Math.round((item.sessions || 0) * scaleRatio)),
+      }));
 
-        return {
-          ...p,
-          totalSpent,
-          bonusAccrued,
-          bonusSpent,
-          bonusBalance,
-          balance,
-          txCount,
-          avgTx,
-          bonusGivenRatio,
-          cashShare,
-          valueCategory,
-          isWhale,
-          preferredTime,
-          lastAuth: p.lastAuth ? new Date(p.lastAuth) : null,
-          regDate: p.regDate ? new Date(p.regDate) : null,
-        };
-      });
-
-      // Reconstruct zone stats from PC stats if available
+      // Reconstruct zone stats from PC stats
       const zoneMap = new Map<string, { rub: number; bonus: number; sessions: number }>();
-      let totalRub = sm.totalRevenueInLog || 0;
-      for (const p of pc) {
+      let totalRub = 0;
+      for (const p of clubPcStats) {
         const existing = zoneMap.get(p.zone) || { rub: 0, bonus: 0, sessions: 0 };
         existing.rub += (p.rub || 0);
         existing.bonus += (p.bonus || 0);
         existing.sessions += (p.sessions || 0);
         zoneMap.set(p.zone, existing);
+        totalRub += (p.rub || 0);
       }
 
       const clubZoneStats = Array.from(zoneMap.entries()).map(([zone, d]) => ({
@@ -229,6 +184,114 @@ export default function MarketingPage() {
         percentOfRub: totalRub > 0 ? Math.round((d.rub / totalRub) * 1000) / 10 : 0,
         uniqueGuests: 0,
       }));
+
+      // Enrich profiles with properly computed ratios and categories
+      const enrichedProfiles: ClientProfile[] = rawGuests
+        .map((p) => {
+          const totalSpent = Math.round((p.totalSpent || 0) * scaleRatio);
+          const bonusAccrued = Math.round((p.bonusAccrued || 0) * scaleRatio);
+          const bonusSpent = Math.round((p.bonusSpent || 0) * scaleRatio);
+          const bonusBalance = p.bonusBalance || 0;
+          const balance = p.balance || 0;
+          const visits = p.visits !== undefined ? Math.max(0, Math.round(p.visits * scaleRatio)) : undefined;
+          const playedMinutes = p.playedMinutes !== undefined ? Math.round(p.playedMinutes * scaleRatio) : undefined;
+          const playedHours = playedMinutes !== undefined ? Math.round((playedMinutes / 60) * 10) / 10 : undefined;
+          const txCount = p.txCount ? Math.max(0, Math.round(p.txCount * scaleRatio)) : (totalSpent > 0 ? 1 : 0);
+          const avgTx = txCount > 0 ? Math.round(totalSpent / txCount) : 0;
+          const packageSpentRub = p.packageSpentRub !== undefined ? Math.round(p.packageSpentRub * scaleRatio) : undefined;
+          const packageSpentBonus = p.packageSpentBonus !== undefined ? Math.round(p.packageSpentBonus * scaleRatio) : undefined;
+          const packageCount = p.packageCount !== undefined ? Math.round(p.packageCount * scaleRatio) : undefined;
+          const topupAdmin = p.topupAdmin !== undefined ? Math.round(p.topupAdmin * scaleRatio) : undefined;
+          const topupLK = p.topupLK !== undefined ? Math.round(p.topupLK * scaleRatio) : undefined;
+          const topupApp = p.topupApp !== undefined ? Math.round(p.topupApp * scaleRatio) : undefined;
+          const spentShop = p.spentShop !== undefined ? Math.round(p.spentShop * scaleRatio) : undefined;
+
+          let hourlyYield: number | undefined = p.hourlyYield;
+          if (playedHours && playedHours > 0 && totalSpent > 0) {
+            hourlyYield = Math.round(totalSpent / playedHours);
+          } else if (playedMinutes && playedMinutes >= 15 && totalSpent > 0) {
+            hourlyYield = Math.round(totalSpent / (playedMinutes / 60));
+          }
+
+          const bonusGivenRatio = p.bonusGivenRatio ?? (
+            totalSpent > 0
+              ? Math.round((bonusAccrued / totalSpent) * 100)
+              : (bonusAccrued > 0 ? 999 : 0)
+          );
+
+          const totalAdditions = totalSpent + bonusAccrued;
+          const cashShare = p.cashShare ?? (
+            totalAdditions > 0 ? Math.round((totalSpent / totalAdditions) * 100) : 100
+          );
+
+          let valueCategory: ClientProfile["valueCategory"] = p.valueCategory || "standard";
+          if (!p.valueCategory) {
+            if (bonusAccrued >= Math.round(200 * scaleRatio) && (bonusGivenRatio >= 40 || totalSpent === 0)) {
+              valueCategory = "bonus_heavy";
+            } else if (bonusGivenRatio <= 10 && totalSpent >= whaleThreshold) {
+              valueCategory = "diamond";
+            } else if (bonusGivenRatio <= 25 && totalSpent >= Math.round(1000 * scaleRatio)) {
+              valueCategory = "loyal";
+            }
+          }
+
+          const isWhale = totalSpent >= whaleThreshold;
+
+          let preferredTime: ClientProfile["preferredTime"] = p.preferredTime;
+          if (!preferredTime) {
+            if (p.gamerPersona === "night_owl" || (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("ночь"))) {
+              preferredTime = "night";
+            } else if (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("утро")) {
+              preferredTime = "morning";
+            } else if (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("день")) {
+              preferredTime = "day";
+            } else if (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes("вечер")) {
+              preferredTime = "evening";
+            } else if (p.lastAuth) {
+              const d = new Date(p.lastAuth);
+              if (!isNaN(d.getTime())) {
+                const h = d.getHours();
+                if (h >= 22 || h < 6) preferredTime = "night";
+                else if (h >= 6 && h < 12) preferredTime = "morning";
+                else if (h >= 12 && h < 17) preferredTime = "day";
+                else preferredTime = "evening";
+              }
+            }
+          }
+
+          return {
+            ...p,
+            totalSpent,
+            bonusAccrued,
+            bonusSpent,
+            bonusBalance,
+            balance,
+            txCount,
+            avgTx,
+            visits,
+            playedMinutes,
+            playedHours,
+            hourlyYield,
+            packageSpentRub,
+            packageSpentBonus,
+            packageCount,
+            topupAdmin,
+            topupLK,
+            topupApp,
+            spentShop,
+            bonusGivenRatio,
+            cashShare,
+            valueCategory,
+            isWhale,
+            preferredTime,
+            lastAuth: p.lastAuth ? new Date(p.lastAuth) : null,
+            regDate: p.regDate ? new Date(p.regDate) : null,
+          };
+        })
+        .filter((p) => {
+          if (!dateFilter) return true;
+          return p.totalSpent > 0 || (p.visits !== undefined && p.visits > 0);
+        });
 
       // Reconstruct tariff stats if available from profiles
       const tariffMap = new Map<string, { count: number; rub: number; bonus: number }>();
@@ -260,38 +323,20 @@ export default function MarketingPage() {
       const computedBonusAccrued = enrichedProfiles.reduce((sum, p) => sum + p.bonusAccrued, 0);
       const computedBonusSpent = enrichedProfiles.reduce((sum, p) => sum + p.bonusSpent, 0);
 
-      const totalBonusAccrued = sm.totalBonusAccrued ?? (
+      const totalBonusAccrued = Math.round((sm.totalBonusAccrued ?? (
         computedBonusAccrued > 0 
           ? computedBonusAccrued 
           : (sm.overallBonusEmissionRate && sm.totalRevenueInLog 
               ? Math.round(sm.totalRevenueInLog * (sm.overallBonusEmissionRate / 100)) 
               : 0)
-      );
+      )) * scaleRatio);
 
-      const abandonedBalance = sm.abandonedBalance ?? (sm as any).churnedBal ?? computedAbandonedBalance;
-      const abandonedBonus = sm.abandonedBonus ?? (sm as any).churnedBonus ?? computedAbandonedBonus;
-      const totalBonusSpent = sm.totalBonusSpent ?? computedBonusSpent;
-
-      const fullDateFrom = activeSnapshot.period_start ? new Date(activeSnapshot.period_start) : null;
-      const fullDateTo = activeSnapshot.period_end ? new Date(activeSnapshot.period_end) : null;
-      const datasetDateFrom = fullDateFrom;
-      const datasetDateTo = fullDateTo;
-
-      const reportDateFrom = dateFilter?.startDate || datasetDateFrom;
-      const reportDateTo = dateFilter?.endDate || datasetDateTo;
-
-      const fullDays = (fullDateFrom && fullDateTo && !isNaN(fullDateFrom.getTime()) && !isNaN(fullDateTo.getTime()))
-        ? Math.max(1, Math.round((fullDateTo.getTime() - fullDateFrom.getTime()) / (1000 * 60 * 60 * 24)))
-        : null;
-
-      const reportDays = (reportDateFrom && reportDateTo && !isNaN(reportDateFrom.getTime()) && !isNaN(reportDateTo.getTime()))
-        ? Math.max(1, Math.round((reportDateTo.getTime() - reportDateFrom.getTime()) / (1000 * 60 * 60 * 24)))
-        : null;
-
-      const scaleRatio = (dateFilter && fullDays && reportDays) ? (reportDays / fullDays) : 1;
+      const abandonedBalance = Math.round((sm.abandonedBalance ?? (sm as any).churnedBal ?? computedAbandonedBalance) * scaleRatio);
+      const abandonedBonus = Math.round((sm.abandonedBonus ?? (sm as any).churnedBonus ?? computedAbandonedBonus) * scaleRatio);
+      const totalBonusSpent = Math.round((sm.totalBonusSpent ?? computedBonusSpent) * scaleRatio);
 
       const whales = enrichedProfiles
-        .filter((p) => p.isWhale || p.totalSpent >= 2000)
+        .filter((p) => p.isWhale || p.totalSpent >= whaleThreshold)
         .sort((a, b) => b.totalSpent - a.totalSpent);
 
       const topChurned = enrichedProfiles
@@ -302,19 +347,26 @@ export default function MarketingPage() {
         .filter((p) => p.status === "cooling" && (p.totalSpent > 0 || p.balance > 100))
         .sort((a, b) => b.totalSpent - a.totalSpent);
 
+      const totalRevenueInLog = Math.round((sm.totalRevenueInLog || 0) * scaleRatio);
+      const totalHoursPlayed = Math.round((sm.totalHoursPlayed || 0) * scaleRatio);
+      const totalVisits = Math.round((sm.totalVisits || 0) * scaleRatio);
+      const avgHourlyYield = (totalHoursPlayed > 0 && totalRevenueInLog > 0)
+        ? Math.round(totalRevenueInLog / totalHoursPlayed)
+        : (sm.avgHourlyYield || 0);
+
       return {
         profiles: enrichedProfiles,
-        clubPcStats: pc,
-        totalGuests: sm.totalGuests || enrichedProfiles.length,
-        totalRevenueInLog: Math.round((sm.totalRevenueInLog || 0) * scaleRatio),
+        clubPcStats,
+        totalGuests: dateFilter ? enrichedProfiles.length : (sm.totalGuests || enrichedProfiles.length),
+        totalRevenueInLog,
         totalBonusAccrued,
         totalBonusSpent,
-        overallBonusEmissionRate: sm.overallBonusEmissionRate || (sm.totalRevenueInLog > 0 ? Math.round((totalBonusAccrued / sm.totalRevenueInLog) * 1000) / 10 : 0),
+        overallBonusEmissionRate: sm.overallBonusEmissionRate || (sm.totalRevenueInLog > 0 ? Math.round((totalBonusAccrued / totalRevenueInLog) * 1000) / 10 : 0),
         overallBonusShareOfTotal: 0,
-        avgHourlyYield: sm.avgHourlyYield || 0,
-        activeCount: sm.activeCount || enrichedProfiles.filter((p) => p.status === "active").length,
-        coolingCount: sm.coolingCount || enrichedProfiles.filter((p) => p.status === "cooling").length,
-        churnedCount: sm.churnedCount || enrichedProfiles.filter((p) => p.status === "churned").length,
+        avgHourlyYield,
+        activeCount: Math.round((sm.activeCount || enrichedProfiles.filter((p) => p.status === "active").length) * scaleRatio),
+        coolingCount: Math.round((sm.coolingCount || enrichedProfiles.filter((p) => p.status === "cooling").length) * scaleRatio),
+        churnedCount: Math.round((sm.churnedCount || enrichedProfiles.filter((p) => p.status === "churned").length) * scaleRatio),
         abandonedBalance,
         abandonedBonus,
         whales,
@@ -327,9 +379,9 @@ export default function MarketingPage() {
         datasetDateFrom,
         datasetDateTo,
         totalPlayedMinutes: (sm.totalHoursPlayed || 0) * 60 * scaleRatio,
-        totalHoursPlayed: Math.round((sm.totalHoursPlayed || 0) * scaleRatio),
-        totalVisits: Math.round((sm.totalVisits || 0) * scaleRatio),
-        hasPackagesReport: pc.length > 0,
+        totalHoursPlayed,
+        totalVisits,
+        hasPackagesReport: clubPcStats.length > 0,
         totalPackageRub: Math.round((sm.totalPackageRub || 0) * scaleRatio),
         clubZoneStats,
         clubTariffStats,

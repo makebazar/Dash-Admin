@@ -288,6 +288,13 @@ export function buildClubAnalytics(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const hasSummaryReport = summaryRows.length > 0;
+  let totalPlayedMinutes = 0;
+  let totalAdminTopup = 0;
+  let totalLKTopup = 0;
+  let totalAppTopup = 0;
+  let totalShopSpent = 0;
+
   let rawMinDate: Date | null = null;
   let rawMaxDate: Date | null = null;
 
@@ -324,6 +331,8 @@ export function buildClubAnalytics(
     sessions: number;
     rub: number;
     bonus: number;
+    hours: number;
+    lastDate?: Date;
     nightSessions: number;
     tariffs: Map<string, { count: number; rub: number; bonus: number }>;
     zones: Map<string, number>;
@@ -420,6 +429,7 @@ export function buildClubAnalytics(
           sessions: 0,
           rub: 0,
           bonus: 0,
+          hours: 0,
           nightSessions: 0,
           tariffs: new Map(),
           zones: new Map(),
@@ -432,6 +442,12 @@ export function buildClubAnalytics(
       clientPack.sessions += 1;
       clientPack.rub += rub;
       clientPack.bonus += bonus;
+      clientPack.hours += sessHours;
+      if (rowDate) {
+        if (!clientPack.lastDate || rowDate > clientPack.lastDate) {
+          clientPack.lastDate = rowDate;
+        }
+      }
 
       const isNight = lowerT.includes("ночь");
       if (isNight) clientPack.nightSessions += 1;
@@ -555,6 +571,12 @@ export function buildClubAnalytics(
       const lastVisit = parseDate(row[colLast ?? ""]);
       const group = String(row[colGroup ?? ""] ?? "").trim();
       const club = String(row[colClub ?? ""] ?? "").trim();
+
+      totalPlayedMinutes += playedMinutes;
+      totalAdminTopup += topupAdmin;
+      totalLKTopup += topupLK;
+      totalAppTopup += topupApp;
+      totalShopSpent += spentShop;
 
       summaryMap.set(phone, {
         name,
@@ -727,9 +749,10 @@ export function buildClubAnalytics(
     const bonusBalance = g?.bonusBalance ?? 0;
 
     // Dates
-    const lastAuth = g?.lastAuth || sum?.lastVisit || null;
+    const lastAuth = (dateFilter && pack?.lastDate) ? pack.lastDate : (g?.lastAuth || sum?.lastVisit || pack?.lastDate || null);
     const regDate = g?.regDate || sum?.regDate || null;
-    const daysSince = lastAuth ? daysBetween(lastAuth, today) : null;
+    const refDate = (dateFilter && reportDateTo) ? reportDateTo : today;
+    const daysSince = lastAuth ? daysBetween(lastAuth, refDate) : null;
 
     // REAL MONEY TOTAL SPENT (исключаем бонусы!)
     let totalSpent = 0;
@@ -747,6 +770,11 @@ export function buildClubAnalytics(
       totalSpent = tx.realSpent;
     } else if (pack) {
       totalSpent = pack.rub;
+    }
+
+    // When a specific dateFilter is active, skip guests who had no activity in this period
+    if (dateFilter && totalSpent === 0 && (!pack || pack.sessions === 0) && (!tx || tx.txCount === 0)) {
+      continue;
     }
 
     // БОНУСЫ НАЧИСЛЕННЫЕ / ВЫДАННЫЕ КЛУБОМ
@@ -769,6 +797,24 @@ export function buildClubAnalytics(
       bonusSpent = sum?.bonusSpent || pack?.bonus || 0;
     }
 
+    // Visits and Hours
+    let visits = pack?.sessions;
+    let playedHours = pack?.hours;
+    let playedMinutes = pack ? pack.hours * 60 : undefined;
+
+    if (!dateFilter && sum) {
+      visits = sum.visits;
+      playedMinutes = sum.playedMinutes;
+      playedHours = playedMinutes !== undefined
+        ? (playedMinutes >= 6000 ? Math.round(playedMinutes / 60) : Math.round((playedMinutes / 60) * 10) / 10)
+        : undefined;
+    } else if (dateFilter && !pack && sum && datasetDays && reportDays) {
+      const scale = reportDays / datasetDays;
+      visits = Math.max(1, Math.round(sum.visits * scale));
+      playedMinutes = Math.round(sum.playedMinutes * scale);
+      playedHours = Math.round((playedMinutes / 60) * 10) / 10;
+    }
+
     const txCount = pack?.sessions || (sum && dateFilter && datasetDays && reportDays ? Math.max(1, Math.round(sum.visits * (reportDays / datasetDays))) : (sum?.visits || tx?.txCount || (totalSpent > 0 ? 1 : 0)));
     const avgTx = txCount > 0 ? Math.round(totalSpent / txCount) : 0;
 
@@ -789,21 +835,29 @@ export function buildClubAnalytics(
       else if (topupAdmin + topupLK + topupApp > 0) preferredPayment = "mixed";
     }
 
-    const playedMinutes = sum?.playedMinutes ?? undefined;
-    // Keep 1 decimal place precision for hours to prevent rounding errors
-    const playedHours = playedMinutes !== undefined
-      ? (playedMinutes >= 6000 ? Math.round(playedMinutes / 60) : Math.round((playedMinutes / 60) * 10) / 10)
-      : undefined;
-
-    const visits = sum?.visits ?? pack?.sessions ?? undefined;
     const avgSessionMinutes = (playedMinutes && visits && visits > 0)
       ? Math.round(playedMinutes / visits)
       : undefined;
 
-    // Hourly yield: calculated from exact minutes to prevent rounding distortion
+    // Hourly yield: calculated from exact hours to prevent distortion
     let hourlyYield: number | undefined = undefined;
-    if (playedMinutes && playedMinutes >= 15) {
+    if (playedHours && playedHours > 0 && totalSpent > 0) {
+      hourlyYield = Math.round(totalSpent / playedHours);
+    } else if (playedMinutes && playedMinutes >= 15 && totalSpent > 0) {
       hourlyYield = Math.round(totalSpent / (playedMinutes / 60));
+    }
+
+    // Scaled topup breakdown
+    let topupAdmin = sum?.topupAdmin;
+    let topupLK = sum?.topupLK;
+    let topupApp = sum?.topupApp;
+    let spentShop = sum?.spentShop;
+    if (dateFilter && datasetDays && reportDays) {
+      const scale = reportDays / datasetDays;
+      if (topupAdmin !== undefined) topupAdmin = Math.round(topupAdmin * scale);
+      if (topupLK !== undefined) topupLK = Math.round(topupLK * scale);
+      if (topupApp !== undefined) topupApp = Math.round(topupApp * scale);
+      if (spentShop !== undefined) spentShop = Math.round(spentShop * scale);
     }
 
     // Процент выданных бонусов к реальным деньгам
@@ -919,11 +973,11 @@ export function buildClubAnalytics(
       playedMinutes,
       playedHours,
       avgSessionMinutes,
-      topupAdmin: sum?.topupAdmin,
-      topupLK: sum?.topupLK,
-      topupApp: sum?.topupApp,
+      topupAdmin,
+      topupLK,
+      topupApp,
       spentSessionsReal,
-      spentShop: sum?.spentShop,
+      spentShop,
       preferredPayment,
 
       favoriteZone,
@@ -938,11 +992,13 @@ export function buildClubAnalytics(
     });
   }
 
-  // Determine Whales (топ 10% платящих по реальным деньгам)
-  const payers = profiles.filter((p) => p.totalSpent > 0).sort((a, b) => b.totalSpent - a.totalSpent);
-  const whaleThreshold = payers.length > 10 ? payers[Math.floor(payers.length * 0.1)].totalSpent : 2500;
-  payers.forEach((p) => {
-    if (p.totalSpent >= Math.max(1500, whaleThreshold)) {
+  // Determine Whales (киты)
+  const whaleThreshold = (dateFilter && reportDays && datasetDays)
+    ? Math.max(500, Math.round(2000 * (reportDays / datasetDays)))
+    : 2000;
+
+  profiles.forEach((p) => {
+    if (p.totalSpent >= whaleThreshold) {
       p.isWhale = true;
     }
   });
@@ -978,24 +1034,15 @@ export function buildClubAnalytics(
     ? Math.round((totalBonusAccrued / totalAllTopups) * 1000) / 10
     : 0;
 
-  // Summary aggregates (sum exact minutes first to prevent rounding drift)
-  const hasSummaryReport = summaryRows.length > 0;
-  let totalPlayedMinutes = 0;
   let totalVisits = 0;
-  let totalAdminTopup = 0;
-  let totalLKTopup = 0;
-  let totalAppTopup = 0;
-  let totalShopSpent = 0;
-
-  if (hasSummaryReport) {
-    for (const s of summaryMap.values()) {
-      totalPlayedMinutes += s.playedMinutes;
-      totalVisits += s.visits;
-      totalAdminTopup += s.topupAdmin;
-      totalLKTopup += s.topupLK;
-      totalAppTopup += s.topupApp;
-      totalShopSpent += s.spentShop;
-    }
+  if (packageRows.length > 0) {
+    totalVisits = totalPackageSessions;
+    totalPlayedMinutes = totalPackageHours * 60;
+  } else if (hasSummaryReport) {
+    const rawVisits = Array.from(summaryMap.values()).reduce((s, x) => s + x.visits, 0);
+    totalVisits = (dateFilter && datasetDays && reportDays)
+      ? Math.round(rawVisits * (reportDays / datasetDays))
+      : rawVisits;
   }
 
   let totalHoursPlayed = 0;
@@ -1012,8 +1059,16 @@ export function buildClubAnalytics(
     ? Math.round(totalRevenueInLog / totalHoursPlayed)
     : (totalPlayedMinutes > 0 && totalRevenueInLog > 0 ? Math.round(totalRevenueInLog / (totalPlayedMinutes / 60)) : 0);
 
+  if (dateFilter && datasetDays && reportDays) {
+    const scale = reportDays / datasetDays;
+    totalAdminTopup = Math.round(totalAdminTopup * scale);
+    totalLKTopup = Math.round(totalLKTopup * scale);
+    totalAppTopup = Math.round(totalAppTopup * scale);
+    totalShopSpent = Math.round(totalShopSpent * scale);
+  }
+
   const whales = profiles
-    .filter((p) => p.isWhale || p.totalSpent >= 2000)
+    .filter((p) => p.isWhale || p.totalSpent >= whaleThreshold)
     .sort((a, b) => b.totalSpent - a.totalSpent);
 
   const topChurned = profiles
