@@ -122,21 +122,44 @@ export default function MarketingPage() {
         uniqueGuests: 0,
       }));
 
+      const computedAbandonedBalance = g
+        .filter((p) => p.status === "churned" && (p.balance || 0) > 0)
+        .reduce((sum, p) => sum + (p.balance || 0), 0);
+
+      const computedAbandonedBonus = g
+        .filter((p) => p.status === "churned" && (p.bonusBalance || 0) > 0)
+        .reduce((sum, p) => sum + (p.bonusBalance || 0), 0);
+
+      const computedBonusAccrued = g.reduce((sum, p) => sum + (p.bonusAccrued || 0), 0);
+      const computedBonusSpent = g.reduce((sum, p) => sum + (p.bonusSpent || 0), 0);
+
+      const totalBonusAccrued = sm.totalBonusAccrued ?? (
+        computedBonusAccrued > 0 
+          ? computedBonusAccrued 
+          : (sm.overallBonusEmissionRate && sm.totalRevenueInLog 
+              ? Math.round(sm.totalRevenueInLog * (sm.overallBonusEmissionRate / 100)) 
+              : 0)
+      );
+
+      const abandonedBalance = sm.abandonedBalance ?? computedAbandonedBalance;
+      const abandonedBonus = sm.abandonedBonus ?? computedAbandonedBonus;
+      const totalBonusSpent = sm.totalBonusSpent ?? computedBonusSpent;
+
       return {
         profiles: g,
         clubPcStats: pc,
         totalGuests: sm.totalGuests || g.length,
         totalRevenueInLog: sm.totalRevenueInLog || 0,
-        totalBonusAccrued: 0,
-        totalBonusSpent: 0,
-        overallBonusEmissionRate: sm.overallBonusEmissionRate || 0,
+        totalBonusAccrued,
+        totalBonusSpent,
+        overallBonusEmissionRate: sm.overallBonusEmissionRate || (sm.totalRevenueInLog > 0 ? Math.round((totalBonusAccrued / sm.totalRevenueInLog) * 1000) / 10 : 0),
         overallBonusShareOfTotal: 0,
         avgHourlyYield: sm.avgHourlyYield || 0,
         activeCount: sm.activeCount || g.filter((p) => p.status === "active").length,
         coolingCount: g.filter((p) => p.status === "cooling").length,
         churnedCount: sm.churnedCount || g.filter((p) => p.status === "churned").length,
-        abandonedBalance: 0,
-        abandonedBonus: 0,
+        abandonedBalance,
+        abandonedBonus,
         whales: g.filter((p) => p.isWhale),
         topChurned: g.filter((p) => p.status === "churned").slice(0, 10),
         atRisk: [],
