@@ -364,8 +364,8 @@ export default function MarketingPage() {
         .sort((a, b) => b.totalSpent - a.totalSpent);
 
       const totalRevenueInLog = monthData
-        ? (monthData.shiftRev || monthData.rub)
-        : Math.round((sm.totalRevenueInLog || 0) * scaleRatio);
+        ? monthData.rub
+        : Math.round((sm.totalPackageRub || sm.totalRevenueInLog || 0) * scaleRatio);
       const totalHoursPlayed = monthData
         ? monthData.hours
         : Math.round((sm.totalHoursPlayed || 0) * scaleRatio);
