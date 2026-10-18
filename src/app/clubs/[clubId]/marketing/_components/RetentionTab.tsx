@@ -15,7 +15,9 @@ import {
   FileSpreadsheet,
   Percent,
   Search,
-  Check
+  Check,
+  Sparkles,
+  Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SnapshotSummary, SnapshotFull } from "./types";
@@ -27,7 +29,7 @@ interface Props {
   currentAnalytics: ClubAnalytics | null;
 }
 
-type SubTab = "churn" | "downgrade" | "growth" | "newbies";
+type SubTab = "churn" | "downgrade" | "growth" | "newbies" | "cooling" | "with_balance";
 
 export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props) {
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
@@ -41,7 +43,6 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
   // Loaded full snapshots
   const [baseData, setBaseData] = useState<SnapshotFull | null>(null);
   const [compareData, setCompareData] = useState<SnapshotFull | null>(null);
-  const [loadingData, setLoadingData] = useState(false);
 
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("churn");
   const [searchQuery, setSearchQuery] = useState("");
@@ -61,7 +62,13 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
             setCurrentSnapshotId(data[0].id);
             setBaseSnapshotId(data[1].id);
           } else if (data.length === 1) {
-            setCurrentSnapshotId(data[0].id);
+            if (currentAnalytics) {
+              setBaseSnapshotId(data[0].id);
+              setCurrentSnapshotId("");
+            } else {
+              setBaseSnapshotId(data[0].id);
+              setCurrentSnapshotId(data[0].id);
+            }
           }
         }
       })
@@ -69,7 +76,7 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
         console.warn("Failed to load snapshots list for retention:", err);
       })
       .finally(() => setLoadingList(false));
-  }, [clubId]);
+  }, [clubId, currentAnalytics]);
 
   // Load Base snapshot
   useEffect(() => {
@@ -114,9 +121,10 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
       .catch((err) => console.warn("Failed to load compare snapshot:", err));
   }, [currentSnapshotId, activeSnapshot, currentAnalytics, clubId]);
 
-  // Map guests for comparison
+  // Map guests for comparison if two DISTINCT periods are selected
   const comparison = useMemo(() => {
     if (!baseData || !compareData) return null;
+    if (baseData.id === compareData.id) return null;
 
     const baseProfiles = baseData.guests_data || [];
     const currentProfiles = compareData.guests_data || [];
@@ -221,18 +229,70 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
     };
   }, [baseData, compareData]);
 
-  // Export phones of active subtab
+  // Single-Snapshot Retention Audit calculations (when 1 snapshot is active or selected)
+  const singleSnapshot: SnapshotFull | null = compareData || baseData || activeSnapshot;
+  const singleProfiles = useMemo(() => {
+    return singleSnapshot?.guests_data || currentAnalytics?.profiles || [];
+  }, [singleSnapshot, currentAnalytics]);
+
+  const singleMetrics = useMemo(() => {
+    if (!singleSnapshot && !currentAnalytics) return null;
+    const sm = singleSnapshot?.summary_metrics || {};
+    const totalGuests = sm.totalGuests || singleProfiles.length;
+
+    const churned = singleProfiles.filter((p) => p.status === "churned");
+    const cooling = singleProfiles.filter((p) => p.status === "cooling");
+    const withBalance = singleProfiles
+      .filter((p) => (p.balance || 0) > 0 || (p.bonusBalance || 0) > 0)
+      .sort((a, b) => (b.balance || 0) - (a.balance || 0));
+
+    const abandonedBal = sm.abandonedBalance ?? (sm as any).churnedBal ?? churned.reduce((s, p) => s + (p.balance || 0), 0);
+    const abandonedBonus = sm.abandonedBonus ?? (sm as any).churnedBonus ?? churned.reduce((s, p) => s + (p.bonusBalance || 0), 0);
+    const churnPercent = totalGuests > 0 ? Math.round((churned.length / totalGuests) * 1000) / 10 : 0;
+
+    return {
+      totalGuests,
+      churned,
+      cooling,
+      withBalance,
+      abandonedBal,
+      abandonedBonus,
+      churnPercent,
+    };
+  }, [singleSnapshot, currentAnalytics, singleProfiles]);
+
+  // Single snapshot filtered table rows
+  const filteredSingleList = useMemo(() => {
+    if (!singleMetrics) return [];
+    let list: ClientProfile[] = [];
+    if (activeSubTab === "churn") list = singleMetrics.churned;
+    else if (activeSubTab === "cooling") list = singleMetrics.cooling;
+    else if (activeSubTab === "with_balance") list = singleMetrics.withBalance;
+    else list = singleMetrics.churned;
+
+    if (!searchQuery) return list;
+    const q = searchQuery.toLowerCase().trim();
+    return list.filter((p) => 
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.phone && p.phone.includes(q))
+    );
+  }, [singleMetrics, activeSubTab, searchQuery]);
+
+  // Export phones of active subtab (for dual comparison OR single snapshot audit)
   const handleExportPhones = () => {
-    if (!comparison) return;
     let phones: string[] = [];
-    if (activeSubTab === "churn") {
-      phones = comparison.churned.map((c) => c.profile.phone).filter(Boolean);
-    } else if (activeSubTab === "downgrade") {
-      phones = comparison.downgraded.map((d) => d.profile.phone).filter(Boolean);
-    } else if (activeSubTab === "growth") {
-      phones = comparison.growth.map((g) => g.profile.phone).filter(Boolean);
-    } else if (activeSubTab === "newbies") {
-      phones = comparison.newbies.map((n) => n.phone).filter(Boolean);
+    if (comparison) {
+      if (activeSubTab === "churn") {
+        phones = comparison.churned.map((c) => c.profile.phone).filter(Boolean);
+      } else if (activeSubTab === "downgrade") {
+        phones = comparison.downgraded.map((d) => d.profile.phone).filter(Boolean);
+      } else if (activeSubTab === "growth") {
+        phones = comparison.growth.map((g) => g.profile.phone).filter(Boolean);
+      } else if (activeSubTab === "newbies") {
+        phones = comparison.newbies.map((n) => n.phone).filter(Boolean);
+      }
+    } else if (singleMetrics) {
+      phones = filteredSingleList.map((p) => p.phone).filter(Boolean);
     }
 
     if (phones.length === 0) return;
@@ -257,15 +317,15 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (snapshots.length < 2 && !activeSnapshot && !currentAnalytics) {
+  if (snapshots.length === 0 && !activeSnapshot && !currentAnalytics) {
     return (
       <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center space-y-3">
         <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
         <h3 className="font-black text-base uppercase tracking-tight text-slate-700">
-          Нужно минимум 2 среза для сравнения
+          Срезы еще не созданы
         </h3>
         <p className="text-xs text-slate-400 max-w-md mx-auto">
-          Чтобы выявить отток гостей, потерянную выручку и динамику удержания, сохраните минимум два периода (например: Сентябрь и Октябрь) во вкладке «Срезы и Загрузка».
+          Для анализа удержания, оттока и динамики гостей сохраните хотя бы один период во вкладке «Срезы и Загрузка».
         </p>
       </div>
     );
@@ -317,18 +377,17 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
           </div>
         </div>
 
-        {comparison && (
-          <button
-            onClick={handleExportPhones}
-            className="flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider bg-slate-900 text-white rounded-xl shadow-md hover:bg-slate-800 transition-all self-start md:self-auto"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Download className="w-3.5 h-3.5" />}
-            <span>Скачать телефоны ({activeSubTab})</span>
-          </button>
-        )}
+        <button
+          onClick={handleExportPhones}
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider bg-slate-900 text-white rounded-xl shadow-md hover:bg-slate-800 transition-all self-start md:self-auto"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Download className="w-3.5 h-3.5" />}
+          <span>Скачать телефоны ({activeSubTab})</span>
+        </button>
       </div>
 
-      {comparison && (
+      {/* DUAL COMPARISON MODE (when 2 distinct periods are selected) */}
+      {comparison ? (
         <>
           {/* Macro Deltas */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -382,7 +441,7 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
           </div>
 
           {/* Subtabs Navigation */}
-          <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
             <button
               onClick={() => setActiveSubTab("churn")}
               className={cn(
@@ -538,6 +597,206 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
             </div>
           </div>
         </>
+      ) : singleMetrics ? (
+        /* SINGLE-SNAPSHOT RETENTION AUDIT (when viewing 1 period) */
+        <>
+          {/* Helpful callout banner */}
+          <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <span className="p-1.5 bg-violet-600 text-white rounded-lg">
+                <Sparkles className="w-4 h-4" />
+              </span>
+              <div>
+                <p className="text-xs font-bold text-slate-900">
+                  Аудит удержания и оттока базы {singleSnapshot?.name ? `(Срез: ${singleSnapshot.name})` : ""}
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Вы можете скачать базу номеров для SMS/VK рассылок по оттоку. Чтобы увидеть сравнение «Месяц к Месяцу» (рост, новичков и падения), выберите второй срез в селекторе выше.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Macro Audit Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
+              <span className="text-[10px] font-black uppercase text-slate-400">Всего в базе клуба</span>
+              <div className="text-xl font-black text-slate-900">
+                {singleMetrics.totalGuests.toLocaleString("ru")} чел.
+              </div>
+              <span className="text-[11px] text-slate-400 block">
+                Зарегистрированные профили
+              </span>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
+              <span className="text-[10px] font-black uppercase text-slate-400">В оттоке (&gt;30 дней)</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-black text-red-600">
+                  {singleMetrics.churned.length.toLocaleString("ru")} чел.
+                </span>
+                <span className="text-xs font-bold text-red-500">
+                  ({singleMetrics.churnPercent}%)
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400 block">
+                Не посещали клуб более месяца
+              </span>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
+              <span className="text-[10px] font-black uppercase text-slate-400">Остывают (15–30 дней)</span>
+              <div className="text-xl font-black text-amber-600">
+                {singleMetrics.cooling.length.toLocaleString("ru")} чел.
+              </div>
+              <span className="text-[11px] text-slate-400 block">
+                Риск перехода в отток
+              </span>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
+              <span className="text-[10px] font-black uppercase text-slate-400">Забытые деньги</span>
+              <div className="text-xl font-black text-slate-900">
+                {Math.round(singleMetrics.abandonedBal).toLocaleString("ru")} ₽
+              </div>
+              <span className="text-[11px] text-slate-400 block">
+                + {Math.round(singleMetrics.abandonedBonus).toLocaleString("ru")} Б на спящих счетах
+              </span>
+            </div>
+          </div>
+
+          {/* Subtabs for Single Snapshot Audit */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+            <button
+              onClick={() => setActiveSubTab("churn")}
+              className={cn(
+                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
+                activeSubTab === "churn"
+                  ? "bg-red-50 text-red-700 border border-red-200 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <UserMinus className="w-3.5 h-3.5" />
+              <span>В оттоке 31+ дней ({singleMetrics.churned.length.toLocaleString("ru")})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSubTab("cooling")}
+              className={cn(
+                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
+                activeSubTab === "cooling"
+                  ? "bg-amber-50 text-amber-700 border border-amber-200 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <TrendingDown className="w-3.5 h-3.5" />
+              <span>Остывают 15–30 дней ({singleMetrics.cooling.length.toLocaleString("ru")})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSubTab("with_balance")}
+              className={cn(
+                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
+                activeSubTab === "with_balance"
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              <span>С деньгами на балансе ({singleMetrics.withBalance.length.toLocaleString("ru")})</span>
+            </button>
+          </div>
+
+          {/* Table Container */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 space-y-4 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-black text-sm uppercase tracking-wider text-slate-800">
+                  {activeSubTab === "churn" && "Клиенты в оттоке (31+ дней без визита)"}
+                  {activeSubTab === "cooling" && "Клиенты, которые остывают (15–30 дней)"}
+                  {activeSubTab === "with_balance" && "Гости с остатком рублей или бонусов на счете"}
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Показано {Math.min(100, filteredSingleList.length)} из {filteredSingleList.length.toLocaleString("ru")} гостей. Для полной базы нажмите «Скачать телефоны».
+                </p>
+              </div>
+
+              {/* Search */}
+              <div className="relative w-full md:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Поиск по имени или телефону..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-400 font-black uppercase text-[10px] tracking-wider">
+                    <th className="py-3 px-4">Имя гостя</th>
+                    <th className="py-3 px-4">Телефон</th>
+                    <th className="py-3 px-4 text-right">Баланс (₽)</th>
+                    <th className="py-3 px-4 text-right">Бонусы</th>
+                    <th className="py-3 px-4 text-right">Потрачено в клубе</th>
+                    <th className="py-3 px-4 text-center">Дней без визита</th>
+                    <th className="py-3 px-4 text-center">Статус</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {filteredSingleList.slice(0, 100).map((p, idx) => (
+                    <tr key={(p.phone || "") + idx} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3.5 px-4 font-black text-slate-900">{p.name || "Гость"}</td>
+                      <td className="py-3.5 px-4 text-slate-600 font-mono">{p.phone || "—"}</td>
+                      <td className="py-3.5 px-4 text-right font-black text-slate-900">
+                        {(p.balance || 0) > 0 ? `${(p.balance || 0).toLocaleString("ru")} ₽` : "0 ₽"}
+                      </td>
+                      <td className="py-3.5 px-4 text-right text-amber-600 font-semibold">
+                        {(p.bonusBalance || 0) > 0 ? `${(p.bonusBalance || 0).toLocaleString("ru")} Б` : "0 Б"}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-bold text-slate-700">
+                        {(p.totalSpent || 0).toLocaleString("ru")} ₽
+                      </td>
+                      <td className="py-3.5 px-4 text-center text-slate-500">
+                        {p.daysSince !== null && p.daysSince !== undefined ? `${p.daysSince} дн.` : "—"}
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span
+                          className={cn(
+                            "px-2 py-0.5 rounded-md text-[10px] font-bold",
+                            p.status === "churned"
+                              ? "bg-red-50 text-red-600 border border-red-200"
+                              : p.status === "cooling"
+                              ? "bg-amber-50 text-amber-600 border border-amber-200"
+                              : "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                          )}
+                        >
+                          {p.status === "churned" ? "Отток" : p.status === "cooling" ? "Остывает" : "Активен"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredSingleList.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                        Гостей по заданным критериям не найдено
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center space-y-3">
+          <Loader2 className="w-8 h-8 animate-spin text-violet-600 mx-auto" />
+          <p className="text-xs text-slate-400">Загрузка данных удержания...</p>
+        </div>
       )}
     </div>
   );

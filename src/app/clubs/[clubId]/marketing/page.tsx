@@ -16,7 +16,7 @@ import {
   Calendar,
   Sparkles
 } from "lucide-react";
-import { buildClubAnalytics, type ClubAnalytics, type WorkstationInfo } from "./_components/segmentation";
+import { buildClubAnalytics, type ClubAnalytics, type WorkstationInfo, type ClientProfile } from "./_components/segmentation";
 import { detectPeriod } from "./_components/periodDetection";
 import type { SnapshotFull } from "./_components/types";
 
@@ -71,6 +71,34 @@ export default function MarketingPage() {
       });
   }, [clubId]);
 
+  // Auto-load latest snapshot on mount if no files and no snapshot loaded
+  useEffect(() => {
+    if (guestRows || txRows || summaryRows || packageRows || activeSnapshot) return;
+
+    let isMounted = true;
+    fetch(`/api/clubs/${clubId}/marketing/snapshots`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then(async (snapshots: any[]) => {
+        if (!isMounted || !Array.isArray(snapshots) || snapshots.length === 0) return;
+        const latest = snapshots[0];
+        const detailRes = await fetch(`/api/clubs/${clubId}/marketing/snapshots/${latest.id}`);
+        if (!isMounted || !detailRes.ok) return;
+        const fullSnapshot = await detailRes.json();
+        if (!isMounted) return;
+        setActiveSnapshot(fullSnapshot);
+        if (!tabParam) {
+          setActiveTab("analytics");
+        }
+      })
+      .catch((err) => {
+        console.warn("Auto-load snapshot error:", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [clubId]);
+
   useEffect(() => {
     if (tabParam && tabParam !== activeTab) {
       setActiveTab(tabParam);
@@ -99,9 +127,61 @@ export default function MarketingPage() {
 
     // Otherwise if a saved snapshot is selected, reconstruct analytics
     if (activeSnapshot) {
-      const g = activeSnapshot.guests_data || [];
+      const rawGuests = activeSnapshot.guests_data || [];
       const pc = activeSnapshot.pc_data || [];
       const sm = activeSnapshot.summary_metrics || {};
+
+      // Enrich profiles with properly computed ratios and categories
+      const enrichedProfiles: ClientProfile[] = rawGuests.map((p) => {
+        const totalSpent = p.totalSpent || 0;
+        const bonusAccrued = p.bonusAccrued || 0;
+        const bonusSpent = p.bonusSpent || 0;
+        const bonusBalance = p.bonusBalance || 0;
+        const balance = p.balance || 0;
+        const txCount = p.txCount || (totalSpent > 0 ? 1 : 0);
+        const avgTx = p.avgTx || (txCount > 0 ? Math.round(totalSpent / txCount) : 0);
+
+        const bonusGivenRatio = p.bonusGivenRatio ?? (
+          totalSpent > 0
+            ? Math.round((bonusAccrued / totalSpent) * 100)
+            : (bonusAccrued > 0 ? 999 : 0)
+        );
+
+        const totalAdditions = totalSpent + bonusAccrued;
+        const cashShare = p.cashShare ?? (
+          totalAdditions > 0 ? Math.round((totalSpent / totalAdditions) * 100) : 100
+        );
+
+        let valueCategory: ClientProfile["valueCategory"] = p.valueCategory || "standard";
+        if (!p.valueCategory) {
+          if (bonusAccrued >= 200 && (bonusGivenRatio >= 40 || totalSpent === 0)) {
+            valueCategory = "bonus_heavy";
+          } else if (bonusGivenRatio <= 10 && totalSpent >= 2000) {
+            valueCategory = "diamond";
+          } else if (bonusGivenRatio <= 25 && totalSpent >= 1000) {
+            valueCategory = "loyal";
+          }
+        }
+
+        const isWhale = p.isWhale || totalSpent >= 2000;
+
+        return {
+          ...p,
+          totalSpent,
+          bonusAccrued,
+          bonusSpent,
+          bonusBalance,
+          balance,
+          txCount,
+          avgTx,
+          bonusGivenRatio,
+          cashShare,
+          valueCategory,
+          isWhale,
+          lastAuth: p.lastAuth ? new Date(p.lastAuth) : null,
+          regDate: p.regDate ? new Date(p.regDate) : null,
+        };
+      });
 
       // Reconstruct zone stats from PC stats if available
       const zoneMap = new Map<string, { rub: number; sessions: number }>();
@@ -122,16 +202,35 @@ export default function MarketingPage() {
         uniqueGuests: 0,
       }));
 
-      const computedAbandonedBalance = g
-        .filter((p) => p.status === "churned" && (p.balance || 0) > 0)
-        .reduce((sum, p) => sum + (p.balance || 0), 0);
+      // Reconstruct tariff stats if available from profiles
+      const tariffMap = new Map<string, { count: number; rub: number; bonus: number }>();
+      for (const p of enrichedProfiles) {
+        if (p.favoriteTariff) {
+          const t = tariffMap.get(p.favoriteTariff) || { count: 0, rub: 0, bonus: 0 };
+          t.count += p.packageCount || 1;
+          t.rub += p.packageSpentRub || 0;
+          t.bonus += p.packageSpentBonus || 0;
+          tariffMap.set(p.favoriteTariff, t);
+        }
+      }
+      const clubTariffStats = Array.from(tariffMap.entries()).map(([name, d]) => ({
+        name,
+        type: "Пакет",
+        count: d.count,
+        rub: d.rub,
+        bonus: d.bonus,
+      })).sort((a, b) => b.rub - a.rub);
 
-      const computedAbandonedBonus = g
-        .filter((p) => p.status === "churned" && (p.bonusBalance || 0) > 0)
-        .reduce((sum, p) => sum + (p.bonusBalance || 0), 0);
+      const computedAbandonedBalance = enrichedProfiles
+        .filter((p) => p.status === "churned" && p.balance > 0)
+        .reduce((sum, p) => sum + p.balance, 0);
 
-      const computedBonusAccrued = g.reduce((sum, p) => sum + (p.bonusAccrued || 0), 0);
-      const computedBonusSpent = g.reduce((sum, p) => sum + (p.bonusSpent || 0), 0);
+      const computedAbandonedBonus = enrichedProfiles
+        .filter((p) => p.status === "churned" && p.bonusBalance > 0)
+        .reduce((sum, p) => sum + p.bonusBalance, 0);
+
+      const computedBonusAccrued = enrichedProfiles.reduce((sum, p) => sum + p.bonusAccrued, 0);
+      const computedBonusSpent = enrichedProfiles.reduce((sum, p) => sum + p.bonusSpent, 0);
 
       const totalBonusAccrued = sm.totalBonusAccrued ?? (
         computedBonusAccrued > 0 
@@ -141,36 +240,57 @@ export default function MarketingPage() {
               : 0)
       );
 
-      const abandonedBalance = sm.abandonedBalance ?? computedAbandonedBalance;
-      const abandonedBonus = sm.abandonedBonus ?? computedAbandonedBonus;
+      const abandonedBalance = sm.abandonedBalance ?? (sm as any).churnedBal ?? computedAbandonedBalance;
+      const abandonedBonus = sm.abandonedBonus ?? (sm as any).churnedBonus ?? computedAbandonedBonus;
       const totalBonusSpent = sm.totalBonusSpent ?? computedBonusSpent;
 
+      const reportDateFrom = activeSnapshot.period_start ? new Date(activeSnapshot.period_start) : null;
+      const reportDateTo = activeSnapshot.period_end ? new Date(activeSnapshot.period_end) : null;
+      const reportDays = (reportDateFrom && reportDateTo && !isNaN(reportDateFrom.getTime()) && !isNaN(reportDateTo.getTime()))
+        ? Math.max(1, Math.round((reportDateTo.getTime() - reportDateFrom.getTime()) / (1000 * 60 * 60 * 24)))
+        : null;
+
+      const whales = enrichedProfiles
+        .filter((p) => p.isWhale || p.totalSpent >= 2000)
+        .sort((a, b) => b.totalSpent - a.totalSpent);
+
+      const topChurned = enrichedProfiles
+        .filter((p) => p.status === "churned" && p.totalSpent > 0)
+        .sort((a, b) => b.totalSpent - a.totalSpent);
+
+      const atRisk = enrichedProfiles
+        .filter((p) => p.status === "cooling" && (p.totalSpent > 0 || p.balance > 100))
+        .sort((a, b) => b.totalSpent - a.totalSpent);
+
       return {
-        profiles: g,
+        profiles: enrichedProfiles,
         clubPcStats: pc,
-        totalGuests: sm.totalGuests || g.length,
+        totalGuests: sm.totalGuests || enrichedProfiles.length,
         totalRevenueInLog: sm.totalRevenueInLog || 0,
         totalBonusAccrued,
         totalBonusSpent,
         overallBonusEmissionRate: sm.overallBonusEmissionRate || (sm.totalRevenueInLog > 0 ? Math.round((totalBonusAccrued / sm.totalRevenueInLog) * 1000) / 10 : 0),
         overallBonusShareOfTotal: 0,
         avgHourlyYield: sm.avgHourlyYield || 0,
-        activeCount: sm.activeCount || g.filter((p) => p.status === "active").length,
-        coolingCount: g.filter((p) => p.status === "cooling").length,
-        churnedCount: sm.churnedCount || g.filter((p) => p.status === "churned").length,
+        activeCount: sm.activeCount || enrichedProfiles.filter((p) => p.status === "active").length,
+        coolingCount: sm.coolingCount || enrichedProfiles.filter((p) => p.status === "cooling").length,
+        churnedCount: sm.churnedCount || enrichedProfiles.filter((p) => p.status === "churned").length,
         abandonedBalance,
         abandonedBonus,
-        whales: g.filter((p) => p.isWhale),
-        topChurned: g.filter((p) => p.status === "churned").slice(0, 10),
-        atRisk: [],
+        whales,
+        topChurned,
+        atRisk,
         hasSummaryReport: true,
+        reportDateFrom,
+        reportDateTo,
+        reportDays,
         totalPlayedMinutes: (sm.totalHoursPlayed || 0) * 60,
         totalHoursPlayed: sm.totalHoursPlayed || 0,
         totalVisits: sm.totalVisits || 0,
         hasPackagesReport: pc.length > 0,
         totalPackageRub: sm.totalPackageRub || 0,
         clubZoneStats,
-        clubTariffStats: [],
+        clubTariffStats,
         parsedAt: new Date(activeSnapshot.created_at),
       };
     }

@@ -27,11 +27,21 @@ interface Props {
 }
 
 interface WorkplaceHealth {
-  id: number;
+  id: number | string;
   name: string;
   zone: string;
   openIssuesCount: number;
   lastCleanedAt: string | null;
+}
+
+export function normalizeWorkstationName(str: unknown): string {
+  if (!str) return "";
+  return String(str)
+    .trim()
+    .toLowerCase()
+    .replace(/^пк/g, "pc")
+    .replace(/[\s\-_]/g, "")
+    .replace(/^([a-zа-я]+)0*(\d+)$/, "$1$2");
 }
 
 export function HardwareTab({ clubId, analytics }: Props) {
@@ -54,8 +64,8 @@ export function HardwareTab({ clubId, analytics }: Props) {
           const eqList: any[] = Array.isArray(data.equipment) ? data.equipment : [];
 
           // Group issues and cleaning by workstation_id
-          const issuesByWorkstation = new Map<number, number>();
-          const cleaningByWorkstation = new Map<number, string | null>();
+          const issuesByWorkstation = new Map<number | string, number>();
+          const cleaningByWorkstation = new Map<number | string, string | null>();
 
           for (const eq of eqList) {
             if (eq.workstation_id) {
@@ -72,8 +82,8 @@ export function HardwareTab({ clubId, analytics }: Props) {
           }
 
           for (const w of data.workstations) {
-            const normalizedName = String(w.name || "").trim().toLowerCase();
-            map.set(normalizedName, {
+            const normalizedKey = normalizeWorkstationName(w.name);
+            map.set(normalizedKey, {
               id: w.id,
               name: w.name,
               zone: w.zone,
@@ -105,7 +115,7 @@ export function HardwareTab({ clubId, analytics }: Props) {
         if (!pc.pc.toLowerCase().includes(q) && !pc.zone.toLowerCase().includes(q)) return false;
       }
 
-      const health = workplaceHealthMap.get(pc.pc.toLowerCase());
+      const health = workplaceHealthMap.get(normalizeWorkstationName(pc.pc));
       if (filterIssueOnly && (!health || health.openIssuesCount === 0)) return false;
       if (filterUnderperformingOnly && pc.percentOfZoneAverage >= 80) return false;
 
@@ -275,7 +285,7 @@ export function HardwareTab({ clubId, analytics }: Props) {
                 </tr>
               ) : (
                 filteredPcs.map((pc) => {
-                  const health = workplaceHealthMap.get(pc.pc.toLowerCase());
+                  const health = workplaceHealthMap.get(normalizeWorkstationName(pc.pc));
                   const hasIssues = health && health.openIssuesCount > 0;
                   const dev = pc.percentOfZoneAverage;
                   const isUnder = dev < 80;
