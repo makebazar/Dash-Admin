@@ -120,6 +120,13 @@ export function SnapshotsManager({
         if (p.favoriteZone) item.favoriteZone = p.favoriteZone;
         if (p.favoriteTariff) item.favoriteTariff = p.favoriteTariff;
         if (p.favoriteSeat) item.favoriteSeat = p.favoriteSeat;
+        if (p.packageSpentRub !== undefined) item.packageSpentRub = Math.round(p.packageSpentRub);
+        if (p.packageSpentBonus !== undefined) item.packageSpentBonus = Math.round(p.packageSpentBonus);
+        if (p.packageCount !== undefined) item.packageCount = p.packageCount;
+        if (p.topupAdmin !== undefined) item.topupAdmin = Math.round(p.topupAdmin);
+        if (p.topupLK !== undefined) item.topupLK = Math.round(p.topupLK);
+        if (p.topupApp !== undefined) item.topupApp = Math.round(p.topupApp);
+        if (p.spentShop !== undefined) item.spentShop = Math.round(p.spentShop);
         if (p.gamerPersona && p.gamerPersona !== "regular") item.gamerPersona = p.gamerPersona;
         if (p.preferredTime) item.preferredTime = p.preferredTime;
         if (p.favoriteDay) item.favoriteDay = p.favoriteDay;
