@@ -294,22 +294,9 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
     setSortRules(filtered.length > 0 ? filtered : [{ key: "spent", desc: true }]);
   };
 
-  if (!analytics) {
-    return (
-      <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center space-y-3">
-        <Users className="w-12 h-12 text-slate-300 mx-auto" />
-        <h3 className="font-bold text-sm text-slate-700">
-          Данные не загружены
-        </h3>
-        <p className="text-xs text-slate-400 max-w-sm mx-auto">
-          Перейдите на вкладку «Загрузка отчетов» и загрузите один или несколько файлов Langame.
-        </p>
-      </div>
-    );
-  }
-
   // Bonus heavy clients
   const bonusHeavyClients = useMemo(() => {
+    if (!analytics) return [];
     return analytics.profiles
       .filter((p) => p.valueCategory === "bonus_heavy")
       .sort((a, b) => b.bonusAccrued - a.bonusAccrued);
@@ -317,6 +304,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
   // Filter & Multi-sort
   const displayList = useMemo(() => {
+    if (!analytics) return [];
     let list: ClientProfile[] = [];
     if (viewMode === "whales") list = analytics.whales;
     else if (viewMode === "churned") list = analytics.topChurned;
@@ -398,6 +386,18 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
     });
   }, [analytics, viewMode, search, sortRules, bonusHeavyClients, minSpent, selectedZone, selectedPersona, selectedTime]);
 
+  const totalBonusOnHands = useMemo(() => {
+    if (!analytics) return 0;
+    return analytics.profiles.reduce((sum, p) => sum + p.bonusBalance, 0);
+  }, [analytics]);
+
+  const activeColumns = useMemo(() => {
+    return columnOrder
+      .filter((id) => visibleColumns[id])
+      .map((id) => ALL_COLUMNS.find((c) => c.id === id)!)
+      .filter(Boolean);
+  }, [columnOrder, visibleColumns]);
+
   const formatDate = (d: Date | string | null | undefined) => {
     if (!d) return "—";
     try {
@@ -413,16 +413,19 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
     }
   };
 
-  const totalBonusOnHands = useMemo(() => {
-    return analytics.profiles.reduce((sum, p) => sum + p.bonusBalance, 0);
-  }, [analytics]);
-
-  const activeColumns = useMemo(() => {
-    return columnOrder
-      .filter((id) => visibleColumns[id])
-      .map((id) => ALL_COLUMNS.find((c) => c.id === id)!)
-      .filter(Boolean);
-  }, [columnOrder, visibleColumns]);
+  if (!analytics) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center space-y-3">
+        <Users className="w-12 h-12 text-slate-300 mx-auto" />
+        <h3 className="font-bold text-sm text-slate-700">
+          Данные не загружены
+        </h3>
+        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+          Перейдите на вкладку «Загрузка отчетов» и загрузите один или несколько файлов Langame.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
