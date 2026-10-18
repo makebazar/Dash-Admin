@@ -6,6 +6,10 @@ import { UploadTab } from "./_components/UploadTab";
 import { AnalyticsTab } from "./_components/AnalyticsTab";
 import { HardwareTab } from "./_components/HardwareTab";
 import { RetentionTab } from "./_components/RetentionTab";
+import { TasksTab } from "./_components/TasksTab";
+import { MarketingSettingsModal } from "./_components/MarketingSettingsModal";
+import { SmsCampaignModal } from "./_components/SmsCampaignModal";
+import { VkAudiencesModal } from "./_components/VkAudiencesModal";
 import { cn } from "@/lib/utils";
 import { 
   FolderArchive, 
@@ -14,7 +18,11 @@ import {
   Users, 
   Database,
   Calendar,
-  Sparkles
+  Sparkles,
+  CheckSquare,
+  MessageSquare,
+  Share2,
+  Settings
 } from "lucide-react";
 import { buildClubAnalytics, type ClubAnalytics, type WorkstationInfo, type ClientProfile, type DateFilter, type ClubPcStat } from "./_components/segmentation";
 import { detectPeriod } from "./_components/periodDetection";
@@ -22,6 +30,7 @@ import type { SnapshotFull } from "./_components/types";
 
 const TABS = [
   { id: "analytics", label: "Гости и Персоны", icon: BarChart3 },
+  { id: "tasks", label: "Задачи смене", icon: CheckSquare },
   { id: "hardware", label: "Зоны и Железо", icon: Monitor },
   { id: "retention", label: "Удержание и Динамика", icon: Users },
   { id: "upload", label: "Срезы и Загрузка", icon: FolderArchive },
@@ -59,6 +68,38 @@ export default function MarketingPage() {
 
   // Workstations from equipment module for zone mapping
   const [workstations, setWorkstations] = useState<WorkstationInfo[]>([]);
+
+  // Modals & Marketing settings
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSmsOpen, setIsSmsOpen] = useState(false);
+  const [isVkOpen, setIsVkOpen] = useState(false);
+  const [excludedPhones, setExcludedPhones] = useState<string[]>([]);
+
+  // Load excluded phones from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(`marketing_excluded_phones_${clubId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) setExcludedPhones(parsed);
+        }
+      } catch (err) {
+        console.warn("Failed to load excluded phones:", err);
+      }
+    }
+  }, [clubId]);
+
+  const handleSaveExcludedPhones = (phones: string[]) => {
+    setExcludedPhones(phones);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`marketing_excluded_phones_${clubId}`, JSON.stringify(phones));
+      } catch (e) {
+        console.warn("Failed to save excluded phones:", e);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!clubId) return;
@@ -119,7 +160,7 @@ export default function MarketingPage() {
   const analytics: ClubAnalytics | null = useMemo(() => {
     // If raw files are uploaded, prioritize them
     if (guestRows || txRows || summaryRows || packageRows) {
-      return buildClubAnalytics(
+      const built = buildClubAnalytics(
         guestRows || [],
         txRows || [],
         summaryRows || [],
@@ -127,11 +168,34 @@ export default function MarketingPage() {
         workstations,
         dateFilter
       );
+      if (built && excludedPhones.length > 0) {
+        built.profiles = built.profiles.filter((p) => {
+          const norm = (p.phone || "").replace(/\D/g, "").slice(-10);
+          return !excludedPhones.includes(norm);
+        });
+        built.whales = built.whales.filter((p) => {
+          const norm = (p.phone || "").replace(/\D/g, "").slice(-10);
+          return !excludedPhones.includes(norm);
+        });
+        built.topChurned = built.topChurned.filter((p) => {
+          const norm = (p.phone || "").replace(/\D/g, "").slice(-10);
+          return !excludedPhones.includes(norm);
+        });
+        built.atRisk = built.atRisk.filter((p) => {
+          const norm = (p.phone || "").replace(/\D/g, "").slice(-10);
+          return !excludedPhones.includes(norm);
+        });
+      }
+      return built;
     }
 
     // Otherwise if a saved snapshot is selected, reconstruct analytics
     if (activeSnapshot) {
-      const rawGuests = activeSnapshot.guests_data || [];
+      const rawGuests = (activeSnapshot.guests_data || []).filter((p) => {
+        if (excludedPhones.length === 0) return true;
+        const norm = (p.phone || "").replace(/\D/g, "").slice(-10);
+        return !excludedPhones.includes(norm);
+      });
       const pc = activeSnapshot.pc_data || [];
       const sm = activeSnapshot.summary_metrics || {};
 
@@ -438,7 +502,7 @@ export default function MarketingPage() {
     }
 
     return null;
-  }, [guestRows, txRows, summaryRows, packageRows, workstations, activeSnapshot, dateFilter]);
+  }, [guestRows, txRows, summaryRows, packageRows, workstations, activeSnapshot, dateFilter, excludedPhones]);
 
   const handleClearAll = () => {
     setGuestRows(null);
@@ -520,6 +584,49 @@ export default function MarketingPage() {
               </span>
             ) : null}
 
+            {/* Quick Action Buttons (SMS, VK, Settings) */}
+            <div className="flex items-center gap-1.5 mr-2">
+              <button
+                type="button"
+                onClick={() => setIsSmsOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200/80 font-bold text-xs uppercase italic tracking-wider transition-all shadow-sm"
+                title="Создать персонализированную SMS-рассылку"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>SMS</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsVkOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 font-bold text-xs uppercase italic tracking-wider transition-all shadow-sm"
+                title="Экспорт сегментов в VK Рекламу (ads.vk.com)"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>VK</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs uppercase italic tracking-wider transition-all border shadow-sm",
+                  excludedPhones.length > 0
+                    ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200"
+                    : "bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-700 border-slate-200"
+                )}
+                title="Настройки маркетинга и номера исключения (админы/персонал)"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>Исключения</span>
+                {excludedPhones.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-black not-italic">
+                    {excludedPhones.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
             {TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -575,6 +682,16 @@ export default function MarketingPage() {
           />
         )}
 
+        {activeTab === "tasks" && (
+          <TasksTab 
+            clubId={clubId} 
+            analytics={analytics} 
+            excludedPhones={excludedPhones}
+            onOpenSms={() => setIsSmsOpen(true)}
+            onOpenVk={() => setIsVkOpen(true)}
+          />
+        )}
+
         {activeTab === "hardware" && (
           <HardwareTab clubId={clubId} analytics={analytics} />
         )}
@@ -587,6 +704,31 @@ export default function MarketingPage() {
           />
         )}
       </div>
+
+      {/* Marketing Modals */}
+      <MarketingSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        clubId={clubId}
+        excludedPhones={excludedPhones}
+        onSaveExcludedPhones={handleSaveExcludedPhones}
+      />
+
+      <SmsCampaignModal
+        isOpen={isSmsOpen}
+        onClose={() => setIsSmsOpen(false)}
+        clubId={clubId}
+        analytics={analytics}
+        excludedPhones={excludedPhones}
+      />
+
+      <VkAudiencesModal
+        isOpen={isVkOpen}
+        onClose={() => setIsVkOpen(false)}
+        clubId={clubId}
+        analytics={analytics}
+        excludedPhones={excludedPhones}
+      />
     </div>
   );
 }
