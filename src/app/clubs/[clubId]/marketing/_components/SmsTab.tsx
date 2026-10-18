@@ -1,23 +1,6 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { 
-  MessageSquare, 
-  Download, 
-  Sparkles, 
-  Send, 
-  Users, 
-  Wallet, 
-  Tag, 
-  Smartphone, 
-  CheckCircle2, 
-  Flame, 
-  UserCheck, 
-  FileText,
-  ChevronRight,
-  RefreshCw,
-  Info
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ClientProfile, ClubAnalytics } from "./segmentation";
 import type { MarketingCampaignRecord } from "./SmsCampaignModal";
@@ -38,40 +21,76 @@ const TEMPLATE_TAGS = [
   { tag: "{Любимый_Тариф}", desc: "Любимый тариф" },
 ];
 
-const PRESET_TEMPLATES = [
+const PRESETS = [
   {
-    name: "Забытые деньги на балансе",
+    name: "Забытый баланс",
     cohort: "balance",
-    text: "Привет, {Имя}! Напоминаем, что в Colizeum на твоем счете {Баланс_Руб} ₽ и {Баланс_Бонус} Б. Твой {Любимый_ПК} свободен, заглядывай поиграть!",
+    defaultName: "Напоминание о забытом балансе",
+    text: "Привет, {Имя}! В Colizeum на твоем счете {Баланс_Руб} ₽ и {Баланс_Бонус} Б. Твой {Любимый_ПК} свободен, заглядывай!",
   },
   {
     name: "VIP-бронь на привычный день",
     cohort: "whales",
-    text: "Привет, {Имя}! Скоро {Любимый_День}. Твой привычный {Любимый_ПК} в {Любимая_Зона} ждет тебя. Забронировать место на вечер?",
+    defaultName: "VIP-бронь для постоянных гостей",
+    text: "Привет, {Имя}! Скоро {Любимый_День}. Твой привычный {Любимый_ПК} в {Любимая_Зона} ждет тебя. Забронировать на вечер?",
   },
   {
-    name: "Спецпредложение на отток",
+    name: "Реактивация оттока",
     cohort: "churned",
-    text: "{Имя}, давно не виделись в Colizeum! Дарим 250 бонусов на 4 дня. Успей затестить новое железо в эти дни!",
+    defaultName: "Возврат остывших клиентов",
+    text: "{Имя}, давно не виделись в Colizeum! Дарим 250 бонусов на 4 дня. Заходи затестить новое железо!",
   },
   {
     name: "Остывающие постоянники",
     cohort: "cooling",
-    text: "Привет, {Имя}! Мы соскучились в Colizeum. Твой любимый {Любимый_ПК} готов к каткам {Любимый_День}!",
+    defaultName: "Удержание регулярных гостей",
+    text: "Привет, {Имя}! Мы соскучились. Твой любимый {Любимый_ПК} готов к каткам {Любимый_День}!",
   },
 ];
 
 export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
-  const [selectedCohort, setSelectedCohort] = useState<"balance" | "whales" | "cooling" | "churned" | "all">("balance");
-  const [templateText, setTemplateText] = useState(PRESET_TEMPLATES[0].text);
-  const [campaignName, setCampaignName] = useState("SMS: Забытые деньги на балансе");
-  const [sampleClientIdx, setSampleClientIdx] = useState(0);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
-
-  // Storage key for campaign registry
   const storageKey = `marketing_campaigns_${clubId}`;
 
-  // Filter cohort clients
+  // Loaded campaigns history
+  const [campaigns, setCampaigns] = useState<MarketingCampaignRecord[]>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+
+  // Wizard state: "wizard" when configuring, "view" when showing results
+  const [mode, setMode] = useState<"view" | "wizard">("view");
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+
+  // Wizard form values
+  const [campaignName, setCampaignName] = useState("Рассылка постоянным гостям");
+  const [selectedCohort, setSelectedCohort] = useState<"balance" | "whales" | "cooling" | "churned" | "all">("balance");
+  const [templateText, setTemplateText] = useState(PRESETS[0].text);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+
+  // Load existing campaigns on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const smsList = parsed.filter((c: MarketingCampaignRecord) => c.channel === "sms");
+            setCampaigns(smsList);
+            if (smsList.length > 0) {
+              setSelectedCampaignId(smsList[0].id);
+              setMode("view");
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load campaigns:", err);
+      }
+      // If no SMS campaigns yet, open wizard
+      setMode("wizard");
+    }
+  }, [storageKey]);
+
+  // Cohort audience calculation
   const targetClients: ClientProfile[] = useMemo(() => {
     if (!analytics || !analytics.profiles) return [];
 
@@ -104,9 +123,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
     }
   }, [analytics, selectedCohort, excludedPhones]);
 
-  const sampleClient = targetClients[sampleClientIdx % Math.max(1, targetClients.length)] || null;
-
-  // Substitute tags helper
+  // Message renderer
   const renderMessage = (text: string, client: ClientProfile | null) => {
     if (!client) return text;
     const name = client.name ? client.name.split(" ")[0] : "друг";
@@ -127,34 +144,28 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
       .replace(/{Любимый_Тариф}/g, tariff);
   };
 
-  const previewMessage = useMemo(() => {
-    return renderMessage(templateText, sampleClient);
-  }, [templateText, sampleClient]);
+  const sampleClient = targetClients[0] || null;
+  const sampleMessage = useMemo(() => renderMessage(templateText, sampleClient), [templateText, sampleClient]);
 
-  // Calculations for SMS parts and costs
-  const isCyrillic = /[а-яёА-ЯЁ]/.test(previewMessage);
+  // Length and cost metrics
+  const isCyrillic = /[а-яёА-ЯЁ]/.test(sampleMessage);
   const charLimit = isCyrillic ? 70 : 160;
   const multiLimit = isCyrillic ? 67 : 153;
-  const msgLength = previewMessage.length;
+  const msgLength = sampleMessage.length;
   const smsParts = msgLength <= charLimit ? 1 : Math.ceil(msgLength / multiLimit);
-  const costPerSms = 3.5; // ~3.5 ₽ avg in RU SMS aggregators
+  const costPerSms = 3.5;
   const estimatedCost = targetClients.length * smsParts * costPerSms;
 
-  const handleInsertTag = (tag: string) => {
-    setTemplateText((prev) => prev + " " + tag);
+  const handleStartWizard = () => {
+    setWizardStep(1);
+    setMode("wizard");
   };
 
-  const handleSelectPreset = (preset: typeof PRESET_TEMPLATES[0]) => {
-    setTemplateText(preset.text);
-    setSelectedCohort(preset.cohort as any);
-    setCampaignName(`SMS: ${preset.name}`);
-  };
-
-  const handleRegisterCampaign = () => {
+  const handleFinishWizard = () => {
     const record: MarketingCampaignRecord = {
       id: `sms_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       clubId,
-      name: campaignName,
+      name: campaignName.trim() || "Новая SMS-кампания",
       channel: "sms",
       templateText,
       targetPhones: targetClients.map((c) => (c.phone || "").replace(/\D/g, "").slice(-10)),
@@ -168,21 +179,35 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
         list.unshift(record);
         localStorage.setItem(storageKey, JSON.stringify(list));
       } catch (e) {
-        console.warn("Failed to register campaign:", e);
+        console.warn("Failed to save campaign:", e);
       }
     }
+
+    setCampaigns((prev) => [record, ...prev]);
+    setSelectedCampaignId(record.id);
+    setMode("view");
   };
 
-  const handleExportCsv = () => {
-    if (targetClients.length === 0) return;
+  const activeCampaign = campaigns.find((c) => c.id === selectedCampaignId) || campaigns[0] || null;
 
-    handleRegisterCampaign();
+  // Active campaign clients
+  const activeCampaignClients = useMemo(() => {
+    if (!activeCampaign || !analytics || !analytics.profiles) return [];
+    const phoneSet = new Set(activeCampaign.targetPhones);
+    return analytics.profiles.filter((p) => {
+      const norm = (p.phone || "").replace(/\D/g, "").slice(-10);
+      return phoneSet.has(norm);
+    });
+  }, [activeCampaign, analytics]);
+
+  const handleExportCsv = (clientList: ClientProfile[], text: string, name: string) => {
+    if (clientList.length === 0) return;
 
     const rows = [["phone", "name", "message", "balance_rub", "bonus_balance", "favorite_pc", "favorite_day"]];
-    for (const c of targetClients) {
+    for (const c of clientList) {
       const p = (c.phone || "").replace(/\D/g, "");
       const fullPhone = p.length === 11 && p.startsWith("8") ? "7" + p.slice(1) : p;
-      const msg = renderMessage(templateText, c).replace(/"/g, '""');
+      const msg = renderMessage(text, c).replace(/"/g, '""');
       rows.push([
         `+${fullPhone}`,
         `"${c.name || ""}"`,
@@ -199,296 +224,525 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `sms_campaign_${selectedCohort}_${Date.now()}.csv`);
+    link.setAttribute("download", `${name.toLowerCase().replace(/\s+/g, "_")}_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
     setDownloadSuccess(true);
-    setTimeout(() => setDownloadSuccess(false), 4000);
+    setTimeout(() => setDownloadSuccess(false), 3000);
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-violet-600/30 text-violet-400 border border-violet-500/30">
-              <MessageSquare className="w-5 h-5" />
+  const handleDeleteCampaign = (id: string) => {
+    if (!confirm("Удалить эту кампанию?")) return;
+    const updated = campaigns.filter((c) => c.id !== id);
+    setCampaigns(updated);
+    if (selectedCampaignId === id) {
+      setSelectedCampaignId(updated[0]?.id || null);
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        const list: MarketingCampaignRecord[] = saved ? JSON.parse(saved) : [];
+        const filtered = list.filter((c) => c.id !== id);
+        localStorage.setItem(storageKey, JSON.stringify(filtered));
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+    if (updated.length === 0) {
+      setMode("wizard");
+      setWizardStep(1);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // RENDER 1: WIZARD ("КВЕСТ" НАСТРОЙКИ КАМПАНИИ)
+  // -------------------------------------------------------------
+  if (mode === "wizard") {
+    return (
+      <div className="max-w-3xl mx-auto py-4 space-y-8">
+        {/* Step Indicator Header */}
+        <div className="border-b border-slate-200 pb-5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-mono uppercase tracking-wider text-slate-400">
+              Мастер создания рассылки • Шаг {wizardStep} из 3
             </span>
-            <h2 className="text-xl font-bold tracking-tight">Персонализированные SMS-рассылки</h2>
-            <span className="bg-violet-500/30 text-violet-300 border border-violet-500/30 text-xs font-bold px-2.5 py-0.5 rounded-full">
-              {targetClients.length.toLocaleString("ru")} получателей
-            </span>
+            {campaigns.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setMode("view")}
+                className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
+              >
+                Отмена и возврат к списку
+              </button>
+            )}
           </div>
-          <p className="text-xs text-slate-400 max-w-3xl">
-            Конструктор шаблонов с автоподстановкой любимого дня недели, ПК, зоны, бонусов и забытого остатка гостя. Экспорт готового файла для SMS-шлюзов с фиксацией в сквозной аналитике доходимости.
-          </p>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+            {wizardStep === 1 && "Когорта получателей"}
+            {wizardStep === 2 && "Текст сообщения и подстановки"}
+            {wizardStep === 3 && "Проверка и запуск"}
+          </h2>
         </div>
 
-        <button
-          type="button"
-          onClick={handleExportCsv}
-          disabled={targetClients.length === 0}
-          className="px-5 py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center gap-2 self-start md:self-auto shrink-0"
-        >
-          <Download className="w-4 h-4" />
-          <span>Скачать CSV для рассылки</span>
-        </button>
-      </div>
-
-      {/* Main Two-Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Template Builder & Settings */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* 1. Cohort Selector */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
-            <label className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
-              1. Когорта получателей
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {[
-                { id: "balance", label: "Забытые балансы", count: analytics?.profiles?.filter((p) => (p.balance >= 100 || p.bonusBalance >= 200) && p.status !== "active").length },
-                { id: "whales", label: "Киты (Whales)", count: analytics?.whales?.length },
-                { id: "cooling", label: "Остывающие", count: analytics?.coolingCount },
-                { id: "churned", label: "Отток (>30 дн.)", count: analytics?.churnedCount },
-                { id: "all", label: "Все с чеком > 0", count: analytics?.profiles?.filter((p) => p.totalSpent > 0).length },
-              ].map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setSelectedCohort(c.id as any)}
-                  className={cn(
-                    "p-3 rounded-xl border text-left transition-all",
-                    selectedCohort === c.id
-                      ? "bg-slate-900 text-white border-slate-900 shadow-sm"
-                      : "bg-white hover:bg-slate-50 border-slate-200 text-slate-700"
-                  )}
-                >
-                  <p className="text-xs font-bold">{c.label}</p>
-                  <span className={cn(
-                    "text-[10px] font-semibold block mt-0.5",
-                    selectedCohort === c.id ? "text-violet-300" : "text-slate-400"
-                  )}>
-                    {c.count ?? 0} чел.
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 2. Presets Quick Select */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
-            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider block">
-              Готовые сценарии рассылок
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {PRESET_TEMPLATES.map((p) => (
-                <button
-                  key={p.name}
-                  type="button"
-                  onClick={() => handleSelectPreset(p)}
-                  className="p-3 text-left bg-slate-50 hover:bg-violet-50/60 border border-slate-200/80 hover:border-violet-200 rounded-xl transition-colors group"
-                >
-                  <p className="text-xs font-bold text-slate-900 group-hover:text-violet-700">{p.name}</p>
-                  <p className="text-[11px] text-slate-500 line-clamp-2 mt-1">{p.text}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 3. Template Editor */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                2. Текст сообщения
-              </label>
-              <span className="text-[11px] text-slate-400">
-                Нажмите на тег для вставки в текст
-              </span>
-            </div>
-
-            {/* Tags Pills */}
-            <div className="flex flex-wrap gap-1.5">
-              {TEMPLATE_TAGS.map((t) => (
-                <button
-                  key={t.tag}
-                  type="button"
-                  onClick={() => handleInsertTag(t.tag)}
-                  className="px-2.5 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1"
-                  title={t.desc}
-                >
-                  <span>{t.tag}</span>
-                </button>
-              ))}
-            </div>
-
-            <textarea
-              rows={4}
-              value={templateText}
-              onChange={(e) => setTemplateText(e.target.value)}
-              placeholder="Напишите текст сообщения..."
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white transition-colors"
-            />
-
-            {/* Campaign Name */}
-            <div>
-              <label className="text-[11px] font-semibold text-slate-500 mb-1 block">
-                Название кампании для сквозной аналитики:
+        {/* STEP 1: AUDIENCE & NAME */}
+        {wizardStep === 1 && (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-700 block">
+                Название кампании
               </label>
               <input
                 type="text"
                 value={campaignName}
                 onChange={(e) => setCampaignName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 font-medium focus:outline-none focus:border-violet-500 focus:bg-white"
+                placeholder="Например: Напоминание о забытых бонусах на счетах"
+                className="w-full text-base font-semibold py-2.5 px-3 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-slate-900 transition-colors"
               />
             </div>
-          </div>
-        </div>
 
-        {/* Right Column: Live Phone Mockup & Cost Breakdown */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* Live Smartphone Mockup */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4 flex flex-col items-center">
-            <div className="w-full flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <Smartphone className="w-4 h-4 text-violet-600" />
-                Живой предпросмотр SMS
+            <div className="space-y-3 pt-2">
+              <label className="text-xs font-semibold text-slate-700 block">
+                Кому отправить сообщение?
+              </label>
+
+              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white overflow-hidden">
+                {[
+                  {
+                    id: "balance",
+                    title: "Гости с забытыми деньгами на балансе",
+                    desc: "Баланс от 100 ₽ или бонусы от 200 Б, клиент не был в клубе более 7 дней",
+                    count: analytics?.profiles?.filter((p) => (p.balance >= 100 || p.bonusBalance >= 200) && p.status !== "active").length || 0,
+                  },
+                  {
+                    id: "whales",
+                    title: "VIP-клиенты и Киты (Whales)",
+                    desc: "Гости с чеком от 2 500 ₽ или максимальным статусом трат",
+                    count: analytics?.whales?.length || 0,
+                  },
+                  {
+                    id: "cooling",
+                    title: "Остывающие постоянники",
+                    desc: "Регулярно ходили в клуб, но не появлялись последние 20–40 дней",
+                    count: analytics?.coolingCount || 0,
+                  },
+                  {
+                    id: "churned",
+                    title: "Клиенты в оттоке",
+                    desc: "Бывшие активные клиенты, которые не были более 30 дней",
+                    count: analytics?.churnedCount || 0,
+                  },
+                  {
+                    id: "all",
+                    title: "Все клиенты с ненулевым чеком",
+                    desc: "Вся база клуба за исключением служебных номеров",
+                    count: analytics?.profiles?.filter((p) => p.totalSpent > 0).length || 0,
+                  },
+                ].map((item) => (
+                  <label
+                    key={item.id}
+                    className={cn(
+                      "flex items-start gap-4 p-4 cursor-pointer transition-colors",
+                      selectedCohort === item.id ? "bg-slate-50" : "hover:bg-slate-50/50"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="cohort"
+                      checked={selectedCohort === item.id}
+                      onChange={() => setSelectedCohort(item.id as any)}
+                      className="mt-1 h-4 w-4 text-slate-900 focus:ring-slate-900"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-slate-900">{item.title}</span>
+                        <span className="text-xs font-mono font-bold text-slate-900">{item.count.toLocaleString("ru")} чел.</span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">{item.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4 flex items-center justify-between border-t border-slate-200">
+              <span className="text-xs text-slate-500 font-medium">
+                Выбрано: <b>{targetClients.length.toLocaleString("ru")}</b> получателей
               </span>
+              <button
+                type="button"
+                onClick={() => setWizardStep(2)}
+                disabled={targetClients.length === 0}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors"
+              >
+                Продолжить к тексту $\rightarrow$
+              </button>
+            </div>
+          </div>
+        )}
 
-              {targetClients.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setSampleClientIdx((prev) => prev + 1)}
-                  className="text-xs text-violet-600 hover:text-violet-800 font-semibold flex items-center gap-1"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>Другой гость</span>
-                </button>
-              )}
+        {/* STEP 2: TEMPLATE TEXT & TAGS */}
+        {wizardStep === 2 && (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-700 block">
+                Готовые варианты сообщений
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.name}
+                    type="button"
+                    onClick={() => {
+                      setTemplateText(p.text);
+                      if (!campaignName || campaignName.includes("Рассылка")) {
+                        setCampaignName(p.defaultName);
+                      }
+                    }}
+                    className="p-3 text-left border border-slate-200 rounded-lg hover:border-slate-400 bg-white transition-colors"
+                  >
+                    <span className="text-xs font-semibold text-slate-900 block">{p.name}</span>
+                    <span className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{p.text}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Phone Screen */}
-            <div className="w-full max-w-[320px] bg-slate-900 p-3 rounded-[36px] shadow-xl border-4 border-slate-800">
-              {/* Speaker Notch */}
-              <div className="w-20 h-3.5 bg-slate-800 rounded-full mx-auto mb-2" />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700">
+                  Текст SMS
+                </label>
+                <span className="text-[11px] text-slate-400">
+                  Кликните тег, чтобы вставить персонализацию
+                </span>
+              </div>
 
-              {/* Screen Content */}
-              <div className="bg-slate-100 rounded-[28px] p-4 text-slate-900 min-h-[300px] flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="text-center pb-2 border-b border-slate-200">
-                    <p className="text-xs font-bold text-slate-900">COLIZEUM</p>
-                    <span className="text-[10px] text-slate-400">Сегодня, 18:30</span>
-                  </div>
+              {/* Tags bar */}
+              <div className="flex flex-wrap gap-1.5 pb-1">
+                {TEMPLATE_TAGS.map((t) => (
+                  <button
+                    key={t.tag}
+                    type="button"
+                    onClick={() => setTemplateText((prev) => prev + " " + t.tag)}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-mono transition-colors"
+                    title={t.desc}
+                  >
+                    {t.tag}
+                  </button>
+                ))}
+              </div>
 
-                  {/* SMS Bubble */}
-                  <div className="bg-white border border-slate-200/80 rounded-2xl rounded-tl-sm p-3.5 shadow-sm text-xs text-slate-800 leading-relaxed font-normal">
-                    {previewMessage}
-                  </div>
+              <textarea
+                rows={4}
+                value={templateText}
+                onChange={(e) => setTemplateText(e.target.value)}
+                placeholder="Введите текст сообщения с тегами..."
+                className="w-full text-sm p-3 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-slate-900 transition-colors"
+              />
+
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <span>
+                  Длина: <b className="text-slate-800">{msgLength}</b> симв. • <b className="text-slate-800">{smsParts}</b> SMS на контакт
+                </span>
+                <span>
+                  Ориентировочный бюджет: <b className="text-slate-900 font-mono">~{Math.round(estimatedCost).toLocaleString("ru")} ₽</b>
+                </span>
+              </div>
+            </div>
+
+            {/* Live Client Preview Box */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 block">
+                Пример для {sampleClient ? (sampleClient.name || "гостя") : "клиента"}:
+              </span>
+              <p className="text-xs text-slate-800 leading-relaxed font-normal">
+                «{sampleMessage}»
+              </p>
+            </div>
+
+            <div className="pt-4 flex items-center justify-between border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setWizardStep(1)}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+              >
+                $\leftarrow$ Назад к аудитории
+              </button>
+              <button
+                type="button"
+                onClick={() => setWizardStep(3)}
+                disabled={!templateText.trim()}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors"
+              >
+                Проверить и сохранить $\rightarrow$
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: CONFIRM & COMPLETE */}
+        {wizardStep === 3 && (
+          <div className="space-y-6">
+            <div className="border border-slate-200 rounded-xl p-5 bg-white space-y-4">
+              <div>
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                  Название
+                </span>
+                <p className="text-base font-bold text-slate-900 mt-0.5">{campaignName}</p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 pt-3 border-t border-slate-100">
+                <div>
+                  <span className="text-xs text-slate-400 block">Получателей</span>
+                  <p className="text-lg font-bold text-slate-900 mt-0.5 font-mono">
+                    {targetClients.length.toLocaleString("ru")}
+                  </p>
                 </div>
+                <div>
+                  <span className="text-xs text-slate-400 block">Частей SMS</span>
+                  <p className="text-lg font-bold text-slate-900 mt-0.5 font-mono">
+                    {smsParts}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400 block">Бюджет</span>
+                  <p className="text-lg font-bold text-slate-900 mt-0.5 font-mono">
+                    ~{Math.round(estimatedCost).toLocaleString("ru")} ₽
+                  </p>
+                </div>
+              </div>
 
-                {/* Recipient Details */}
-                {sampleClient && (
-                  <div className="pt-2 border-t border-slate-200 text-[10px] text-slate-500 space-y-0.5">
-                    <p><b>Получатель:</b> {sampleClient.name || "Гость"} ({sampleClient.phone})</p>
-                    <p><b>Баланс:</b> {sampleClient.balance} ₽ / {sampleClient.bonusBalance} Б</p>
-                    <p><b>Любимый ПК:</b> {sampleClient.favoriteSeat || "Не определен"}</p>
-                  </div>
-                )}
+              <div className="pt-3 border-t border-slate-100 space-y-1">
+                <span className="text-xs text-slate-400 block">Шаблон</span>
+                <p className="text-xs text-slate-800 font-mono bg-slate-50 p-3 rounded-lg leading-relaxed">
+                  {templateText}
+                </p>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 space-y-1">
+                <span className="text-xs text-slate-400 block">Пример готового сообщения (как увидит гость)</span>
+                <p className="text-xs text-slate-900 font-medium p-3 bg-emerald-50/50 border border-emerald-100 rounded-lg leading-relaxed">
+                  «{sampleMessage}»
+                </p>
               </div>
             </div>
 
-            {/* Cost & Length Scoreboard */}
-            <div className="w-full grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
-              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-[10px] text-slate-400 block font-medium">Длина</span>
-                <p className="text-sm font-bold text-slate-900 tabular-nums">{msgLength} симв.</p>
-              </div>
-
-              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-[10px] text-slate-400 block font-medium">SMS-части</span>
-                <p className="text-sm font-bold text-slate-900 tabular-nums">{smsParts} часть</p>
-              </div>
-
-              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-[10px] text-slate-400 block font-medium">Оценка бюджета</span>
-                <p className="text-sm font-bold text-violet-600 tabular-nums">~{Math.round(estimatedCost).toLocaleString("ru")} ₽</p>
-              </div>
+            <div className="pt-4 flex items-center justify-between border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setWizardStep(2)}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+              >
+                $\leftarrow$ Назад к тексту
+              </button>
+              <button
+                type="button"
+                onClick={handleFinishWizard}
+                className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm"
+              >
+                Завершить настройку и открыть кампанию
+              </button>
             </div>
-
-            {downloadSuccess && (
-              <div className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>CSV-файл скачан, кампания зарегистрирована в сквозной аналитике!</span>
-              </div>
-            )}
           </div>
-        </div>
+        )}
       </div>
+    );
+  }
 
-      {/* Bottom Audience Table Preview */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">
-              Предпросмотр таблицы получателей ({targetClients.length.toLocaleString("ru")})
-            </h3>
-            <p className="text-xs text-slate-500">
-              Персональные сообщения, которые попадут в выгрузку для SMS-шлюза
-            </p>
+  // -------------------------------------------------------------
+  // RENDER 2: STRUCTURED OVERVIEW PAGE (РЕЗУЛЬТАТ ПОСЛЕ НАСТРОЙКИ)
+  // -------------------------------------------------------------
+  return (
+    <div className="space-y-8">
+      {/* Top Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono uppercase tracking-wider text-slate-400">
+              Кампания
+            </span>
+            <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              Сформирована
+            </span>
           </div>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+            {activeCampaign?.name || "SMS-кампания"}
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Создана {activeCampaign?.createdAt ? new Date(activeCampaign.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "сегодня"}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleStartWizard}
+            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold text-xs rounded-lg transition-colors"
+          >
+            + Новая рассылка
+          </button>
 
           <button
             type="button"
-            onClick={handleExportCsv}
-            disabled={targetClients.length === 0}
-            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-2"
+            onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms")}
+            disabled={activeCampaignClients.length === 0}
+            className="px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Скачать весь список</span>
+            Скачать CSV для рассылки
           </button>
         </div>
+      </div>
 
-        <div className="overflow-x-auto border border-slate-100 rounded-xl">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-100">
-                <th className="py-2.5 px-3 font-semibold w-12">№</th>
-                <th className="py-2.5 px-3 font-semibold min-w-[140px]">Клиент</th>
-                <th className="py-2.5 px-3 font-semibold min-w-[130px]">Телефон</th>
-                <th className="py-2.5 px-3 font-semibold min-w-[100px] text-right">Баланс (₽)</th>
-                <th className="py-2.5 px-3 font-semibold min-w-[100px] text-right">Бонусы</th>
-                <th className="py-2.5 px-3 font-semibold min-w-[110px]">Любимый ПК</th>
-                <th className="py-2.5 px-3 font-semibold min-w-[320px]">Сгенерированный текст SMS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-800">
-              {targetClients.slice(0, 30).map((c, idx) => {
-                const personalized = renderMessage(templateText, c);
-                return (
-                  <tr key={c.phone + idx} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-2 px-3 text-slate-400 font-mono">{idx + 1}</td>
-                    <td className="py-2 px-3 font-semibold text-slate-900">{c.name || "Гость"}</td>
-                    <td className="py-2 px-3 font-mono text-slate-600">{c.phone}</td>
-                    <td className="py-2 px-3 text-right font-medium">{Math.round(c.balance || 0).toLocaleString()} ₽</td>
-                    <td className="py-2 px-3 text-right font-medium text-amber-600">{Math.round(c.bonusBalance || 0).toLocaleString()} Б</td>
-                    <td className="py-2 px-3 text-slate-600">{c.favoriteSeat || "—"}</td>
-                    <td className="py-2 px-3 text-slate-700 italic max-w-md truncate">{personalized}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {downloadSuccess && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 font-medium">
+          CSV-файл успешно скачан со всеми персонализированными сообщениями для SMS-шлюза.
+        </div>
+      )}
+
+      {/* Structured Metrics Block */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 border-b border-slate-200 pb-6">
+        <div>
+          <span className="text-xs text-slate-400 uppercase tracking-wider block">
+            Получателей
+          </span>
+          <p className="text-3xl font-bold text-slate-900 mt-1 font-mono">
+            {activeCampaignClients.length.toLocaleString("ru")}
+          </p>
+          <span className="text-[11px] text-slate-500 mt-0.5 block">уникальных гостей</span>
         </div>
 
-        {targetClients.length > 30 && (
-          <p className="text-center text-xs text-slate-400 pt-2">
-            Показаны первые 30 из {targetClients.length.toLocaleString("ru")} получателей. При скачивании в CSV попадут все.
+        <div>
+          <span className="text-xs text-slate-400 uppercase tracking-wider block">
+            Длина шаблона
+          </span>
+          <p className="text-3xl font-bold text-slate-900 mt-1 font-mono">
+            {(activeCampaign?.templateText || "").length} <span className="text-base font-normal text-slate-400">симв.</span>
           </p>
-        )}
+          <span className="text-[11px] text-slate-500 mt-0.5 block">~1 SMS-часть на контакт</span>
+        </div>
+
+        <div>
+          <span className="text-xs text-slate-400 uppercase tracking-wider block">
+            Оценка бюджета
+          </span>
+          <p className="text-3xl font-bold text-slate-900 mt-1 font-mono">
+            ~{Math.round(activeCampaignClients.length * costPerSms).toLocaleString("ru")} <span className="text-base font-normal text-slate-400">₽</span>
+          </p>
+          <span className="text-[11px] text-slate-500 mt-0.5 block">по ставке 3.50 ₽/SMS</span>
+        </div>
+
+        <div>
+          <span className="text-xs text-slate-400 uppercase tracking-wider block">
+            Канал
+          </span>
+          <p className="text-3xl font-bold text-slate-900 mt-1 font-mono">
+            SMS
+          </p>
+          <span className="text-[11px] text-slate-500 mt-0.5 block">готово к импорту в шлюз</span>
+        </div>
       </div>
+
+      {/* Message Template Display */}
+      <div className="space-y-2">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+          Шаблон с тегами персонализации
+        </span>
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 font-mono leading-relaxed">
+          {activeCampaign?.templateText}
+        </div>
+      </div>
+
+      {/* Recipient Table */}
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">
+              Список сформированных сообщений ({activeCampaignClients.length.toLocaleString("ru")})
+            </h3>
+            <p className="text-xs text-slate-500">
+              Итоговый текст, сгенерированный под каждого гостя индивидуально
+            </p>
+          </div>
+
+          {activeCampaign && (
+            <button
+              type="button"
+              onClick={() => handleDeleteCampaign(activeCampaign.id)}
+              className="text-xs text-slate-400 hover:text-rose-600 transition-colors"
+            >
+              Удалить эту кампанию
+            </button>
+          )}
+        </div>
+
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                  <th className="py-3 px-4 font-semibold w-12">№</th>
+                  <th className="py-3 px-4 font-semibold min-w-[140px]">Клиент</th>
+                  <th className="py-3 px-4 font-semibold min-w-[130px]">Телефон</th>
+                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Баланс</th>
+                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Бонусы</th>
+                  <th className="py-3 px-4 font-semibold min-w-[110px]">Любимый ПК</th>
+                  <th className="py-3 px-4 font-semibold min-w-[340px]">Итоговый текст сообщения</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-800">
+                {activeCampaignClients.slice(0, 50).map((c, idx) => {
+                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c);
+                  return (
+                    <tr key={c.phone + idx} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-2.5 px-4 text-slate-400 font-mono">{idx + 1}</td>
+                      <td className="py-2.5 px-4 font-semibold text-slate-900">{c.name || "Гость"}</td>
+                      <td className="py-2.5 px-4 font-mono text-slate-600">{c.phone}</td>
+                      <td className="py-2.5 px-4 text-right font-mono">{Math.round(c.balance || 0).toLocaleString()} ₽</td>
+                      <td className="py-2.5 px-4 text-right font-mono text-amber-700">{Math.round(c.bonusBalance || 0).toLocaleString()} Б</td>
+                      <td className="py-2.5 px-4 text-slate-600">{c.favoriteSeat || "—"}</td>
+                      <td className="py-2.5 px-4 text-slate-700 italic max-w-md truncate">{finalMsg}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {activeCampaignClients.length > 50 && (
+            <div className="py-3 px-4 bg-slate-50 border-t border-slate-200 text-center text-xs text-slate-400">
+              Показаны первые 50 строк. При скачивании в CSV файл войдут все {activeCampaignClients.length.toLocaleString("ru")} получателей.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Other Campaigns Switcher if multiple exist */}
+      {campaigns.length > 1 && (
+        <div className="pt-6 border-t border-slate-200 space-y-2">
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+            Другие созданные кампании
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {campaigns.map((camp) => (
+              <button
+                key={camp.id}
+                type="button"
+                onClick={() => setSelectedCampaignId(camp.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+                  selectedCampaignId === camp.id
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-600 hover:bg-slate-50 border-slate-200"
+                )}
+              >
+                {camp.name} ({camp.targetPhones.length} чел.)
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
