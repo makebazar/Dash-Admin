@@ -275,6 +275,18 @@ export default function MarketingPage() {
             }
           }
 
+          let dayPattern: ClientProfile["dayPattern"] = p.dayPattern;
+          let favoriteDay: string | undefined = p.favoriteDay;
+          if (!dayPattern && p.lastAuth) {
+            const d = new Date(p.lastAuth);
+            if (!isNaN(d.getTime())) {
+              const day = d.getDay();
+              const DAY_NAMES = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
+              favoriteDay = DAY_NAMES[day];
+              dayPattern = (day === 0 || day === 5 || day === 6) ? "weekend" : "weekday";
+            }
+          }
+
           return {
             ...p,
             totalSpent,
@@ -300,6 +312,8 @@ export default function MarketingPage() {
             valueCategory,
             isWhale,
             preferredTime,
+            favoriteDay,
+            dayPattern,
             lastAuth: p.lastAuth ? new Date(p.lastAuth) : null,
             regDate: p.regDate ? new Date(p.regDate) : null,
           };
@@ -339,17 +353,22 @@ export default function MarketingPage() {
       const computedBonusAccrued = enrichedProfiles.reduce((sum, p) => sum + p.bonusAccrued, 0);
       const computedBonusSpent = enrichedProfiles.reduce((sum, p) => sum + p.bonusSpent, 0);
 
-      const totalBonusAccrued = Math.round((sm.totalBonusAccrued ?? (
-        computedBonusAccrued > 0 
-          ? computedBonusAccrued 
-          : (sm.overallBonusEmissionRate && sm.totalRevenueInLog 
-              ? Math.round(sm.totalRevenueInLog * (sm.overallBonusEmissionRate / 100)) 
-              : 0)
-      )) * scaleRatio);
+      const totalBonusSpent = monthData
+        ? (monthData.bonusSpent ?? monthData.bonus ?? 0)
+        : Math.round((sm.totalBonusSpent ?? (sm.totalPackageBonus || computedBonusSpent)) * scaleRatio);
+
+      const totalBonusAccrued = monthData
+        ? (monthData.bonusAccrued ?? (monthData.rub > 0 ? Math.round(monthData.rub * ((sm.overallBonusEmissionRate || 15.5) / 100)) : 0))
+        : Math.round((sm.totalBonusAccrued ?? (
+            computedBonusAccrued > 0 
+              ? computedBonusAccrued 
+              : (sm.overallBonusEmissionRate && sm.totalRevenueInLog 
+                  ? Math.round(sm.totalRevenueInLog * (sm.overallBonusEmissionRate / 100)) 
+                  : 0)
+          )) * scaleRatio);
 
       const abandonedBalance = Math.round((sm.abandonedBalance ?? (sm as any).churnedBal ?? computedAbandonedBalance) * scaleRatio);
       const abandonedBonus = Math.round((sm.abandonedBonus ?? (sm as any).churnedBonus ?? computedAbandonedBonus) * scaleRatio);
-      const totalBonusSpent = Math.round((sm.totalBonusSpent ?? computedBonusSpent) * scaleRatio);
 
       const whales = enrichedProfiles
         .filter((p) => p.isWhale || p.totalSpent >= whaleThreshold)
@@ -379,6 +398,10 @@ export default function MarketingPage() {
         ? Math.round(totalRevenueInLog / totalHoursPlayed)
         : (sm.avgHourlyYield || 0);
 
+      const overallBonusEmissionRate = totalRevenueInLog > 0
+        ? Math.round((totalBonusAccrued / totalRevenueInLog) * 1000) / 10
+        : (sm.overallBonusEmissionRate || 0);
+
       return {
         profiles: enrichedProfiles,
         clubPcStats,
@@ -386,7 +409,7 @@ export default function MarketingPage() {
         totalRevenueInLog,
         totalBonusAccrued,
         totalBonusSpent,
-        overallBonusEmissionRate: sm.overallBonusEmissionRate || (sm.totalRevenueInLog > 0 ? Math.round((totalBonusAccrued / totalRevenueInLog) * 1000) / 10 : 0),
+        overallBonusEmissionRate,
         overallBonusShareOfTotal: 0,
         avgHourlyYield,
         activeCount: Math.round((sm.activeCount || enrichedProfiles.filter((p) => p.status === "active").length) * scaleRatio),

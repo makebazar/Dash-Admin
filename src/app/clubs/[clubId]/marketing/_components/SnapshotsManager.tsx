@@ -121,6 +121,9 @@ export function SnapshotsManager({
         if (p.favoriteTariff) item.favoriteTariff = p.favoriteTariff;
         if (p.favoriteSeat) item.favoriteSeat = p.favoriteSeat;
         if (p.gamerPersona && p.gamerPersona !== "regular") item.gamerPersona = p.gamerPersona;
+        if (p.preferredTime) item.preferredTime = p.preferredTime;
+        if (p.favoriteDay) item.favoriteDay = p.favoriteDay;
+        if (p.dayPattern) item.dayPattern = p.dayPattern;
         if (p.lastAuth) item.lastAuth = p.lastAuth instanceof Date ? p.lastAuth.toISOString() : String(p.lastAuth);
         if (p.daysSince !== null && p.daysSince !== undefined) item.daysSince = p.daysSince;
         return item;

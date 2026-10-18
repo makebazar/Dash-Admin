@@ -68,6 +68,8 @@ export interface ClientProfile {
   nightSessionsCount?: number;
   gamerPersona?: "night_owl" | "console" | "bootcamp" | "regular";
   preferredTime?: "morning" | "day" | "evening" | "night";
+  favoriteDay?: string;
+  dayPattern?: "weekend" | "weekday" | "mixed";
 }
 
 export interface ClubZoneStat {
@@ -338,6 +340,7 @@ export function buildClubAnalytics(
     zones: Map<string, number>;
     seats: Map<string, number>;
     timeSlots: { morning: number; day: number; evening: number; night: number };
+    daySlots: number[];
   }
   const clientPackageMap = new Map<string, ClientPackageStats>();
   const clubZoneMap = new Map<string, { sessions: number; rub: number; bonus: number; guests: Set<string> }>();
@@ -435,22 +438,28 @@ export function buildClubAnalytics(
           zones: new Map(),
           seats: new Map(),
           timeSlots: { morning: 0, day: 0, evening: 0, night: 0 },
+          daySlots: [0, 0, 0, 0, 0, 0, 0], // Sun (0) to Sat (6)
         };
         clientPackageMap.set(phone, clientPack);
       }
+      const pStats = clientPack;
 
-      clientPack.sessions += 1;
-      clientPack.rub += rub;
-      clientPack.bonus += bonus;
-      clientPack.hours += sessHours;
+      pStats.sessions += 1;
+      pStats.rub += rub;
+      pStats.bonus += bonus;
+      pStats.hours += sessHours;
       if (rowDate) {
-        if (!clientPack.lastDate || rowDate > clientPack.lastDate) {
-          clientPack.lastDate = rowDate;
+        if (!pStats.lastDate || rowDate > pStats.lastDate) {
+          pStats.lastDate = rowDate;
+        }
+        const dIdx = rowDate.getDay();
+        if (pStats.daySlots) {
+          pStats.daySlots[dIdx] = (pStats.daySlots[dIdx] || 0) + 1;
         }
       }
 
       const isNight = lowerT.includes("ночь");
-      if (isNight) clientPack.nightSessions += 1;
+      if (isNight) pStats.nightSessions += 1;
 
       let slot: "morning" | "day" | "evening" | "night" | null = null;
       if (isNight) {
@@ -469,21 +478,21 @@ export function buildClubAnalytics(
         else slot = "evening";
       }
       if (slot) {
-        clientPack.timeSlots[slot] += 1;
+        pStats.timeSlots[slot] += 1;
       }
 
-      const tStat = clientPack.tariffs.get(tariffName) || { count: 0, rub: 0, bonus: 0 };
+      const tStat = pStats.tariffs.get(tariffName) || { count: 0, rub: 0, bonus: 0 };
       tStat.count += 1;
       tStat.rub += rub;
       tStat.bonus += bonus;
-      clientPack.tariffs.set(tariffName, tStat);
+      pStats.tariffs.set(tariffName, tStat);
 
       if (zone) {
-        clientPack.zones.set(zone, (clientPack.zones.get(zone) || 0) + 1);
+        pStats.zones.set(zone, (pStats.zones.get(zone) || 0) + 1);
       }
 
       if (pc) {
-        clientPack.seats.set(pc, (clientPack.seats.get(pc) || 0) + 1);
+        pStats.seats.set(pc, (pStats.seats.get(pc) || 0) + 1);
       }
     }
   }
@@ -945,6 +954,37 @@ export function buildClubAnalytics(
       else preferredTime = "evening";
     }
 
+    let dayPattern: ClientProfile["dayPattern"] = undefined;
+    let favoriteDay: string | undefined = undefined;
+    const DAY_NAMES = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
+    if (pack && pack.daySlots) {
+      const dCounts = pack.daySlots;
+      let maxDay = -1;
+      let maxCnt = 0;
+      for (let i = 0; i < 7; i++) {
+        if (dCounts[i] > maxCnt) {
+          maxCnt = dCounts[i];
+          maxDay = i;
+        }
+      }
+      if (maxDay !== -1 && maxCnt > 0) {
+        favoriteDay = DAY_NAMES[maxDay];
+        const weekend = (dCounts[0] || 0) + (dCounts[5] || 0) + (dCounts[6] || 0); // Вс, Пт, Сб
+        const weekday = (dCounts[1] || 0) + (dCounts[2] || 0) + (dCounts[3] || 0) + (dCounts[4] || 0); // Пн-Чт
+        const totalD = weekend + weekday;
+        if (totalD > 0) {
+          if (weekend / totalD >= 0.65) dayPattern = "weekend";
+          else if (weekday / totalD >= 0.65) dayPattern = "weekday";
+          else dayPattern = "mixed";
+        }
+      }
+    }
+    if (!dayPattern && lastAuth && !isNaN(lastAuth.getTime())) {
+      const d = lastAuth.getDay();
+      favoriteDay = DAY_NAMES[d];
+      dayPattern = (d === 0 || d === 5 || d === 6) ? "weekend" : "weekday";
+    }
+
     profiles.push({
       name,
       phone,
@@ -989,6 +1029,8 @@ export function buildClubAnalytics(
       nightSessionsCount: pack?.nightSessions,
       gamerPersona,
       preferredTime,
+      favoriteDay,
+      dayPattern,
     });
   }
 

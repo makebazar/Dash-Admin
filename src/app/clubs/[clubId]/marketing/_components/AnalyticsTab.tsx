@@ -50,6 +50,7 @@ export type ColumnId =
   | "phone"
   | "spent"
   | "preferredTime"
+  | "favoriteDay"
   | "topupAdmin"
   | "topupLK"
   | "topupApp"
@@ -82,6 +83,7 @@ const ALL_COLUMNS: ColumnMeta[] = [
   { id: "phone", label: "Телефон", align: "left", sortable: false, defaultVisible: true, minWidth: "min-w-[130px]" },
   { id: "spent", label: "Реальная выручка", align: "right", sortable: true, defaultVisible: true, minWidth: "min-w-[150px]" },
   { id: "preferredTime", label: "Время визитов", align: "left", sortable: true, defaultVisible: true, minWidth: "min-w-[160px]" },
+  { id: "favoriteDay", label: "Дни визитов", align: "left", sortable: true, defaultVisible: true, minWidth: "min-w-[155px]" },
   { id: "favoriteZone", label: "Любимая зона", align: "left", sortable: true, defaultVisible: true, minWidth: "min-w-[130px]" },
   { id: "favoriteTariff", label: "Любимый тариф", align: "left", sortable: true, defaultVisible: true, minWidth: "min-w-[175px]" },
   { id: "favoriteSeat", label: "Любимый ПК/ТВ", align: "left", sortable: true, defaultVisible: false, minWidth: "min-w-[110px]" },
@@ -115,6 +117,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
   const [selectedZone, setSelectedZone] = useState<string>("all");
   const [selectedPersona, setSelectedPersona] = useState<string>("all");
   const [selectedTime, setSelectedTime] = useState<string>("all");
+  const [selectedDayPattern, setSelectedDayPattern] = useState<string>("all");
 
   const datasetFrom = analytics?.datasetDateFrom || analytics?.reportDateFrom;
   const datasetTo = analytics?.datasetDateTo || analytics?.reportDateTo;
@@ -344,6 +347,10 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
       list = list.filter((p) => p.preferredTime === selectedTime);
     }
 
+    if (selectedDayPattern !== "all") {
+      list = list.filter((p) => p.dayPattern === selectedDayPattern);
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase().trim();
       list = list.filter(
@@ -353,7 +360,8 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
           p.email.toLowerCase().includes(q) ||
           (p.favoriteZone && p.favoriteZone.toLowerCase().includes(q)) ||
           (p.favoriteTariff && p.favoriteTariff.toLowerCase().includes(q)) ||
-          (p.favoriteSeat && p.favoriteSeat.toLowerCase().includes(q))
+          (p.favoriteSeat && p.favoriteSeat.toLowerCase().includes(q)) ||
+          (p.favoriteDay && p.favoriteDay.toLowerCase().includes(q))
       );
     }
 
@@ -362,6 +370,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
         case "name": return p.name.toLowerCase();
         case "spent": return p.totalSpent;
         case "preferredTime": return p.preferredTime ?? "";
+        case "favoriteDay": return p.favoriteDay ?? "";
         case "topupAdmin": return p.topupAdmin ?? 0;
         case "topupLK": return p.topupLK ?? 0;
         case "topupApp": return p.topupApp ?? 0;
@@ -676,14 +685,31 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
         </div>
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
-          <span className="text-xs text-slate-500 font-medium">Выдано бонусов</span>
-          <div className="flex items-baseline gap-1.5 mt-2">
-            <p className="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
-              {Math.round(analytics.totalBonusAccrued).toLocaleString("ru")}
-            </p>
-            <span className="text-xs font-semibold text-amber-600">Б ({analytics.overallBonusEmissionRate}%)</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500 font-medium">Бонусы</span>
+            {analytics.overallBonusEmissionRate > 0 && (
+              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded">
+                {analytics.overallBonusEmissionRate}% эмиссия
+              </span>
+            )}
           </div>
-          <span className="text-[11px] text-slate-400 mt-1">от реальной кассы</span>
+          <div className="mt-2 space-y-1.5">
+            <div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-[11px] text-slate-400">Списано на ПК:</span>
+                <span className="text-base font-bold text-slate-900 tabular-nums">
+                  {Math.round(analytics.totalBonusSpent || 0).toLocaleString("ru")} Б
+                </span>
+              </div>
+            </div>
+            <div className="pt-1.5 border-t border-slate-100 flex items-baseline justify-between">
+              <span className="text-[11px] text-slate-400">Выдано клубом:</span>
+              <span className="text-xs font-bold text-amber-600 tabular-nums">
+                {Math.round(analytics.totalBonusAccrued || 0).toLocaleString("ru")} Б
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] text-slate-400 mt-1">оплачено бонусами / начислено</span>
         </div>
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
@@ -828,6 +854,30 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
                   </button>
                 );
               })}
+            </div>
+
+            {/* Preferred Day Pattern Filter */}
+            <div className="flex items-center gap-1 border-l pl-3 border-slate-200">
+              <span className="text-[11px] text-slate-400 font-medium mr-0.5">Дни:</span>
+              {[
+                { id: "all", label: "Все" },
+                { id: "weekend", label: "🎉 Выходные" },
+                { id: "weekday", label: "💼 Будни" },
+                { id: "mixed", label: "🔄 Смешанные" },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setSelectedDayPattern(opt.id)}
+                  className={cn(
+                    "px-2 py-1 rounded-md text-[11px] font-medium transition-colors",
+                    selectedDayPattern === opt.id
+                      ? "bg-slate-900 text-white font-semibold"
+                      : "text-slate-600 hover:bg-slate-100"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1204,6 +1254,36 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50/80 text-emerald-700 border border-emerald-200/60">
                                   <Sunrise className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                                   <span>Утро <span className="text-[10px] text-emerald-500/80 font-normal">(06–12)</span></span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 text-xs">—</span>
+                              )}
+                            </td>
+                          );
+
+                        case "favoriteDay":
+                          return (
+                            <td key={col.id} className="py-3 px-3.5 whitespace-nowrap">
+                              {client.dayPattern === "weekend" ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-blue-50/80 text-blue-700 border border-blue-200/60">
+                                  <span>Выходные</span>
+                                  {client.favoriteDay && (
+                                    <span className="text-[10px] text-blue-500 font-normal">({client.favoriteDay.slice(0, 2)})</span>
+                                  )}
+                                </span>
+                              ) : client.dayPattern === "weekday" ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-teal-50/80 text-teal-700 border border-teal-200/60">
+                                  <span>Будни</span>
+                                  {client.favoriteDay && (
+                                    <span className="text-[10px] text-teal-600 font-normal">({client.favoriteDay.slice(0, 2)})</span>
+                                  )}
+                                </span>
+                              ) : client.dayPattern === "mixed" ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                  <span>Смешанные</span>
+                                  {client.favoriteDay && (
+                                    <span className="text-[10px] text-slate-500 font-normal">({client.favoriteDay.slice(0, 2)})</span>
+                                  )}
                                 </span>
                               ) : (
                                 <span className="text-slate-300 text-xs">—</span>
