@@ -537,7 +537,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   // -------------------------------------------------------------
   if (viewMode === "wizard") {
     return (
-      <div className="max-w-3xl mx-auto py-4 space-y-8">
+      <div className="w-full py-4 space-y-8">
         {/* Wizard Header Bar */}
         <div className="border-b border-slate-200 pb-5">
           <div className="flex items-center justify-between">
@@ -611,7 +611,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                 Диапазоны фильтрации
               </h3>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {/* 1. LTV / Spent Range */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-700 block">
