@@ -55,7 +55,40 @@ export async function GET(
       });
     }
 
-    // Action 2: Проверка баланса и валидация ключа
+    // Action 2: Расчет стоимости (sms/cost) для одного сообщения или списка
+    if (action === "cost") {
+      const to = searchParams.get("to");
+      const msg = searchParams.get("msg") || "";
+
+      if (!to) {
+        return NextResponse.json({ ok: false, error: "Параметр 'to' обязателен для расчета" }, { status: 400 });
+      }
+
+      const url = new URL("https://sms.ru/sms/cost");
+      url.searchParams.set("api_id", apiId);
+      url.searchParams.set("to", to);
+      url.searchParams.set("msg", msg);
+      url.searchParams.set("json", "1");
+
+      const res = await fetch(url.toString(), { method: "GET" });
+      const data = await res.json();
+
+      if (data.status === "OK") {
+        return NextResponse.json({
+          ok: true,
+          totalCost: data.total_cost || 0,
+          totalSms: data.total_sms || 0,
+          sms: data.sms || {},
+        });
+      }
+
+      return NextResponse.json({
+        ok: false,
+        error: data.status_text || `Ошибка расчета SMS.RU (код ${data.status_code})`,
+      });
+    }
+
+    // Action 3: Проверка баланса и валидация ключа
     const url = `https://sms.ru/my/balance?api_id=${encodeURIComponent(apiId)}&json=1`;
     const res = await fetch(url, { method: "GET" });
     const data = await res.json();
@@ -84,7 +117,7 @@ export async function POST(
 ) {
   try {
     const body = await request.json();
-    const { apiId, senderName, testMode, messages } = body;
+    const { apiId, senderName, testMode, messages, action } = body;
 
     if (!apiId) {
       return NextResponse.json({ ok: false, error: "API ID обязателен" }, { status: 400 });
@@ -92,6 +125,57 @@ export async function POST(
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ ok: false, error: "Список сообщений пуст" }, { status: 400 });
+    }
+
+    // -------------------------------------------------------------
+    // POST Action: Пакетный расчет точной стоимости через sms.ru/sms/cost
+    // -------------------------------------------------------------
+    if (action === "cost") {
+      const chunkSize = 100;
+      const chunks: typeof messages[] = [];
+      for (let i = 0; i < messages.length; i += chunkSize) {
+        chunks.push(messages.slice(i, i + chunkSize));
+      }
+
+      let totalCost = 0;
+      let totalSms = 0;
+      const smsMap: Record<string, any> = {};
+
+      for (const chunk of chunks) {
+        const formData = new URLSearchParams();
+        formData.set("api_id", apiId);
+        formData.set("json", "1");
+
+        chunk.forEach((item: { phone: string; text: string }) => {
+          const clean = (item.phone || "").replace(/\D/g, "");
+          const fullPhone = clean.length === 11 && clean.startsWith("8") ? "7" + clean.slice(1) : clean;
+          formData.set(`to[${fullPhone}]`, item.text);
+        });
+
+        const res = await fetch("https://sms.ru/sms/cost", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formData.toString(),
+        });
+
+        const data = await res.json();
+        if (data.status === "OK") {
+          totalCost += data.total_cost || 0;
+          totalSms += data.total_sms || 0;
+          if (data.sms) {
+            Object.assign(smsMap, data.sms);
+          }
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        totalCost: Number(totalCost.toFixed(2)),
+        totalSms,
+        count: messages.length,
+        averageCostPerMessage: messages.length > 0 ? Number((totalCost / messages.length).toFixed(2)) : 0,
+        sms: smsMap,
+      });
     }
 
     // Разбиваем на пакеты по 100 сообщений (лимит SMS.RU multi-send за 1 запрос)
