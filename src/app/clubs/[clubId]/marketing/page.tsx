@@ -126,7 +126,10 @@ export default function MarketingPage() {
         if (!isMounted || !detailRes.ok) return;
         const fullSnapshot = await detailRes.json();
         if (!isMounted) return;
-        setActiveSnapshot(fullSnapshot);
+        setActiveSnapshot((curr) => {
+          if (curr) return curr;
+          return fullSnapshot;
+        });
         const currentUrlTab = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
         if (!currentUrlTab) {
           setActiveTab("analytics");
@@ -364,6 +367,28 @@ export default function MarketingPage() {
             }
           }
 
+          let topDays: string[] | undefined = p.topDays;
+          if (!topDays || topDays.length === 0) {
+            if (favoriteDay) {
+              if (dayPattern === "weekend") {
+                const weekendDays = ["Пятница", "Суббота", "Воскресенье"];
+                topDays = [favoriteDay, ...weekendDays.filter((d) => d !== favoriteDay)].slice(0, 3);
+              } else if (dayPattern === "weekday") {
+                const weekdayPool = ["Пятница", "Четверг", "Среда", "Вторник", "Понедельник"];
+                topDays = [favoriteDay, ...weekdayPool.filter((d) => d !== favoriteDay)].slice(0, 3);
+              } else {
+                topDays = [favoriteDay];
+              }
+            }
+          }
+
+          let topSeats: string[] | undefined = p.topSeats;
+          if (!topSeats || topSeats.length === 0) {
+            if (p.favoriteSeat && p.favoriteSeat !== "—") {
+              topSeats = [p.favoriteSeat];
+            }
+          }
+
           return {
             ...p,
             totalSpent,
@@ -390,6 +415,9 @@ export default function MarketingPage() {
             isWhale,
             preferredTime,
             favoriteDay,
+            topDays,
+            favoriteSeat: p.favoriteSeat,
+            topSeats,
             dayPattern,
             lastAuth: p.lastAuth ? new Date(p.lastAuth) : null,
             regDate: p.regDate ? new Date(p.regDate) : null,

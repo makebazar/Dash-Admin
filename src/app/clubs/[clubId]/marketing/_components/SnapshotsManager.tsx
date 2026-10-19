@@ -120,6 +120,7 @@ export function SnapshotsManager({
         if (p.favoriteZone) item.favoriteZone = p.favoriteZone;
         if (p.favoriteTariff) item.favoriteTariff = p.favoriteTariff;
         if (p.favoriteSeat) item.favoriteSeat = p.favoriteSeat;
+        if (p.topSeats && p.topSeats.length > 0) item.topSeats = p.topSeats;
         if (p.packageSpentRub !== undefined) item.packageSpentRub = Math.round(p.packageSpentRub);
         if (p.packageSpentBonus !== undefined) item.packageSpentBonus = Math.round(p.packageSpentBonus);
         if (p.packageCount !== undefined) item.packageCount = p.packageCount;
@@ -130,6 +131,7 @@ export function SnapshotsManager({
         if (p.gamerPersona && p.gamerPersona !== "regular") item.gamerPersona = p.gamerPersona;
         if (p.preferredTime) item.preferredTime = p.preferredTime;
         if (p.favoriteDay) item.favoriteDay = p.favoriteDay;
+        if (p.topDays && p.topDays.length > 0) item.topDays = p.topDays;
         if (p.dayPattern) item.dayPattern = p.dayPattern;
         if (p.lastAuth) item.lastAuth = p.lastAuth instanceof Date ? p.lastAuth.toISOString() : String(p.lastAuth);
         if (p.daysSince !== null && p.daysSince !== undefined) item.daysSince = p.daysSince;
