@@ -18,6 +18,7 @@ export interface MarketingCampaignRecord {
   templateText: string;
   targetPhones: string[];
   createdAt: string;
+  startDate?: string; // ISO date string YYYY-MM-DD or ISO timestamp
   returnedCount?: number;
   returnedRevenue?: number;
   scheduleMode?: "instant" | "smart_day" | "smart_day_eve" | "even";

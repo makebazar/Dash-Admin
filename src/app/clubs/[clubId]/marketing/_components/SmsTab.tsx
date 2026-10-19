@@ -198,7 +198,25 @@ const DAY_INDEX_MAP: Record<string, number> = {
   "Суббота": 6,
 };
 
-export function getScheduledDate(dayName: string, baseDate: Date = new Date()): string {
+export function parseBaseDate(val?: Date | string | null): Date {
+  if (!val) return new Date();
+  if (val instanceof Date) return val;
+  const str = String(val).split("T")[0];
+  const parts = str.split("-");
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return new Date(y, m, d, 12, 0, 0);
+    }
+  }
+  const parsed = new Date(val);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+export function getScheduledDate(dayName: string, baseDateInput?: Date | string | null): string {
+  const baseDate = parseBaseDate(baseDateInput);
   if (!dayName || dayName === "Сразу") {
     const dd = String(baseDate.getDate()).padStart(2, "0");
     const mm = String(baseDate.getMonth() + 1).padStart(2, "0");
@@ -331,6 +349,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const [csvFormat, setCsvFormat] = useState<CsvFormatMode>("standard");
   const [isEditingDetailTemplate, setIsEditingDetailTemplate] = useState(false);
   const [detailTemplateDraft, setDetailTemplateDraft] = useState("");
+  const [wizardStartDate, setWizardStartDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   // SMS.RU Integration State
   const smsRuStorageKey = `marketing_sms_ru_${clubId}`;
@@ -531,7 +550,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     client: ClientProfile | null,
     scheduledDay?: string,
     customBonusTiers?: BonusTier[],
-    isTiersEnabled?: boolean
+    isTiersEnabled?: boolean,
+    campaignStartDate?: string | Date
   ) => {
     if (!client) return text;
     const name = client.name ? client.name.split(" ")[0] : "друг";
@@ -548,7 +568,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const giftBonus = calculateClientGiftBonus(client.totalSpent || 0, activeTiers, activeEnabled);
 
     const scheduledTime = getScheduledTime(client);
-    const scheduledDate = getScheduledDate(scheduledDay || "Сразу");
+    const scheduledDate = getScheduledDate(scheduledDay || "Сразу", campaignStartDate);
 
     return text
       .replace(/{Имя}/g, name)
@@ -585,7 +605,10 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
   const sampleClient = filteredClients[0] || null;
   const sampleDay = sampleClient ? getScheduledDay(sampleClient, scheduleMode, 0) : undefined;
-  const sampleMessage = useMemo(() => renderMessage(templateText, sampleClient, sampleDay), [templateText, sampleClient, sampleDay]);
+  const sampleMessage = useMemo(
+    () => renderMessage(templateText, sampleClient, sampleDay, bonusTiers, bonusTiersEnabled, wizardStartDate),
+    [templateText, sampleClient, sampleDay, bonusTiers, bonusTiersEnabled, wizardStartDate]
+  );
 
   // Message calculations
   const isCyrillic = /[а-яёА-ЯЁ]/.test(sampleMessage);
@@ -626,7 +649,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       const day = getScheduledDay(c, scheduleMode, idx);
       scheduleDayMap[norm] = day;
       scheduleTimeMap[norm] = getScheduledTime(c);
-      scheduleDateMap[norm] = getScheduledDate(day);
+      scheduleDateMap[norm] = getScheduledDate(day, wizardStartDate);
     });
 
     const record: MarketingCampaignRecord = {
@@ -637,6 +660,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       templateText,
       targetPhones: filteredClients.map((c) => (c.phone || "").replace(/\D/g, "").slice(-10)),
       createdAt: new Date().toISOString(),
+      startDate: wizardStartDate,
       scheduleMode,
       scheduleDayMap,
       scheduleTimeMap,
@@ -695,6 +719,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       headerRow = ["phone", "text", "date", "time", "day"];
     }
 
+    const baseDate = activeCampaign?.startDate || (viewMode === "wizard" ? wizardStartDate : new Date());
     const rows = [headerRow];
     for (const c of targetList) {
       const p = (c.phone || "").replace(/\D/g, "");
@@ -702,9 +727,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       // Format 7XXXXXXXXXX: strictly starts with 7, without +, exactly 11 digits
       const phone7 = `7${norm}`;
       const scheduledDay = dayMap?.[norm] || getScheduledDay(c, scheduleMode, 0);
-      const scheduledDate = getScheduledDate(scheduledDay);
-      const scheduledTime = getScheduledTime(c);
-      const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn).replace(/"/g, '""');
+      const scheduledDate = activeCampaign?.scheduleDateMap?.[norm] || getScheduledDate(scheduledDay, baseDate);
+      const scheduledTime = activeCampaign?.scheduleTimeMap?.[norm] || getScheduledTime(c);
+      const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate).replace(/"/g, '""');
 
       if (formatMode === "ru_date") {
         rows.push([phone7, `"${msg}"`, `"${scheduledDate}"`, `"${scheduledTime}"`, `"${scheduledDay}"`]);
@@ -848,6 +873,61 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     setDetailTemplateDraft("");
   };
 
+  const activeCampaignStartDate = useMemo(() => {
+    if (activeCampaign?.startDate) {
+      return activeCampaign.startDate.split("T")[0];
+    }
+    if (activeCampaign?.createdAt) {
+      return activeCampaign.createdAt.split("T")[0];
+    }
+    return new Date().toISOString().split("T")[0];
+  }, [activeCampaign]);
+
+  const handleUpdateCampaignStartDate = (newStartDate: string) => {
+    if (!activeCampaignId || !activeCampaign) return;
+
+    const updatedDateMap: Record<string, string> = {};
+    const dayMap = activeCampaign.scheduleDayMap || {};
+
+    activeCampaignClients.forEach((c) => {
+      const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+      const day = dayMap[norm] || "Сразу";
+      updatedDateMap[norm] = getScheduledDate(day, newStartDate);
+    });
+
+    const updated = campaigns.map((c) => {
+      if (c.id === activeCampaignId) {
+        return {
+          ...c,
+          startDate: newStartDate,
+          scheduleDateMap: updatedDateMap,
+        };
+      }
+      return c;
+    });
+    setCampaigns(updated);
+
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        const list: MarketingCampaignRecord[] = saved ? JSON.parse(saved) : [];
+        const updatedList = list.map((c) => {
+          if (c.id === activeCampaignId) {
+            return {
+              ...c,
+              startDate: newStartDate,
+              scheduleDateMap: updatedDateMap,
+            };
+          }
+          return c;
+        });
+        localStorage.setItem(storageKey, JSON.stringify(updatedList));
+      } catch (e) {
+        console.warn("Failed to persist updated campaign start date:", e);
+      }
+    }
+  };
+
   // Request exact calculation from SMS.RU API (sms/cost)
   const fetchSmsRuCost = async (
     targets: ClientProfile[],
@@ -859,12 +939,13 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     }
     const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
     const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
+    const baseDate = activeCampaign?.startDate || (viewMode === "wizard" ? wizardStartDate : new Date());
     const messages = targets.map((c) => {
       const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
       const scheduledDay = dayMap?.[norm] || "Сразу";
       return {
         phone: c.phone || "",
-        text: renderMessage(text, c, scheduledDay, currentTiers, isTiersOn),
+        text: renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate),
       };
     });
 
@@ -955,7 +1036,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const messages = targets.map((c) => {
       const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
       const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
-      const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn);
+      const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate);
       return {
         phone: c.phone || "",
         text: finalMsg,
@@ -2299,18 +2380,42 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   </span>
                 </div>
 
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-800 block">
+                      Дата старта рассылки
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      От этой даты рассчитываются точные календарные даты дней недели для отправки
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 shadow-2xs self-start sm:self-auto">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <input
+                      type="date"
+                      value={wizardStartDate}
+                      onChange={(e) => setWizardStartDate(e.target.value)}
+                      className="text-xs font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0"
+                    />
+                  </div>
+                </div>
+
                 {scheduleMode !== "instant" && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-1">
                     {DAYS_OF_WEEK.map((day) => {
                       const count = (scheduleDistribution[day] || []).length;
+                      const dayDate = getScheduledDate(day, wizardStartDate);
                       const avgPerClient = wizardCostSmsRu && wizardCostSmsRu.totalCost > 0 && filteredClients.length > 0
                         ? wizardCostSmsRu.totalCost / filteredClients.length
                         : smsParts * costPerSms;
                       const dayCost = Math.round(count * avgPerClient);
                       return (
                         <div key={day} className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-center">
-                          <span className="text-[11px] font-bold text-slate-700 uppercase block">{day.slice(0, 2)}</span>
-                          <p className="text-sm font-bold text-slate-900 font-mono">{count} <span className="text-[10px] font-normal text-slate-400">чел</span></p>
+                          <span className="text-[11px] font-bold text-slate-700 uppercase block">
+                            {day.slice(0, 2)} • {dayDate.slice(0, 5)}
+                          </span>
+                          <span className="text-[10px] text-slate-500 block">{day}</span>
+                          <p className="text-sm font-bold text-slate-900 font-mono mt-0.5">{count} <span className="text-[10px] font-normal text-slate-400">чел</span></p>
                           <span className="text-[10px] text-slate-500 font-mono block">~{dayCost} ₽</span>
                         </div>
                       );
@@ -2422,6 +2527,17 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   </span>
                 </>
               )}
+              <span>•</span>
+              <div className="inline-flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2 py-0.5 text-slate-700 shadow-2xs">
+                <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span className="text-[11px] font-medium text-slate-500">Старт рассылки:</span>
+                <input
+                  type="date"
+                  value={activeCampaignStartDate}
+                  onChange={(e) => handleUpdateCampaignStartDate(e.target.value)}
+                  className="text-xs font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0"
+                />
+              </div>
             </div>
           </div>
 
@@ -2611,6 +2727,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
               const count = activeCampaignDayBreakdown[d] || 0;
               const share = activeCampaignClients.length > 0 ? Math.round((count / activeCampaignClients.length) * 100) : 0;
               const isSelected = activeDayFilter === d;
+              const cardDate = getScheduledDate(d, activeCampaignStartDate);
               return (
                 <button
                   key={d}
@@ -2625,9 +2742,15 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                 >
                   <span className={cn(
                     "text-[11px] font-bold uppercase tracking-wider block",
-                    isSelected ? "text-slate-300" : "text-slate-600"
+                    isSelected ? "text-slate-300" : "text-slate-700"
                   )}>
-                    {d.slice(0, 2)} • {d}
+                    {d.slice(0, 2)} • {cardDate.slice(0, 5)}
+                  </span>
+                  <span className={cn(
+                    "text-[10px] block font-medium mt-0.5",
+                    isSelected ? "text-slate-300" : "text-slate-500"
+                  )}>
+                    {d}
                   </span>
                   <p className="text-base font-bold font-mono mt-0.5">
                     {count} <span className={cn("text-[10px] font-normal", isSelected ? "text-slate-300" : "text-slate-400")}>чел</span>
@@ -2807,12 +2930,12 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                 {displayedClients.slice(0, 50).map((c, idx) => {
                   const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
                   const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
-                  const scheduledDate = getScheduledDate(scheduledDay);
-                  const scheduledTime = getScheduledTime(c);
+                  const scheduledDate = activeCampaign?.scheduleDateMap?.[norm] || getScheduledDate(scheduledDay, activeCampaignStartDate);
+                  const scheduledTime = activeCampaign?.scheduleTimeMap?.[norm] || getScheduledTime(c);
                   const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
                   const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
                   const giftBonus = calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
-                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn);
+                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate);
                   return (
                     <tr key={c.phone + idx} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-2.5 px-4 text-slate-400 font-mono">{idx + 1}</td>
