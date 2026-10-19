@@ -62,6 +62,7 @@ export interface ClientProfile {
   favoriteZone?: string;
   favoriteTariff?: string;
   favoriteSeat?: string;
+  topSeats?: string[];
   packageCount?: number;
   packageSpentRub?: number;
   packageSpentBonus?: number;
@@ -69,6 +70,7 @@ export interface ClientProfile {
   gamerPersona?: "night_owl" | "console" | "bootcamp" | "regular";
   preferredTime?: "morning" | "day" | "evening" | "night";
   favoriteDay?: string;
+  topDays?: string[];
   dayPattern?: "weekend" | "weekday" | "mixed";
 }
 
@@ -896,6 +898,7 @@ export function buildClubAnalytics(
     let favoriteZone: string | undefined = undefined;
     let favoriteTariff: string | undefined = undefined;
     let favoriteSeat: string | undefined = undefined;
+    let topSeats: string[] | undefined = undefined;
     let gamerPersona: ClientProfile["gamerPersona"] = undefined;
 
     if (pack) {
@@ -921,6 +924,13 @@ export function buildClubAnalytics(
           maxSCount = cnt;
           favoriteSeat = s;
         }
+      }
+
+      if (pack.seats.size > 0) {
+        topSeats = [...pack.seats.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([s]) => s);
       }
 
       if (pack.nightSessions >= 2 || (pack.sessions >= 3 && pack.nightSessions / pack.sessions >= 0.3)) {
@@ -956,32 +966,33 @@ export function buildClubAnalytics(
 
     let dayPattern: ClientProfile["dayPattern"] = undefined;
     let favoriteDay: string | undefined = undefined;
+    let topDays: string[] | undefined = undefined;
     const DAY_NAMES = ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"];
     if (pack && pack.daySlots) {
       const dCounts = pack.daySlots;
-      let maxDay = -1;
-      let maxCnt = 0;
-      for (let i = 0; i < 7; i++) {
-        if (dCounts[i] > maxCnt) {
-          maxCnt = dCounts[i];
-          maxDay = i;
-        }
+      const daysWithCounts = dCounts
+        .map((cnt, idx) => ({ day: DAY_NAMES[idx], cnt }))
+        .filter((d) => d.cnt > 0)
+        .sort((a, b) => b.cnt - a.cnt);
+
+      if (daysWithCounts.length > 0) {
+        favoriteDay = daysWithCounts[0].day;
+        topDays = daysWithCounts.slice(0, 3).map((d) => d.day);
       }
-      if (maxDay !== -1 && maxCnt > 0) {
-        favoriteDay = DAY_NAMES[maxDay];
-        const weekend = (dCounts[0] || 0) + (dCounts[5] || 0) + (dCounts[6] || 0); // Вс, Пт, Сб
-        const weekday = (dCounts[1] || 0) + (dCounts[2] || 0) + (dCounts[3] || 0) + (dCounts[4] || 0); // Пн-Чт
-        const totalD = weekend + weekday;
-        if (totalD > 0) {
-          if (weekend / totalD >= 0.65) dayPattern = "weekend";
-          else if (weekday / totalD >= 0.65) dayPattern = "weekday";
-          else dayPattern = "mixed";
-        }
+
+      const weekend = (dCounts[0] || 0) + (dCounts[5] || 0) + (dCounts[6] || 0); // Вс, Пт, Сб
+      const weekday = (dCounts[1] || 0) + (dCounts[2] || 0) + (dCounts[3] || 0) + (dCounts[4] || 0); // Пн-Чт
+      const totalD = weekend + weekday;
+      if (totalD > 0) {
+        if (weekend / totalD >= 0.65) dayPattern = "weekend";
+        else if (weekday / totalD >= 0.65) dayPattern = "weekday";
+        else dayPattern = "mixed";
       }
     }
     if (!dayPattern && lastAuth && !isNaN(lastAuth.getTime())) {
       const d = lastAuth.getDay();
       favoriteDay = DAY_NAMES[d];
+      topDays = [DAY_NAMES[d]];
       dayPattern = (d === 0 || d === 5 || d === 6) ? "weekend" : "weekday";
     }
 
@@ -1023,6 +1034,7 @@ export function buildClubAnalytics(
       favoriteZone,
       favoriteTariff,
       favoriteSeat,
+      topSeats: topSeats && topSeats.length > 0 ? topSeats : (favoriteSeat ? [favoriteSeat] : undefined),
       packageCount: pack?.sessions,
       packageSpentRub: pack?.rub,
       packageSpentBonus: pack?.bonus,
@@ -1030,6 +1042,7 @@ export function buildClubAnalytics(
       gamerPersona,
       preferredTime,
       favoriteDay,
+      topDays: topDays && topDays.length > 0 ? topDays : (favoriteDay ? [favoriteDay] : undefined),
       dayPattern,
     });
   }

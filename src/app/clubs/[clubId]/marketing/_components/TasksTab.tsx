@@ -41,6 +41,16 @@ const ORDERED_DAYS = [
   "Воскресенье",
 ];
 
+const SHORT_DAYS: Record<string, string> = {
+  "Понедельник": "Пн",
+  "Вторник": "Вт",
+  "Среда": "Ср",
+  "Четверг": "Чт",
+  "Пятница": "Пт",
+  "Суббота": "Сб",
+  "Воскресенье": "Вс",
+};
+
 const TIME_SLOTS = [
   { id: "all", label: "Любое время" },
   { id: "morning", label: "Утро (08:00–13:00)" },
@@ -201,65 +211,112 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
         const rec = recordsMap[norm];
         const visitCount = p.visits ?? p.txCount ?? (p.totalSpent > 0 ? 1 : 0);
 
-        let score = 0;
-        const matchReasons: string[] = [];
-
         // 1. Day match
-        const isDayMatch = resolvedDay !== "all" && p.favoriteDay === resolvedDay;
-        if (isDayMatch && p.favoriteDay) {
-          score += 40;
-          matchReasons.push(p.favoriteDay);
-        } else if (p.favoriteDay) {
-          matchReasons.push(p.favoriteDay);
-        }
+        const clientTopDays = p.topDays && p.topDays.length > 0 ? p.topDays : (p.favoriteDay ? [p.favoriteDay] : []);
+        const isPrimaryDayMatch = resolvedDay !== "all" && p.favoriteDay === resolvedDay;
+        const isSecondaryDayMatch = resolvedDay !== "all" && !isPrimaryDayMatch && clientTopDays.includes(resolvedDay);
 
         // 2. Time slot match
-        const isTimeMatch = selectedTime !== "all" && p.preferredTime === selectedTime;
-        if (isTimeMatch && p.preferredTime) {
-          score += 35;
-          const slotLabel = TIME_SLOTS.find((s) => s.id === p.preferredTime)?.label?.split(" ")[0] || p.preferredTime;
-          matchReasons.push(slotLabel);
-        } else if (p.preferredTime) {
-          const slotLabel = TIME_SLOTS.find((s) => s.id === p.preferredTime)?.label?.split(" ")[0] || p.preferredTime;
-          matchReasons.push(slotLabel);
-        }
+        const isTimeMatch = selectedTime !== "all" && (p.preferredTime === selectedTime || (selectedTime === "night" && p.gamerPersona === "night_owl"));
 
         // 3. Zone match
         const isZoneMatch = selectedZone !== "all" && p.favoriteZone === selectedZone;
-        if (isZoneMatch && p.favoriteZone) {
-          score += 30;
-          matchReasons.push(p.favoriteZone);
-        } else if (p.favoriteZone && p.favoriteZone !== "—") {
-          matchReasons.push(p.favoriteZone);
-        }
 
-        // 4. PC match
-        let isPcMatch = false;
-        if (pcTokens.length > 0 && p.favoriteSeat) {
-          const seatLower = p.favoriteSeat.toLowerCase();
-          const seatDigits = seatLower.replace(/\D/g, "");
-          isPcMatch = pcTokens.some((tok) => {
-            const tokDigits = tok.replace(/\D/g, "");
-            return seatLower.includes(tok) || (tokDigits && seatDigits === tokDigits);
-          });
-          if (isPcMatch) {
-            score += 50;
-            matchReasons.push(p.favoriteSeat);
+        // 4. PC match (checks favorite seat and topSeats)
+        const clientTopSeats = p.topSeats && p.topSeats.length > 0 ? p.topSeats : (p.favoriteSeat ? [p.favoriteSeat] : []);
+        let matchedGuestSeat: string | null = null;
+        let pcMatchTier: "primary" | "secondary" | "none" = "none";
+
+        if (pcTokens.length > 0 && clientTopSeats.length > 0) {
+          for (let i = 0; i < clientTopSeats.length; i++) {
+            const seat = clientTopSeats[i];
+            const sLower = seat.toLowerCase();
+            const sDigits = sLower.replace(/\D/g, "");
+            const isHit = pcTokens.some((tok) => {
+              const tokDigits = tok.replace(/\D/g, "");
+              return sLower.includes(tok) || (tokDigits.length > 0 && sDigits === tokDigits);
+            });
+            if (isHit) {
+              matchedGuestSeat = seat;
+              pcMatchTier = i === 0 ? "primary" : "secondary";
+              break;
+            }
           }
-        } else if (p.favoriteSeat && p.favoriteSeat !== "—") {
-          matchReasons.push(p.favoriteSeat);
         }
 
-        // 5. Customer value & re-engagement weighting
-        if (p.daysSince && p.daysSince >= 7 && p.daysSince <= 30) {
-          score += 15;
+        // Calculate slot criteria score & percentage
+        let activeWeight = 0;
+        let earnedSlotWeight = 0;
+
+        if (resolvedDay !== "all") {
+          activeWeight += 40;
+          if (isPrimaryDayMatch) earnedSlotWeight += 40;
+          else if (isSecondaryDayMatch) earnedSlotWeight += 28;
         }
-        if (p.isWhale) {
-          score += 10;
+
+        if (selectedTime !== "all") {
+          activeWeight += 35;
+          if (isTimeMatch) earnedSlotWeight += 35;
         }
-        if ((p.balance || 0) > 100) {
-          score += 8;
+
+        if (selectedZone !== "all") {
+          activeWeight += 30;
+          if (isZoneMatch) earnedSlotWeight += 30;
         }
+
+        if (pcTokens.length > 0) {
+          activeWeight += 50;
+          if (pcMatchTier === "primary") earnedSlotWeight += 50;
+          else if (pcMatchTier === "secondary") earnedSlotWeight += 35;
+        }
+
+        let matchPercent: number;
+        if (activeWeight > 0) {
+          matchPercent = Math.min(100, Math.round((earnedSlotWeight / activeWeight) * 100));
+        } else {
+          // If no specific slot filters are chosen, compute general retention/engagement score:
+          const baseAffinity = p.status === "active" ? 85
+            : p.status === "cooling" ? 65
+            : p.status === "newbie" ? 55
+            : 40;
+          const bonusAffinity = (p.isWhale ? 10 : 0) + (p.daysSince !== null && p.daysSince <= 14 ? 5 : 0);
+          matchPercent = Math.min(99, baseAffinity + bonusAffinity);
+        }
+
+        // Composite sorting score
+        let score = 0;
+        if (activeWeight > 0) {
+          score = earnedSlotWeight * 10
+            + (p.isWhale ? 20 : 0)
+            + (p.status === "active" ? 15 : 0)
+            + (p.daysSince !== null && p.daysSince >= 7 && p.daysSince <= 30 ? 10 : 0)
+            + ((p.balance || 0) > 100 ? 5 : 0);
+        } else {
+          score = (p.isWhale ? 50 : 0)
+            + (p.status === "active" ? 30 : 0)
+            + Math.max(0, 30 - (p.daysSince || 30))
+            + Math.min(20, Math.round((p.balance || 0) / 100));
+        }
+
+        // Human-friendly profile preferences:
+        // E.g. "Дни: Пт, Сб • Вечер • VIP • ПК: 14, 15, 12"
+        const detailsParts: string[] = [];
+        if (clientTopDays.length > 0) {
+          const daysShort = clientTopDays.map((d) => SHORT_DAYS[d] || d).join(", ");
+          detailsParts.push(`Дни: ${daysShort}`);
+        }
+        if (p.preferredTime) {
+          const timeSlotLabel = TIME_SLOTS.find((s) => s.id === p.preferredTime)?.label?.split(" ")[0] || p.preferredTime;
+          detailsParts.push(timeSlotLabel);
+        }
+        if (p.favoriteZone && p.favoriteZone !== "—") {
+          detailsParts.push(p.favoriteZone);
+        }
+        if (clientTopSeats.length > 0) {
+          detailsParts.push(`ПК: ${clientTopSeats.join(", ")}`);
+        }
+
+        const matchDetails = detailsParts.length > 0 ? detailsParts.join(" • ") : "Любое время и место";
 
         // Attribution: check if guest returned after shift contact
         let attributionResult: "returned" | "waiting" | "none" = "none";
@@ -276,7 +333,8 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
         }
 
         // Generate warm, loyal shift script WITHOUT clumsy name/surname parsing
-        const seatText = p.favoriteSeat && p.favoriteSeat !== "—" ? `твой любимый ${p.favoriteSeat}` : "место в клубе";
+        const chosenSeat = matchedGuestSeat || p.favoriteSeat;
+        const seatText = chosenSeat && chosenSeat !== "—" ? `твой любимый ${chosenSeat}` : "место в клубе";
         const zoneText = p.favoriteZone && p.favoriteZone !== "—" ? `в зоне ${p.favoriteZone}` : "";
         const targetTimeText = selectedTime === "morning" ? "утром"
           : selectedTime === "day" ? "днем"
@@ -310,8 +368,9 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           normPhone: norm,
           record: rec,
           score,
+          matchPercent,
+          matchDetails,
           visitCount,
-          matchDesc: matchReasons.length > 0 ? matchReasons.join(" • ") : "Любое время и зона",
           script,
           attributionResult,
           attributedAmount,
@@ -319,6 +378,9 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
       })
       .sort((a, b) => {
         if (sortMode === "match") {
+          if (b.matchPercent !== a.matchPercent) {
+            return b.matchPercent - a.matchPercent;
+          }
           return b.score - a.score;
         }
         if (sortMode === "spent_desc") {
@@ -609,7 +671,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
               }}
               className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-slate-400 font-medium cursor-pointer"
             >
-              <option value="match">По совпадению (Match)</option>
+              <option value="match">По % совпадения (макс)</option>
               <option value="spent_desc">По чеку LTV (макс)</option>
               <option value="visits_desc">По числу визитов (макс)</option>
               <option value="days_desc">Не были дольше всех</option>
@@ -773,16 +835,35 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                         )}
                       </td>
 
-                      {/* Match Details */}
-                      <td className="py-2.5 px-3 align-top">
-                        <div className="font-medium text-slate-800 leading-tight">
-                          {item.matchDesc}
+                      {/* Match Details & Color Percentage */}
+                      <td className="py-2.5 px-3 align-top min-w-[170px]">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold border",
+                              item.matchPercent >= 80
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200/80"
+                                : item.matchPercent >= 50
+                                ? "bg-indigo-50 text-indigo-800 border-indigo-200/80"
+                                : "bg-slate-100 text-slate-600 border-slate-200"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "w-1.5 h-1.5 rounded-full shrink-0",
+                                item.matchPercent >= 80
+                                  ? "bg-emerald-500"
+                                  : item.matchPercent >= 50
+                                  ? "bg-indigo-500"
+                                  : "bg-slate-400"
+                              )}
+                            />
+                            {item.matchPercent}% совпадение
+                          </span>
                         </div>
-                        {item.score > 0 && (
-                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            индекс: {item.score}
-                          </div>
-                        )}
+                        <div className="text-[11px] text-slate-600 leading-tight">
+                          {item.matchDetails}
+                        </div>
                       </td>
 
                       {/* LTV, Visits & Balance */}
