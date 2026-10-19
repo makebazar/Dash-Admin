@@ -1,15 +1,17 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator } from "lucide-react";
+import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ClientProfile, ClubAnalytics } from "./segmentation";
+import { type ClientProfile, type ClubAnalytics, type DateFilter, type MonthOption, getAvailableMonths } from "./segmentation";
 import type { MarketingCampaignRecord } from "./SmsCampaignModal";
 
 interface Props {
   clubId: string;
   analytics: ClubAnalytics | null;
   excludedPhones: string[];
+  dateFilter?: DateFilter | null;
+  onDateFilterChange?: (filter: DateFilter | null) => void;
 }
 
 export interface SegmentationFilter {
@@ -154,8 +156,60 @@ export function getScheduledDay(
   return day;
 }
 
-export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
+export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFilterChange }: Props) {
   const storageKey = `marketing_campaigns_${clubId}`;
+
+  // Period / Date bounds & options
+  const datasetFrom = analytics?.datasetDateFrom || analytics?.reportDateFrom;
+  const datasetTo = analytics?.datasetDateTo || analytics?.reportDateTo;
+
+  const availableMonths = useMemo(() => {
+    if (!datasetFrom || !datasetTo) return [];
+    return getAvailableMonths(datasetFrom, datasetTo);
+  }, [datasetFrom, datasetTo]);
+
+  const totalDatasetDays = useMemo(() => {
+    if (!datasetFrom || !datasetTo) return analytics?.reportDays || 0;
+    return Math.max(1, Math.round(Math.abs(datasetTo.getTime() - datasetFrom.getTime()) / 86_400_000));
+  }, [datasetFrom, datasetTo, analytics?.reportDays]);
+
+  const datasetStartIso = useMemo(() => {
+    if (!datasetFrom || isNaN(datasetFrom.getTime())) return "";
+    return datasetFrom.toISOString().slice(0, 10);
+  }, [datasetFrom]);
+
+  const datasetEndIso = useMemo(() => {
+    if (!datasetTo || isNaN(datasetTo.getTime())) return "";
+    return datasetTo.toISOString().slice(0, 10);
+  }, [datasetTo]);
+
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+  const [showCustomRange, setShowCustomRange] = useState(false);
+
+  useEffect(() => {
+    if (dateFilter?.startDate && dateFilter?.endDate) {
+      setCustomStart(dateFilter.startDate.toISOString().slice(0, 10));
+      setCustomEnd(dateFilter.endDate.toISOString().slice(0, 10));
+    } else if (analytics?.reportDateFrom && analytics?.reportDateTo) {
+      setCustomStart(analytics.reportDateFrom.toISOString().slice(0, 10));
+      setCustomEnd(analytics.reportDateTo.toISOString().slice(0, 10));
+    }
+  }, [dateFilter, analytics?.reportDateFrom, analytics?.reportDateTo]);
+
+  const periodLabel = useMemo(() => {
+    if (dateFilter?.monthKey) {
+      const found = availableMonths.find((m) => m.key === dateFilter.monthKey);
+      if (found) return found.label;
+    }
+    if (dateFilter?.startDate && dateFilter?.endDate) {
+      return `${dateFilter.startDate.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} – ${dateFilter.endDate.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })} (${analytics?.reportDays || 0} дн.)`;
+    }
+    if (analytics?.reportDateFrom && analytics?.reportDateTo) {
+      return `Весь период выгрузки: ${analytics.reportDateFrom.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} – ${analytics.reportDateTo.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })} (${analytics.reportDays || totalDatasetDays} дн.)`;
+    }
+    return "Весь период выгрузки";
+  }, [dateFilter, availableMonths, analytics?.reportDateFrom, analytics?.reportDateTo, analytics?.reportDays, totalDatasetDays]);
 
   // Mode: "hub" (список кампаний), "wizard" (квест создания), "detail" (просмотр конкретной кампании)
   const [viewMode, setViewMode] = useState<"hub" | "wizard" | "detail">("hub");
@@ -303,9 +357,15 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   // Human-readable criteria description
   const segmentationDescription = useMemo(() => {
     const parts: string[] = [];
-    if (filters.spentMin !== "" && filters.spentMax !== "") parts.push(`Траты: ${filters.spentMin}–${filters.spentMax} ₽`);
-    else if (filters.spentMin !== "") parts.push(`Траты от ${filters.spentMin} ₽`);
-    else if (filters.spentMax !== "") parts.push(`Траты до ${filters.spentMax} ₽`);
+    const periodShort = dateFilter?.monthKey
+      ? availableMonths.find((m) => m.key === dateFilter.monthKey)?.label
+      : dateFilter?.startDate && dateFilter?.endDate
+        ? `${analytics?.reportDays || 0} дн.`
+        : `весь период (${totalDatasetDays} дн.)`;
+
+    if (filters.spentMin !== "" && filters.spentMax !== "") parts.push(`Траты за ${periodShort}: ${filters.spentMin}–${filters.spentMax} ₽`);
+    else if (filters.spentMin !== "") parts.push(`Траты за ${periodShort} от ${filters.spentMin} ₽`);
+    else if (filters.spentMax !== "") parts.push(`Траты за ${periodShort} до ${filters.spentMax} ₽`);
 
     if (filters.daysSinceMin !== "" && filters.daysSinceMax !== "") parts.push(`Не был: ${filters.daysSinceMin}–${filters.daysSinceMax} дн.`);
     else if (filters.daysSinceMin !== "") parts.push(`Не был от ${filters.daysSinceMin} дн.`);
@@ -313,7 +373,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
 
     if (filters.balanceMin !== "") parts.push(`Баланс от ${filters.balanceMin} ₽`);
     if (filters.bonusMin !== "") parts.push(`Бонусы от ${filters.bonusMin} Б`);
-    if (filters.visitsMin !== "") parts.push(`Визитов от ${filters.visitsMin}`);
+    if (filters.visitsMin !== "") parts.push(`Визитов за ${periodShort} от ${filters.visitsMin}`);
 
     if (filters.dayType === "weekday") parts.push("Будни");
     if (filters.dayType === "weekend") parts.push("Выходные");
@@ -327,7 +387,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
     if (filters.favoriteZone !== "all") parts.push(`Зона: ${filters.favoriteZone}`);
 
     return parts.length > 0 ? parts.join(" • ") : "Все клиенты без ограничений";
-  }, [filters]);
+  }, [filters, dateFilter, availableMonths, analytics?.reportDays, totalDatasetDays]);
 
   // Substitute tags into message
   const renderMessage = (text: string, client: ClientProfile | null, scheduledDay?: string) => {
@@ -416,6 +476,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
       createdAt: new Date().toISOString(),
       scheduleMode,
       scheduleDayMap,
+      periodLabel,
     };
 
     if (typeof window !== "undefined") {
@@ -825,8 +886,13 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                         >
                           {camp.name}
                         </button>
-                        <p className="text-[11px] text-slate-500 font-normal line-clamp-1 mt-0.5 font-mono">
-                          {camp.templateText}
+                        <p className="text-[11px] text-slate-500 font-normal line-clamp-1 mt-0.5 font-mono flex items-center gap-1.5">
+                          {camp.periodLabel && (
+                            <span className="text-[10px] text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200 shrink-0 font-sans font-medium">
+                              {camp.periodLabel}
+                            </span>
+                          )}
+                          <span className="truncate">{camp.templateText}</span>
                         </p>
                       </td>
                       <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
@@ -938,6 +1004,125 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
               </div>
             </div>
 
+            {/* Period Selection Section */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-violet-600 shrink-0" />
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Период сегментации аудитории:
+                  </span>
+                  <span className="text-xs font-semibold text-violet-700 bg-violet-100/80 border border-violet-200 px-2 py-0.5 rounded-md">
+                    {periodLabel}
+                  </span>
+                </div>
+                {onDateFilterChange && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomRange(!showCustomRange)}
+                    className="text-[11px] text-slate-600 hover:text-slate-900 underline font-medium self-start sm:self-auto"
+                  >
+                    {showCustomRange ? "Скрыть выбор дат" : "Выбрать произвольные даты ↗"}
+                  </button>
+                )}
+              </div>
+
+              {/* Quick Month / Period Pills */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => onDateFilterChange?.(null)}
+                  className={cn(
+                    "text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all",
+                    !dateFilter
+                      ? "bg-violet-600 text-white shadow-sm font-semibold ring-1 ring-violet-400"
+                      : "bg-white hover:bg-slate-200/70 text-slate-700 border border-slate-200"
+                  )}
+                >
+                  Весь период ({totalDatasetDays} дн.)
+                </button>
+
+                {availableMonths.map((m) => {
+                  const isSelected = dateFilter?.monthKey === m.key;
+                  return (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => {
+                        onDateFilterChange?.({
+                          startDate: m.startDate,
+                          endDate: m.endDate,
+                          monthKey: m.key,
+                        });
+                      }}
+                      className={cn(
+                        "text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all",
+                        isSelected
+                          ? "bg-violet-600 text-white shadow-sm font-semibold ring-1 ring-violet-400"
+                          : "bg-white hover:bg-slate-200/70 text-slate-700 border border-slate-200"
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom Date Range Inputs (if open) */}
+              {showCustomRange && (
+                <div className="pt-2 border-t border-slate-200/80 flex items-center gap-2 text-xs flex-wrap">
+                  <span className="text-[11px] text-slate-500 font-medium">С даты:</span>
+                  <input
+                    type="date"
+                    value={customStart}
+                    min={datasetStartIso}
+                    max={datasetEndIso}
+                    onChange={(e) => setCustomStart(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 outline-none focus:border-slate-900"
+                  />
+                  <span className="text-[11px] text-slate-500 font-medium">По:</span>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    min={datasetStartIso}
+                    max={datasetEndIso}
+                    onChange={(e) => setCustomEnd(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 outline-none focus:border-slate-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!customStart || !customEnd) return;
+                      const s = new Date(`${customStart}T00:00:00`);
+                      const e = new Date(`${customEnd}T23:59:59`);
+                      if (isNaN(s.getTime()) || isNaN(e.getTime())) return;
+                      onDateFilterChange?.({
+                        startDate: s,
+                        endDate: e,
+                        monthKey: undefined,
+                      });
+                    }}
+                    className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium"
+                  >
+                    Применить даты
+                  </button>
+                  {dateFilter && (
+                    <button
+                      type="button"
+                      onClick={() => onDateFilterChange?.(null)}
+                      className="text-xs text-rose-600 hover:text-rose-800 font-medium ml-2"
+                    >
+                      Сбросить фильтр
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                💡 Все фильтры ниже (траты LTV, число визитов, отсиженные часы) пересчитываются строго за выбранный период.
+              </p>
+            </div>
+
             {/* Configurable Ranges Section */}
             <div className="space-y-5 border-t border-slate-200 pt-6">
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
@@ -947,9 +1132,18 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {/* 1. LTV / Spent Range */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-700 block">
-                    Траты клиента за период (₽)
-                  </label>
+                  <div className="flex items-center justify-between gap-1">
+                    <label className="text-xs font-medium text-slate-700 block">
+                      Траты клиента за период (₽)
+                    </label>
+                    <span className="text-[10px] text-violet-700 bg-violet-50 font-semibold px-1.5 py-0.5 rounded border border-violet-200 truncate max-w-[170px]" title={periodLabel}>
+                      {dateFilter?.monthKey 
+                        ? availableMonths.find((m) => m.key === dateFilter.monthKey)?.label 
+                        : dateFilter?.startDate && dateFilter?.endDate 
+                          ? `${analytics?.reportDays || 0} дн.`
+                          : `весь период (${totalDatasetDays} дн.)`}
+                    </span>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="number"
@@ -966,6 +1160,9 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                       className="w-full py-2 px-3 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-slate-900"
                     />
                   </div>
+                  <span className="text-[10px] text-slate-400 block truncate" title={periodLabel}>
+                    Учитываются пополнения за: {periodLabel}
+                  </span>
                 </div>
 
                 {/* 2. Days Since Last Visit Range */}
@@ -1658,8 +1855,16 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
               {activeCampaign?.name || "SMS-кампания"}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Создана {activeCampaign?.createdAt ? new Date(activeCampaign.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "сегодня"}
+            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>Создана {activeCampaign?.createdAt ? new Date(activeCampaign.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "сегодня"}</span>
+              {activeCampaign?.periodLabel && (
+                <>
+                  <span>•</span>
+                  <span className="text-violet-700 font-medium bg-violet-50 px-2 py-0.5 rounded border border-violet-200">
+                    Период: {activeCampaign.periodLabel}
+                  </span>
+                </>
+              )}
             </p>
           </div>
 

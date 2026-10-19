@@ -660,6 +660,8 @@ export default function MarketingPage() {
             clubId={clubId} 
             analytics={analytics} 
             excludedPhones={excludedPhones}
+            dateFilter={dateFilter}
+            onDateFilterChange={setDateFilter}
           />
         )}
 

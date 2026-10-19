@@ -17,6 +17,7 @@ export interface MarketingCampaignRecord {
   returnedRevenue?: number;
   scheduleMode?: "instant" | "smart_day" | "smart_day_eve" | "even";
   scheduleDayMap?: Record<string, string>; // phone -> scheduled day
+  periodLabel?: string; // Human readable period used for segmentation
 }
 
 interface Props {
