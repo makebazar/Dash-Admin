@@ -334,9 +334,48 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors"
               />
               <span className="text-[10px] text-slate-500 block leading-relaxed">
-                Операторы РФ (126-ФЗ) требуют зарегистрированного буквенного имени для доставки SMS. Зарегистрируйте его в кабинете SMS.RU (Отправители).
+                Операторы РФ (126-ФЗ) требуют зарегистрированного буквенного имени для доставки SMS.
               </span>
             </div>
+          </div>
+
+          {/* Operator Tariffs Reference Card */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-800 text-[11px] uppercase tracking-wider">
+                Официальные тарифы операторов связи РФ:
+              </span>
+              <span className="text-[10px] text-slate-400">МТС • Мегафон • Билайн • Т2</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+              <div className="p-2 bg-white rounded-lg border border-slate-200/80 space-y-0.5">
+                <span className="font-bold text-blue-600 block">МТС</span>
+                <span className="text-slate-500 block text-[10px]">Имя: 3 000 ₽/мес</span>
+                <span className="text-slate-500 block text-[10px]">Шаблон: 2 000 ₽</span>
+                <span className="font-mono text-slate-800 font-semibold block pt-0.5">от 8.50 ₽/SMS</span>
+              </div>
+              <div className="p-2 bg-white rounded-lg border border-slate-200/80 space-y-0.5">
+                <span className="font-bold text-emerald-600 block">Мегафон</span>
+                <span className="text-slate-500 block text-[10px]">Имя: 2 550 ₽/мес</span>
+                <span className="text-slate-500 block text-[10px]">Шаблон: 1 220 ₽</span>
+                <span className="font-mono text-slate-800 font-semibold block pt-0.5">от 8.40 ₽/SMS</span>
+              </div>
+              <div className="p-2 bg-white rounded-lg border border-slate-200/80 space-y-0.5">
+                <span className="font-bold text-amber-600 block">Билайн</span>
+                <span className="text-slate-500 block text-[10px]">Имя: 2 080 ₽/мес</span>
+                <span className="text-slate-500 block text-[10px]">Шаблон: 1 220 ₽</span>
+                <span className="font-mono text-slate-800 font-semibold block pt-0.5">от 8.40 ₽/SMS</span>
+              </div>
+              <div className="p-2 bg-white rounded-lg border border-slate-200/80 space-y-0.5">
+                <span className="font-bold text-slate-900 block">Т2 (Tele2)</span>
+                <span className="text-slate-500 block text-[10px]">Имя: бесплатно</span>
+                <span className="text-slate-500 block text-[10px]">Шаблон: 1 100 ₽</span>
+                <span className="font-mono text-slate-800 font-semibold block pt-0.5">от 8.36 ₽/SMS</span>
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-500 leading-relaxed pt-0.5">
+              💡 <b>Совет:</b> Если вы не хотите платить абонплату за буквенное имя операторам (~7 600 ₽/мес), вы можете формировать сегменты и скачивать готовый <b>CSV-файл</b> для бесплатной рассылки через корпоративный мессенджер клуба (Telegram, VK) или корпоративный телефон клуба.
+            </p>
           </div>
 
           {/* Test mode toggle */}

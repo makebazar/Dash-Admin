@@ -380,7 +380,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   const multiLimit = isCyrillic ? 67 : 153;
   const msgLength = sampleMessage.length;
   const smsParts = msgLength <= charLimit ? 1 : Math.ceil(msgLength / multiLimit);
-  const costPerSms = 3.5;
+  const costPerSms = 8.5;
   const estimatedCost = filteredClients.length * smsParts * costPerSms;
 
   // Actions
@@ -1401,7 +1401,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                       {wizardCostError && (
                         <span className="text-[10px] text-amber-700 flex items-center gap-1 font-medium mt-0.5" title={wizardCostError}>
                           <ShieldAlert className="w-3 h-3 text-amber-600 shrink-0" />
-                          <span>Расчет по базовой ставке (~3.50 ₽/SMS). В SMS.RU нужен буквенный отправитель (код 221)</span>
+                          <span>Расчет по базовой ставке операторов (~8.50 ₽/SMS). В SMS.RU нужен буквенный отправитель (код 221)</span>
                         </span>
                       )}
                     </div>
@@ -1491,7 +1491,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                 </div>
                 <div>
                   <span className="text-xs text-slate-400 block flex items-center justify-between">
-                    <span>{wizardCostSmsRu && wizardCostSmsRu.totalCost > 0 ? "Точный бюджет SMS.RU" : "Бюджет (~3.50 ₽)"}</span>
+                    <span>{wizardCostSmsRu && wizardCostSmsRu.totalCost > 0 ? "Точный бюджет SMS.RU" : "Бюджет (~8.50 ₽)"}</span>
                     {smsRuConfig?.apiId && (
                       <button
                         type="button"
@@ -1520,7 +1520,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                     </span>
                   ) : wizardCostError ? (
                     <span className="text-[10px] text-amber-600 block">
-                      базовый тариф (нужен Sender ID в SMS.RU)
+                      базовый тариф операторов (~8.50 ₽/SMS, нужен Sender ID)
                     </span>
                   ) : null}
                 </div>
@@ -1773,8 +1773,8 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
               : detailCostError
                 ? "базовый тариф (нужен Sender ID в SMS.RU)"
                 : activeDayFilter !== "all"
-                  ? `на ${activeDayFilter} (${displayedClients.length} чел по ~3.50 ₽)`
-                  : "по базовой ставке ~3.50 ₽/SMS"}
+                  ? `на ${activeDayFilter} (${displayedClients.length} чел по ~8.50 ₽)`
+                  : "по базовой ставке операторов ~8.50 ₽/SMS"}
           </span>
         </div>
 
@@ -2004,7 +2004,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                   ) : detailCostSmsRu && detailCostSmsRu.totalCost > 0 ? (
                     <span className="text-emerald-700 font-bold">{detailCostSmsRu.totalCost.toFixed(2)} ₽ ({detailCostSmsRu.totalSms} SMS частей)</span>
                   ) : (
-                    <span>~{Math.round(displayedClients.length * 3.5)} ₽ (~3.50 ₽/SMS)</span>
+                    <span>~{Math.round(displayedClients.length * 8.5)} ₽ (~8.50 ₽/SMS)</span>
                   )}
                 </span>
               </div>
@@ -2014,7 +2014,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                   "font-bold font-mono",
                   smsRuBalance !== null && detailCostSmsRu && detailCostSmsRu.totalCost > 0 && smsRuBalance < detailCostSmsRu.totalCost
                     ? "text-rose-600"
-                    : smsRuBalance !== null && smsRuBalance < displayedClients.length * 3.5
+                    : smsRuBalance !== null && smsRuBalance < displayedClients.length * 8.5
                       ? "text-rose-600"
                       : "text-emerald-700"
                 )}>
@@ -2037,7 +2037,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
             {detailCostError && (
               <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-[11px] flex items-center gap-2">
                 <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>Операторы требуют зарегистрировать буквенное имя (код 221). Стоимость рассчитана по базовой ставке ~3.50 ₽/SMS.</span>
+                <span>Операторы требуют зарегистрировать буквенное имя (код 221). Стоимость рассчитана по базовой ставке операторов ~8.50 ₽/SMS.</span>
               </div>
             )}
 
