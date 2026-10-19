@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle } from "lucide-react";
+import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Gift, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ClientProfile, type ClubAnalytics, type DateFilter, type MonthOption, getAvailableMonths } from "./segmentation";
-import type { MarketingCampaignRecord } from "./SmsCampaignModal";
+import type { MarketingCampaignRecord, BonusTier } from "./SmsCampaignModal";
 
 interface Props {
   clubId: string;
@@ -12,6 +12,25 @@ interface Props {
   excludedPhones: string[];
   dateFilter?: DateFilter | null;
   onDateFilterChange?: (filter: DateFilter | null) => void;
+}
+
+export const DEFAULT_BONUS_TIERS: BonusTier[] = [
+  { minSpent: 0, bonus: 100 },
+  { minSpent: 1000, bonus: 200 },
+  { minSpent: 3000, bonus: 300 },
+  { minSpent: 5000, bonus: 500 },
+  { minSpent: 10000, bonus: 1000 },
+];
+
+export function calculateClientGiftBonus(spent: number, tiers: BonusTier[], enabled: boolean = true): number {
+  if (!enabled || !tiers || tiers.length === 0) return 0;
+  const sorted = [...tiers].sort((a, b) => b.minSpent - a.minSpent);
+  for (const tier of sorted) {
+    if (spent >= tier.minSpent) {
+      return tier.bonus;
+    }
+  }
+  return 0;
 }
 
 export interface SegmentationFilter {
@@ -52,6 +71,7 @@ const TEMPLATE_TAGS = [
   { tag: "{Имя}", desc: "Имя клиента" },
   { tag: "{Баланс_Руб}", desc: "Баланс в рублях" },
   { tag: "{Баланс_Бонус}", desc: "Бонусный баланс" },
+  { tag: "{Бонус_В_Подарок}", desc: "Сумма бонуса по шкале трат" },
   { tag: "{Любимый_ПК}", desc: "Любимый компьютер" },
   { tag: "{Любимый_День}", desc: "Любимый день недели" },
   { tag: "{День_Отправки}", desc: "Назначенный день недели отправки" },
@@ -226,6 +246,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("smart_day_eve");
   const [activeDayFilter, setActiveDayFilter] = useState<string>("all");
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [bonusTiersEnabled, setBonusTiersEnabled] = useState(true);
+  const [bonusTiers, setBonusTiers] = useState<BonusTier[]>(DEFAULT_BONUS_TIERS);
 
   // SMS.RU Integration State
   const smsRuStorageKey = `marketing_sms_ru_${clubId}`;
@@ -351,6 +373,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const totalSpent = filteredClients.reduce((sum, c) => sum + (c.totalSpent || 0), 0);
     const totalBalance = filteredClients.reduce((sum, c) => sum + (c.balance || 0), 0);
     const totalBonusBalance = filteredClients.reduce((sum, c) => sum + (c.bonusBalance || 0), 0);
+    const totalGiftBonus = filteredClients.reduce((sum, c) => {
+      return sum + calculateClientGiftBonus(c.totalSpent || 0, bonusTiers, bonusTiersEnabled);
+    }, 0);
     const totalVisits = filteredClients.reduce((sum, c) => sum + (c.visits ?? c.txCount ?? (c.totalSpent > 0 ? 1 : 0)), 0);
     const avgSpentPerGuest = count > 0 ? Math.round(totalSpent / count) : 0;
     const avgCheckPerVisit = totalVisits > 0 ? Math.round(totalSpent / totalVisits) : 0;
@@ -359,11 +384,12 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       totalSpent,
       totalBalance,
       totalBonusBalance,
+      totalGiftBonus,
       totalVisits,
       avgSpentPerGuest,
       avgCheckPerVisit,
     };
-  }, [filteredClients]);
+  }, [filteredClients, bonusTiers, bonusTiersEnabled]);
 
   // Human-readable criteria description
   const segmentationDescription = useMemo(() => {
@@ -401,7 +427,13 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   }, [filters, dateFilter, availableMonths, analytics?.reportDays, totalDatasetDays]);
 
   // Substitute tags into message
-  const renderMessage = (text: string, client: ClientProfile | null, scheduledDay?: string) => {
+  const renderMessage = (
+    text: string,
+    client: ClientProfile | null,
+    scheduledDay?: string,
+    customBonusTiers?: BonusTier[],
+    isTiersEnabled?: boolean
+  ) => {
     if (!client) return text;
     const name = client.name ? client.name.split(" ")[0] : "друг";
     const rubBal = Math.round(client.balance || 0).toLocaleString("ru");
@@ -412,6 +444,10 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const zone = client.favoriteZone || "VIP";
     const tariff = client.favoriteTariff || "стандарт";
 
+    const activeTiers = customBonusTiers ?? bonusTiers;
+    const activeEnabled = isTiersEnabled !== undefined ? isTiersEnabled : bonusTiersEnabled;
+    const giftBonus = calculateClientGiftBonus(client.totalSpent || 0, activeTiers, activeEnabled);
+
     return text
       .replace(/{Имя}/g, name)
       .replace(/{Баланс_Руб}/g, `${rubBal} ₽`)
@@ -420,7 +456,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       .replace(/{Любимый_День}/g, day)
       .replace(/{День_Отправки}/g, targetDay)
       .replace(/{Любимая_Зона}/g, zone)
-      .replace(/{Любимый_Тариф}/g, tariff);
+      .replace(/{Любимый_Тариф}/g, tariff)
+      .replace(/{Бонус_В_Подарок}/g, giftBonus.toLocaleString("ru"))
+      .replace(/{Подарочный_Бонус}/g, giftBonus.toLocaleString("ru"));
   };
 
   // Schedule distribution of filtered cohort across days of week
@@ -493,6 +531,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       scheduleMode,
       scheduleDayMap,
       periodLabel,
+      bonusTiers: bonusTiersEnabled ? bonusTiers : undefined,
+      bonusTiersEnabled,
     };
 
     if (typeof window !== "undefined") {
@@ -529,13 +569,17 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
     if (targetList.length === 0) return;
 
-    const rows = [["phone", "name", "scheduled_day", "message", "balance_rub", "bonus_balance", "favorite_pc", "favorite_day"]];
+    const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
+    const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
+
+    const rows = [["phone", "name", "scheduled_day", "message", "balance_rub", "bonus_balance", "gift_bonus", "favorite_pc", "favorite_day"]];
     for (const c of targetList) {
       const p = (c.phone || "").replace(/\D/g, "");
       const norm = p.slice(-10);
       const fullPhone = p.length === 11 && p.startsWith("8") ? "7" + p.slice(1) : p;
       const scheduledDay = dayMap?.[norm] || "Сразу";
-      const msg = renderMessage(text, c, scheduledDay).replace(/"/g, '""');
+      const giftBonus = calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
+      const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn).replace(/"/g, '""');
       rows.push([
         `+${fullPhone}`,
         `"${c.name || ""}"`,
@@ -543,6 +587,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
         `"${msg}"`,
         `${Math.round(c.balance || 0)}`,
         `${Math.round(c.bonusBalance || 0)}`,
+        `${giftBonus}`,
         `"${c.favoriteSeat || ""}"`,
         `"${c.favoriteDay || ""}"`,
       ]);
@@ -635,12 +680,14 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     if (!smsRuConfig?.apiId || targets.length === 0) {
       return { ok: false, totalCost: 0, totalSms: 0, error: "Нет API ID или пустой список" };
     }
+    const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
+    const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
     const messages = targets.map((c) => {
       const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
       const scheduledDay = dayMap?.[norm] || "Сразу";
       return {
         phone: c.phone || "",
-        text: renderMessage(text, c, scheduledDay),
+        text: renderMessage(text, c, scheduledDay, currentTiers, isTiersOn),
       };
     });
 
@@ -726,10 +773,12 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     setIsSendingViaSmsRu(true);
     setSmsRuSendResult(null);
 
+    const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
+    const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
     const messages = targets.map((c) => {
       const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
       const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
-      const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay);
+      const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn);
       return {
         phone: c.phone || "",
         text: finalMsg,
@@ -1486,6 +1535,142 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
               </div>
             </div>
 
+            {/* Tiered Gift Bonuses Section */}
+            <div className="p-5 bg-gradient-to-br from-purple-50/40 via-white to-amber-50/30 border border-purple-200/80 rounded-xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="p-2 rounded-lg bg-purple-100 text-purple-700 border border-purple-200 shrink-0 mt-0.5">
+                    <Gift className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-slate-900">
+                        Шкала подарочных бонусов (в зависимости от трат гостя)
+                      </h3>
+                      <span className={cn(
+                        "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                        bonusTiersEnabled
+                          ? "bg-purple-100 text-purple-800 border-purple-200"
+                          : "bg-slate-100 text-slate-600 border-slate-200"
+                      )}>
+                        {bonusTiersEnabled ? "Активна" : "Отключена"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Гости с большим чеком получают больший подарок. Сумма бонуса автоматически подставляется в текст через тег <code className="font-mono text-purple-700 bg-purple-50 px-1 py-0.5 rounded border border-purple-200 font-semibold">{"{Бонус_В_Подарок}"}</code>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setBonusTiersEnabled(!bonusTiersEnabled)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                      bonusTiersEnabled
+                        ? "bg-purple-600 text-white border-purple-600 shadow-sm"
+                        : "bg-white text-slate-600 hover:bg-slate-50 border-slate-300"
+                    )}
+                  >
+                    {bonusTiersEnabled ? "✓ Шкала включена" : "Включить шкалу"}
+                  </button>
+                </div>
+              </div>
+
+              {bonusTiersEnabled && (
+                <div className="space-y-3 pt-2 border-t border-purple-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {bonusTiers.map((tier, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between gap-2 p-2.5 bg-white border border-slate-200 rounded-lg shadow-xs hover:border-purple-300 transition-colors"
+                      >
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                          <span className="text-[11px] text-slate-500 shrink-0">Траты от:</span>
+                          <div className="relative flex-1">
+                            <input
+                              type="number"
+                              min="0"
+                              step="500"
+                              value={tier.minSpent}
+                              onChange={(e) => {
+                                const val = Math.max(0, Number(e.target.value) || 0);
+                                const updated = [...bonusTiers];
+                                updated[idx] = { ...updated[idx], minSpent: val };
+                                setBonusTiers(updated);
+                              }}
+                              className="w-full py-1 px-2 font-mono text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:border-purple-500"
+                            />
+                            <span className="absolute right-2 top-1 text-[10px] text-slate-400 pointer-events-none">₽</span>
+                          </div>
+                        </div>
+
+                        <span className="text-slate-400 font-bold text-xs shrink-0">→</span>
+
+                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                          <span className="text-[11px] text-slate-500 shrink-0">Бонус:</span>
+                          <div className="relative flex-1">
+                            <input
+                              type="number"
+                              min="0"
+                              step="50"
+                              value={tier.bonus}
+                              onChange={(e) => {
+                                const val = Math.max(0, Number(e.target.value) || 0);
+                                const updated = [...bonusTiers];
+                                updated[idx] = { ...updated[idx], bonus: val };
+                                setBonusTiers(updated);
+                              }}
+                              className="w-full py-1 px-2 font-mono text-xs font-bold text-purple-700 bg-purple-50/50 border border-purple-300 rounded focus:bg-white focus:outline-none focus:border-purple-500"
+                            />
+                            <span className="absolute right-2 top-1 text-[10px] text-purple-400 pointer-events-none">Б</span>
+                          </div>
+                        </div>
+
+                        {bonusTiers.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBonusTiers(bonusTiers.filter((_, i) => i !== idx));
+                            }}
+                            className="p-1 text-slate-300 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors shrink-0"
+                            title="Удалить ступень"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const lastSpent = bonusTiers.length > 0 ? Math.max(...bonusTiers.map((t) => t.minSpent)) : 0;
+                        const lastBonus = bonusTiers.length > 0 ? Math.max(...bonusTiers.map((t) => t.bonus)) : 0;
+                        setBonusTiers([...bonusTiers, { minSpent: lastSpent + 5000, bonus: lastBonus + 500 }]);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-purple-700 border border-purple-200 font-semibold rounded-lg text-xs transition-colors self-start"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Добавить ступень бонуса
+                    </button>
+
+                    <div className="flex items-center gap-2 text-[11px] text-slate-600 bg-white/80 px-3 py-1.5 rounded-lg border border-slate-200">
+                      <span>Суммарно к выдаче:</span>
+                      <span className="font-bold text-purple-700 font-mono text-xs">
+                        {cohortStats.totalGiftBonus.toLocaleString("ru")} Б
+                      </span>
+                      <span className="text-slate-400">
+                        (в среднем ~{cohortStats.count > 0 ? Math.round(cohortStats.totalGiftBonus / cohortStats.count) : 0} Б на гостя)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Live Counter & Summary */}
             <div className="border-t border-slate-200 pt-5 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
@@ -1505,9 +1690,21 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   </div>
 
                   <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-left" title="Сумма реальных рублей, которая сейчас лежит на игровых счетах (депозитах) этих клиентов в системе клуба">
-                    <span className="text-[10px] text-slate-500 block uppercase font-semibold">Остаток на балансах гостей</span>
+                    <span className="text-[10px] text-slate-500 block uppercase font-semibold">Остаток на балансах (₽)</span>
                     <span className="font-bold text-slate-900 font-mono text-xs">{Math.round(cohortStats.totalBalance).toLocaleString("ru")} ₽</span>
                   </div>
+
+                  <div className="px-3 py-1.5 bg-amber-50/80 border border-amber-200 rounded-lg text-left" title="Сумма бонусных баллов, которая сейчас лежит на клубных картах этих клиентов">
+                    <span className="text-[10px] text-amber-700 block uppercase font-semibold">Остаток бонусов у гостей</span>
+                    <span className="font-bold text-amber-900 font-mono text-xs">{Math.round(cohortStats.totalBonusBalance).toLocaleString("ru")} Б</span>
+                  </div>
+
+                  {bonusTiersEnabled && cohortStats.totalGiftBonus > 0 && (
+                    <div className="px-3 py-1.5 bg-purple-50/90 border border-purple-200 rounded-lg text-left" title="Суммарное количество бонусов, которое будет подарено этой когорте гостей по шкале трат">
+                      <span className="text-[10px] text-purple-700 block uppercase font-semibold">Подарки по шкале (Б)</span>
+                      <span className="font-bold text-purple-900 font-mono text-xs">{Math.round(cohortStats.totalGiftBonus).toLocaleString("ru")} Б</span>
+                    </div>
+                  )}
 
                   <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-left" title="Сколько денег суммарно принес один отобранный гость за выбранный период">
                     <span className="text-[10px] text-slate-500 block uppercase font-semibold">Траты на 1 гостя (LTV)</span>
@@ -2251,8 +2448,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   <th className="py-3 px-4 font-semibold min-w-[140px]">Клиент</th>
                   <th className="py-3 px-4 font-semibold min-w-[130px]">Телефон</th>
                   <th className="py-3 px-4 font-semibold min-w-[110px]">День отправки</th>
-                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Баланс</th>
-                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Бонусы</th>
+                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Баланс ₽</th>
+                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Бонусы Б</th>
+                  <th className="py-3 px-4 font-semibold min-w-[100px] text-right text-purple-700 bg-purple-50/50">Подарок Б</th>
                   <th className="py-3 px-4 font-semibold min-w-[110px]">Любимый ПК</th>
                   <th className="py-3 px-4 font-semibold min-w-[340px]">Итоговый текст сообщения</th>
                 </tr>
@@ -2261,7 +2459,10 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                 {displayedClients.slice(0, 50).map((c, idx) => {
                   const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
                   const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
-                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay);
+                  const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
+                  const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
+                  const giftBonus = calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
+                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn);
                   return (
                     <tr key={c.phone + idx} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-2.5 px-4 text-slate-400 font-mono">{idx + 1}</td>
@@ -2272,8 +2473,11 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                           {scheduledDay}
                         </span>
                       </td>
-                      <td className="py-2.5 px-4 text-right font-mono">{Math.round(c.balance || 0).toLocaleString()} ₽</td>
-                      <td className="py-2.5 px-4 text-right font-mono text-amber-700">{Math.round(c.bonusBalance || 0).toLocaleString()} Б</td>
+                      <td className="py-2.5 px-4 text-right font-mono text-slate-800">{Math.round(c.balance || 0).toLocaleString()} ₽</td>
+                      <td className="py-2.5 px-4 text-right font-mono text-amber-700 font-semibold">{Math.round(c.bonusBalance || 0).toLocaleString()} Б</td>
+                      <td className="py-2.5 px-4 text-right font-mono font-bold text-purple-700 bg-purple-50/30">
+                        {giftBonus > 0 ? `+${giftBonus.toLocaleString()} Б` : "—"}
+                      </td>
                       <td className="py-2.5 px-4 text-slate-600">{c.favoriteSeat || "—"}</td>
                       <td className="py-2.5 px-4 text-slate-700 italic max-w-md truncate">{finalMsg}</td>
                     </tr>

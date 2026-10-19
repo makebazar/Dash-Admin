@@ -5,6 +5,11 @@ import { X, MessageSquare, Download, Sparkles, Send, Users, Wallet, Tag } from "
 import { cn } from "@/lib/utils";
 import type { ClientProfile, ClubAnalytics } from "./segmentation";
 
+export interface BonusTier {
+  minSpent: number;
+  bonus: number;
+}
+
 export interface MarketingCampaignRecord {
   id: string;
   clubId: string;
@@ -18,6 +23,8 @@ export interface MarketingCampaignRecord {
   scheduleMode?: "instant" | "smart_day" | "smart_day_eve" | "even";
   scheduleDayMap?: Record<string, string>; // phone -> scheduled day
   periodLabel?: string; // Human readable period used for segmentation
+  bonusTiers?: BonusTier[];
+  bonusTiersEnabled?: boolean;
 }
 
 interface Props {
@@ -33,6 +40,7 @@ const TEMPLATE_TAGS = [
   { tag: "{Имя}", desc: "Имя клиента" },
   { tag: "{Баланс_Руб}", desc: "Баланс в рублях" },
   { tag: "{Баланс_Бонус}", desc: "Бонусный баланс" },
+  { tag: "{Бонус_В_Подарок}", desc: "Сумма бонуса по шкале трат" },
   { tag: "{Любимый_ПК}", desc: "Любимый компьютер" },
   { tag: "{Любимый_День}", desc: "Любимый день недели" },
   { tag: "{Любимая_Зона}", desc: "Любимая зона" },
