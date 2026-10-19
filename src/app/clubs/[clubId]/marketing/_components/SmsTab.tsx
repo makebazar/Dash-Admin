@@ -405,7 +405,6 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const [isDetailExpandedView, setIsDetailExpandedView] = useState(false);
   const [sendTimeMode, setSendTimeMode] = useState<"fixed" | "smart">("fixed");
   const [fixedSendTime, setFixedSendTime] = useState<string>("18:00");
-  const [detailFixedTimeInput, setDetailFixedTimeInput] = useState<string>("18:00");
 
   // SMS.RU Integration State
   const smsRuStorageKey = `marketing_sms_ru_${clubId}`;
@@ -882,71 +881,6 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     setTimeout(() => setDownloadSuccess(false), 3000);
   };
 
-  const handleExportCategoryBatches = (formatMode: CsvFormatMode = csvFormat) => {
-    if (!activeCampaign) return;
-    const curBalCats = (activeCampaign.balanceCategories ?? balanceCategories)
-      .slice()
-      .sort((a, b) => b.minBalance - a.minBalance);
-    const curBalCatOn = activeCampaign.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
-    const curBalIncBon = activeCampaign.balanceIncludeBonuses ?? balanceIncludeBonuses;
-
-    let delay = 0;
-    curBalCats.forEach((cat) => {
-      const catClients = activeCampaignClients.filter((c) => {
-        const cCat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
-        return cCat && cCat.minBalance === cat.minBalance;
-      });
-      if (catClients.length > 0) {
-        setTimeout(() => {
-          handleExportCsv(
-            catClients,
-            activeCampaign.templateText,
-            activeCampaign.name,
-            activeCampaignDayMap,
-            "all",
-            formatMode,
-            cat.minBalance,
-            `colizeum_${clubId}_balans_${cat.minBalance}_plus_${catClients.length}clients.csv`
-          );
-        }, delay);
-        delay += 450;
-      }
-    });
-  };
-
-  const handleExportWaves = (formatMode: CsvFormatMode = csvFormat) => {
-    if (!activeCampaign) return;
-    const weekdaysList = activeCampaignClients.filter((c) => c.dayPattern !== "weekend");
-    const weekendsList = activeCampaignClients.filter((c) => c.dayPattern === "weekend");
-
-    if (weekdaysList.length > 0) {
-      handleExportCsv(
-        weekdaysList,
-        activeCampaign.templateText,
-        activeCampaign.name,
-        activeCampaignDayMap,
-        "all",
-        formatMode,
-        "all",
-        `colizeum_${clubId}_volna_1_budni_${weekdaysList.length}clients.csv`
-      );
-    }
-
-    if (weekendsList.length > 0) {
-      setTimeout(() => {
-        handleExportCsv(
-          weekendsList,
-          activeCampaign.templateText,
-          activeCampaign.name,
-          activeCampaignDayMap,
-          "all",
-          formatMode,
-          "all",
-          `colizeum_${clubId}_volna_2_vykhodnye_${weekendsList.length}clients.csv`
-        );
-      }, 450);
-    }
-  };
 
   const handleDeleteCampaign = (id: string) => {
     if (!confirm("Удалить эту кампанию?")) return;
@@ -1267,10 +1201,12 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       });
     }
 
+    const newScheduleMode: ScheduleMode = unifyMode === "single_day" ? "instant" : "smart_day_eve";
     const updated = campaigns.map((c) => {
       if (c.id === activeCampaignId) {
         return {
           ...c,
+          scheduleMode: newScheduleMode,
           scheduleDayMap: updatedDayMap,
           scheduleDateMap: updatedDateMap,
         };
@@ -1287,6 +1223,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
           if (c.id === activeCampaignId) {
             return {
               ...c,
+              scheduleMode: newScheduleMode,
               scheduleDayMap: updatedDayMap,
               scheduleDateMap: updatedDateMap,
             };
@@ -2193,68 +2130,22 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   ))}
                 </div>
 
-                {/* Send Time Mode Selection */}
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-slate-700 shrink-0" />
-                      <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                        Время отправки SMS
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-slate-500">
-                      Для быстрого запуска менеджером без десятков очередей
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
+                {/* Send Time */}
+                <div className="flex items-center gap-2.5 pt-1 text-xs text-slate-600">
+                  <span className="font-medium">Время отправки:</span>
+                  <div className="inline-flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2 py-0.5 text-slate-700 shadow-2xs">
+                    <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <input
+                      type="time"
+                      value={fixedSendTime}
+                      onChange={(e) => {
                         setSendTimeMode("fixed");
-                        setFixedSendTime("18:00");
+                        setFixedSendTime(e.target.value);
                       }}
-                      className={cn(
-                        "py-1.5 px-3 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5",
-                        sendTimeMode === "fixed" && fixedSendTime === "18:00"
-                          ? "bg-slate-900 text-white border-slate-900 shadow-2xs font-semibold"
-                          : "bg-white text-slate-700 hover:bg-slate-100 border-slate-300"
-                      )}
-                    >
-                      <span>Фиксированное 18:00 (Рекомендуется)</span>
-                    </button>
-
-                    <div className={cn(
-                      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-white transition-colors",
-                      sendTimeMode === "fixed" && fixedSendTime !== "18:00"
-                        ? "border-slate-900 ring-1 ring-slate-900"
-                        : "border-slate-300"
-                    )}>
-                      <span className="text-xs text-slate-600 font-medium">Свое время:</span>
-                      <input
-                        type="time"
-                        value={fixedSendTime}
-                        onChange={(e) => {
-                          setSendTimeMode("fixed");
-                          setFixedSendTime(e.target.value);
-                        }}
-                        className="text-xs font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0 w-16"
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setSendTimeMode("smart")}
-                      className={cn(
-                        "py-1.5 px-3 rounded-lg text-xs font-medium border transition-colors",
-                        sendTimeMode === "smart"
-                          ? "bg-slate-900 text-white border-slate-900 shadow-2xs font-semibold"
-                          : "bg-white text-slate-700 hover:bg-slate-100 border-slate-300"
-                      )}
-                    >
-                      <span>Умное время (10:30, 13:30, 17:00, 19:30)</span>
-                    </button>
+                      className="text-xs font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0 w-14"
+                    />
                   </div>
+                  <span className="text-[11px] text-slate-400">единое время для всей рассылки (по умолчанию 18:00)</span>
                 </div>
 
                 {/* Live 7-Day Schedule Preview */}
@@ -3099,59 +2990,88 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-mono uppercase tracking-wider text-slate-400">
-                SMS-кампания
+        {/* Campaign Title & Metadata Row */}
+        <div className="space-y-1.5 pt-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-mono uppercase tracking-wider text-slate-400">
+              SMS-кампания
+            </span>
+            <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              Готова к отправке
+            </span>
+            {activeCampaign?.periodLabel && (
+              <span className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                Период: {activeCampaign.periodLabel}
               </span>
-              <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                Готова к отправке
+            )}
+            <span className="text-xs text-slate-400">
+              • Создана {activeCampaign?.createdAt ? new Date(activeCampaign.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "сегодня"}
+            </span>
+          </div>
+
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+            {activeCampaign?.name || "SMS-кампания"}
+          </h2>
+        </div>
+
+        {/* Structured Settings & Actions Bar */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 sm:p-4 space-y-3">
+          {/* Row 1: Schedule parameters */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Параметры отправки:
               </span>
-              {activeCampaign?.scheduleMode && (
-                <span className="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                  {activeCampaign.scheduleMode === "smart_day_eve" && "Расписание: накануне визита"}
-                  {activeCampaign.scheduleMode === "smart_day" && "Расписание: в день визита"}
-                  {activeCampaign.scheduleMode === "even" && "Расписание: равномерно на 7 дней"}
-                  {activeCampaign.scheduleMode === "instant" && "Отправка: разово"}
-                </span>
-              )}
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-              {activeCampaign?.name || "SMS-кампания"}
-            </h2>
-            <div className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
-              <span>Создана {activeCampaign?.createdAt ? new Date(activeCampaign.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "сегодня"}</span>
-              {activeCampaign?.periodLabel && (
-                <>
-                  <span>•</span>
-                  <span className="text-slate-600 font-medium bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                    Период: {activeCampaign.periodLabel}
-                  </span>
-                </>
-              )}
-              <span>•</span>
-              <div className="inline-flex items-center gap-1.5 bg-white border border-slate-300 rounded-md px-2 py-0.5 text-slate-700 shadow-2xs">
+
+            <div className="flex flex-wrap items-center gap-2.5 text-xs">
+              {/* Start Date */}
+              <div className="inline-flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-700 shadow-2xs">
                 <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                <span className="text-[11px] font-medium text-slate-500">Старт рассылки:</span>
+                <span className="text-slate-500 font-medium">Дата:</span>
                 <input
                   type="date"
                   value={activeCampaignStartDate}
                   onChange={(e) => handleUpdateCampaignStartDate(e.target.value)}
-                  className="text-xs font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0"
+                  className="font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0"
                 />
+              </div>
+
+              {/* Time */}
+              <div className="inline-flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-700 shadow-2xs">
+                <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span className="text-slate-500 font-medium">Время:</span>
+                <input
+                  type="time"
+                  value={activeCampaign?.fixedSendTime || "18:00"}
+                  onChange={(e) => handleUpdateCampaignTime("fixed", e.target.value)}
+                  className="font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0 w-14"
+                />
+              </div>
+
+              {/* Schedule Mode */}
+              <div className="inline-flex items-center gap-1.5 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-700 shadow-2xs">
+                <span className="text-slate-500 font-medium">График:</span>
+                <select
+                  value={activeCampaign?.scheduleMode === "instant" ? "instant" : "schedule"}
+                  onChange={(e) => handleUnifyCampaignDates(e.target.value === "instant" ? "single_day" : "by_days")}
+                  className="font-medium text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0"
+                >
+                  <option value="instant">В один день ({activeCampaignStartDate})</option>
+                  <option value="schedule">По дням недели (7 дней)</option>
+                </select>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
-            {/* CSV Format Selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 whitespace-nowrap">Колонки CSV:</span>
+          {/* Row 2: CSV format & Export Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-500 font-medium whitespace-nowrap">Колонки CSV:</span>
               <select
                 value={csvFormat}
                 onChange={(e) => setCsvFormat(e.target.value as CsvFormatMode)}
-                className="py-2 px-3 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-slate-900"
+                className="py-1.5 px-2.5 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-slate-900 shadow-2xs"
               >
                 <option value="standard">phone; text; date; time; day (Стандарт)</option>
                 <option value="ru_date">номер; текст; дата; время; день (Русский)</option>
@@ -3160,25 +3080,27 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
               </select>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {(activeDayFilter !== "all" || activeBalanceCategoryFilter !== "all") && (
+            <div className="flex items-center gap-2.5">
+              {activeDayFilter !== "all" || activeBalanceCategoryFilter !== "all" ? (
                 <button
                   type="button"
                   onClick={() => handleExportCsv(displayedClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs flex items-center gap-1.5"
                 >
-                  Скачать CSV выборки ({displayedClients.length})
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Скачать выборку ({displayedClients.length})</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat)}
+                  disabled={activeCampaignClients.length === 0}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Скачать CSV ({activeCampaignClients.length})</span>
                 </button>
               )}
-
-              <button
-                type="button"
-                onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat)}
-                disabled={activeCampaignClients.length === 0}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs"
-              >
-                Скачать полный CSV ({activeCampaignClients.length})
-              </button>
 
               {smsRuConfig?.apiId && (
                 <button
@@ -3281,232 +3203,6 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
             {(!activeCampaign?.scheduleMode || activeCampaign?.scheduleMode === "instant") && "Разово"}
           </p>
           <span className="text-[11px] text-slate-500 mt-0.5 block">автоматический график</span>
-        </div>
-      </div>
-
-      {/* MANAGER BATCH STANDARDIZATION & EXPORT PANEL */}
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 md:p-6 shadow-md border border-slate-700 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-700/80 pb-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Layers className="w-5 h-5 text-emerald-400" />
-              <h3 className="text-base font-bold text-white tracking-wide">
-                Пакетная стандартизация и выгрузка для менеджера
-              </h3>
-              <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                Решение для быстрого запуска
-              </span>
-            </div>
-            <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-              Устраняет проблему десятков разрозненных очередей и текстов. Фиксирует единое время отправки (18:00) и формирует стандартизированные пакеты под модерацию любого SMS-сервиса (SMS.RU, МТС Маркетолог и др.).
-            </p>
-          </div>
-          <div className="text-xs text-slate-300 bg-slate-800/80 border border-slate-600 rounded-lg px-3 py-1.5 self-start md:self-auto font-mono">
-            База: <span className="text-white font-bold">{activeCampaignClients.length}</span> чел
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Controls: Time & Dates */}
-          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 space-y-4">
-            {/* 1. Time Slot Standardization */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-blue-400" />
-                  1. Единое время отправки
-                </span>
-                <span className="text-[11px] font-mono text-emerald-400 font-semibold">
-                  Текущее: {activeCampaign?.sendTimeMode === "smart" ? "Смарт (по гостям)" : `Единое (${activeCampaign?.fixedSendTime || "18:00"})`}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleUpdateCampaignTime("fixed", "18:00")}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                    (!activeCampaign?.sendTimeMode || (activeCampaign.sendTimeMode === "fixed" && (activeCampaign.fixedSendTime || "18:00") === "18:00"))
-                      ? "bg-emerald-600 text-white font-bold shadow-sm ring-1 ring-emerald-400"
-                      : "bg-slate-700/80 hover:bg-slate-700 text-slate-200 border border-slate-600"
-                  )}
-                >
-                  ✓ 18:00 (Стандарт Colizeum)
-                </button>
-
-                <div className="inline-flex items-center gap-1.5 bg-slate-700/80 border border-slate-600 rounded-lg px-2.5 py-1">
-                  <span className="text-[11px] text-slate-300">Свое:</span>
-                  <input
-                    type="time"
-                    value={detailFixedTimeInput}
-                    onChange={(e) => setDetailFixedTimeInput(e.target.value)}
-                    className="text-xs font-mono font-bold text-white bg-transparent border-none focus:outline-none w-16 p-0"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleUpdateCampaignTime("fixed", detailFixedTimeInput)}
-                    className="text-[11px] bg-slate-600 hover:bg-slate-500 text-white font-medium px-2 py-0.5 rounded transition-colors"
-                  >
-                    Задать
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleUpdateCampaignTime("smart", "18:00")}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                    activeCampaign?.sendTimeMode === "smart"
-                      ? "bg-emerald-600 text-white font-bold shadow-sm ring-1 ring-emerald-400"
-                      : "bg-slate-700/80 hover:bg-slate-700 text-slate-200 border border-slate-600"
-                  )}
-                  title="Отправлять в индивидуальное время каждого гостя (10:30, 13:30, 17:00, 19:30)"
-                >
-                  Умное время
-                </button>
-              </div>
-            </div>
-
-            {/* 2. Days Schedule Simplification */}
-            <div className="space-y-2 pt-2 border-t border-slate-700/60">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                  2. График и объединение дат
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Дата старта: {activeCampaignStartDate}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleUnifyCampaignDates("single_day")}
-                  className="px-3 py-1.5 bg-slate-700/80 hover:bg-slate-700 text-white rounded-lg text-xs font-medium border border-slate-600 transition-colors"
-                  title="Назначить всем клиентам единую дату старта рассылки"
-                >
-                  ⚡ Все в 1 день ({activeCampaignStartDate})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleUnifyCampaignDates("two_waves")}
-                  className="px-3 py-1.5 bg-slate-700/80 hover:bg-slate-700 text-white rounded-lg text-xs font-medium border border-slate-600 transition-colors"
-                  title="Разделить клиентов на 2 волны: Будни (Вторник) и Выходные (Суббота)"
-                >
-                  🌊 2 волны (Будни / Выходные)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleUnifyCampaignDates("by_days")}
-                  className="px-3 py-1.5 bg-slate-700/80 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-600 transition-colors"
-                  title="Восстановить распределение по 7 дням недели"
-                >
-                  🗓 По 7 дням недели
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Batch Downloads Section */}
-          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                <Download className="w-3.5 h-3.5 text-emerald-400" />
-                3. Готовые пакеты выгрузки (CSV)
-              </span>
-              <span className="text-[11px] text-slate-400">
-                Формат: 7XXXXXXXXXX
-              </span>
-            </div>
-
-            {/* Option A: 3 Balance Category Batches */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-emerald-400">
-                  Вариант А: 3 пакета по категориям баланса (Рекомендуется)
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  3 файла со 100% единым текстом
-                </span>
-              </div>
-
-              {/* 1-click batch download button */}
-              <button
-                type="button"
-                onClick={() => handleExportCategoryBatches(csvFormat)}
-                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm"
-              >
-                <Download className="w-4 h-4" />
-                <span>Скачать все 3 пакета в 1 клик (3 отдельных CSV)</span>
-              </button>
-
-              {/* Individual Category Batch Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                {((activeCampaign?.balanceCategories ?? balanceCategories) || [])
-                  .slice()
-                  .sort((a, b) => b.minBalance - a.minBalance)
-                  .map((cat) => {
-                    const count = activeCampaignCategoryBreakdown.counts[cat.minBalance] || 0;
-                    return (
-                      <button
-                        key={cat.minBalance}
-                        type="button"
-                        onClick={() => {
-                          const curBalCats = (activeCampaign?.balanceCategories ?? balanceCategories).slice().sort((a, b) => b.minBalance - a.minBalance);
-                          const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
-                          const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
-                          const catClients = activeCampaignClients.filter((c) => {
-                            const cCat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
-                            return cCat && cCat.minBalance === cat.minBalance;
-                          });
-                          handleExportCsv(
-                            catClients,
-                            activeCampaign?.templateText || "",
-                            activeCampaign?.name || "sms",
-                            activeCampaignDayMap,
-                            "all",
-                            csvFormat,
-                            cat.minBalance,
-                            `colizeum_${clubId}_balans_${cat.minBalance}_plus_${catClients.length}clients.csv`
-                          );
-                        }}
-                        disabled={count === 0}
-                        className="p-2 bg-slate-700/80 hover:bg-slate-700 disabled:opacity-40 text-left rounded-lg border border-slate-600 transition-colors"
-                      >
-                        <span className="text-[10px] text-slate-300 block uppercase font-mono font-medium">
-                          {cat.label}
-                        </span>
-                        <div className="flex items-center justify-between mt-0.5">
-                          <span className="text-xs font-bold text-white font-mono">{count} чел</span>
-                          <span className="text-[10px] text-emerald-400 font-medium">CSV ↓</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-              </div>
-            </div>
-
-            {/* Option B & C: Unified or 2 Waves */}
-            <div className="pt-3 border-t border-slate-700/60 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat, "all", `colizeum_${clubId}_vse_${activeCampaignClients.length}clients.csv`)}
-                className="px-3 py-1.5 bg-slate-700/90 hover:bg-slate-700 text-white rounded-lg text-xs font-medium border border-slate-600 transition-colors flex items-center gap-1.5"
-              >
-                <FileText className="w-3.5 h-3.5 text-blue-400" />
-                <span>1 общий файл на всю базу ({activeCampaignClients.length} чел)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleExportWaves(csvFormat)}
-                className="px-3 py-1.5 bg-slate-700/90 hover:bg-slate-700 text-white rounded-lg text-xs font-medium border border-slate-600 transition-colors flex items-center gap-1.5"
-              >
-                <Layers className="w-3.5 h-3.5 text-purple-400" />
-                <span>2 волны (Будни / Выходные)</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
