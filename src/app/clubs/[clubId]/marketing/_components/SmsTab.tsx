@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2, Pencil, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ClientProfile, type ClubAnalytics, type DateFilter, type MonthOption, getAvailableMonths } from "./segmentation";
 import type { MarketingCampaignRecord, BonusTier } from "./SmsCampaignModal";
@@ -329,6 +329,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const [bonusTiersEnabled, setBonusTiersEnabled] = useState(true);
   const [bonusTiers, setBonusTiers] = useState<BonusTier[]>(DEFAULT_BONUS_TIERS);
   const [csvFormat, setCsvFormat] = useState<CsvFormatMode>("standard");
+  const [isEditingDetailTemplate, setIsEditingDetailTemplate] = useState(false);
+  const [detailTemplateDraft, setDetailTemplateDraft] = useState("");
 
   // SMS.RU Integration State
   const smsRuStorageKey = `marketing_sms_ru_${clubId}`;
@@ -792,6 +794,59 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   useEffect(() => {
     setDetailCostSmsRu(null);
   }, [activeCampaignId, activeDayFilter]);
+
+  // Reset template editing state when campaign or view mode changes
+  useEffect(() => {
+    setIsEditingDetailTemplate(false);
+    setDetailTemplateDraft("");
+  }, [activeCampaignId, viewMode]);
+
+  const handleStartEditTemplate = () => {
+    if (!activeCampaign) return;
+    setDetailTemplateDraft(activeCampaign.templateText || "");
+    setIsEditingDetailTemplate(true);
+  };
+
+  const handleSaveDetailTemplate = () => {
+    if (!activeCampaignId) return;
+    const newText = detailTemplateDraft.trim();
+    if (!newText) {
+      alert("Текст шаблона не может быть пустым");
+      return;
+    }
+
+    const updated = campaigns.map((c) => {
+      if (c.id === activeCampaignId) {
+        return { ...c, templateText: newText };
+      }
+      return c;
+    });
+    setCampaigns(updated);
+
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        const list: MarketingCampaignRecord[] = saved ? JSON.parse(saved) : [];
+        const updatedList = list.map((c) => {
+          if (c.id === activeCampaignId) {
+            return { ...c, templateText: newText };
+          }
+          return c;
+        });
+        localStorage.setItem(storageKey, JSON.stringify(updatedList));
+      } catch (e) {
+        console.warn("Failed to persist updated template:", e);
+      }
+    }
+
+    setIsEditingDetailTemplate(false);
+    setDetailCostSmsRu(null);
+  };
+
+  const handleCancelEditTemplate = () => {
+    setIsEditingDetailTemplate(false);
+    setDetailTemplateDraft("");
+  };
 
   // Request exact calculation from SMS.RU API (sms/cost)
   const fetchSmsRuCost = async (
@@ -2590,15 +2645,127 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
         </div>
       )}
 
-      {/* Message Template Display */}
-      <div className="space-y-2">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-          Шаблон с тегами персонализации
-        </span>
-        <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 font-mono leading-relaxed">
-          {activeCampaign?.templateText}
-        </div>
-      </div>
+      {/* Message Template Display / Edit */}
+      {(() => {
+        const isDraftCyrillic = /[а-яёА-ЯЁ]/.test(detailTemplateDraft);
+        const draftSingleLimit = isDraftCyrillic ? 70 : 160;
+        const draftMultiLimit = isDraftCyrillic ? 67 : 153;
+        const draftLength = detailTemplateDraft.length;
+        const draftSmsParts = draftLength <= draftSingleLimit ? 1 : Math.ceil(draftLength / draftMultiLimit);
+
+        if (isEditingDetailTemplate) {
+          return (
+            <div className="space-y-3 bg-white border border-slate-300 rounded-xl p-4 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-semibold text-slate-900 uppercase tracking-wider block">
+                    Редактирование шаблона кампании
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Кликните тег для вставки. После сохранения сообщения клиентов и выгрузка CSV обновятся мгновенно.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={handleCancelEditTemplate}
+                    className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveDetailTemplate}
+                    disabled={!detailTemplateDraft.trim()}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Сохранить шаблон</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Tags bar */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {TEMPLATE_TAGS.map((t) => (
+                  <button
+                    key={t.tag}
+                    type="button"
+                    onClick={() => setDetailTemplateDraft((prev) => (prev ? prev + " " + t.tag : t.tag))}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-mono transition-colors"
+                    title={t.desc}
+                  >
+                    {t.tag}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                rows={3}
+                value={detailTemplateDraft}
+                onChange={(e) => setDetailTemplateDraft(e.target.value)}
+                placeholder="Введите текст SMS с тегами..."
+                className="w-full text-sm p-3 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-none focus:border-slate-900 transition-colors"
+              />
+
+              {/* Live Character & Part Counter */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    "font-bold px-2 py-0.5 rounded text-[11px] font-mono",
+                    draftSmsParts === 1
+                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                      : "bg-amber-100 text-amber-900 border border-amber-300"
+                  )}>
+                    {draftSmsParts === 1 ? "1 SMS (Эконом)" : `${draftSmsParts} SMS-части`}
+                  </span>
+                  <span className="font-mono text-slate-700 font-semibold text-xs">
+                    {draftLength} / {draftSmsParts === 1 ? draftSingleLimit : draftSmsParts * draftMultiLimit} симв.
+                  </span>
+                </div>
+
+                <div className="text-[11px] text-slate-500">
+                  {draftSmsParts === 1 ? (
+                    <span className="text-emerald-700 font-medium">
+                      ✓ В лимите 1 SMS (осталось {Math.max(0, draftSingleLimit - draftLength)} симв.)
+                    </span>
+                  ) : (
+                    <span className="text-amber-800 font-medium">
+                      Превышен лимит 1 SMS (сократите на {draftLength - draftSingleLimit} симв., чтобы платить как за 1 часть)
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="space-y-2 bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider block">
+                  Шаблон с тегами персонализации
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  По этому шаблону генерируется персональное сообщение для каждого гостя
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleStartEditTemplate}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Редактировать шаблон</span>
+              </button>
+            </div>
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 font-mono leading-relaxed select-all">
+              {activeCampaign?.templateText}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Recipient Table */}
       <div className="space-y-3 pt-2">
