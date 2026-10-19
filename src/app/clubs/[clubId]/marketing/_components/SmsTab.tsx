@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Gift, Plus, Trash2 } from "lucide-react";
+import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ClientProfile, type ClubAnalytics, type DateFilter, type MonthOption, getAvailableMonths } from "./segmentation";
 import type { MarketingCampaignRecord, BonusTier } from "./SmsCampaignModal";
@@ -1536,55 +1536,48 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
             </div>
 
             {/* Tiered Gift Bonuses Section */}
-            <div className="p-5 bg-gradient-to-br from-purple-50/40 via-white to-amber-50/30 border border-purple-200/80 rounded-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-lg bg-purple-100 text-purple-700 border border-purple-200 shrink-0 mt-0.5">
-                    <Gift className="w-4 h-4" />
+            <div className="border-t border-slate-200 pt-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      Шкала подарочных бонусов
+                    </h3>
+                    <span className={cn(
+                      "text-[10px] font-mono px-1.5 py-0.5 rounded",
+                      bonusTiersEnabled
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    )}>
+                      {bonusTiersEnabled ? "Включена" : "Отключена"}
+                    </span>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-900">
-                        Шкала подарочных бонусов (в зависимости от трат гостя)
-                      </h3>
-                      <span className={cn(
-                        "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
-                        bonusTiersEnabled
-                          ? "bg-purple-100 text-purple-800 border-purple-200"
-                          : "bg-slate-100 text-slate-600 border-slate-200"
-                      )}>
-                        {bonusTiersEnabled ? "Активна" : "Отключена"}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Гости с большим чеком получают больший подарок. Сумма бонуса автоматически подставляется в текст через тег <code className="font-mono text-purple-700 bg-purple-50 px-1 py-0.5 rounded border border-purple-200 font-semibold">{"{Бонус_В_Подарок}"}</code>.
-                    </p>
-                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Сумма бонуса зависит от общей суммы трат гостя. В текст сообщения подставляется тегом <code className="font-mono text-slate-800 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">{"{Бонус_В_Подарок}"}</code>.
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-2 self-start sm:self-auto">
-                  <button
-                    type="button"
-                    onClick={() => setBonusTiersEnabled(!bonusTiersEnabled)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
-                      bonusTiersEnabled
-                        ? "bg-purple-600 text-white border-purple-600 shadow-sm"
-                        : "bg-white text-slate-600 hover:bg-slate-50 border-slate-300"
-                    )}
-                  >
-                    {bonusTiersEnabled ? "✓ Шкала включена" : "Включить шкалу"}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setBonusTiersEnabled(!bonusTiersEnabled)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors self-start sm:self-auto",
+                    bonusTiersEnabled
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                      : "bg-white text-slate-700 hover:bg-slate-50 border-slate-300"
+                  )}
+                >
+                  {bonusTiersEnabled ? "Шкала включена" : "Включить шкалу"}
+                </button>
               </div>
 
               {bonusTiersEnabled && (
-                <div className="space-y-3 pt-2 border-t border-purple-100">
+                <div className="space-y-3 pt-1">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                     {bonusTiers.map((tier, idx) => (
                       <div
                         key={idx}
-                        className="flex items-center justify-between gap-2 p-2.5 bg-white border border-slate-200 rounded-lg shadow-xs hover:border-purple-300 transition-colors"
+                        className="flex items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg"
                       >
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           <span className="text-[11px] text-slate-500 shrink-0">Траты от:</span>
@@ -1600,13 +1593,13 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                                 updated[idx] = { ...updated[idx], minSpent: val };
                                 setBonusTiers(updated);
                               }}
-                              className="w-full py-1 px-2 font-mono text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:border-purple-500"
+                              className="w-full py-1 px-2 font-mono text-xs font-semibold text-slate-900 bg-white border border-slate-300 rounded focus:border-slate-900 focus:outline-none"
                             />
                             <span className="absolute right-2 top-1 text-[10px] text-slate-400 pointer-events-none">₽</span>
                           </div>
                         </div>
 
-                        <span className="text-slate-400 font-bold text-xs shrink-0">→</span>
+                        <span className="text-slate-400 font-mono text-xs shrink-0">→</span>
 
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           <span className="text-[11px] text-slate-500 shrink-0">Бонус:</span>
@@ -1622,9 +1615,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                                 updated[idx] = { ...updated[idx], bonus: val };
                                 setBonusTiers(updated);
                               }}
-                              className="w-full py-1 px-2 font-mono text-xs font-bold text-purple-700 bg-purple-50/50 border border-purple-300 rounded focus:bg-white focus:outline-none focus:border-purple-500"
+                              className="w-full py-1 px-2 font-mono text-xs font-semibold text-slate-900 bg-white border border-slate-300 rounded focus:border-slate-900 focus:outline-none"
                             />
-                            <span className="absolute right-2 top-1 text-[10px] text-purple-400 pointer-events-none">Б</span>
+                            <span className="absolute right-2 top-1 text-[10px] text-slate-400 pointer-events-none">Б</span>
                           </div>
                         </div>
 
@@ -1634,7 +1627,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                             onClick={() => {
                               setBonusTiers(bonusTiers.filter((_, i) => i !== idx));
                             }}
-                            className="p-1 text-slate-300 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors shrink-0"
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors shrink-0"
                             title="Удалить ступень"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1652,14 +1645,14 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                         const lastBonus = bonusTiers.length > 0 ? Math.max(...bonusTiers.map((t) => t.bonus)) : 0;
                         setBonusTiers([...bonusTiers, { minSpent: lastSpent + 5000, bonus: lastBonus + 500 }]);
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-purple-700 border border-purple-200 font-semibold rounded-lg text-xs transition-colors self-start"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-medium rounded-lg text-xs transition-colors self-start"
                     >
-                      <Plus className="w-3.5 h-3.5" /> Добавить ступень бонуса
+                      <Plus className="w-3.5 h-3.5" /> Добавить ступень
                     </button>
 
-                    <div className="flex items-center gap-2 text-[11px] text-slate-600 bg-white/80 px-3 py-1.5 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 text-[11px] text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
                       <span>Суммарно к выдаче:</span>
-                      <span className="font-bold text-purple-700 font-mono text-xs">
+                      <span className="font-bold text-slate-900 font-mono text-xs">
                         {cohortStats.totalGiftBonus.toLocaleString("ru")} Б
                       </span>
                       <span className="text-slate-400">
@@ -1700,9 +1693,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   </div>
 
                   {bonusTiersEnabled && cohortStats.totalGiftBonus > 0 && (
-                    <div className="px-3 py-1.5 bg-purple-50/90 border border-purple-200 rounded-lg text-left" title="Суммарное количество бонусов, которое будет подарено этой когорте гостей по шкале трат">
-                      <span className="text-[10px] text-purple-700 block uppercase font-semibold">Подарки по шкале (Б)</span>
-                      <span className="font-bold text-purple-900 font-mono text-xs">{Math.round(cohortStats.totalGiftBonus).toLocaleString("ru")} Б</span>
+                    <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-left" title="Суммарное количество бонусов, которое будет подарено этой когорте гостей по шкале трат">
+                      <span className="text-[10px] text-slate-500 block uppercase font-semibold">Подарки по шкале (Б)</span>
+                      <span className="font-bold text-slate-900 font-mono text-xs">{Math.round(cohortStats.totalGiftBonus).toLocaleString("ru")} Б</span>
                     </div>
                   )}
 
@@ -2450,7 +2443,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   <th className="py-3 px-4 font-semibold min-w-[110px]">День отправки</th>
                   <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Баланс ₽</th>
                   <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Бонусы Б</th>
-                  <th className="py-3 px-4 font-semibold min-w-[100px] text-right text-purple-700 bg-purple-50/50">Подарок Б</th>
+                  <th className="py-3 px-4 font-semibold min-w-[100px] text-right">Подарок Б</th>
                   <th className="py-3 px-4 font-semibold min-w-[110px]">Любимый ПК</th>
                   <th className="py-3 px-4 font-semibold min-w-[340px]">Итоговый текст сообщения</th>
                 </tr>
@@ -2475,7 +2468,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                       </td>
                       <td className="py-2.5 px-4 text-right font-mono text-slate-800">{Math.round(c.balance || 0).toLocaleString()} ₽</td>
                       <td className="py-2.5 px-4 text-right font-mono text-amber-700 font-semibold">{Math.round(c.bonusBalance || 0).toLocaleString()} Б</td>
-                      <td className="py-2.5 px-4 text-right font-mono font-bold text-purple-700 bg-purple-50/30">
+                      <td className="py-2.5 px-4 text-right font-mono font-medium text-slate-900">
                         {giftBonus > 0 ? `+${giftBonus.toLocaleString()} Б` : "—"}
                       </td>
                       <td className="py-2.5 px-4 text-slate-600">{c.favoriteSeat || "—"}</td>
