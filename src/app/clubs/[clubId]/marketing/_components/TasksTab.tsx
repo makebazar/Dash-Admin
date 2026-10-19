@@ -204,6 +204,43 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           return false;
         }
 
+        // Slot Constructor Filters:
+        // 1. Zone filter: if specific zone chosen, guest must match this zone!
+        if (selectedZone !== "all" && p.favoriteZone !== selectedZone) {
+          return false;
+        }
+
+        // 2. PC filter: if specific PC(s) entered, guest must have a match among their seats!
+        const clientTopSeats = p.topSeats && p.topSeats.length > 0 ? p.topSeats : (p.favoriteSeat ? [p.favoriteSeat] : []);
+        if (pcTokens.length > 0) {
+          const hasSeatMatch = clientTopSeats.some((seat) => {
+            const sLower = seat.toLowerCase();
+            const sDigits = sLower.replace(/\D/g, "");
+            return pcTokens.some((tok) => {
+              const tokDigits = tok.replace(/\D/g, "");
+              return sLower.includes(tok) || (tokDigits.length > 0 && sDigits === tokDigits);
+            });
+          });
+          if (!hasSeatMatch) return false;
+        }
+
+        // 3. Day filter: if specific day chosen, guest must play on this day!
+        if (resolvedDay !== "all") {
+          const clientTopDays = p.topDays && p.topDays.length > 0 ? p.topDays : (p.favoriteDay ? [p.favoriteDay] : []);
+          const isDayMatch = clientTopDays.includes(resolvedDay)
+            || p.favoriteDay === resolvedDay
+            || (p.dayPattern === "weekend" && ["Пятница", "Суббота", "Воскресенье"].includes(resolvedDay))
+            || (p.dayPattern === "weekday" && ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"].includes(resolvedDay));
+          if (!isDayMatch) return false;
+        }
+
+        // 4. Time slot filter: if specific time chosen, guest must match time slot!
+        if (selectedTime !== "all") {
+          const isTimeMatch = p.preferredTime === selectedTime
+            || (selectedTime === "night" && p.gamerPersona === "night_owl");
+          if (!isTimeMatch) return false;
+        }
+
         return true;
       })
       .map((p) => {
@@ -299,7 +336,18 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
         }
 
         // Human-friendly profile preferences:
-        // E.g. "Дни: Пт, Сб • Вечер • VIP • ПК: 14, 15, 12"
+        const daysDisplay = clientTopDays.length > 0
+          ? clientTopDays.map((d) => SHORT_DAYS[d] || d).join(", ")
+          : (p.dayPattern === "weekend" ? "Пт, Сб, Вс" : p.dayPattern === "weekday" ? "Пн-Пт" : "—");
+
+        const seatsDisplay = clientTopSeats.length > 0 ? clientTopSeats.join(", ") : "—";
+
+        const timeLabel = p.preferredTime
+          ? (TIME_SLOTS.find((s) => s.id === p.preferredTime)?.label?.split(" ")[0] || p.preferredTime)
+          : "";
+        const zoneLabel = p.favoriteZone && p.favoriteZone !== "—" ? p.favoriteZone : "";
+        const timeAndZoneText = [timeLabel, zoneLabel].filter(Boolean).join(" • ") || "Любая зона";
+
         const detailsParts: string[] = [];
         if (clientTopDays.length > 0) {
           const daysShort = clientTopDays.map((d) => SHORT_DAYS[d] || d).join(", ");
@@ -370,6 +418,9 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           score,
           matchPercent,
           matchDetails,
+          daysDisplay,
+          seatsDisplay,
+          timeAndZoneText,
           visitCount,
           script,
           attributionResult,
@@ -750,21 +801,23 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold tracking-wider text-[11px]">
-                <th className="py-2.5 px-3 w-10 text-slate-400">№</th>
+                <th className="py-2.5 px-3 w-9 text-slate-400">№</th>
                 <th className="py-2.5 px-3 min-w-[130px]">Гость</th>
                 <th className="py-2.5 px-3 min-w-[125px]">Телефон</th>
-                <th className="py-2.5 px-3 min-w-[80px]">Не был</th>
-                <th className="py-2.5 px-3 min-w-[160px]">Совпадение со слотом</th>
-                <th className="py-2.5 px-3 min-w-[140px]">LTV • Визиты • Баланс</th>
-                <th className="py-2.5 px-3 min-w-[300px]">Текст сообщения / скрипт</th>
-                <th className="py-2.5 px-3 min-w-[130px]">Отметка смены</th>
-                <th className="py-2.5 px-3 min-w-[110px]">Результат</th>
+                <th className="py-2.5 px-3 min-w-[75px]">Не был</th>
+                <th className="py-2.5 px-3 min-w-[140px]">Совпадение</th>
+                <th className="py-2.5 px-3 min-w-[110px]">Любимые дни</th>
+                <th className="py-2.5 px-3 min-w-[95px]">Любимые ПК</th>
+                <th className="py-2.5 px-3 min-w-[130px]">LTV • Баланс</th>
+                <th className="py-2.5 px-3 min-w-[280px]">Текст сообщения / скрипт</th>
+                <th className="py-2.5 px-3 min-w-[125px]">Отметка смены</th>
+                <th className="py-2.5 px-3 min-w-[95px]">Результат</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-800">
               {paginatedClients.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={11} className="py-12 text-center text-slate-400">
                     Нет гостей, подходящих под выбранные параметры слота и фильтры.
                   </td>
                 </tr>
@@ -835,8 +888,8 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                         )}
                       </td>
 
-                      {/* Match Details & Color Percentage */}
-                      <td className="py-2.5 px-3 align-top min-w-[170px]">
+                      {/* Match & Slot Info */}
+                      <td className="py-2.5 px-3 align-top min-w-[140px]">
                         <div className="flex items-center gap-1.5 mb-1">
                           <span
                             className={cn(
@@ -861,9 +914,31 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                             {item.matchPercent}% совпадение
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-600 leading-tight">
-                          {item.matchDetails}
+                        <div className="text-[11px] text-slate-500 leading-tight">
+                          {item.timeAndZoneText}
                         </div>
+                      </td>
+
+                      {/* Favorite Days (separate column) */}
+                      <td className="py-2.5 px-3 align-top min-w-[110px]">
+                        {item.daysDisplay && item.daysDisplay !== "—" ? (
+                          <div className="text-xs font-semibold text-slate-800 leading-tight">
+                            {item.daysDisplay}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* Favorite PCs (separate column) */}
+                      <td className="py-2.5 px-3 align-top min-w-[95px] whitespace-nowrap">
+                        {item.seatsDisplay && item.seatsDisplay !== "—" ? (
+                          <div className="text-xs font-mono font-medium text-slate-800 leading-tight">
+                            {item.seatsDisplay}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
                       </td>
 
                       {/* LTV, Visits & Balance */}
