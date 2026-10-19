@@ -350,8 +350,19 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const count = filteredClients.length;
     const totalSpent = filteredClients.reduce((sum, c) => sum + (c.totalSpent || 0), 0);
     const totalBalance = filteredClients.reduce((sum, c) => sum + (c.balance || 0), 0);
-    const avgSpent = count > 0 ? Math.round(totalSpent / count) : 0;
-    return { count, totalSpent, totalBalance, avgSpent };
+    const totalBonusBalance = filteredClients.reduce((sum, c) => sum + (c.bonusBalance || 0), 0);
+    const totalVisits = filteredClients.reduce((sum, c) => sum + (c.visits ?? c.txCount ?? (c.totalSpent > 0 ? 1 : 0)), 0);
+    const avgSpentPerGuest = count > 0 ? Math.round(totalSpent / count) : 0;
+    const avgCheckPerVisit = totalVisits > 0 ? Math.round(totalSpent / totalVisits) : 0;
+    return {
+      count,
+      totalSpent,
+      totalBalance,
+      totalBonusBalance,
+      totalVisits,
+      avgSpentPerGuest,
+      avgCheckPerVisit,
+    };
   }, [filteredClients]);
 
   // Human-readable criteria description
@@ -1482,10 +1493,28 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   </p>
                 </div>
 
-                <div className="text-xs text-slate-600 space-x-4">
-                  <span>Оборот: <b className="text-slate-900">{Math.round(cohortStats.totalSpent).toLocaleString("ru")} ₽</b></span>
-                  <span>Баланс: <b className="text-slate-900">{Math.round(cohortStats.totalBalance).toLocaleString("ru")} ₽</b></span>
-                  <span>Средний чек: <b className="text-slate-900">{cohortStats.avgSpent.toLocaleString("ru")} ₽</b></span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-left" title="Суммарная выручка, которую эти отобранные гости принесли клубу за выбранный период">
+                    <span className="text-[10px] text-slate-500 block uppercase font-semibold">Принесли в клуб (LTV)</span>
+                    <span className="font-bold text-slate-900 font-mono text-xs">{Math.round(cohortStats.totalSpent).toLocaleString("ru")} ₽</span>
+                  </div>
+
+                  <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-left" title="Сумма реальных рублей, которая сейчас лежит на игровых счетах (депозитах) этих клиентов в системе клуба">
+                    <span className="text-[10px] text-slate-500 block uppercase font-semibold">Остаток на балансах гостей</span>
+                    <span className="font-bold text-slate-900 font-mono text-xs">{Math.round(cohortStats.totalBalance).toLocaleString("ru")} ₽</span>
+                  </div>
+
+                  <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-left" title="Сколько денег суммарно принес один отобранный гость за выбранный период">
+                    <span className="text-[10px] text-slate-500 block uppercase font-semibold">Траты на 1 гостя (LTV)</span>
+                    <span className="font-bold text-slate-900 font-mono text-xs">{cohortStats.avgSpentPerGuest.toLocaleString("ru")} ₽</span>
+                  </div>
+
+                  {cohortStats.avgCheckPerVisit > 0 && (
+                    <div className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-left" title="Средний чек одного визита в клуб среди отобранных клиентов">
+                      <span className="text-[10px] text-slate-500 block uppercase font-semibold">Чек за 1 визит</span>
+                      <span className="font-bold text-slate-900 font-mono text-xs">{cohortStats.avgCheckPerVisit.toLocaleString("ru")} ₽</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
