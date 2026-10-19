@@ -22,6 +22,8 @@ export interface MarketingCampaignRecord {
   returnedRevenue?: number;
   scheduleMode?: "instant" | "smart_day" | "smart_day_eve" | "even";
   scheduleDayMap?: Record<string, string>; // phone -> scheduled day
+  scheduleTimeMap?: Record<string, string>; // phone -> scheduled time HH:MM
+  scheduleDateMap?: Record<string, string>; // phone -> scheduled date DD.MM.YYYY
   periodLabel?: string; // Human readable period used for segmentation
   bonusTiers?: BonusTier[];
   bonusTiersEnabled?: boolean;
@@ -43,6 +45,8 @@ const TEMPLATE_TAGS = [
   { tag: "{Бонус_В_Подарок}", desc: "Сумма бонуса по шкале трат" },
   { tag: "{Любимый_ПК}", desc: "Любимый компьютер" },
   { tag: "{Любимый_День}", desc: "Любимый день недели" },
+  { tag: "{Время_Отправки}", desc: "Время отправки по привычке гостя (напр. 17:00)" },
+  { tag: "{Дата_Отправки}", desc: "Календарная дата отправки (напр. 23.10.2026)" },
   { tag: "{Любимая_Зона}", desc: "Любимая зона" },
   { tag: "{Любимый_Тариф}", desc: "Любимый тариф" },
 ];

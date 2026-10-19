@@ -79,6 +79,8 @@ const TEMPLATE_TAGS = [
   { tag: "{Любимый_ПК}", desc: "Любимый компьютер" },
   { tag: "{Любимый_День}", desc: "Любимый день недели" },
   { tag: "{День_Отправки}", desc: "Назначенный день недели отправки" },
+  { tag: "{Время_Отправки}", desc: "Время отправки по привычке гостя (напр. 17:00)" },
+  { tag: "{Дата_Отправки}", desc: "Календарная дата отправки (напр. 23.10.2026)" },
   { tag: "{Любимая_Зона}", desc: "Любимая зона" },
   { tag: "{Любимый_Тариф}", desc: "Любимый тариф" },
 ];
@@ -186,6 +188,74 @@ export function getScheduledDay(
   return day;
 }
 
+const DAY_INDEX_MAP: Record<string, number> = {
+  "Воскресенье": 0,
+  "Понедельник": 1,
+  "Вторник": 2,
+  "Среда": 3,
+  "Четверг": 4,
+  "Пятница": 5,
+  "Суббота": 6,
+};
+
+export function getScheduledDate(dayName: string, baseDate: Date = new Date()): string {
+  if (!dayName || dayName === "Сразу") {
+    const dd = String(baseDate.getDate()).padStart(2, "0");
+    const mm = String(baseDate.getMonth() + 1).padStart(2, "0");
+    const yyyy = baseDate.getFullYear();
+    return `${dd}.${mm}.${yyyy}`;
+  }
+
+  const targetDay = DAY_INDEX_MAP[dayName];
+  if (targetDay === undefined) {
+    const dd = String(baseDate.getDate()).padStart(2, "0");
+    const mm = String(baseDate.getMonth() + 1).padStart(2, "0");
+    const yyyy = baseDate.getFullYear();
+    return `${dd}.${mm}.${yyyy}`;
+  }
+
+  const currentDay = baseDate.getDay();
+  let diff = targetDay - currentDay;
+  if (diff < 0) diff += 7;
+  const d = new Date(baseDate.getTime() + diff * 86400000);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
+}
+
+export function getScheduledTime(client: ClientProfile): string {
+  switch (client.preferredTime) {
+    case "morning":
+      return "10:30";
+    case "day":
+      return "13:30";
+    case "evening":
+      return "17:00";
+    case "night":
+      return "19:30";
+    default:
+      return "14:00";
+  }
+}
+
+export function getScheduledTimeLabel(client: ClientProfile): string {
+  switch (client.preferredTime) {
+    case "morning":
+      return "Утро (10:30)";
+    case "day":
+      return "День (13:30)";
+    case "evening":
+      return "Вечер (17:00)";
+    case "night":
+      return "Ночник (19:30)";
+    default:
+      return "День (14:00)";
+  }
+}
+
+export type CsvFormatMode = "standard" | "ru_date" | "sms_ru" | "ru_day";
+
 export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFilterChange }: Props) {
   const storageKey = `marketing_campaigns_${clubId}`;
 
@@ -258,6 +328,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [bonusTiersEnabled, setBonusTiersEnabled] = useState(true);
   const [bonusTiers, setBonusTiers] = useState<BonusTier[]>(DEFAULT_BONUS_TIERS);
+  const [csvFormat, setCsvFormat] = useState<CsvFormatMode>("standard");
 
   // SMS.RU Integration State
   const smsRuStorageKey = `marketing_sms_ru_${clubId}`;
@@ -474,6 +545,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const activeEnabled = isTiersEnabled !== undefined ? isTiersEnabled : bonusTiersEnabled;
     const giftBonus = calculateClientGiftBonus(client.totalSpent || 0, activeTiers, activeEnabled);
 
+    const scheduledTime = getScheduledTime(client);
+    const scheduledDate = getScheduledDate(scheduledDay || "Сразу");
+
     return text
       .replace(/{Имя}/g, name)
       .replace(/{Баланс_Руб}/g, `${rubBal} ₽`)
@@ -481,6 +555,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       .replace(/{Любимый_ПК}/g, seat)
       .replace(/{Любимый_День}/g, day)
       .replace(/{День_Отправки}/g, targetDay)
+      .replace(/{Время_Отправки}/g, scheduledTime)
+      .replace(/{Дата_Отправки}/g, scheduledDate)
       .replace(/{Любимая_Зона}/g, zone)
       .replace(/{Любимый_Тариф}/g, tariff)
       .replace(/{Бонус_В_Подарок}/g, giftBonus.toLocaleString("ru"))
@@ -541,9 +617,14 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
   const handleFinishWizard = () => {
     const scheduleDayMap: Record<string, string> = {};
+    const scheduleTimeMap: Record<string, string> = {};
+    const scheduleDateMap: Record<string, string> = {};
     filteredClients.forEach((c, idx) => {
       const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
-      scheduleDayMap[norm] = getScheduledDay(c, scheduleMode, idx);
+      const day = getScheduledDay(c, scheduleMode, idx);
+      scheduleDayMap[norm] = day;
+      scheduleTimeMap[norm] = getScheduledTime(c);
+      scheduleDateMap[norm] = getScheduledDate(day);
     });
 
     const record: MarketingCampaignRecord = {
@@ -556,6 +637,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       createdAt: new Date().toISOString(),
       scheduleMode,
       scheduleDayMap,
+      scheduleTimeMap,
+      scheduleDateMap,
       periodLabel,
       bonusTiers: bonusTiersEnabled ? bonusTiers : undefined,
       bonusTiersEnabled,
@@ -583,7 +666,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     text: string,
     name: string,
     dayMap?: Record<string, string>,
-    filterDay: string = "all"
+    filterDay: string = "all",
+    formatMode: CsvFormatMode = csvFormat
   ) => {
     let targetList = clientList;
     if (filterDay !== "all" && dayMap) {
@@ -598,25 +682,37 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
     const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
 
-    const rows = [["phone", "name", "scheduled_day", "message", "balance_rub", "bonus_balance", "gift_bonus", "favorite_pc", "favorite_day"]];
+    let headerRow: string[];
+    if (formatMode === "ru_date") {
+      headerRow = ["номер", "текст", "дата", "время", "день"];
+    } else if (formatMode === "ru_day") {
+      headerRow = ["номер", "текст", "день", "время"];
+    } else if (formatMode === "sms_ru") {
+      headerRow = ["phone", "text", "date", "time"];
+    } else {
+      headerRow = ["phone", "text", "date", "time", "day"];
+    }
+
+    const rows = [headerRow];
     for (const c of targetList) {
       const p = (c.phone || "").replace(/\D/g, "");
       const norm = p.slice(-10);
-      const fullPhone = p.length === 11 && p.startsWith("8") ? "7" + p.slice(1) : p;
-      const scheduledDay = dayMap?.[norm] || "Сразу";
-      const giftBonus = calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
+      // Format 7XXXXXXXXXX: strictly starts with 7, without +, exactly 11 digits
+      const phone7 = `7${norm}`;
+      const scheduledDay = dayMap?.[norm] || getScheduledDay(c, scheduleMode, 0);
+      const scheduledDate = getScheduledDate(scheduledDay);
+      const scheduledTime = getScheduledTime(c);
       const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn).replace(/"/g, '""');
-      rows.push([
-        `+${fullPhone}`,
-        `"${c.name || ""}"`,
-        `"${scheduledDay}"`,
-        `"${msg}"`,
-        `${Math.round(c.balance || 0)}`,
-        `${Math.round(c.bonusBalance || 0)}`,
-        `${giftBonus}`,
-        `"${c.favoriteSeat || ""}"`,
-        `"${c.favoriteDay || ""}"`,
-      ]);
+
+      if (formatMode === "ru_date") {
+        rows.push([phone7, `"${msg}"`, `"${scheduledDate}"`, `"${scheduledTime}"`, `"${scheduledDay}"`]);
+      } else if (formatMode === "ru_day") {
+        rows.push([phone7, `"${msg}"`, `"${scheduledDay}"`, `"${scheduledTime}"`]);
+      } else if (formatMode === "sms_ru") {
+        rows.push([phone7, `"${msg}"`, `"${scheduledDate}"`, `"${scheduledTime}"`]);
+      } else {
+        rows.push([phone7, `"${msg}"`, `"${scheduledDate}"`, `"${scheduledTime}"`, `"${scheduledDay}"`]);
+      }
     }
 
     const csvContent = "\uFEFF" + rows.map((r) => r.join(";")).join("\r\n");
@@ -1510,10 +1606,10 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                 <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
                   <div>
                     <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                      Автоматическое распределение по дням недели
+                      Автоматическое расписание по дням и времени суток
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Алгоритм рассчитывает, в какой день отправить SMS каждому гостю на основе его истории посещений
+                      Алгоритм рассчитывает день недели и персональное время отправки SMS каждому гостю по его привычкам: утро (10:30), день (13:30), вечер (17:00), ночники (19:30 перед началом ночи).
                     </p>
                   </div>
                 </div>
@@ -2293,6 +2389,31 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
               </button>
             )}
 
+            {/* CSV Format Selector */}
+            <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
+              <span className="text-[11px] text-slate-500 font-medium">Колонки CSV:</span>
+              {[
+                { id: "standard", label: "phone; text; date; time; day" },
+                { id: "ru_date", label: "номер; текст; дата; время; день" },
+                { id: "sms_ru", label: "phone; text; date; time (шлюз)" },
+                { id: "ru_day", label: "номер; текст; день; время" },
+              ].map((fmt) => (
+                <button
+                  key={fmt.id}
+                  type="button"
+                  onClick={() => setCsvFormat(fmt.id as CsvFormatMode)}
+                  className={cn(
+                    "px-2 py-1 rounded text-[10px] font-mono border transition-colors",
+                    csvFormat === fmt.id
+                      ? "bg-slate-900 text-white border-slate-900 font-semibold shadow-xs"
+                      : "bg-white text-slate-600 hover:bg-slate-50 border-slate-300"
+                  )}
+                >
+                  {fmt.label}
+                </button>
+              ))}
+            </div>
+
             {activeDayFilter !== "all" && (
               <button
                 type="button"
@@ -2321,7 +2442,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
       {downloadSuccess && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 font-medium">
-          CSV-файл успешно скачан с персонализированными сообщениями и разметкой очередей по дням.
+          CSV-файл успешно скачан: номер в формате 7xxxxxxxxxx, текст, дата (ДД.ММ.ГГГГ) и персональное время отправки (ЧЧ:ММ). Лишние данные удалены.
         </div>
       )}
 
@@ -2522,13 +2643,10 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
                   <th className="py-3 px-4 font-semibold w-12">№</th>
+                  <th className="py-3 px-4 font-semibold min-w-[130px]">Телефон (7xxx)</th>
                   <th className="py-3 px-4 font-semibold min-w-[140px]">Клиент</th>
-                  <th className="py-3 px-4 font-semibold min-w-[130px]">Телефон</th>
-                  <th className="py-3 px-4 font-semibold min-w-[110px]">День отправки</th>
-                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Баланс ₽</th>
-                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Бонусы Б</th>
-                  <th className="py-3 px-4 font-semibold min-w-[100px] text-right">Подарок Б</th>
-                  <th className="py-3 px-4 font-semibold min-w-[110px]">Любимый ПК</th>
+                  <th className="py-3 px-4 font-semibold min-w-[170px]">Отправка (дата и время)</th>
+                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Подарок Б</th>
                   <th className="py-3 px-4 font-semibold min-w-[340px]">Итоговый текст сообщения</th>
                 </tr>
               </thead>
@@ -2536,6 +2654,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                 {displayedClients.slice(0, 50).map((c, idx) => {
                   const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
                   const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
+                  const scheduledDate = getScheduledDate(scheduledDay);
+                  const scheduledTime = getScheduledTime(c);
                   const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
                   const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
                   const giftBonus = calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
@@ -2543,6 +2663,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   return (
                     <tr key={c.phone + idx} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-2.5 px-4 text-slate-400 font-mono">{idx + 1}</td>
+                      <td className="py-2.5 px-4 font-mono font-medium text-slate-900">7{norm}</td>
                       <td className="py-2.5 px-4">
                         <div className="font-semibold text-slate-900 leading-tight">{c.name || "Гость"}</div>
                         {c.valueCategory === "diamond" && (
@@ -2555,18 +2676,17 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                           <div className="text-[10px] text-slate-400 font-mono">Бонусоед • {c.bonusGivenRatio}% бонусов</div>
                         )}
                       </td>
-                      <td className="py-2.5 px-4 font-mono text-slate-600">{c.phone}</td>
                       <td className="py-2.5 px-4">
-                        <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-800 rounded text-[11px] font-medium">
-                          {scheduledDay}
-                        </span>
+                        <div className="font-semibold text-slate-900 font-mono text-xs">
+                          {scheduledDay} • {scheduledDate}
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                          {scheduledTime} ({getScheduledTimeLabel(c)})
+                        </div>
                       </td>
-                      <td className="py-2.5 px-4 text-right font-mono text-slate-800">{Math.round(c.balance || 0).toLocaleString()} ₽</td>
-                      <td className="py-2.5 px-4 text-right font-mono text-amber-700 font-semibold">{Math.round(c.bonusBalance || 0).toLocaleString()} Б</td>
                       <td className="py-2.5 px-4 text-right font-mono font-medium text-slate-900">
                         {giftBonus > 0 ? `+${giftBonus.toLocaleString()} Б` : "—"}
                       </td>
-                      <td className="py-2.5 px-4 text-slate-600">{c.favoriteSeat || "—"}</td>
                       <td className="py-2.5 px-4 text-slate-700 italic max-w-md truncate">{finalMsg}</td>
                     </tr>
                   );
