@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar } from "lucide-react";
+import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ClientProfile, type ClubAnalytics, type DateFilter, type MonthOption, getAvailableMonths } from "./segmentation";
 import type { MarketingCampaignRecord } from "./SmsCampaignModal";
@@ -64,43 +64,43 @@ const PRESETS = [
     name: "Все клиенты клуба",
     filter: { ...DEFAULT_SEGMENTATION, spentMin: 1 },
     campaignName: "Рассылка всей базе клиентов",
-    text: "Привет, {Имя}! Ждем тебя в Colizeum. Твой любимый {Любимый_ПК} готов к каткам!",
+    text: "{Имя}, ждем тебя в клубе! Твой любимый {Любимый_ПК} готов к каткам.",
   },
   {
     name: "Забытый баланс на счете",
     filter: { ...DEFAULT_SEGMENTATION, balanceMin: 100, daysSinceMin: 7 },
     campaignName: "Напоминание о забытом балансе",
-    text: "Привет, {Имя}! В Colizeum на твоем счете {Баланс_Руб} ₽ и {Баланс_Бонус} Б. Твой {Любимый_ПК} свободен, заглядывай!",
+    text: "{Имя}, на твоем балансе {Баланс_Руб} ₽ в клубе! {Любимый_ПК} свободен, залетай!",
   },
   {
     name: "VIP-киты (Whales)",
     filter: { ...DEFAULT_SEGMENTATION, spentMin: 2500 },
     campaignName: "VIP-бронь для постоянных гостей",
-    text: "Привет, {Имя}! Скоро {Любимый_День}. Твой привычный {Любимый_ПК} в {Любимая_Зона} ждет тебя. Забронировать на вечер?",
+    text: "{Имя}, скоро {Любимый_День}! Твой привычный {Любимый_ПК} свободен. Бронь?",
   },
   {
     name: "Остывающие постоянники",
     filter: { ...DEFAULT_SEGMENTATION, daysSinceMin: 20, daysSinceMax: 45, spentMin: 1000 },
     campaignName: "Удержание остывающих гостей",
-    text: "Привет, {Имя}! Мы соскучились в Colizeum. Твой любимый {Любимый_ПК} свободен {Любимый_День}!",
+    text: "{Имя}, соскучились в клубе! Твой {Любимый_ПК} ждет в {Любимый_День}.",
   },
   {
     name: "Клиенты в оттоке (>30 дней)",
     filter: { ...DEFAULT_SEGMENTATION, daysSinceMin: 31, spentMin: 500 },
     campaignName: "Возврат ушедших клиентов",
-    text: "{Имя}, давно не виделись в Colizeum! Дарим 250 бонусов на 4 дня. Заходи затестить новое железо!",
+    text: "{Имя}, дарим 200 бонусов на 4 дня! Заходи затестить новый ПК в клубе.",
   },
   {
     name: "Новички (1 визит)",
     filter: { ...DEFAULT_SEGMENTATION, visitsMin: 1, visitsMax: 1, daysSinceMax: 14 },
     campaignName: "Приветственная рассылка новичкам",
-    text: "{Имя}, привет! Надеемся, тебе понравилась первая катка в Colizeum! Дарим бонус на следующий визит.",
+    text: "{Имя}, как первая катка в клубе? Дарим 150 бонусов на следующий визит!",
   },
   {
     name: "Ночные игроки (Пакет Ночь)",
     filter: { ...DEFAULT_SEGMENTATION, preferredTime: "night" as const, spentMin: 500 },
     campaignName: "Спецпредложение на ночные пакеты",
-    text: "Привет, {Имя}! Планируешь ночной марафон? Твой {Любимый_ПК} в {Любимая_Зона} свободен на сегодняшнюю ночь!",
+    text: "{Имя}, готов к ночному марафону? Твой {Любимый_ПК} ждет на эту ночь!",
   },
 ];
 
@@ -447,10 +447,15 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
   // Message calculations
   const isCyrillic = /[а-яёА-ЯЁ]/.test(sampleMessage);
-  const charLimit = isCyrillic ? 70 : 160;
+  const singleLimit = isCyrillic ? 70 : 160;
+  const charLimit = singleLimit;
   const multiLimit = isCyrillic ? 67 : 153;
   const msgLength = sampleMessage.length;
-  const smsParts = msgLength <= charLimit ? 1 : Math.ceil(msgLength / multiLimit);
+  const smsParts = msgLength <= singleLimit ? 1 : Math.ceil(msgLength / multiLimit);
+  const charsUntilNextPart = smsParts === 1 
+    ? Math.max(0, singleLimit - msgLength)
+    : Math.max(0, (smsParts * multiLimit) - msgLength);
+  const charsToTrimToOnePart = msgLength > singleLimit ? msgLength - singleLimit : 0;
   const costPerSms = 8.5;
   const estimatedCost = filteredClients.length * smsParts * costPerSms;
 
@@ -1554,9 +1559,14 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
         {wizardStep === 2 && (
           <div className="space-y-6">
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-700 block">
-                Готовые варианты сообщений
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700 block">
+                  Готовые шаблоны сообщений
+                </label>
+                <span className="text-[11px] text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                  ✓ Все оптимизированы под 1 SMS (до 70 симв.)
+                </span>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {PRESETS.map((p) => (
                   <button
@@ -1565,8 +1575,13 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                     onClick={() => setTemplateText(p.text)}
                     className="p-3 text-left border border-slate-200 rounded-lg hover:border-slate-400 bg-white transition-colors"
                   >
-                    <span className="text-xs font-semibold text-slate-900 block">{p.name}</span>
-                    <span className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{p.text}</span>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs font-semibold text-slate-900 block">{p.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded font-mono font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                        1 SMS ({p.text.length} с.)
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-500 line-clamp-1 mt-1">{p.text}</span>
                   </button>
                 ))}
               </div>
@@ -1606,12 +1621,83 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   setWizardCostError(null);
                 }}
                 placeholder="Введите текст сообщения с тегами..."
-                className="w-full text-sm p-3 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-slate-900 transition-colors"
+                className={cn(
+                  "w-full text-sm p-3 bg-white border rounded-lg text-slate-900 focus:outline-none transition-colors",
+                  smsParts > 1
+                    ? "border-amber-400 focus:border-amber-600 focus:ring-1 focus:ring-amber-400"
+                    : "border-slate-300 focus:border-slate-900"
+                )}
               />
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 pt-1 gap-2">
+              {/* Character Limit and Progress Bar (70 chars limit) */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      "font-bold px-2 py-0.5 rounded text-[11px] font-mono",
+                      smsParts === 1
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                        : "bg-amber-100 text-amber-900 border border-amber-300"
+                    )}>
+                      {smsParts === 1 ? "1 SMS (Эконом)" : `${smsParts} SMS-части (тариф x${smsParts})`}
+                    </span>
+                    <span className="font-mono text-slate-700 font-semibold text-xs">
+                      {msgLength} / {smsParts === 1 ? singleLimit : smsParts * multiLimit} симв.
+                    </span>
+                  </div>
+
+                  <div className="text-[11px]">
+                    {smsParts === 1 ? (
+                      <span className="text-emerald-700 font-medium">
+                        ✓ В лимите 1 SMS (осталось {charsUntilNextPart} симв. до удорожания)
+                      </span>
+                    ) : (
+                      <span className="text-amber-800 font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>Сократите на {charsToTrimToOnePart} симв., чтобы платить в 2 раза меньше!</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Visual Progress Bar */}
+                <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${Math.min(100, (msgLength / singleLimit) * 100)}%` }}
+                    className={cn(
+                      "h-full transition-all duration-300",
+                      smsParts === 1 ? "bg-emerald-500" : "bg-amber-500"
+                    )}
+                  />
+                  {smsParts > 1 && (
+                    <div
+                      style={{ width: `${Math.min(100, ((msgLength - singleLimit) / (multiLimit * (smsParts - 1))) * 100)}%` }}
+                      className="h-full bg-rose-500 transition-all duration-300"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Warning box when message exceeds 70 characters */}
+              {smsParts > 1 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-amber-900">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Внимание: длина {msgLength} симв. превысила лимит 1 SMS (до 70 симв.)!</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Сообщение отправляется как <b>{smsParts} SMS-части</b> (каждая часть по {multiLimit} симв.), и операторы сотовой связи тарифицируют <b>каждую часть отдельно</b>. Стоимость за одного клиента возрастает до <b>~{(smsParts * costPerSms).toFixed(2)} ₽</b> (вместо ~{costPerSms.toFixed(2)} ₽).
+                  </p>
+                  <p className="text-[11px] text-amber-950 font-semibold">
+                    💰 Сократите текст всего на <b>{charsToTrimToOnePart} симв.</b>, чтобы сэкономить <b>~{Math.round(filteredClients.length * (smsParts - 1) * costPerSms).toLocaleString("ru")} ₽</b> на этой рассылке!
+                  </p>
+                </div>
+              )}
+
+              {/* Cost Calculation Strip */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 pt-2 gap-2 border-t border-slate-100">
                 <span>
-                  Длина: <b className="text-slate-800">{msgLength}</b> симв. • <b className="text-slate-800">{smsParts}</b> SMS на контакт
+                  Бюджет на получателя: <b className="text-slate-800 font-mono">~{(smsParts * costPerSms).toFixed(2)} ₽</b> ({smsParts} SMS × {costPerSms} ₽)
                 </span>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   {wizardCostSmsRu && wizardCostSmsRu.totalCost > 0 ? (
@@ -1622,7 +1708,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   ) : (
                     <div className="flex flex-col sm:items-end">
                       <span>
-                        Ориентировочный бюджет: <b className="text-slate-900 font-mono">~{Math.round(estimatedCost).toLocaleString("ru")} ₽</b>
+                        Итого ориентировочно: <b className="text-slate-900 font-mono">~{Math.round(estimatedCost).toLocaleString("ru")} ₽</b>
                       </span>
                       {wizardCostError && (
                         <span className="text-[10px] text-amber-700 flex items-center gap-1 font-medium mt-0.5" title={wizardCostError}>
@@ -1658,12 +1744,29 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
             {/* Live Client Preview Box */}
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-              <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 block">
-                Пример для {sampleClient ? (sampleClient.name || "гостя") : "клиента"}:
-              </span>
-              <p className="text-xs text-slate-800 leading-relaxed font-normal">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 block">
+                  Пример с подстановкой для {sampleClient ? (sampleClient.name || "гостя") : "клиента"}:
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  {sampleMessage.length} симв. • {smsParts} SMS
+                </span>
+              </div>
+              <p className="text-xs text-slate-800 leading-relaxed font-normal bg-white p-3 rounded-lg border border-slate-200/80">
                 «{sampleMessage}»
               </p>
+            </div>
+
+            {/* Telecom Rules Explainer Card */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-slate-600 text-xs">
+              <span className="font-semibold text-slate-800 block text-[11px] uppercase tracking-wider">
+                ℹ️ Правило операторов связи РФ по длине SMS (126-ФЗ):
+              </span>
+              <ul className="text-[11px] space-y-1 list-disc list-inside text-slate-500 leading-relaxed">
+                <li><b>1 SMS (русский язык / кириллица)</b>: ровно до <b>70 символов</b> (включая пробелы и знаки).</li>
+                <li><b>2+ SMS (составные)</b>: если в тексте 71 символ и больше, 3 символа в каждой части забирает служебный заголовок склейки (UDH), поэтому длина каждой части становится <b>67 символов</b> (71–134 симв. = 2 SMS, 135–201 симв. = 3 SMS).</li>
+                <li><b>Тарификация</b>: оператор сотовой связи списывает оплату <b>за каждую часть отдельно</b> (~8.50 ₽ × {smsParts} = ~{(smsParts * costPerSms).toFixed(2)} ₽).</li>
+              </ul>
             </div>
 
             <div className="pt-4 flex items-center justify-between border-t border-slate-200">
