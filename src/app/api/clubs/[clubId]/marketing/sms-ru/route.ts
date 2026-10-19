@@ -166,6 +166,7 @@ export async function POST(
         const formData = new URLSearchParams();
         formData.set("api_id", apiId);
         formData.set("json", "1");
+        if (senderName) formData.set("from", senderName);
 
         chunk.forEach((item: { phone: string; text: string }) => {
           const clean = (item.phone || "").replace(/\D/g, "");
@@ -187,6 +188,25 @@ export async function POST(
             Object.assign(smsMap, data.sms);
           }
         }
+      }
+
+      // Check if SMS.RU actually returned valid calculation
+      const entries = Object.values(smsMap);
+      const errorEntry = entries.find((e: any) => e.status === "ERROR");
+
+      if (totalCost === 0 && errorEntry) {
+        let errDesc = errorEntry.status_text || "Не удалось рассчитать стоимость в SMS.RU";
+        if (errorEntry.status_code === 221) {
+          errDesc = "SMS.RU требует зарегистрировать буквенного отправителя (Sender ID) для расчета операторских тарифов: https://sms.ru/?panel=senders (Код 221)";
+        }
+        return NextResponse.json({
+          ok: false,
+          error: errDesc,
+          status_code: errorEntry.status_code,
+          totalCost: 0,
+          totalSms: 0,
+          sms: smsMap,
+        });
       }
 
       return NextResponse.json({
