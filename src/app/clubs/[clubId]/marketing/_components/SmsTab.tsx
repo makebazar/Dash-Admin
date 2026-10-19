@@ -2861,22 +2861,21 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
         </div>
 
         {/* Structured Settings & Actions Bar */}
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Left: Start Date Picker */}
-          <div className="inline-flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-700 shadow-2xs self-start md:self-auto">
-            <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-            <span className="text-slate-500 font-medium">Старт рассылки:</span>
-            <input
-              type="date"
-              value={activeCampaignStartDate}
-              onChange={(e) => handleUpdateCampaignStartDate(e.target.value)}
-              className="font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0"
-            />
-          </div>
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 sm:p-4 space-y-3">
+          {/* Row 1: Parameter & Format */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80">
+            <div className="inline-flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-700 shadow-2xs shrink-0 self-start sm:self-auto">
+              <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="text-slate-500 font-medium whitespace-nowrap">Старт рассылки:</span>
+              <input
+                type="date"
+                value={activeCampaignStartDate}
+                onChange={(e) => handleUpdateCampaignStartDate(e.target.value)}
+                className="font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0"
+              />
+            </div>
 
-          {/* Right: CSV Format Selector & Export Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-1.5 text-xs">
+            <div className="flex items-center gap-2 text-xs">
               <span className="text-slate-500 font-medium whitespace-nowrap">Колонки CSV:</span>
               <select
                 value={csvFormat}
@@ -2889,45 +2888,55 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                 <option value="ru_day">номер; текст; день; время (По дням)</option>
               </select>
             </div>
+          </div>
 
-            <div className="flex items-center gap-2">
-              {(activeDayFilter !== "all" || activeBalanceCategoryFilter !== "all") && (
-                <button
-                  type="button"
-                  onClick={() => handleExportCsv(displayedClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs flex items-center gap-1.5"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Скачать CSV выборки ({displayedClients.length})</span>
-                </button>
-              )}
-
+          {/* Row 2: Action Buttons */}
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-0.5">
+            {(activeDayFilter !== "all" || activeBalanceCategoryFilter !== "all") && (
               <button
                 type="button"
-                onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat)}
-                disabled={activeCampaignClients.length === 0}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs flex items-center gap-1.5"
+                onClick={() => handleExportCsv(displayedClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs flex items-center gap-1.5"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Скачать полный CSV ({activeCampaignClients.length})</span>
+                <span>Скачать CSV выборки ({displayedClients.length})</span>
               </button>
+            )}
 
-              {smsRuConfig?.apiId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSmsRuSendResult(null);
-                    setSmsRuSendModalOpen(true);
-                    handleCalculateDetailCost(displayedClients);
-                  }}
-                  disabled={displayedClients.length === 0}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Отправить в SMS.RU</span>
-                </button>
+            <button
+              type="button"
+              onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat)}
+              disabled={activeCampaignClients.length === 0}
+              className={cn(
+                "px-4 py-2 font-semibold text-xs rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5",
+                activeDayFilter !== "all" || activeBalanceCategoryFilter !== "all"
+                  ? "bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs"
+                  : "bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white shadow-xs"
               )}
-            </div>
+            >
+              <Download className={cn("w-3.5 h-3.5", activeDayFilter !== "all" || activeBalanceCategoryFilter !== "all" ? "text-slate-400" : "text-white")} />
+              <span>
+                {activeDayFilter !== "all" || activeBalanceCategoryFilter !== "all"
+                  ? `Вся база (${activeCampaignClients.length})`
+                  : `Скачать полный CSV (${activeCampaignClients.length})`}
+              </span>
+            </button>
+
+            {smsRuConfig?.apiId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSmsRuSendResult(null);
+                  setSmsRuSendModalOpen(true);
+                  handleCalculateDetailCost(displayedClients);
+                }}
+                disabled={displayedClients.length === 0}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Отправить в SMS.RU</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
