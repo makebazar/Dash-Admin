@@ -10,6 +10,11 @@ export interface BonusTier {
   bonus: number;
 }
 
+export interface BalanceCategoryTier {
+  minBalance: number;
+  label: string;
+}
+
 export interface MarketingCampaignRecord {
   id: string;
   clubId: string;
@@ -28,6 +33,9 @@ export interface MarketingCampaignRecord {
   periodLabel?: string; // Human readable period used for segmentation
   bonusTiers?: BonusTier[];
   bonusTiersEnabled?: boolean;
+  balanceCategories?: BalanceCategoryTier[];
+  balanceCategoriesEnabled?: boolean;
+  balanceIncludeBonuses?: boolean;
 }
 
 interface Props {

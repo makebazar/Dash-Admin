@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2, Pencil, Check, ChevronLeft, ChevronRight, Eye, Table } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ClientProfile, type ClubAnalytics, type DateFilter, type MonthOption, getAvailableMonths } from "./segmentation";
-import type { MarketingCampaignRecord, BonusTier } from "./SmsCampaignModal";
+import type { MarketingCampaignRecord, BonusTier, BalanceCategoryTier } from "./SmsCampaignModal";
 
 interface Props {
   clubId: string;
@@ -31,6 +31,35 @@ export function calculateClientGiftBonus(spent: number, tiers: BonusTier[], enab
     }
   }
   return 0;
+}
+
+export const DEFAULT_BALANCE_CATEGORIES: BalanceCategoryTier[] = [
+  { minBalance: 100, label: "более 100 ₽" },
+  { minBalance: 300, label: "более 300 ₽" },
+  { minBalance: 500, label: "более 500 ₽" },
+];
+
+export function getClientEffectiveBalance(client: ClientProfile, includeBonuses: boolean = true): number {
+  const rub = client.balance || 0;
+  const bon = includeBonuses ? client.bonusBalance || 0 : 0;
+  return Math.round(rub + bon);
+}
+
+export function getClientBalanceCategory(
+  client: ClientProfile,
+  categories: BalanceCategoryTier[] = DEFAULT_BALANCE_CATEGORIES,
+  enabled: boolean = true,
+  includeBonuses: boolean = true
+): BalanceCategoryTier | null {
+  if (!enabled || !categories || categories.length === 0) return null;
+  const effective = getClientEffectiveBalance(client, includeBonuses);
+  const sorted = [...categories].sort((a, b) => b.minBalance - a.minBalance);
+  for (const cat of sorted) {
+    if (effective >= cat.minBalance) {
+      return cat;
+    }
+  }
+  return null;
 }
 
 export type LoyaltyFilterMode = "all" | "no_bonus_hunters" | "loyal_only";
@@ -73,6 +102,9 @@ const DEFAULT_SEGMENTATION: SegmentationFilter = {
 
 const TEMPLATE_TAGS = [
   { tag: "{Имя}", desc: "Имя клиента" },
+  { tag: "{Категория_Баланса}", desc: "Примерный баланс без точных цифр (напр. более 300 ₽)" },
+  { tag: "{Баланс_Примерно}", desc: "То же что категория баланса (напр. более 300 ₽)" },
+  { tag: "{Общий_Баланс}", desc: "Суммарный баланс: рубли + бонусы" },
   { tag: "{Баланс_Руб}", desc: "Баланс в рублях" },
   { tag: "{Баланс_Бонус}", desc: "Бонусный баланс" },
   { tag: "{Бонус_В_Подарок}", desc: "Сумма бонуса по шкале трат" },
@@ -96,7 +128,7 @@ const PRESETS = [
     name: "Забытый баланс на счете",
     filter: { ...DEFAULT_SEGMENTATION, balanceMin: 100, daysSinceMin: 7 },
     campaignName: "Напоминание о забытом балансе",
-    text: "{Имя}, на твоем балансе {Баланс_Руб} ₽ в клубе! {Любимый_ПК} свободен, залетай!",
+    text: "{Имя}, у тебя {Категория_Баланса} на счете в клубе! {Любимый_ПК} свободен, залетай!",
   },
   {
     name: "VIP-киты (Whales)",
@@ -346,6 +378,10 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [bonusTiersEnabled, setBonusTiersEnabled] = useState(true);
   const [bonusTiers, setBonusTiers] = useState<BonusTier[]>(DEFAULT_BONUS_TIERS);
+  const [balanceCategoriesEnabled, setBalanceCategoriesEnabled] = useState(true);
+  const [balanceIncludeBonuses, setBalanceIncludeBonuses] = useState(true);
+  const [balanceCategories, setBalanceCategories] = useState<BalanceCategoryTier[]>(DEFAULT_BALANCE_CATEGORIES);
+  const [activeBalanceCategoryFilter, setActiveBalanceCategoryFilter] = useState<number | "all">("all");
   const [csvFormat, setCsvFormat] = useState<CsvFormatMode>("standard");
   const [isEditingDetailTemplate, setIsEditingDetailTemplate] = useState(false);
   const [detailTemplateDraft, setDetailTemplateDraft] = useState("");
@@ -554,7 +590,10 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     scheduledDay?: string,
     customBonusTiers?: BonusTier[],
     isTiersEnabled?: boolean,
-    campaignStartDate?: string | Date
+    campaignStartDate?: string | Date,
+    customBalanceCategories?: BalanceCategoryTier[],
+    isBalCatEnabled?: boolean,
+    includeBonusesBal?: boolean
   ) => {
     if (!client) return text;
     const name = client.name ? client.name.split(" ")[0] : "друг";
@@ -570,11 +609,23 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const activeEnabled = isTiersEnabled !== undefined ? isTiersEnabled : bonusTiersEnabled;
     const giftBonus = calculateClientGiftBonus(client.totalSpent || 0, activeTiers, activeEnabled);
 
+    const activeBalCats = customBalanceCategories ?? balanceCategories;
+    const activeBalCatEnabled = isBalCatEnabled !== undefined ? isBalCatEnabled : balanceCategoriesEnabled;
+    const activeIncBonuses = includeBonusesBal !== undefined ? includeBonusesBal : balanceIncludeBonuses;
+
+    const effectiveBal = getClientEffectiveBalance(client, activeIncBonuses);
+    const balCat = getClientBalanceCategory(client, activeBalCats, activeBalCatEnabled, activeIncBonuses);
+    const balCatLabel = balCat ? balCat.label : (effectiveBal > 0 ? `${effectiveBal.toLocaleString("ru")} ₽` : "0 ₽");
+    const totalBalFormatted = `${effectiveBal.toLocaleString("ru")} ₽`;
+
     const scheduledTime = getScheduledTime(client);
     const scheduledDate = getScheduledDate(scheduledDay || "Сразу", campaignStartDate);
 
     return text
       .replace(/{Имя}/g, name)
+      .replace(/{Категория_Баланса}/g, balCatLabel)
+      .replace(/{Баланс_Примерно}/g, balCatLabel)
+      .replace(/{Общий_Баланс}/g, totalBalFormatted)
       .replace(/{Баланс_Руб}/g, `${rubBal} ₽`)
       .replace(/{Баланс_Бонус}/g, bonusBal)
       .replace(/{Любимый_ПК}/g, seat)
@@ -609,8 +660,28 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const sampleClient = filteredClients[0] || null;
   const sampleDay = sampleClient ? getScheduledDay(sampleClient, scheduleMode, 0) : undefined;
   const sampleMessage = useMemo(
-    () => renderMessage(templateText, sampleClient, sampleDay, bonusTiers, bonusTiersEnabled, wizardStartDate),
-    [templateText, sampleClient, sampleDay, bonusTiers, bonusTiersEnabled, wizardStartDate]
+    () => renderMessage(
+      templateText,
+      sampleClient,
+      sampleDay,
+      bonusTiers,
+      bonusTiersEnabled,
+      wizardStartDate,
+      balanceCategories,
+      balanceCategoriesEnabled,
+      balanceIncludeBonuses
+    ),
+    [
+      templateText,
+      sampleClient,
+      sampleDay,
+      bonusTiers,
+      bonusTiersEnabled,
+      wizardStartDate,
+      balanceCategories,
+      balanceCategoriesEnabled,
+      balanceIncludeBonuses,
+    ]
   );
 
   // Message calculations
@@ -671,6 +742,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       periodLabel,
       bonusTiers: bonusTiersEnabled ? bonusTiers : undefined,
       bonusTiersEnabled,
+      balanceCategories: balanceCategoriesEnabled ? balanceCategories : undefined,
+      balanceCategoriesEnabled,
+      balanceIncludeBonuses,
     };
 
     if (typeof window !== "undefined") {
@@ -687,6 +761,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     setCampaigns((prev) => [record, ...prev]);
     setActiveCampaignId(record.id);
     setActiveDayFilter("all");
+    setActiveBalanceCategoryFilter("all");
     setViewMode("detail");
   };
 
@@ -696,13 +771,25 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     name: string,
     dayMap?: Record<string, string>,
     filterDay: string = "all",
-    formatMode: CsvFormatMode = csvFormat
+    formatMode: CsvFormatMode = csvFormat,
+    filterCategory: number | "all" = "all"
   ) => {
     let targetList = clientList;
     if (filterDay !== "all" && dayMap) {
-      targetList = clientList.filter((c) => {
+      targetList = targetList.filter((c) => {
         const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
         return dayMap[norm] === filterDay;
+      });
+    }
+
+    if (filterCategory !== "all") {
+      const curBalCats = activeCampaign?.balanceCategories ?? balanceCategories;
+      const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
+      const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
+      targetList = targetList.filter((c) => {
+        const cat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
+        if (filterCategory === -1) return cat === null;
+        return cat && cat.minBalance === filterCategory;
       });
     }
 
@@ -710,6 +797,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
     const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
     const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
+    const curBalCats = activeCampaign?.balanceCategories ?? balanceCategories;
+    const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
+    const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
 
     let headerRow: string[];
     if (formatMode === "ru_date") {
@@ -732,7 +822,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       const scheduledDay = dayMap?.[norm] || getScheduledDay(c, scheduleMode, 0);
       const scheduledDate = activeCampaign?.scheduleDateMap?.[norm] || getScheduledDate(scheduledDay, baseDate);
       const scheduledTime = activeCampaign?.scheduleTimeMap?.[norm] || getScheduledTime(c);
-      const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate).replace(/"/g, '""');
+      const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate, curBalCats, curBalCatOn, curBalIncBon).replace(/"/g, '""');
 
       if (formatMode === "ru_date") {
         rows.push([phone7, `"${msg}"`, `"${scheduledDate}"`, `"${scheduledTime}"`, `"${scheduledDay}"`]);
@@ -809,20 +899,57 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     return counts;
   }, [activeCampaignClients, activeCampaignDayMap]);
 
-  const displayedClients = useMemo(() => {
-    if (activeDayFilter === "all") return activeCampaignClients;
-    return activeCampaignClients.filter((c) => {
-      const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
-      const day = activeCampaignDayMap[norm] || "Сразу";
-      return day === activeDayFilter;
-    });
-  }, [activeCampaignClients, activeCampaignDayMap, activeDayFilter]);
+  const activeCampaignCategoryBreakdown = useMemo(() => {
+    const curBalCats = activeCampaign?.balanceCategories ?? balanceCategories;
+    const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
+    const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
+    const counts: Record<number, number> = {};
+    for (const cat of curBalCats) {
+      counts[cat.minBalance] = 0;
+    }
+    let belowCount = 0;
 
-  // Reset detail cost and pagination when campaign or day filter changes
+    activeCampaignClients.forEach((c) => {
+      const cat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
+      if (cat) {
+        counts[cat.minBalance] = (counts[cat.minBalance] || 0) + 1;
+      } else {
+        belowCount++;
+      }
+    });
+
+    return { counts, belowCount };
+  }, [activeCampaignClients, activeCampaign, balanceCategories, balanceCategoriesEnabled, balanceIncludeBonuses]);
+
+  const displayedClients = useMemo(() => {
+    return activeCampaignClients.filter((c) => {
+      if (activeDayFilter !== "all") {
+        const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+        const day = activeCampaignDayMap[norm] || "Сразу";
+        if (day !== activeDayFilter) return false;
+      }
+
+      if (activeBalanceCategoryFilter !== "all") {
+        const curBalCats = activeCampaign?.balanceCategories ?? balanceCategories;
+        const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
+        const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
+        const cat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
+        if (activeBalanceCategoryFilter === -1) {
+          if (cat !== null) return false;
+        } else {
+          if (!cat || cat.minBalance !== activeBalanceCategoryFilter) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [activeCampaignClients, activeCampaignDayMap, activeDayFilter, activeBalanceCategoryFilter, activeCampaign, balanceCategories, balanceCategoriesEnabled, balanceIncludeBonuses]);
+
+  // Reset detail cost and pagination when campaign, day filter, or balance category filter changes
   useEffect(() => {
     setDetailCostSmsRu(null);
     setDetailPage(1);
-  }, [activeCampaignId, activeDayFilter]);
+  }, [activeCampaignId, activeDayFilter, activeBalanceCategoryFilter]);
 
   // Detailed cohort metrics for the campaign view
   const detailCohortStats = useMemo(() => {
@@ -977,13 +1104,16 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     }
     const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
     const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
+    const curBalCats = activeCampaign?.balanceCategories ?? balanceCategories;
+    const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
+    const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
     const baseDate = activeCampaign?.startDate || (viewMode === "wizard" ? wizardStartDate : new Date());
     const messages = targets.map((c) => {
       const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
       const scheduledDay = dayMap?.[norm] || "Сразу";
       return {
         phone: c.phone || "",
-        text: renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate),
+        text: renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate, curBalCats, curBalCatOn, curBalIncBon),
       };
     });
 
@@ -1071,10 +1201,13 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
     const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
     const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
+    const curBalCats = activeCampaign?.balanceCategories ?? balanceCategories;
+    const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
+    const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
     const messages = targets.map((c) => {
       const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
       const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
-      const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate);
+      const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate, curBalCats, curBalCatOn, curBalIncBon);
       return {
         phone: c.phone || "",
         text: finalMsg,
@@ -2018,6 +2151,167 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
               )}
             </div>
 
+            {/* Balance Categories Section */}
+            <div className="border-t border-slate-200 pt-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      Категории баланса (сегментация без точных цифр)
+                    </h3>
+                    <span className={cn(
+                      "text-[10px] font-mono px-1.5 py-0.5 rounded",
+                      balanceCategoriesEnabled
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    )}>
+                      {balanceCategoriesEnabled ? "Включено" : "Отключено"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Группирует гостей по порогу баланса и подставляет в SMS округлённую фразу (напр. «более 300 ₽») вместо неловких точных копеек через теги <code className="font-mono text-slate-800 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">{"{Категория_Баланса}"}</code> или <code className="font-mono text-slate-800 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">{"{Баланс_Примерно}"}</code>.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setBalanceCategoriesEnabled(!balanceCategoriesEnabled)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors self-start sm:self-auto",
+                    balanceCategoriesEnabled
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                      : "bg-white text-slate-700 hover:bg-slate-50 border-slate-300"
+                  )}
+                >
+                  {balanceCategoriesEnabled ? "Категории включены" : "Включить категории"}
+                </button>
+              </div>
+
+              {balanceCategoriesEnabled && (
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-center justify-between p-3 bg-blue-50/60 border border-blue-200 rounded-xl">
+                    <label className="inline-flex items-center gap-2.5 cursor-pointer select-none text-xs text-slate-800">
+                      <input
+                        type="checkbox"
+                        checked={balanceIncludeBonuses}
+                        onChange={(e) => setBalanceIncludeBonuses(e.target.checked)}
+                        className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 w-4 h-4 cursor-pointer"
+                      />
+                      <div>
+                        <span className="font-semibold block text-slate-900">
+                          Учитывать суммарный баланс (рубли + бонусы)
+                        </span>
+                        <span className="text-[11px] text-slate-500 block mt-0.5">
+                          {balanceIncludeBonuses
+                            ? "Включено: баланс гостя рассчитывается как рублевый депозит + бонусные баллы"
+                            : "Выключено: учитываются только реальные рубли на депозите"}
+                        </span>
+                      </div>
+                    </label>
+                    <span className="text-xs font-mono font-bold text-blue-900 bg-white border border-blue-200 px-2.5 py-1 rounded-lg shrink-0">
+                      {balanceIncludeBonuses ? "Рубли + Бонусы" : "Только рубли"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {balanceCategories.map((cat, idx) => {
+                      const count = filteredClients.reduce((acc, c) => {
+                        const clientCat = getClientBalanceCategory(c, balanceCategories, balanceCategoriesEnabled, balanceIncludeBonuses);
+                        return clientCat?.minBalance === cat.minBalance ? acc + 1 : acc;
+                      }, 0);
+                      const share = filteredClients.length > 0 ? Math.round((count / filteredClients.length) * 100) : 0;
+
+                      return (
+                        <div
+                          key={idx}
+                          className="flex flex-col gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg"
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              Категория {idx + 1}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-700 font-semibold">
+                                {count} чел ({share}%)
+                              </span>
+                              {balanceCategories.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBalanceCategories(balanceCategories.filter((_, i) => i !== idx));
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 transition-colors shrink-0"
+                                  title="Удалить категорию"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-slate-500 shrink-0">Баланс от:</span>
+                            <div className="relative flex-1">
+                              <input
+                                type="number"
+                                min="0"
+                                step="50"
+                                value={cat.minBalance}
+                                onChange={(e) => {
+                                  const val = Math.max(0, Number(e.target.value) || 0);
+                                  const updated = [...balanceCategories];
+                                  updated[idx] = { ...updated[idx], minBalance: val };
+                                  setBalanceCategories(updated);
+                                }}
+                                className="w-full py-1 px-2 font-mono text-xs font-semibold text-slate-900 bg-white border border-slate-300 rounded focus:border-slate-900 focus:outline-none"
+                              />
+                              <span className="absolute right-2 top-1 text-[10px] text-slate-400 pointer-events-none">₽</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-slate-500 shrink-0">Фраза:</span>
+                            <input
+                              type="text"
+                              value={cat.label}
+                              onChange={(e) => {
+                                const updated = [...balanceCategories];
+                                updated[idx] = { ...updated[idx], label: e.target.value };
+                                setBalanceCategories(updated);
+                              }}
+                              placeholder="напр. более 300 ₽"
+                              className="w-full py-1 px-2 text-xs font-medium text-slate-900 bg-white border border-slate-300 rounded focus:border-slate-900 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const highest = balanceCategories.length > 0 ? Math.max(...balanceCategories.map((c) => c.minBalance)) : 0;
+                        const nextVal = highest >= 500 ? highest + 500 : highest + 200;
+                        setBalanceCategories([...balanceCategories, { minBalance: nextVal, label: `более ${nextVal} ₽` }]);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-medium rounded-lg text-xs transition-colors self-start"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Добавить категорию
+                    </button>
+
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                      <span>Доступные теги:</span>
+                      <code className="font-mono text-slate-800 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">{"{Категория_Баланса}"}</code>
+                      <code className="font-mono text-slate-800 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">{"{Баланс_Примерно}"}</code>
+                      <code className="font-mono text-slate-800 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">{"{Общий_Баланс}"}</code>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Live Counter & Summary */}
             <div className="border-t border-slate-200 pt-5 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
@@ -2596,19 +2890,19 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {activeDayFilter !== "all" && (
+              {(activeDayFilter !== "all" || activeBalanceCategoryFilter !== "all") && (
                 <button
                   type="button"
-                  onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, activeDayFilter)}
+                  onClick={() => handleExportCsv(displayedClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat)}
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs"
                 >
-                  Скачать CSV ({activeDayFilter})
+                  Скачать CSV выборки ({displayedClients.length})
                 </button>
               )}
 
               <button
                 type="button"
-                onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all")}
+                onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat)}
                 disabled={activeCampaignClients.length === 0}
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs"
               >
@@ -2910,6 +3204,121 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
         </div>
       )}
 
+      {/* Balance Category Breakdown Strip & Category Filter */}
+      {(activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled) && (
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider block">
+                Категории баланса (сегментация без точных цифр)
+              </span>
+              <span className="text-[10px] text-blue-700 bg-blue-50 font-semibold px-1.5 py-0.5 rounded border border-blue-200">
+                {(activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses) ? "рубли + бонусы" : "только рубли"}
+              </span>
+            </div>
+            <span className="text-xs text-slate-400">
+              Нажмите на категорию баланса, чтобы отфильтровать список и сформировать целевую выгрузку
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveBalanceCategoryFilter("all")}
+              className={cn(
+                "p-3 rounded-xl border text-center transition-all min-w-[120px]",
+                activeBalanceCategoryFilter === "all"
+                  ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                  : "border-slate-200 bg-white hover:border-slate-300 text-slate-900"
+              )}
+            >
+              <span className={cn(
+                "text-[11px] font-bold uppercase tracking-wider block",
+                activeBalanceCategoryFilter === "all" ? "text-slate-300" : "text-slate-700"
+              )}>
+                Все категории
+              </span>
+              <p className="text-base font-bold font-mono mt-0.5">
+                {activeCampaignClients.length} <span className={cn("text-[10px] font-normal", activeBalanceCategoryFilter === "all" ? "text-slate-300" : "text-slate-400")}>чел</span>
+              </p>
+              <span className={cn(
+                "text-[10px] block font-mono mt-0.5",
+                activeBalanceCategoryFilter === "all" ? "text-slate-300" : "text-slate-400"
+              )}>
+                100% базы
+              </span>
+            </button>
+
+            {((activeCampaign?.balanceCategories ?? balanceCategories) || [])
+              .slice()
+              .sort((a, b) => b.minBalance - a.minBalance)
+              .map((cat) => {
+                const count = activeCampaignCategoryBreakdown.counts[cat.minBalance] || 0;
+                const isSelected = activeBalanceCategoryFilter === cat.minBalance;
+                const share = activeCampaignClients.length > 0 ? Math.round((count / activeCampaignClients.length) * 100) : 0;
+                return (
+                  <button
+                    key={cat.minBalance}
+                    type="button"
+                    onClick={() => setActiveBalanceCategoryFilter(cat.minBalance)}
+                    className={cn(
+                      "p-3 rounded-xl border text-center transition-all min-w-[130px]",
+                      isSelected
+                        ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                        : "border-slate-200 bg-white hover:border-slate-300 text-slate-900"
+                    )}
+                  >
+                    <span className={cn(
+                      "text-[11px] font-bold uppercase tracking-wider block",
+                      isSelected ? "text-slate-300" : "text-slate-700"
+                    )}>
+                      {cat.label}
+                    </span>
+                    <p className="text-base font-bold font-mono mt-0.5">
+                      {count} <span className={cn("text-[10px] font-normal", isSelected ? "text-slate-300" : "text-slate-400")}>чел</span>
+                    </p>
+                    <span className={cn(
+                      "text-[10px] block font-mono mt-0.5",
+                      isSelected ? "text-slate-300" : "text-slate-400"
+                    )}>
+                      {share}% • от {cat.minBalance} ₽
+                    </span>
+                  </button>
+                );
+              })}
+
+            {activeCampaignCategoryBreakdown.belowCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveBalanceCategoryFilter(-1)}
+                className={cn(
+                  "p-3 rounded-xl border text-center transition-all min-w-[130px]",
+                  activeBalanceCategoryFilter === -1
+                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                    : "border-slate-200 bg-white hover:border-slate-300 text-slate-900"
+                )}
+              >
+                <span className={cn(
+                  "text-[11px] font-bold uppercase tracking-wider block",
+                  activeBalanceCategoryFilter === -1 ? "text-slate-300" : "text-slate-700"
+                )}>
+                  Менее порога
+                </span>
+                <p className="text-base font-bold font-mono mt-0.5">
+                  {activeCampaignCategoryBreakdown.belowCount} <span className={cn("text-[10px] font-normal", activeBalanceCategoryFilter === -1 ? "text-slate-300" : "text-slate-400")}>чел</span>
+                </p>
+                <span className={cn(
+                  "text-[10px] block font-mono mt-0.5",
+                  activeBalanceCategoryFilter === -1 ? "text-slate-300" : "text-slate-400"
+                )}>
+                  {activeCampaignClients.length > 0 ? Math.round((activeCampaignCategoryBreakdown.belowCount / activeCampaignClients.length) * 100) : 0}%
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Message Template Display / Edit */}
       {(() => {
         const isDraftCyrillic = /[а-яёА-ЯЁ]/.test(detailTemplateDraft);
@@ -3038,7 +3447,12 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
           <div>
             <h3 className="text-base font-bold text-slate-900">
               Список сформированных сообщений ({displayedClients.length.toLocaleString("ru")}
-              {activeDayFilter !== "all" && ` • день: ${activeDayFilter}`})
+              {activeDayFilter !== "all" && ` • день: ${activeDayFilter}`}
+              {activeBalanceCategoryFilter !== "all" && ` • баланс: ${
+                activeBalanceCategoryFilter === -1
+                  ? "менее порога"
+                  : ((activeCampaign?.balanceCategories ?? balanceCategories) || []).find((c) => c.minBalance === activeBalanceCategoryFilter)?.label || ""
+              }`})
             </h3>
             <p className="text-xs text-slate-500">
               {isDetailExpandedView
@@ -3052,9 +3466,18 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
               <button
                 type="button"
                 onClick={() => setActiveDayFilter("all")}
-                className="text-xs text-slate-500 hover:text-slate-900 underline mr-2"
+                className="text-xs text-slate-500 hover:text-slate-900 underline mr-1"
               >
                 Сбросить день
+              </button>
+            )}
+            {activeBalanceCategoryFilter !== "all" && (
+              <button
+                type="button"
+                onClick={() => setActiveBalanceCategoryFilter("all")}
+                className="text-xs text-slate-500 hover:text-slate-900 underline mr-1"
+              >
+                Сбросить категорию баланса
               </button>
             )}
 
@@ -3130,8 +3553,13 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   const scheduledTime = activeCampaign?.scheduleTimeMap?.[norm] || getScheduledTime(c);
                   const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
                   const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
+                  const curBalCats = activeCampaign?.balanceCategories ?? balanceCategories;
+                  const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
+                  const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
+                  const clientCat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
+                  const effectiveBal = getClientEffectiveBalance(c, curBalIncBon);
                   const giftBonus = calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
-                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate);
+                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate, curBalCats, curBalCatOn, curBalIncBon);
 
                   if (isDetailExpandedView) {
                     return (
@@ -3140,7 +3568,12 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                         <td className="py-2.5 px-3 font-mono font-medium text-slate-900 whitespace-nowrap">7{norm}</td>
                         <td className="py-2.5 px-3">
                           <div className="font-semibold text-slate-900 leading-tight truncate max-w-[140px]">{c.name || "Гость"}</div>
-                          <div className="flex items-center gap-1 mt-0.5">
+                          <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                            {clientCat && (
+                              <span className="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 font-medium whitespace-nowrap" title={`Категория: ${clientCat.label} (баланс: ${effectiveBal.toLocaleString("ru")} ₽)`}>
+                                {clientCat.label}
+                              </span>
+                            )}
                             {c.valueCategory === "diamond" && (
                               <span className="text-[10px] text-violet-700 bg-violet-50 px-1.5 py-0.2 rounded border border-violet-200 font-medium">VIP</span>
                             )}
@@ -3159,7 +3592,10 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                           {Math.round(c.totalSpent || 0).toLocaleString("ru")} ₽
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono text-slate-800 whitespace-nowrap">
-                          {Math.round(c.balance || 0).toLocaleString("ru")} ₽
+                          <div>{Math.round(c.balance || 0).toLocaleString("ru")} ₽</div>
+                          {curBalIncBon && (
+                            <div className="text-[10px] text-slate-400 font-normal">всего {effectiveBal.toLocaleString("ru")} ₽</div>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-medium text-amber-900 whitespace-nowrap">
                           {Math.round(c.bonusBalance || 0).toLocaleString("ru")} Б
@@ -3198,15 +3634,22 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                       <td className="py-2.5 px-4 font-mono font-medium text-slate-900">7{norm}</td>
                       <td className="py-2.5 px-4">
                         <div className="font-semibold text-slate-900 leading-tight">{c.name || "Гость"}</div>
-                        {c.valueCategory === "diamond" && (
-                          <div className="text-[10px] text-slate-400 font-mono">VIP • {c.cashShare}% свои</div>
-                        )}
-                        {c.valueCategory === "loyal" && (
-                          <div className="text-[10px] text-slate-400 font-mono">Лояльный • {c.cashShare}% свои</div>
-                        )}
-                        {c.valueCategory === "bonus_heavy" && (
-                          <div className="text-[10px] text-slate-400 font-mono">Бонусоед • {c.bonusGivenRatio}% бонусов</div>
-                        )}
+                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                          {clientCat && (
+                            <span className="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200 font-medium whitespace-nowrap" title={`Категория: ${clientCat.label} (баланс: ${effectiveBal.toLocaleString("ru")} ₽)`}>
+                              {clientCat.label}
+                            </span>
+                          )}
+                          {c.valueCategory === "diamond" && (
+                            <span className="text-[10px] text-slate-400 font-mono">VIP • {c.cashShare}% свои</span>
+                          )}
+                          {c.valueCategory === "loyal" && (
+                            <span className="text-[10px] text-slate-400 font-mono">Лояльный • {c.cashShare}% свои</span>
+                          )}
+                          {c.valueCategory === "bonus_heavy" && (
+                            <span className="text-[10px] text-slate-400 font-mono">Бонусоед • {c.bonusGivenRatio}% бонусов</span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2.5 px-4">
                         <div className="font-semibold text-slate-900 font-mono text-xs">
