@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Copy, Check, Search, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Copy, Check, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ClientProfile, ClubAnalytics } from "./segmentation";
 
@@ -58,8 +58,10 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
   const [selectedTime, setSelectedTime] = useState<string>("all");
   const [selectedZone, setSelectedZone] = useState<string>("all");
   const [pcInput, setPcInput] = useState<string>("");
+  const [daysFilter, setDaysFilter] = useState<string>("all");
+  const [clientStatusFilter, setClientStatusFilter] = useState<string>("all");
   const [sortMode, setSortMode] = useState<"match" | "spent_desc" | "days_desc" | "balance_desc">("match");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [shiftStatusFilter, setShiftStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Pagination
@@ -108,7 +110,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
   };
 
   const handleResetRecords = () => {
-    if (!confirm("Сбросить историю контактов текущей смены?")) return;
+    if (!confirm("Сбросить отметки контактов текущей смены?")) return;
     setRecordsMap({});
     if (typeof window !== "undefined") {
       localStorage.removeItem(storageKey);
@@ -155,17 +157,31 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
         const norm = (p.phone || "").replace(/\D/g, "").slice(-10);
         if (excludedPhones.includes(norm)) return false;
 
-        // Search query filter
+        // Search query filter (name or phone)
         if (query) {
           const matchName = (p.name || "").toLowerCase().includes(query);
           const matchPhone = (p.phone || "").replace(/\D/g, "").includes(query);
           if (!matchName && !matchPhone) return false;
         }
 
-        // Contact status filter
+        // Days since last visit filter
+        const days = p.daysSince;
+        if (daysFilter === "recent" && (days === null || days > 7)) return false;
+        if (daysFilter === "7_14" && (days === null || days < 7 || days > 14)) return false;
+        if (daysFilter === "15_30" && (days === null || days < 15 || days > 30)) return false;
+        if (daysFilter === "30_plus" && (days === null || days < 31)) return false;
+
+        // Guest lifecycle status filter
+        if (clientStatusFilter === "whale" && !p.isWhale) return false;
+        if (clientStatusFilter === "active" && p.status !== "active") return false;
+        if (clientStatusFilter === "cooling" && p.status !== "cooling") return false;
+        if (clientStatusFilter === "churned" && p.status !== "churned") return false;
+        if (clientStatusFilter === "newbie" && p.status !== "newbie") return false;
+
+        // Contact status of shift
         const rec = recordsMap[norm];
-        const currentStatus: ShiftContactStatus = rec?.status || "none";
-        if (statusFilter !== "all" && currentStatus !== statusFilter) {
+        const currentShiftStatus: ShiftContactStatus = rec?.status || "none";
+        if (shiftStatusFilter !== "all" && currentShiftStatus !== shiftStatusFilter) {
           return false;
         }
 
@@ -180,9 +196,9 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
 
         // 1. Day match
         const isDayMatch = resolvedDay !== "all" && p.favoriteDay === resolvedDay;
-        if (isDayMatch) {
+        if (isDayMatch && p.favoriteDay) {
           score += 40;
-          matchReasons.push(p.favoriteDay || resolvedDay);
+          matchReasons.push(p.favoriteDay);
         } else if (p.favoriteDay) {
           matchReasons.push(p.favoriteDay);
         }
@@ -200,9 +216,9 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
 
         // 3. Zone match
         const isZoneMatch = selectedZone !== "all" && p.favoriteZone === selectedZone;
-        if (isZoneMatch) {
+        if (isZoneMatch && p.favoriteZone) {
           score += 30;
-          matchReasons.push(p.favoriteZone || selectedZone);
+          matchReasons.push(p.favoriteZone);
         } else if (p.favoriteZone && p.favoriteZone !== "—") {
           matchReasons.push(p.favoriteZone);
         }
@@ -224,9 +240,9 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           matchReasons.push(p.favoriteSeat);
         }
 
-        // 5. Customer value & re-engagement bonuses
+        // 5. Customer value & re-engagement weighting
         if (p.daysSince && p.daysSince >= 7 && p.daysSince <= 30) {
-          score += 15; // prime window for reactivation
+          score += 15;
         }
         if (p.isWhale) {
           score += 10;
@@ -243,29 +259,28 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           const lastVisitDate = p.lastAuth ? new Date(p.lastAuth) : null;
           if (lastVisitDate && lastVisitDate.getTime() >= contactDate.getTime() - 60_000) {
             attributionResult = "returned";
-            // Rough attribution value: avg transaction or balance top-up
             attributedAmount = p.avgTx || Math.round(p.totalSpent / Math.max(1, p.txCount || 1)) || 500;
           } else {
             attributionResult = "waiting";
           }
         }
 
-        // Generate tailored shift script
-        const firstName = p.name ? p.name.split(" ")[0].trim() : "друг";
-        const targetDayText = resolvedDay !== "all" ? resolvedDay.toLowerCase() : (p.favoriteDay ? p.favoriteDay.toLowerCase() : "сегодня");
+        // Generate warm, loyal shift script WITHOUT clumsy name/surname parsing
+        const seatText = p.favoriteSeat && p.favoriteSeat !== "—" ? `твой любимый ${p.favoriteSeat}` : "место в клубе";
+        const zoneText = p.favoriteZone && p.favoriteZone !== "—" ? `в зоне ${p.favoriteZone}` : "";
         const targetTimeText = selectedTime === "morning" ? "утром"
           : selectedTime === "day" ? "днем"
           : selectedTime === "evening" ? "вечером"
           : selectedTime === "night" ? "на ночь"
           : "на вечер";
-        const seatText = p.favoriteSeat ? `твой любимый ${p.favoriteSeat}` : "место в клубе";
-        const zoneText = p.favoriteZone && p.favoriteZone !== "—" ? `в зоне ${p.favoriteZone}` : "";
 
         let script = "";
         if ((p.balance || 0) >= 150) {
-          script = `Привет, ${firstName}! Напоминаем, что у тебя ${Math.round(p.balance)} ₽ на счете в клубе. ${seatText} ${zoneText} ${targetTimeText} свободен, забронировать за тобой?`;
+          script = `Привет! На балансе в Colizeum тебя ждут ${Math.round(p.balance)} ₽. Твой ${seatText} ${zoneText} ${targetTimeText} свободен, заглядывай на катку! Забронировать место?`;
+        } else if (p.daysSince && p.daysSince >= 14) {
+          script = `Привет! Давно не виделись в Colizeum. Твой ${seatText} ${zoneText} ${targetTimeText} ждет тебя. Забронировать место на катку?`;
         } else {
-          script = `Привет, ${firstName}! Это администратор Colizeum. ${targetDayText} ${targetTimeText} ${seatText} ${zoneText} свободен. Забронировать место на катку?`;
+          script = `Привет! Твой ${seatText} ${zoneText} ${targetTimeText} свободен. Забронировать за тобой место на катку?`;
         }
 
         return {
@@ -298,13 +313,15 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
     analytics,
     excludedPhones,
     searchQuery,
+    daysFilter,
+    clientStatusFilter,
     selectedDay,
     todayDayName,
     selectedTime,
     selectedZone,
     pcTokens,
     sortMode,
-    statusFilter,
+    shiftStatusFilter,
     recordsMap,
   ]);
 
@@ -355,6 +372,16 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
     );
   }
 
+  const hasActiveFilters =
+    selectedDay !== "all" ||
+    selectedTime !== "all" ||
+    selectedZone !== "all" ||
+    pcInput.trim() !== "" ||
+    daysFilter !== "all" ||
+    clientStatusFilter !== "all" ||
+    shiftStatusFilter !== "all" ||
+    searchQuery.trim() !== "";
+
   return (
     <div className="space-y-4 font-sans text-slate-900">
       {/* Top Header & Plain Text Summary */}
@@ -385,7 +412,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
               type="button"
               onClick={handleResetRecords}
               className="ml-2 text-[11px] text-slate-400 hover:text-rose-600 underline"
-              title="Сбросить статус текущей смены"
+              title="Сбросить отметки контактов текущей смены"
             >
               Сброс
             </button>
@@ -393,9 +420,10 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
         </div>
       </div>
 
-      {/* Lightweight Slot Constructor */}
+      {/* Lightweight Slot & Guest Constructor */}
       <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        {/* Row 1: Slot Parameters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {/* Day of Week */}
           <div className="space-y-1">
             <label className="text-[11px] font-semibold text-slate-600 block">День недели</label>
@@ -407,7 +435,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
               }}
               className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-slate-400 font-medium cursor-pointer"
             >
-              <option value="all">Все дни</option>
+              <option value="all">Все дни недели</option>
               <option value="today">Сегодня ({todayDayName})</option>
               {ORDERED_DAYS.map((d) => (
                 <option key={d} value={d}>{d}</option>
@@ -464,6 +492,48 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
               className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-slate-400 font-mono placeholder:font-sans"
             />
           </div>
+        </div>
+
+        {/* Row 2: Guest Lifecycle & Filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1 border-t border-slate-100">
+          {/* Days Since Last Visit */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-slate-600 block">Как давно не был</label>
+            <select
+              value={daysFilter}
+              onChange={(e) => {
+                setDaysFilter(e.target.value);
+                setPage(1);
+              }}
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-slate-400 font-medium cursor-pointer"
+            >
+              <option value="all">Любой срок</option>
+              <option value="recent">До 7 дней (недавно)</option>
+              <option value="7_14">7–14 дней (остывают)</option>
+              <option value="15_30">15–30 дней (засыпают)</option>
+              <option value="30_plus">Более 30 дней (отток)</option>
+            </select>
+          </div>
+
+          {/* Guest Lifecycle Status */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-slate-600 block">Статус гостя</label>
+            <select
+              value={clientStatusFilter}
+              onChange={(e) => {
+                setClientStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-slate-400 font-medium cursor-pointer"
+            >
+              <option value="all">Все гости базы</option>
+              <option value="whale">⭐ VIP-киты (Whales)</option>
+              <option value="active">Активные</option>
+              <option value="cooling">Остывающие</option>
+              <option value="churned">В оттоке</option>
+              <option value="newbie">Новички</option>
+            </select>
+          </div>
 
           {/* Sorting */}
           <div className="space-y-1">
@@ -485,11 +555,11 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
 
           {/* Shift Status Filter */}
           <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-slate-600 block">Статус смены</label>
+            <label className="text-[11px] font-semibold text-slate-600 block">Отметка смены</label>
             <select
-              value={statusFilter}
+              value={shiftStatusFilter}
               onChange={(e) => {
-                setStatusFilter(e.target.value);
+                setShiftStatusFilter(e.target.value);
                 setPage(1);
               }}
               className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-slate-400 font-medium cursor-pointer"
@@ -504,7 +574,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           </div>
         </div>
 
-        {/* Quick Search */}
+        {/* Quick Search & Filter Reset */}
         <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
           <div className="relative flex-1 max-w-sm">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -522,7 +592,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
 
           <div className="flex items-center gap-2 text-slate-500 text-[11px]">
             <span>Показано: <b>{paginatedClients.length}</b> из <b>{rankedClients.length}</b></span>
-            {(selectedDay !== "all" || selectedTime !== "all" || selectedZone !== "all" || pcInput || statusFilter !== "all" || searchQuery) && (
+            {hasActiveFilters && (
               <button
                 type="button"
                 onClick={() => {
@@ -530,7 +600,9 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                   setSelectedTime("all");
                   setSelectedZone("all");
                   setPcInput("");
-                  setStatusFilter("all");
+                  setDaysFilter("all");
+                  setClientStatusFilter("all");
+                  setShiftStatusFilter("all");
                   setSearchQuery("");
                   setPage(1);
                 }}
@@ -550,9 +622,10 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold tracking-wider text-[11px]">
                 <th className="py-2.5 px-3 w-10 text-slate-400">№</th>
-                <th className="py-2.5 px-3 min-w-[140px]">Гость</th>
-                <th className="py-2.5 px-3 min-w-[130px]">Телефон</th>
-                <th className="py-2.5 px-3 min-w-[170px]">Совпадение со слотом</th>
+                <th className="py-2.5 px-3 min-w-[130px]">Гость</th>
+                <th className="py-2.5 px-3 min-w-[125px]">Телефон</th>
+                <th className="py-2.5 px-3 min-w-[90px]">Не был</th>
+                <th className="py-2.5 px-3 min-w-[160px]">Совпадение со слотом</th>
                 <th className="py-2.5 px-3 min-w-[130px]">LTV • Баланс</th>
                 <th className="py-2.5 px-3 min-w-[280px]">Текст сообщения / скрипт</th>
                 <th className="py-2.5 px-3 min-w-[130px]">Отметка смены</th>
@@ -562,8 +635,8 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
             <tbody className="divide-y divide-slate-100 text-slate-800">
               {paginatedClients.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    Нет гостей, подходящих под выбранные параметры слота.
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                    Нет гостей, подходящих под выбранные параметры слота и фильтры.
                   </td>
                 </tr>
               ) : (
@@ -576,6 +649,13 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                   const isScriptCopied = copiedKey === `script_${norm}`;
                   const currentStatus = item.record?.status || "none";
 
+                  // Client status label
+                  const statusLabel = p.isWhale ? "VIP-кит"
+                    : p.status === "cooling" ? "Остывает"
+                    : p.status === "churned" ? "Отток"
+                    : p.status === "newbie" ? "Новичок"
+                    : "Регуляр";
+
                   return (
                     <tr key={norm} className="hover:bg-slate-50/70 transition-colors">
                       {/* № */}
@@ -583,13 +663,13 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                         {globalIdx}
                       </td>
 
-                      {/* Guest Name & Simple Subtitle */}
+                      {/* Guest Name & Status */}
                       <td className="py-2.5 px-3 align-top">
                         <div className="font-semibold text-slate-900 leading-tight">
                           {p.name || "Гость клуба"}
                         </div>
                         <div className="text-[11px] text-slate-500 mt-0.5">
-                          {p.isWhale ? "VIP-кит" : p.daysSince ? `не был ${p.daysSince} дн.` : "Регуляр"}
+                          {statusLabel}
                         </div>
                       </td>
 
@@ -610,6 +690,22 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                         </button>
                       </td>
 
+                      {/* Days since last visit */}
+                      <td className="py-2.5 px-3 align-top whitespace-nowrap font-mono text-xs">
+                        {p.daysSince !== null && p.daysSince !== undefined ? (
+                          <span className={cn(
+                            p.daysSince >= 30 ? "text-slate-400 font-medium"
+                              : p.daysSince >= 14 ? "text-amber-800 font-medium"
+                              : p.daysSince >= 7 ? "text-slate-700 font-medium"
+                              : "text-emerald-700 font-medium"
+                          )}>
+                            {p.daysSince === 0 ? "Сегодня" : `${p.daysSince} дн.`}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+
                       {/* Match Details */}
                       <td className="py-2.5 px-3 align-top">
                         <div className="font-medium text-slate-800 leading-tight">
@@ -617,7 +713,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                         </div>
                         {item.score > 0 && (
                           <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            индекс совпадения: {item.score}
+                            индекс: {item.score}
                           </div>
                         )}
                       </td>

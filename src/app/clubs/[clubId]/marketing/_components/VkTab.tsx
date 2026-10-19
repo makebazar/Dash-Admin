@@ -217,6 +217,26 @@ export function VkTab({ clubId, analytics, excludedPhones, dateFilter, onDateFil
     }
   }, []);
 
+  useEffect(() => {
+    const handleVkConfigUpdated = () => {
+      try {
+        const savedConfig = localStorage.getItem(vkConfigKey);
+        if (savedConfig) {
+          const parsed = JSON.parse(savedConfig);
+          if (parsed.clientId) setClientId(parsed.clientId);
+          if (parsed.clientSecret) setClientSecret(parsed.clientSecret);
+          if (parsed.clientId && parsed.clientSecret) {
+            handleCheckAuth(parsed.clientId, parsed.clientSecret);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to update VK config:", e);
+      }
+    };
+    window.addEventListener("marketing_vk_config_updated", handleVkConfigUpdated);
+    return () => window.removeEventListener("marketing_vk_config_updated", handleVkConfigUpdated);
+  }, [vkConfigKey]);
+
   const handleSaveCredentials = (newClientId: string, newClientSecret: string) => {
     setClientId(newClientId);
     setClientSecret(newClientSecret);
@@ -534,73 +554,7 @@ export function VkTab({ clubId, analytics, excludedPhones, dateFilter, onDateFil
           </div>
         </div>
 
-        {/* API Credentials Box */}
-        <div className="border border-slate-200 rounded-xl p-5 bg-white space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                Интеграция с кабинетом ads.vk.com (OAuth 2.0)
-              </h3>
-              <p className="text-xs text-slate-500">
-                Автоматическая авторизация по Client ID и Client Secret приложения VK Рекламы
-              </p>
-            </div>
 
-            {authStatus?.ok && (
-              <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                ✓ Кабинет активен: {authStatus.user?.name || authStatus.user?.email}
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 block">
-                Client ID
-              </label>
-              <input
-                type="text"
-                value={clientId}
-                onChange={(e) => handleSaveCredentials(e.target.value, clientSecret)}
-                placeholder="X3aiv6IIlQxTMLta"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:border-slate-900"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 block">
-                Client Secret
-              </label>
-              <input
-                type="password"
-                value={clientSecret}
-                onChange={(e) => handleSaveCredentials(clientId, e.target.value)}
-                placeholder="Секретный ключ..."
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:border-slate-900"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-1">
-            <button
-              type="button"
-              onClick={() => handleCheckAuth(clientId, clientSecret)}
-              disabled={isCheckingAuth}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors"
-            >
-              {isCheckingAuth ? "Проверка..." : "Проверить подключение"}
-            </button>
-
-            {authStatus && (
-              <span className={cn(
-                "text-xs font-medium",
-                authStatus.ok ? "text-emerald-700" : "text-rose-600"
-              )}>
-                {authStatus.message}
-              </span>
-            )}
-          </div>
-        </div>
 
         {/* Campaigns List or Empty State */}
         {campaigns.length === 0 ? (

@@ -18,7 +18,8 @@ import {
   RefreshCw,
   Send,
   ExternalLink,
-  Wallet
+  Wallet,
+  Share2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizePhone } from "./segmentation";
@@ -27,6 +28,11 @@ export interface SmsRuConfig {
   apiId: string;
   senderName: string;
   testMode: boolean;
+}
+
+export interface VkAdsConfig {
+  clientId: string;
+  clientSecret: string;
 }
 
 interface Props {
@@ -59,7 +65,18 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  // Load SMS.RU settings on mount
+  // VK Ads API Configuration State
+  const vkConfigKey = `marketing_vk_config_${clubId}`;
+  const [vkClientId, setVkClientId] = useState("X3aiv6IIlQxTMLta");
+  const [vkClientSecret, setVkClientSecret] = useState(
+    "nxLVn9KmGxcGXVVzB1d5W04AkMiA1tbLguJm5qxYM59495CMUsCSCP0qmavcD1DGL2jw9wtNnQwtJLY3qBU5iC0P7PMut2sPnl3lVzQDjCoQfrc7eZ5QdytHsYtzanZIvShlMXV4fTQoLxootwa8XLgWwC00LBSVSuPP7bh9azSgHJcwxp4aMhpd8f9HRzdPJR22ZFk2PvJbBtaDbqSI3k9tz5qjYMdRebx5FFq962M6DVtxM7T"
+  );
+  const [showVkSecret, setShowVkSecret] = useState(false);
+  const [isCheckingVkAuth, setIsCheckingVkAuth] = useState(false);
+  const [vkAuthStatus, setVkAuthStatus] = useState<{ ok: boolean; message: string; user?: any } | null>(null);
+  const [vkSaveSuccess, setVkSaveSuccess] = useState(false);
+
+  // Load SMS.RU and VK settings on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
@@ -76,8 +93,24 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
       } catch (e) {
         console.warn("Failed to load SMS.RU settings:", e);
       }
+
+      try {
+        const savedVk = localStorage.getItem(vkConfigKey);
+        if (savedVk) {
+          const parsedVk = JSON.parse(savedVk);
+          if (parsedVk.clientId) setVkClientId(parsedVk.clientId);
+          if (parsedVk.clientSecret) setVkClientSecret(parsedVk.clientSecret);
+          if (parsedVk.clientId && parsedVk.clientSecret) {
+            checkVkAuth(parsedVk.clientId, parsedVk.clientSecret);
+          }
+        } else {
+          checkVkAuth(vkClientId, vkClientSecret);
+        }
+      } catch (e) {
+        console.warn("Failed to load VK settings:", e);
+      }
     }
-  }, [smsStorageKey]);
+  }, [smsStorageKey, vkConfigKey]);
 
   const checkBalance = async (keyToCheck: string) => {
     if (!keyToCheck.trim()) {
@@ -196,6 +229,61 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
     }
   };
 
+  const checkVkAuth = async (cId = vkClientId, cSecret = vkClientSecret) => {
+    if (!cId.trim() || !cSecret.trim()) {
+      setVkAuthStatus({ ok: false, message: "Заполните Client ID и Client Secret приложения ads.vk.com" });
+      return;
+    }
+    setIsCheckingVkAuth(true);
+    setVkAuthStatus(null);
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/marketing/vk-ads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "check_auth",
+          clientId: cId.trim(),
+          clientSecret: cSecret.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setVkAuthStatus({
+          ok: true,
+          message: data.message || "Подключение к VK Рекламе успешно установлено",
+          user: data.user,
+        });
+      } else {
+        setVkAuthStatus({ ok: false, message: data.error || "Ошибка авторизации в VK Рекламе" });
+      }
+    } catch (e: any) {
+      setVkAuthStatus({ ok: false, message: "Ошибка связи с сервером: " + (e.message || String(e)) });
+    } finally {
+      setIsCheckingVkAuth(false);
+    }
+  };
+
+  const handleSaveVkSettings = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(
+          vkConfigKey,
+          JSON.stringify({
+            clientId: vkClientId.trim(),
+            clientSecret: vkClientSecret.trim(),
+          })
+        );
+        window.dispatchEvent(new Event("marketing_vk_config_updated"));
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+    setVkSaveSuccess(true);
+    setTimeout(() => setVkSaveSuccess(false), 3000);
+    checkVkAuth(vkClientId, vkClientSecret);
+  };
+
   const filteredPhones = excludedPhones.filter((p) => p.includes(search.replace(/\D/g, "")));
 
   return (
@@ -204,16 +292,18 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
       <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-100">
-              <UserX className="w-4 h-4" />
+            <span className="p-2 rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+              <Sliders className="w-4 h-4" />
             </span>
-            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">Настройки маркетинга и Номера-исключения</h2>
-            <span className="bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold px-2.5 py-0.5 rounded-full tabular-nums">
-              {excludedPhones.length} в исключениях
-            </span>
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">Настройки маркетинга и интеграций</h2>
+            {excludedPhones.length > 0 && (
+              <span className="bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold px-2.5 py-0.5 rounded-full tabular-nums">
+                {excludedPhones.length} в исключениях
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
-            Номера администраторов клуба, техников, управляющих и владельцев. Они автоматически вырезаются из всех расчетов: базы гостей, задач для смены, списков Китов, SMS-рассылок и рекламы в VK.
+            Шлюзы рассылок (SMS.RU), рекламный кабинет (VK Реклама) и черный список номеров персонала для сквозной аналитики и задач.
           </p>
         </div>
 
@@ -229,7 +319,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
       </div>
 
       {/* SMS.RU Integration Card */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -240,7 +330,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                 Интеграция с SMS.RU (Шлюз рассылок)
               </h3>
               {balance !== null ? (
-                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold px-2.5 py-0.5 rounded-full font-mono">
+                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold px-2.5 py-0.5 rounded-full tabular-nums">
                   Баланс: {balance.toLocaleString("ru")} ₽
                 </span>
               ) : apiId ? (
@@ -282,7 +372,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                     type="button"
                     onClick={() => checkBalance(apiId)}
                     disabled={isCheckingBalance}
-                    className="text-[11px] text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                    className="text-[11px] text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 cursor-pointer"
                   >
                     <RefreshCw className={cn("w-3 h-3", isCheckingBalance && "animate-spin")} />
                     <span>Проверить баланс</span>
@@ -300,7 +390,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                 <button
                   type="button"
                   onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                   title={showApiKey ? "Скрыть" : "Показать"}
                 >
                   {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -342,7 +432,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
           {/* Operator Tariffs Reference Card */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-800 text-[11px] uppercase tracking-wider">
+              <span className="font-semibold text-slate-800 text-xs">
                 Официальные тарифы операторов связи РФ:
               </span>
               <span className="text-[10px] text-slate-400">МТС • Мегафон • Билайн • Т2</span>
@@ -352,25 +442,25 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                 <span className="font-bold text-blue-600 block">МТС</span>
                 <span className="text-slate-500 block text-[10px]">Имя: 3 000 ₽/мес</span>
                 <span className="text-slate-500 block text-[10px]">Шаблон: 2 000 ₽</span>
-                <span className="font-mono text-slate-800 font-semibold block pt-0.5">от 8.50 ₽/SMS</span>
+                <span className="tabular-nums text-slate-800 font-semibold block pt-0.5">от 8.50 ₽/SMS</span>
               </div>
               <div className="p-2 bg-white rounded-lg border border-slate-200/80 space-y-0.5">
                 <span className="font-bold text-emerald-600 block">Мегафон</span>
                 <span className="text-slate-500 block text-[10px]">Имя: 2 550 ₽/мес</span>
                 <span className="text-slate-500 block text-[10px]">Шаблон: 1 220 ₽</span>
-                <span className="font-mono text-slate-800 font-semibold block pt-0.5">от 8.40 ₽/SMS</span>
+                <span className="tabular-nums text-slate-800 font-semibold block pt-0.5">от 8.40 ₽/SMS</span>
               </div>
               <div className="p-2 bg-white rounded-lg border border-slate-200/80 space-y-0.5">
                 <span className="font-bold text-amber-600 block">Билайн</span>
                 <span className="text-slate-500 block text-[10px]">Имя: 2 080 ₽/мес</span>
                 <span className="text-slate-500 block text-[10px]">Шаблон: 1 220 ₽</span>
-                <span className="font-mono text-slate-800 font-semibold block pt-0.5">от 8.40 ₽/SMS</span>
+                <span className="tabular-nums text-slate-800 font-semibold block pt-0.5">от 8.40 ₽/SMS</span>
               </div>
               <div className="p-2 bg-white rounded-lg border border-slate-200/80 space-y-0.5">
                 <span className="font-bold text-slate-900 block">Т2 (Tele2)</span>
                 <span className="text-slate-500 block text-[10px]">Имя: бесплатно</span>
                 <span className="text-slate-500 block text-[10px]">Шаблон: 1 100 ₽</span>
-                <span className="font-mono text-slate-800 font-semibold block pt-0.5">от 8.36 ₽/SMS</span>
+                <span className="tabular-nums text-slate-800 font-semibold block pt-0.5">от 8.36 ₽/SMS</span>
               </div>
             </div>
             <p className="text-[10px] text-slate-500 leading-relaxed pt-0.5">
@@ -415,7 +505,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
 
             <button
               type="submit"
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-2"
+              className="px-5 py-2.5 bg-black hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>Сохранить настройки SMS.RU</span>
@@ -428,7 +518,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
           <div className="border-t border-slate-100 pt-5 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                   <Send className="w-3.5 h-3.5 text-blue-600" />
                   <span>Тестовая отправка SMS на свой номер</span>
                 </h4>
@@ -445,7 +535,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                   placeholder="+7 (999) 000-00-00"
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:border-slate-900"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors"
                 />
               </div>
               <div className="sm:col-span-2 flex gap-2">
@@ -454,13 +544,13 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                   placeholder="Текст сообщения..."
                   value={testMsg}
                   onChange={(e) => setTestMsg(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-slate-900"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors"
                 />
                 <button
                   type="button"
                   onClick={handleSendTestSms}
                   disabled={isSendingTest || !testPhone.trim()}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors shrink-0 flex items-center gap-1.5"
+                  className="px-4 py-2 bg-black hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer"
                 >
                   {isSendingTest ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -488,12 +578,133 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
         )}
       </div>
 
+      {/* VK Ads Integration Card */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-5">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+                <Share2 className="w-4 h-4" />
+              </span>
+              <h3 className="text-base font-bold text-slate-900 tracking-tight">
+                Интеграция с VK Реклама (ads.vk.com)
+              </h3>
+              {vkAuthStatus?.ok ? (
+                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                  Кабинет активен: {vkAuthStatus.user?.name || vkAuthStatus.user?.email || "OAuth 2.0"}
+                </span>
+              ) : vkClientId && vkClientSecret ? (
+                <span className="bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                  Требуется проверка
+                </span>
+              ) : (
+                <span className="bg-slate-100 text-slate-500 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                  Не настроено
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              Автоматическая передача сегментов аудиторий и запуск рекламных кампаний через OAuth 2.0 API
+            </p>
+          </div>
+
+          <a
+            href="https://ads.vk.com/hq/settings/access"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1.5 self-start sm:self-auto hover:underline"
+          >
+            <span>Настройки доступа ads.vk.com</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
+
+        <form onSubmit={handleSaveVkSettings} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">
+                Client ID (Идентификатор приложения) <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="X3aiv6IIlQxTMLta"
+                value={vkClientId}
+                onChange={(e) => setVkClientId(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">
+                Client Secret (Секретный ключ) <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showVkSecret ? "text" : "password"}
+                  placeholder="Секретный ключ..."
+                  value={vkClientSecret}
+                  onChange={(e) => setVkClientSecret(e.target.value)}
+                  className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowVkSecret(!showVkSecret)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  title={showVkSecret ? "Скрыть" : "Показать"}
+                >
+                  {showVkSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => checkVkAuth(vkClientId, vkClientSecret)}
+                disabled={isCheckingVkAuth}
+                className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", isCheckingVkAuth && "animate-spin")} />
+                <span>{isCheckingVkAuth ? "Проверка связи..." : "Проверить подключение"}</span>
+              </button>
+
+              {vkAuthStatus && (
+                <span className={cn(
+                  "text-xs font-medium flex items-center gap-1.5",
+                  vkAuthStatus.ok ? "text-emerald-700" : "text-rose-600"
+                )}>
+                  {vkAuthStatus.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <ShieldAlert className="w-4 h-4 text-rose-600" />}
+                  <span>{vkAuthStatus.message}</span>
+                </span>
+              )}
+
+              {vkSaveSuccess && !vkAuthStatus && (
+                <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Настройки сохранены
+                </span>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="px-5 py-2.5 bg-black hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer self-start sm:self-auto"
+            >
+              <Save className="w-4 h-4" />
+              <span>Сохранить настройки VK</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Add Phone Form */}
-        <div className="lg:col-span-1 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-5">
+        <div className="lg:col-span-1 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
           <div className="space-y-1 border-b border-slate-100 pb-4">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Plus className="w-4 h-4 text-violet-600" />
+              <Plus className="w-4 h-4 text-slate-900" />
               <span>Добавить исключение</span>
             </h3>
             <p className="text-xs text-slate-500">
@@ -513,7 +724,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                   placeholder="+7 (999) 000-00-00"
                   value={phoneInput}
                   onChange={(e) => setPhoneInput(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white transition-colors"
+                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors"
                 />
               </div>
             </div>
@@ -527,7 +738,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                 placeholder="Администратор смены, Управляющий..."
                 value={commentInput}
                 onChange={(e) => setCommentInput(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white transition-colors"
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors"
               />
             </div>
 
@@ -547,7 +758,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-black hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Добавить в исключения</span>
@@ -556,7 +767,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
 
           <div className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2">
             <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <Info className="w-3.5 h-3.5 text-violet-600" />
+              <Info className="w-3.5 h-3.5 text-slate-700" />
               Как это работает?
             </span>
             <p className="text-[11px] text-slate-500 leading-relaxed">
@@ -566,7 +777,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
         </div>
 
         {/* Right Column: List of Excluded Phones */}
-        <div className="lg:col-span-2 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-4">
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
@@ -586,7 +797,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                     placeholder="Поиск по цифрам..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-400 focus:bg-white"
+                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors"
                   />
                 </div>
               )}
@@ -618,7 +829,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                           {idx + 1}.
                         </span>
                         <div>
-                          <p className="text-xs font-bold text-slate-900 font-mono tracking-wide">
+                          <p className="text-xs font-semibold text-slate-900 tabular-nums tracking-wide">
                             {formatted}
                           </p>
                           <span className="text-[10px] text-slate-400">
@@ -630,7 +841,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
                       <button
                         type="button"
                         onClick={() => handleRemovePhone(phone)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                         title="Удалить из исключений"
                       >
                         <Trash2 className="w-4 h-4" />

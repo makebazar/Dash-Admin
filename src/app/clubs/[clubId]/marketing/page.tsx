@@ -1,51 +1,40 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams, useParams, useRouter } from "next/navigation";
+import { useSearchParams, useParams } from "next/navigation";
 import { UploadTab } from "./_components/UploadTab";
 import { AnalyticsTab } from "./_components/AnalyticsTab";
 import { HardwareTab } from "./_components/HardwareTab";
-import { RetentionTab } from "./_components/RetentionTab";
 import { TasksTab } from "./_components/TasksTab";
 import { SettingsTab } from "./_components/SettingsTab";
 import { SmsTab } from "./_components/SmsTab";
 import { VkTab } from "./_components/VkTab";
 import { AttributionTab } from "./_components/AttributionTab";
 import { cn } from "@/lib/utils";
-import { 
-  FolderArchive, 
-  BarChart3, 
-  Monitor, 
-  Users, 
-  Database,
-  Calendar,
-  Sparkles,
-  CheckSquare,
-  MessageSquare,
-  Share2,
-  Settings,
-  TrendingUp
-} from "lucide-react";
+import { Calendar } from "lucide-react";
 import { buildClubAnalytics, type ClubAnalytics, type WorkstationInfo, type ClientProfile, type DateFilter, type ClubPcStat } from "./_components/segmentation";
 import { detectPeriod } from "./_components/periodDetection";
 import type { SnapshotFull } from "./_components/types";
 
-const TABS = [
-  { id: "analytics", label: "Гости и Персоны", icon: BarChart3 },
-  { id: "tasks", label: "Задачи смене", icon: CheckSquare },
-  { id: "sms", label: "SMS-рассылки", icon: MessageSquare },
-  { id: "vk", label: "VK Реклама", icon: Share2 },
-  { id: "attribution", label: "Сквозная аналитика", icon: TrendingUp },
-  { id: "hardware", label: "Зоны и Железо", icon: Monitor },
-  { id: "retention", label: "Удержание", icon: Users },
-  { id: "settings", label: "Исключения", icon: Settings },
-  { id: "upload", label: "Срезы и Загрузка", icon: FolderArchive },
+const MAIN_TABS = [
+  { id: "analytics", label: "Гости" },
+  { id: "tasks", label: "Задачи" },
+  { id: "sms", label: "SMS" },
+  { id: "vk", label: "VK" },
+  { id: "attribution", label: "Сквозная" },
+  { id: "hardware", label: "Зоны и ПК" },
 ] as const;
+
+const SERVICE_TABS = [
+  { id: "settings", label: "Настройки" },
+  { id: "upload", label: "Загрузка" },
+] as const;
+
+const TABS = [...MAIN_TABS, ...SERVICE_TABS] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 export default function MarketingPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams();
   const clubId = (params?.clubId as string) || "1";
@@ -138,7 +127,8 @@ export default function MarketingPage() {
         const fullSnapshot = await detailRes.json();
         if (!isMounted) return;
         setActiveSnapshot(fullSnapshot);
-        if (!tabParam) {
+        const currentUrlTab = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
+        if (!currentUrlTab) {
           setActiveTab("analytics");
         }
       })
@@ -152,16 +142,31 @@ export default function MarketingPage() {
   }, [clubId]);
 
   useEffect(() => {
-    if (tabParam && tabParam !== activeTab) {
+    const handlePopState = () => {
+      const p = new URLSearchParams(window.location.search);
+      const t = p.get("tab") as TabId | null;
+      if (t && TABS.some((tab) => tab.id === t)) {
+        setActiveTab(t);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (tabParam && tabParam !== activeTab && TABS.some((t) => t.id === tabParam)) {
       setActiveTab(tabParam);
     }
-  }, [tabParam, activeTab]);
+  }, [tabParam]);
 
   const handleTabChange = (id: TabId) => {
     setActiveTab(id);
-    const p = new URLSearchParams(window.location.search);
-    p.set("tab", id);
-    router.replace(`?${p.toString()}`);
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      p.set("tab", id);
+      const newUrl = `${window.location.pathname}?${p.toString()}`;
+      window.history.replaceState(null, "", newUrl);
+    }
   };
 
   // Build unified analytics automatically: from raw files OR from active snapshot
@@ -595,34 +600,54 @@ export default function MarketingPage() {
         </div>
 
         {/* Root Main Tabs */}
-        <div className="flex bg-white p-1.5 sm:p-2 rounded-2xl border border-slate-200 shadow-xs gap-1 sm:gap-2 mb-8 overflow-x-auto scrollbar-none">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={cn(
-                "px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer flex items-center gap-2 whitespace-nowrap",
-                activeTab === tab.id
-                  ? "bg-slate-900 text-white shadow-xs font-semibold"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-              )}
-            >
-              <tab.icon className="w-4 h-4" />
-              <span>{tab.label}</span>
-              {tab.id === "settings" && excludedPhones.length > 0 && (
-                <span
-                  className={cn(
-                    "ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold",
-                    activeTab === tab.id
-                      ? "bg-slate-800 text-slate-200"
-                      : "bg-rose-50 text-rose-600 border border-rose-200"
-                  )}
-                >
-                  {excludedPhones.length}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="flex items-center justify-between bg-white p-1.5 sm:p-2 rounded-2xl border border-slate-200 shadow-xs gap-2 mb-8 overflow-x-auto scrollbar-none">
+          {/* Main Sections (Left) */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {MAIN_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={cn(
+                  "px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer whitespace-nowrap",
+                  activeTab === tab.id
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Service & Settings Sections (Right) */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 pl-2 sm:pl-3 border-l border-slate-200 ml-auto">
+            {SERVICE_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={cn(
+                  "px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                  activeTab === tab.id
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <span>{tab.label}</span>
+                {tab.id === "settings" && excludedPhones.length > 0 && (
+                  <span
+                    className={cn(
+                      "px-1.5 py-0.5 rounded-full text-[10px] font-semibold tabular-nums",
+                      activeTab === tab.id
+                        ? "bg-slate-800 text-slate-200"
+                        : "bg-rose-50 text-rose-600 border border-rose-200"
+                    )}
+                  >
+                    {excludedPhones.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Tab content */}
@@ -701,14 +726,6 @@ export default function MarketingPage() {
 
         {activeTab === "hardware" && (
           <HardwareTab clubId={clubId} analytics={analytics} />
-        )}
-
-        {activeTab === "retention" && (
-          <RetentionTab 
-            clubId={clubId} 
-            activeSnapshot={activeSnapshot} 
-            currentAnalytics={analytics} 
-          />
         )}
 
         {activeTab === "settings" && (
