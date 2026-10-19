@@ -40,11 +40,32 @@ export async function GET(
 
       if (data.status === "OK") {
         const phoneData = data.sms?.[fullPhone] || {};
+        if (phoneData.status === "OK") {
+          return NextResponse.json({
+            ok: true,
+            status_code: phoneData.status_code,
+            status_text: phoneData.status_text || "Успешно отправлено",
+            cost: phoneData.cost,
+            balance: data.balance,
+          });
+        }
+
+        let errorMsg = phoneData.status_text || `Ошибка отправки на номер ${fullPhone}`;
+        if (phoneData.status_code === 221) {
+          errorMsg = "Операторы требуют зарегистрировать буквенного отправителя (Sender ID) в личном кабинете SMS.RU: https://sms.ru/?panel=senders (Код 221)";
+        } else if (phoneData.status_code === 201) {
+          errorMsg = "Недостаточно средств на балансе SMS.RU (Код 201)";
+        } else if (phoneData.status_code === 204) {
+          errorMsg = "Указанное имя отправителя (from) не согласовано с администрацией SMS.RU (Код 204)";
+        } else if (phoneData.status_code === 207) {
+          errorMsg = "На этот номер нельзя отправлять сообщения (Код 207)";
+        }
+
         return NextResponse.json({
-          ok: phoneData.status === "OK",
+          ok: false,
+          error: errorMsg,
           status_code: phoneData.status_code,
-          status_text: phoneData.status_text || "Успешно отправлено",
-          cost: phoneData.cost,
+          status_text: phoneData.status_text,
           balance: data.balance,
         });
       }
@@ -233,8 +254,23 @@ export async function POST(
       }
     }
 
+    const firstErr = results.find((r) => r.error);
+    let batchError: string | undefined;
+    if (totalSent === 0 && totalFailed > 0) {
+      if (firstErr?.status_code === 221) {
+        batchError = "Операторы требуют зарегистрировать буквенного отправителя (Sender ID) в личном кабинете SMS.RU: https://sms.ru/?panel=senders (Код 221)";
+      } else if (firstErr?.status_code === 201) {
+        batchError = "Недостаточно средств на балансе SMS.RU (Код 201)";
+      } else if (firstErr?.status_code === 204) {
+        batchError = "Указанное имя отправителя (from) не согласовано с администрацией SMS.RU (Код 204)";
+      } else {
+        batchError = firstErr?.error || "Все сообщения были отклонены шлюзом SMS.RU";
+      }
+    }
+
     return NextResponse.json({
-      ok: true,
+      ok: totalSent > 0,
+      error: batchError,
       totalSent,
       totalFailed,
       totalCost,

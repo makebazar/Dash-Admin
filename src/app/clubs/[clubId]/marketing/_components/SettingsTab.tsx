@@ -313,18 +313,28 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
 
             {/* Sender Name */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">
-                Имя отправителя (Sender ID) <span className="text-slate-400 font-normal">(опционально)</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700">
+                  Имя отправителя (Sender ID) <span className="text-slate-400 font-normal">(буквенное имя)</span>
+                </label>
+                <a
+                  href="https://sms.ru/?panel=senders"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-blue-600 hover:text-blue-800 underline font-normal"
+                >
+                  Раздел имён в SMS.RU ↗
+                </a>
+              </div>
               <input
                 type="text"
-                placeholder="Например: COLIZEUM (если согласовано в sms.ru)"
+                placeholder="Например: MYCLUB (согласованное в sms.ru)"
                 value={senderName}
                 onChange={(e) => setSenderName(e.target.value)}
                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors"
               />
-              <span className="text-[10px] text-slate-400 block">
-                Оставьте пустым для отправки с общего сервисного номера SMS.RU
+              <span className="text-[10px] text-slate-500 block leading-relaxed">
+                Операторы РФ (126-ФЗ) требуют зарегистрированного буквенного имени для доставки SMS. Зарегистрируйте его в кабинете SMS.RU (Отправители).
               </span>
             </div>
           </div>
@@ -425,11 +435,14 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
 
             {testResult && (
               <div className={cn(
-                "p-3 rounded-lg text-xs font-medium flex items-center gap-2",
-                testResult.ok ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-800 border border-rose-200"
+                "p-3.5 rounded-xl text-xs font-medium flex items-start gap-2.5 leading-relaxed",
+                testResult.ok ? "bg-emerald-50 text-emerald-900 border border-emerald-200" : "bg-rose-50 text-rose-900 border border-rose-200"
               )}>
-                {testResult.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />}
-                <span>{testResult.message}</span>
+                {testResult.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />}
+                <div className="space-y-0.5">
+                  <p className="font-semibold">{testResult.ok ? "Отправлено успешно" : "Ответ шлюза SMS.RU"}</p>
+                  <p className="text-[11px] font-normal leading-normal">{testResult.message}</p>
+                </div>
               </div>
             )}
           </div>
