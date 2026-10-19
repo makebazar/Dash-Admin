@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2, Pencil, Check, ChevronLeft, ChevronRight, Eye, Table, Download } from "lucide-react";
+import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2, Pencil, Check, ChevronLeft, ChevronRight, Eye, Table, Download, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ClientProfile, type ClubAnalytics, type DateFilter, type MonthOption, getAvailableMonths } from "./segmentation";
 import type { MarketingCampaignRecord, BonusTier, BalanceCategoryTier } from "./SmsCampaignModal";
@@ -115,6 +115,7 @@ const TEMPLATE_TAGS = [
   { tag: "{Дата_Отправки}", desc: "Календарная дата отправки (напр. 23.10.2026)" },
   { tag: "{Любимая_Зона}", desc: "Любимая зона" },
   { tag: "{Любимый_Тариф}", desc: "Любимый тариф" },
+  { tag: "{Промокод}", desc: "Промокод кампании" },
 ];
 
 const PRESETS = [
@@ -368,9 +369,12 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   // Campaigns stored
   const [campaigns, setCampaigns] = useState<MarketingCampaignRecord[]>([]);
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
+  const activeCampaign = campaigns.find((c) => c.id === activeCampaignId) || null;
 
   // Wizard fields
   const [campaignName, setCampaignName] = useState("Рассылка постоянным гостям");
+  const [wizardPromoCode, setWizardPromoCode] = useState("");
+  const [detailPromoCodeDraft, setDetailPromoCodeDraft] = useState("");
   const [filters, setFilters] = useState<SegmentationFilter>(PRESETS[1].filter);
   const [templateText, setTemplateText] = useState(PRESETS[1].text);
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("smart_day_eve");
@@ -593,9 +597,18 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     campaignStartDate?: string | Date,
     customBalanceCategories?: BalanceCategoryTier[],
     isBalCatEnabled?: boolean,
-    includeBonusesBal?: boolean
+    includeBonusesBal?: boolean,
+    customPromoCode?: string
   ) => {
-    if (!client) return text;
+    const activePromo = customPromoCode !== undefined
+      ? customPromoCode
+      : (activeCampaign?.promoCode || wizardPromoCode || "");
+
+    if (!client) {
+      return text
+        .replace(/{Промокод}/gi, activePromo)
+        .replace(/{Промо}/gi, activePromo);
+    }
     const name = client.name ? client.name.split(" ")[0] : "друг";
     const rubBal = Math.round(client.balance || 0).toLocaleString("ru");
     const bonusBal = Math.round(client.bonusBalance || 0).toLocaleString("ru");
@@ -636,7 +649,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       .replace(/{Любимая_Зона}/g, zone)
       .replace(/{Любимый_Тариф}/g, tariff)
       .replace(/{Бонус_В_Подарок}/g, giftBonus.toLocaleString("ru"))
-      .replace(/{Подарочный_Бонус}/g, giftBonus.toLocaleString("ru"));
+      .replace(/{Подарочный_Бонус}/g, giftBonus.toLocaleString("ru"))
+      .replace(/{Промокод}/gi, activePromo)
+      .replace(/{Промо}/gi, activePromo);
   };
 
   // Schedule distribution of filtered cohort across days of week
@@ -669,7 +684,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       wizardStartDate,
       balanceCategories,
       balanceCategoriesEnabled,
-      balanceIncludeBonuses
+      balanceIncludeBonuses,
+      wizardPromoCode
     ),
     [
       templateText,
@@ -681,6 +697,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       balanceCategories,
       balanceCategoriesEnabled,
       balanceIncludeBonuses,
+      wizardPromoCode,
     ]
   );
 
@@ -745,6 +762,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       balanceCategories: balanceCategoriesEnabled ? balanceCategories : undefined,
       balanceCategoriesEnabled,
       balanceIncludeBonuses,
+      promoCode: wizardPromoCode.trim() || undefined,
     };
 
     if (typeof window !== "undefined") {
@@ -822,7 +840,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       const scheduledDay = dayMap?.[norm] || getScheduledDay(c, scheduleMode, 0);
       const scheduledDate = activeCampaign?.scheduleDateMap?.[norm] || getScheduledDate(scheduledDay, baseDate);
       const scheduledTime = activeCampaign?.scheduleTimeMap?.[norm] || getScheduledTime(c);
-      const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate, curBalCats, curBalCatOn, curBalIncBon).replace(/"/g, '""');
+      const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate, curBalCats, curBalCatOn, curBalIncBon, activeCampaign?.promoCode || wizardPromoCode).replace(/"/g, '""');
 
       if (formatMode === "ru_date") {
         rows.push([phone7, `"${msg}"`, `"${scheduledDate}"`, `"${scheduledTime}"`, `"${scheduledDay}"`]);
@@ -871,8 +889,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     }
   };
 
-  // Active campaign in detail view
-  const activeCampaign = campaigns.find((c) => c.id === activeCampaignId) || null;
+  // Active campaign memoized clients and dayMap
 
   const activeCampaignClients = useMemo(() => {
     if (!activeCampaign || !analytics || !analytics.profiles) return [];
@@ -989,11 +1006,13 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   useEffect(() => {
     setIsEditingDetailTemplate(false);
     setDetailTemplateDraft("");
+    setDetailPromoCodeDraft("");
   }, [activeCampaignId, viewMode]);
 
   const handleStartEditTemplate = () => {
     if (!activeCampaign) return;
     setDetailTemplateDraft(activeCampaign.templateText || "");
+    setDetailPromoCodeDraft(activeCampaign.promoCode || "");
     setIsEditingDetailTemplate(true);
   };
 
@@ -1005,9 +1024,11 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       return;
     }
 
+    const newPromo = detailPromoCodeDraft.trim() || undefined;
+
     const updated = campaigns.map((c) => {
       if (c.id === activeCampaignId) {
-        return { ...c, templateText: newText };
+        return { ...c, templateText: newText, promoCode: newPromo };
       }
       return c;
     });
@@ -1019,7 +1040,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
         const list: MarketingCampaignRecord[] = saved ? JSON.parse(saved) : [];
         const updatedList = list.map((c) => {
           if (c.id === activeCampaignId) {
-            return { ...c, templateText: newText };
+            return { ...c, templateText: newText, promoCode: newPromo };
           }
           return c;
         });
@@ -1036,6 +1057,34 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const handleCancelEditTemplate = () => {
     setIsEditingDetailTemplate(false);
     setDetailTemplateDraft("");
+    setDetailPromoCodeDraft("");
+  };
+
+  const handleQuickUpdatePromoCode = (newPromo: string) => {
+    if (!activeCampaignId) return;
+    const cleanPromo = newPromo.trim() || undefined;
+    const updated = campaigns.map((c) => {
+      if (c.id === activeCampaignId) {
+        return { ...c, promoCode: cleanPromo };
+      }
+      return c;
+    });
+    setCampaigns(updated);
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        const list: MarketingCampaignRecord[] = saved ? JSON.parse(saved) : [];
+        const updatedList = list.map((c) => {
+          if (c.id === activeCampaignId) {
+            return { ...c, promoCode: cleanPromo };
+          }
+          return c;
+        });
+        localStorage.setItem(storageKey, JSON.stringify(updatedList));
+      } catch (e) {
+        console.warn("Failed to persist updated promo code:", e);
+      }
+    }
   };
 
   const activeCampaignStartDate = useMemo(() => {
@@ -1113,7 +1162,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       const scheduledDay = dayMap?.[norm] || "Сразу";
       return {
         phone: c.phone || "",
-        text: renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate, curBalCats, curBalCatOn, curBalIncBon),
+        text: renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate, curBalCats, curBalCatOn, curBalIncBon, activeCampaign?.promoCode || wizardPromoCode),
       };
     });
 
@@ -1207,7 +1256,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const messages = targets.map((c) => {
       const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
       const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
-      const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate, curBalCats, curBalCatOn, curBalIncBon);
+      const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate, curBalCats, curBalCatOn, curBalIncBon, activeCampaign?.promoCode);
       return {
         phone: c.phone || "",
         text: finalMsg,
@@ -2425,6 +2474,55 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
               </div>
             </div>
 
+            {/* Promo Code Input Card */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-indigo-600" />
+                    <label className="text-xs font-semibold text-slate-800">
+                      Промокод кампании
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-normal">
+                      (необязательно)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Укажите промокод акции — он автоматически подставится вместо тега <span className="font-mono font-medium text-slate-700 bg-slate-200/70 px-1 py-0.5 rounded">{"{Промокод}"}</span>
+                  </p>
+                </div>
+                {wizardPromoCode && !templateText.includes("{Промокод}") && !templateText.includes("{промокод}") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTemplateText((prev) => (prev.trim() ? `${prev.trim()} Промокод: {Промокод}` : "Промокод: {Промокод}"));
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors shrink-0"
+                  >
+                    + Вставить в текст SMS
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 max-w-sm">
+                <input
+                  type="text"
+                  value={wizardPromoCode}
+                  onChange={(e) => setWizardPromoCode(e.target.value.toUpperCase())}
+                  placeholder="Например: COLIZEUM500, GAME2026"
+                  className="w-full text-xs font-mono font-semibold py-2 px-3 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-indigo-600 transition-colors uppercase tracking-wider placeholder:normal-case placeholder:font-sans placeholder:font-normal"
+                />
+                {wizardPromoCode && (
+                  <button
+                    type="button"
+                    onClick={() => setWizardPromoCode("")}
+                    className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 shrink-0"
+                  >
+                    Очистить
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-slate-700">
@@ -2755,6 +2853,18 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   </div>
                 )}
               </div>
+
+              {wizardPromoCode && (
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                    <span className="text-xs text-slate-500 font-medium">Промокод кампании</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-md">
+                    {wizardPromoCode}
+                  </span>
+                </div>
+              )}
 
               <div className="pt-3 border-t border-slate-100 space-y-1">
                 <span className="text-xs text-slate-400 block">Шаблон</span>
@@ -3394,6 +3504,39 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                 className="w-full text-sm p-3 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:outline-none focus:border-slate-900 transition-colors"
               />
 
+              {/* Promo Code in Detail Edit */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Tag className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span className="text-xs font-semibold text-slate-800">Промокод:</span>
+                  <input
+                    type="text"
+                    value={detailPromoCodeDraft}
+                    onChange={(e) => setDetailPromoCodeDraft(e.target.value.toUpperCase())}
+                    placeholder="Например: COLIZEUM500"
+                    className="text-xs font-mono font-semibold py-1 px-2.5 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-indigo-600 transition-colors uppercase tracking-wider w-44 placeholder:normal-case placeholder:font-sans placeholder:font-normal"
+                  />
+                  {detailPromoCodeDraft && (
+                    <button
+                      type="button"
+                      onClick={() => setDetailPromoCodeDraft("")}
+                      className="text-xs text-slate-400 hover:text-slate-600 px-1"
+                    >
+                      Очистить
+                    </button>
+                  )}
+                </div>
+                {detailPromoCodeDraft && !detailTemplateDraft.includes("{Промокод}") && !detailTemplateDraft.includes("{промокод}") && (
+                  <button
+                    type="button"
+                    onClick={() => setDetailTemplateDraft((prev) => (prev.trim() ? `${prev.trim()} Промокод: {Промокод}` : "Промокод: {Промокод}"))}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors self-start sm:self-auto"
+                  >
+                    + Вставить в текст SMS
+                  </button>
+                )}
+              </div>
+
               {/* Live Character & Part Counter */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
                 <div className="flex items-center gap-2">
@@ -3449,6 +3592,22 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-900 font-mono leading-relaxed select-all">
               {activeCampaign?.templateText}
             </div>
+
+            {/* Campaign Promo Code Display */}
+            {activeCampaign?.promoCode ? (
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-2">
+                  <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                  <span className="text-xs text-slate-600 font-medium">Промокод кампании:</span>
+                  <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">
+                    {activeCampaign.promoCode}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    (автоматически подставляется в тег {"{Промокод}"})
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </div>
         );
       })()}
@@ -3571,7 +3730,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   const clientCat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
                   const effectiveBal = getClientEffectiveBalance(c, curBalIncBon);
                   const giftBonus = calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
-                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate, curBalCats, curBalCatOn, curBalIncBon);
+                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate, curBalCats, curBalCatOn, curBalIncBon, activeCampaign?.promoCode);
 
                   if (isDetailExpandedView) {
                     return (

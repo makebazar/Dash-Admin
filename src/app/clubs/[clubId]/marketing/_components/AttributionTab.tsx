@@ -139,7 +139,7 @@ export function AttributionTab({ clubId, analytics, onNavigateToSms, onNavigateT
           <button
             type="button"
             onClick={onNavigateToSms}
-            className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-2"
+            className="px-4 py-2.5 bg-black hover:bg-slate-800 text-white font-medium text-xs rounded-xl transition-all shadow-xs flex items-center gap-2"
           >
             <Send className="w-3.5 h-3.5" />
             <span>+ SMS-рассылка</span>
@@ -148,7 +148,7 @@ export function AttributionTab({ clubId, analytics, onNavigateToSms, onNavigateT
           <button
             type="button"
             onClick={onNavigateToVk}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center gap-2"
+            className="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-medium text-xs rounded-xl transition-all shadow-xs flex items-center gap-2"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span>+ Аудитория VK</span>
@@ -158,7 +158,7 @@ export function AttributionTab({ clubId, analytics, onNavigateToSms, onNavigateT
 
       {/* KPI Overview Scoreboard */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 flex flex-col justify-between shadow-sm">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-between shadow-xs">
           <span className="text-xs text-slate-500 font-medium">Запущено кампаний</span>
           <p className="text-3xl font-bold tracking-tight text-slate-900 mt-2">
             {campaigns.length}

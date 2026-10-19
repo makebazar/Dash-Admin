@@ -125,12 +125,12 @@ export function HardwareTab({ clubId, analytics }: Props) {
 
   if (!analytics || pcStats.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center space-y-3">
+      <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
         <Monitor className="w-10 h-10 text-slate-300 mx-auto" />
-        <h3 className="font-black text-base uppercase tracking-tight text-slate-700">
+        <h3 className="font-bold text-base text-slate-900">
           Данные по ПК не загружены
         </h3>
-        <p className="text-xs text-slate-400 max-w-md mx-auto">
+        <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">
           Для анализа экономики мест и доходности оборудования загрузите отчет «Покупка пакетов и тарифов» во вкладке «Срезы и Загрузка».
         </p>
       </div>
@@ -142,14 +142,14 @@ export function HardwareTab({ clubId, analytics }: Props) {
       {/* Zone Economics Cards */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-violet-600" />
+          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-slate-600" />
             <span>Экономика игровых зон</span>
           </h2>
           {selectedZone && (
             <button
               onClick={() => setSelectedZone(null)}
-              className="text-[11px] font-bold text-violet-600 hover:text-violet-800 transition-colors"
+              className="text-xs font-medium text-slate-600 hover:text-black transition-colors"
             >
               Сбросить фильтр зоны (выбрана: {selectedZone})
             </button>
@@ -167,22 +167,22 @@ export function HardwareTab({ clubId, analytics }: Props) {
                 key={z.zone}
                 onClick={() => setSelectedZone(isSelected ? null : z.zone)}
                 className={cn(
-                  "border rounded-2xl p-5 cursor-pointer transition-all flex flex-col justify-between gap-3 relative group",
+                  "border rounded-xl p-5 cursor-pointer transition-all flex flex-col justify-between gap-3 relative group",
                   isSelected
-                    ? "border-violet-500 bg-violet-50/60 shadow-md ring-2 ring-violet-500"
-                    : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm"
+                    ? "border-slate-900 bg-slate-50/80 shadow-xs ring-1 ring-slate-900"
+                    : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs"
                 )}
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="font-black text-sm uppercase text-slate-800 group-hover:text-violet-600 transition-colors">
+                    <span className="font-bold text-sm text-slate-900 group-hover:text-black transition-colors">
                       {z.zone}
                     </span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
                       {z.percentOfRub}% выручки
                     </span>
                   </div>
-                  <div className="text-2xl font-black text-slate-900 mt-2">
+                  <div className="text-2xl font-bold tracking-tight text-slate-900 mt-2 tabular-nums">
                     {z.rub.toLocaleString("ru")} ₽
                   </div>
                 </div>
@@ -190,15 +190,15 @@ export function HardwareTab({ clubId, analytics }: Props) {
                 <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 text-[11px]">
                   <div>
                     <span className="text-slate-400 block text-[9px] uppercase font-bold">Мест</span>
-                    <span className="font-black text-slate-700">{pcsInZone.length}</span>
+                    <span className="font-semibold text-slate-800 tabular-nums">{pcsInZone.length}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[9px] uppercase font-bold">Сессий</span>
-                    <span className="font-black text-slate-700">{z.sessions.toLocaleString("ru")}</span>
+                    <span className="font-semibold text-slate-800 tabular-nums">{z.sessions.toLocaleString("ru")}</span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[9px] uppercase font-bold">На 1 ПК</span>
-                    <span className="font-black text-violet-600">{avgRubPerPc.toLocaleString("ru")} ₽</span>
+                    <span className="font-semibold text-slate-900 tabular-nums">{avgRubPerPc.toLocaleString("ru")} ₽</span>
                   </div>
                 </div>
               </div>
@@ -208,14 +208,14 @@ export function HardwareTab({ clubId, analytics }: Props) {
       </div>
 
       {/* PC Audit & Equipment Health Link */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 space-y-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h3 className="text-lg font-black uppercase tracking-tight text-slate-800 flex items-center gap-2">
-              <Monitor className="w-5 h-5 text-violet-600" />
+            <h3 className="text-lg font-bold tracking-tight text-slate-900 flex items-center gap-2">
+              <Monitor className="w-5 h-5 text-slate-700" />
               <span>Рейтинг мест и аудит оборудования</span>
             </h3>
-            <p className="text-slate-500 text-xs mt-1">
+            <p className="text-slate-500 text-xs mt-1 font-medium">
               Сравнение выручки каждого ПК со средней нормой его зоны. Интеграция с модулем «Оборудование» DashAdmin подсвечивает открытые поломки.
             </p>
           </div>
@@ -265,7 +265,7 @@ export function HardwareTab({ clubId, analytics }: Props) {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-200 text-slate-400 font-black uppercase text-[10px] tracking-wider">
+              <tr className="border-b border-slate-200 text-slate-500 font-semibold text-xs">
                 <th className="py-3 px-4">Рабочее место (ПК)</th>
                 <th className="py-3 px-4">Зона</th>
                 <th className="py-3 px-4 text-right">Выручка за период</th>
@@ -279,7 +279,7 @@ export function HardwareTab({ clubId, analytics }: Props) {
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredPcs.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={8} className="py-8 text-center text-slate-400 text-xs font-medium">
                     Мест по выбранным критериям не найдено
                   </td>
                 </tr>
@@ -293,25 +293,25 @@ export function HardwareTab({ clubId, analytics }: Props) {
 
                   return (
                     <tr key={pc.pc} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3.5 px-4 font-black text-slate-900 text-sm">
+                      <td className="py-3.5 px-4 font-bold text-slate-900 text-sm">
                         {pc.pc}
                       </td>
-                      <td className="py-3.5 px-4 text-slate-600 font-bold">
+                      <td className="py-3.5 px-4 text-slate-600 font-semibold">
                         {pc.zone}
                       </td>
-                      <td className="py-3.5 px-4 text-right font-black text-slate-900">
+                      <td className="py-3.5 px-4 text-right font-bold text-slate-900 tabular-nums">
                         {pc.rub.toLocaleString("ru")} ₽
                       </td>
-                      <td className="py-3.5 px-4 text-right text-slate-700">
+                      <td className="py-3.5 px-4 text-right text-slate-700 tabular-nums font-medium">
                         {pc.sessions.toLocaleString("ru")}
                       </td>
-                      <td className="py-3.5 px-4 text-right text-slate-700">
+                      <td className="py-3.5 px-4 text-right text-slate-700 tabular-nums font-medium">
                         {pc.uniqueGuests.toLocaleString("ru")}
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <span
                           className={cn(
-                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black",
+                            "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold",
                             isUnder
                               ? "bg-red-50 text-red-700 border border-red-200"
                               : isOver

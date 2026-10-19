@@ -267,7 +267,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           <button
             type="button"
             onClick={handleGenerateSmartTasks}
-            className="px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center gap-2"
+            className="px-4 py-2.5 bg-black hover:bg-slate-800 text-white font-medium text-xs rounded-xl transition-all shadow-xs flex items-center gap-2"
           >
             <Sparkles className="w-4 h-4" />
             <span>Сгенерировать задачи из базы</span>
@@ -290,30 +290,32 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs font-medium text-slate-400 mr-1">Статус:</span>
-          {[
-            { id: "pending", label: "К выполнению", count: pendingCount },
-            { id: "completed", label: "Завершенные", count: completedCount },
-            { id: "all", label: "Все задачи", count: tasks.length },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id as any)}
-              className={cn(
-                "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5",
-                statusFilter === tab.id
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-              )}
-            >
-              <span>{tab.label}</span>
-              <span className={cn(
-                "text-[10px] px-1.5 py-0.2 rounded-full",
-                statusFilter === tab.id ? "bg-slate-700 text-slate-200" : "bg-slate-100 text-slate-500"
-              )}>
-                {tab.count}
-              </span>
-            </button>
-          ))}
+          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-xs gap-1">
+            {[
+              { id: "pending", label: "К выполнению", count: pendingCount },
+              { id: "completed", label: "Завершенные", count: completedCount },
+              { id: "all", label: "Все задачи", count: tasks.length },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setStatusFilter(tab.id as any)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer",
+                  statusFilter === tab.id
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <span>{tab.label}</span>
+                <span className={cn(
+                  "text-[10px] px-1.5 py-0.2 rounded-full",
+                  statusFilter === tab.id ? "bg-slate-700 text-slate-200" : "bg-slate-100 text-slate-500"
+                )}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5">

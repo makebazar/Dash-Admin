@@ -265,30 +265,30 @@ export function SnapshotsManager({
     <div className="space-y-6">
       {/* Save current snapshot bar with explicit Date Range controls */}
       {analytics && (
-        <div className="bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-3xl p-6 shadow-sm space-y-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <FolderArchive className="w-5 h-5 text-violet-600" />
-                <h3 className="font-black text-sm uppercase tracking-wider text-slate-900">
+                <FolderArchive className="w-5 h-5 text-slate-700" />
+                <h3 className="font-bold text-sm text-slate-900">
                   Сохранение среза за период
                 </h3>
                 {daysSpan && (
-                  <span className="text-[10px] font-black uppercase tracking-wider bg-violet-200 text-violet-800 px-2.5 py-0.5 rounded-full">
+                  <span className="text-[11px] font-medium bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full border border-slate-200">
                     {daysSpan} {daysSpan === 1 ? "день" : daysSpan < 5 ? "дня" : "дней"}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 font-medium">
                 Укажите диапазон дат периода отчета. Срез сохранится в базу данных и будет доступен для анализа и сравнения.
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end pt-2 border-t border-violet-200/60">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end pt-3 border-t border-slate-100">
             {/* Date range pickers */}
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-500 block">
+              <label className="text-xs font-medium text-slate-600 block">
                 Диапазон дат отчета
               </label>
               <div className="flex items-center gap-2">
@@ -296,21 +296,21 @@ export function SnapshotsManager({
                   type="date"
                   value={startDate}
                   onChange={(e) => handleDateChange(e.target.value, endDate)}
-                  className="w-full px-3 py-2 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  className="w-full px-3 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-slate-400"
                 />
                 <span className="text-slate-400 font-bold">—</span>
                 <input
                   type="date"
                   value={endDate}
                   onChange={(e) => handleDateChange(startDate, e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  className="w-full px-3 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-slate-400"
                 />
               </div>
             </div>
 
             {/* Snapshot name */}
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-500 block">
+              <label className="text-xs font-medium text-slate-600 block">
                 Название среза
               </label>
               <input
@@ -318,7 +318,7 @@ export function SnapshotsManager({
                 value={snapshotName}
                 onChange={(e) => setSnapshotName(e.target.value)}
                 placeholder="Например: Сентябрь 2024..."
-                className="w-full px-3 py-2 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500"
+                className="w-full px-3 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-slate-400"
               />
             </div>
 
@@ -327,7 +327,7 @@ export function SnapshotsManager({
               <button
                 onClick={handleSaveCurrentSnapshot}
                 disabled={saving}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider bg-violet-600 text-white rounded-xl shadow-md hover:bg-violet-700 transition-all disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium bg-black hover:bg-slate-800 text-white rounded-xl shadow-xs transition-all disabled:opacity-50"
               >
                 {saving ? (
                   <>
@@ -354,14 +354,14 @@ export function SnapshotsManager({
       )}
 
       {/* Snapshots list */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 space-y-4 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 space-y-4 shadow-xs">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <FolderArchive className="w-4 h-4 text-slate-500" />
               <span>История сохраненных срезов клуба ({snapshots.length})</span>
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 font-medium">
               Выбирайте нужный период для просмотра или сравнения
             </p>
           </div>
@@ -371,10 +371,10 @@ export function SnapshotsManager({
         {snapshots.length === 0 && !loadingList ? (
           <div className="text-center py-10 border border-dashed border-slate-200 rounded-2xl space-y-2">
             <FileSpreadsheet className="w-8 h-8 text-slate-300 mx-auto" />
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <p className="text-xs font-semibold text-slate-600">
               Сохраненных срезов пока нет
             </p>
-            <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+            <p className="text-[11px] text-slate-400 max-w-sm mx-auto font-medium">
               Загрузите отчеты выше и нажмите «Сохранить срез в базу», чтобы зафиксировать период в системе.
             </p>
           </div>
@@ -392,20 +392,20 @@ export function SnapshotsManager({
                   key={snap.id}
                   onClick={() => !isLoadingThis && handleLoadSnapshot(snap.id)}
                   className={cn(
-                    "border rounded-2xl p-4 transition-all cursor-pointer flex flex-col justify-between gap-3 text-left relative group",
+                    "border rounded-xl p-4 transition-all cursor-pointer flex flex-col justify-between gap-3 text-left relative group",
                     isActive
-                      ? "border-violet-500 bg-violet-50/50 shadow-sm ring-1 ring-violet-500"
-                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/60"
+                      ? "border-slate-900 bg-slate-50/80 shadow-xs ring-1 ring-slate-900"
+                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-black text-sm text-slate-800 group-hover:text-violet-600 transition-colors">
+                        <span className="font-semibold text-sm text-slate-900 group-hover:text-black transition-colors">
                           {snap.name}
                         </span>
                         {isActive && (
-                          <span className="text-[9px] font-black uppercase tracking-wider bg-violet-600 text-white px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] font-semibold bg-slate-900 text-white px-2 py-0.5 rounded-full">
                             Активен
                           </span>
                         )}
@@ -437,11 +437,11 @@ export function SnapshotsManager({
                     <button
                       onClick={(e) => handleDeleteSnapshot(snap.id, e)}
                       disabled={isDeletingThis}
-                      className="text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors"
+                      className="text-slate-300 hover:text-rose-600 p-1 rounded-lg transition-colors"
                       title="Удалить срез"
                     >
                       {isDeletingThis ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-red-500" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-500" />
                       ) : (
                         <Trash2 className="w-3.5 h-3.5" />
                       )}
@@ -450,14 +450,14 @@ export function SnapshotsManager({
 
                   <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
                     <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Выручка</span>
-                      <span className="font-black text-slate-800">
+                      <span className="text-[10px] text-slate-400 font-medium block">Выручка</span>
+                      <span className="font-semibold text-slate-900 tabular-nums">
                         {rev > 0 ? `${rev.toLocaleString("ru")} ₽` : "—"}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Гостей</span>
-                      <span className="font-black text-slate-800">
+                      <span className="text-[10px] text-slate-400 font-medium block">Гостей</span>
+                      <span className="font-semibold text-slate-900 tabular-nums">
                         {guests > 0 ? guests.toLocaleString("ru") : "—"}
                       </span>
                     </div>
@@ -467,13 +467,12 @@ export function SnapshotsManager({
                     <span className="text-[10px] text-slate-400">
                       {snap.file_names?.length || 0} файлов
                     </span>
-                    <button
-                      disabled={isLoadingThis || isActive}
+                    <span
                       className={cn(
-                        "text-[11px] font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors",
+                        "text-[11px] font-medium flex items-center gap-1 px-2.5 py-1 rounded-lg transition-colors",
                         isActive
-                          ? "text-violet-700 bg-violet-100"
-                          : "text-slate-600 hover:text-violet-600 hover:bg-slate-100"
+                          ? "text-slate-900 bg-white border border-slate-200"
+                          : "text-slate-600 group-hover:text-slate-900"
                       )}
                     >
                       {isLoadingThis ? (
@@ -482,17 +481,11 @@ export function SnapshotsManager({
                           <span>Загрузка…</span>
                         </>
                       ) : isActive ? (
-                        <>
-                          <Check className="w-3 h-3" />
-                          <span>Выбран</span>
-                        </>
+                        <span>✓ Выбран</span>
                       ) : (
-                        <>
-                          <span>Выбрать</span>
-                          <ArrowRight className="w-3 h-3" />
-                        </>
+                        <span>Открыть →</span>
                       )}
-                    </button>
+                    </span>
                   </div>
                 </div>
               );

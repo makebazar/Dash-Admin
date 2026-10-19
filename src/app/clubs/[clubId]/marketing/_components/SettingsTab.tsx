@@ -201,18 +201,18 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
-              <UserX className="w-5 h-5" />
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-100">
+              <UserX className="w-4 h-4" />
             </span>
-            <h2 className="text-xl font-bold tracking-tight">Настройки маркетинга и Номера-исключения</h2>
-            <span className="bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold px-2.5 py-0.5 rounded-full">
-              {excludedPhones.length} в черном списке
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">Настройки маркетинга и Номера-исключения</h2>
+            <span className="bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold px-2.5 py-0.5 rounded-full tabular-nums">
+              {excludedPhones.length} в исключениях
             </span>
           </div>
-          <p className="text-xs text-slate-400 max-w-3xl">
+          <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
             Номера администраторов клуба, техников, управляющих и владельцев. Они автоматически вырезаются из всех расчетов: базы гостей, задач для смены, списков Китов, SMS-рассылок и рекламы в VK.
           </p>
         </div>
@@ -221,7 +221,7 @@ export function SettingsTab({ clubId, excludedPhones, onSaveExcludedPhones }: Pr
           <button
             type="button"
             onClick={handleClearAll}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 text-xs font-semibold rounded-xl border border-slate-700 hover:border-rose-800/60 transition-colors self-start md:self-auto"
+            className="px-3.5 py-2 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-semibold rounded-xl border border-slate-200 hover:border-rose-200 shadow-xs transition-colors self-start md:self-auto cursor-pointer"
           >
             Очистить весь список
           </button>

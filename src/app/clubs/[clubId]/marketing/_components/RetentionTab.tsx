@@ -319,12 +319,12 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
 
   if (snapshots.length === 0 && !activeSnapshot && !currentAnalytics) {
     return (
-      <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center space-y-3">
+      <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3 shadow-xs">
         <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
-        <h3 className="font-black text-base uppercase tracking-tight text-slate-700">
+        <h3 className="font-bold text-base text-slate-900">
           Срезы еще не созданы
         </h3>
-        <p className="text-xs text-slate-400 max-w-md mx-auto">
+        <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">
           Для анализа удержания, оттока и динамики гостей сохраните хотя бы один период во вкладке «Срезы и Загрузка».
         </p>
       </div>
@@ -334,16 +334,16 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
   return (
     <div className="space-y-6">
       {/* Selectors Bar */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+            <span className="text-xs font-semibold text-slate-500 block">
               1. Базовый период (Прошлый)
             </span>
             <select
               value={baseSnapshotId}
               onChange={(e) => setBaseSnapshotId(e.target.value)}
-              className="px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="px-3 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-slate-400"
             >
               <option value="">Выберите прошлый срез...</option>
               {snapshots.map((s) => (
@@ -359,13 +359,13 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
           </div>
 
           <div className="space-y-1">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+            <span className="text-xs font-semibold text-slate-500 block">
               2. Текущий период (Для сравнения)
             </span>
             <select
               value={currentSnapshotId}
               onChange={(e) => setCurrentSnapshotId(e.target.value)}
-              className="px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="px-3 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-slate-400"
             >
               <option value="">Текущая загрузка / Активный срез</option>
               {snapshots.map((s) => (
@@ -379,7 +379,7 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
 
         <button
           onClick={handleExportPhones}
-          className="flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider bg-slate-900 text-white rounded-xl shadow-md hover:bg-slate-800 transition-all self-start md:self-auto"
+          className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium bg-black hover:bg-slate-800 text-white rounded-xl shadow-xs transition-all self-start md:self-auto cursor-pointer"
         >
           {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Download className="w-3.5 h-3.5" />}
           <span>Скачать телефоны ({activeSubTab})</span>
@@ -391,114 +391,89 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
         <>
           {/* Macro Deltas */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
-              <span className="text-[10px] font-black uppercase text-slate-400">Дельта выручки</span>
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-1">
+              <span className="text-xs font-medium text-slate-500">Дельта выручки</span>
               <div className="flex items-baseline gap-2">
-                <span className="text-xl font-black text-slate-900">
+                <span className="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
                   {comparison.revDelta >= 0 ? "+" : ""}{comparison.revDelta.toLocaleString("ru")} ₽
                 </span>
                 <span className={cn(
                   "text-xs font-bold",
-                  comparison.revDelta >= 0 ? "text-emerald-600" : "text-red-600"
+                  comparison.revDelta >= 0 ? "text-emerald-600" : "text-rose-600"
                 )}>
                   ({comparison.revDeltaPercent >= 0 ? "+" : ""}{comparison.revDeltaPercent}%)
                 </span>
               </div>
-              <span className="text-[11px] text-slate-400 block">
+              <span className="text-[11px] text-slate-400 block font-medium">
                 {comparison.baseRev.toLocaleString("ru")} ₽ → {comparison.currRev.toLocaleString("ru")} ₽
               </span>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
-              <span className="text-[10px] font-black uppercase text-slate-400">Потерянная выручка (Отток)</span>
-              <div className="text-xl font-black text-red-600">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-1">
+              <span className="text-xs font-medium text-slate-500">Потерянная выручка (Отток)</span>
+              <div className="text-2xl font-bold tracking-tight text-rose-600 tabular-nums">
                 -{comparison.totalLostRevenue.toLocaleString("ru")} ₽
               </div>
-              <span className="text-[11px] text-slate-400 block">
+              <span className="text-[11px] text-slate-400 block font-medium">
                 Траты гостей, которые перестали ходить
               </span>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
-              <span className="text-[10px] font-black uppercase text-slate-400">Ушедшие гости</span>
-              <div className="text-xl font-black text-slate-900">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-1">
+              <span className="text-xs font-medium text-slate-500">Ушедшие гости</span>
+              <div className="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
                 {comparison.churned.length} чел.
               </div>
-              <span className="text-[11px] text-slate-400 block">
+              <span className="text-[11px] text-slate-400 block font-medium">
                 Были в прошлом, 0 визитов в этом
               </span>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
-              <span className="text-[10px] font-black uppercase text-slate-400">Новые гости</span>
-              <div className="text-xl font-black text-emerald-600">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-1">
+              <span className="text-xs font-medium text-slate-500">Новые гости</span>
+              <div className="text-2xl font-bold tracking-tight text-emerald-600 tabular-nums">
                 +{comparison.newbies.length} чел.
               </div>
-              <span className="text-[11px] text-slate-400 block">
+              <span className="text-[11px] text-slate-400 block font-medium">
                 Впервые пришли в этом периоде
               </span>
             </div>
           </div>
 
           {/* Subtabs Navigation */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
-            <button
-              onClick={() => setActiveSubTab("churn")}
-              className={cn(
-                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
-                activeSubTab === "churn"
-                  ? "bg-red-50 text-red-700 border border-red-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <UserMinus className="w-3.5 h-3.5" />
-              <span>Отток ({comparison.churned.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSubTab("downgrade")}
-              className={cn(
-                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
-                activeSubTab === "downgrade"
-                  ? "bg-amber-50 text-amber-700 border border-amber-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <TrendingDown className="w-3.5 h-3.5" />
-              <span>Падение активности &gt;50% ({comparison.downgraded.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSubTab("growth")}
-              className={cn(
-                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
-                activeSubTab === "growth"
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <TrendingUp className="w-3.5 h-3.5" />
-              <span>Выросшие клиенты ({comparison.growth.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSubTab("newbies")}
-              className={cn(
-                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
-                activeSubTab === "newbies"
-                  ? "bg-violet-50 text-violet-700 border border-violet-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Новые гости ({comparison.newbies.length})</span>
-            </button>
+          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-xs gap-1 sm:gap-2 overflow-x-auto scrollbar-none">
+            {[
+              { id: "churn", label: "Отток", count: comparison.churned.length, icon: UserMinus },
+              { id: "downgrade", label: "Падение активности >50%", count: comparison.downgraded.length, icon: TrendingDown },
+              { id: "growth", label: "Выросшие клиенты", count: comparison.growth.length, icon: TrendingUp },
+              { id: "newbies", label: "Новые гости", count: comparison.newbies.length, icon: UserPlus },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSubTab(tab.id as any)}
+                className={cn(
+                  "px-3.5 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
+                  activeSubTab === tab.id
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <tab.icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+                <span className={cn(
+                  "text-[10px] px-1.5 py-0.2 rounded-full",
+                  activeSubTab === tab.id ? "bg-slate-800 text-slate-200" : "bg-slate-100 text-slate-500"
+                )}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
           </div>
 
           {/* List Table */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 space-y-4 shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 space-y-4 shadow-xs">
             <div className="flex items-center justify-between">
-              <h3 className="font-black text-sm uppercase tracking-wider text-slate-800">
+              <h3 className="font-bold text-sm text-slate-900">
                 {activeSubTab === "churn" && "Клиенты в оттоке (ранжированы по сумме потерянной выручки)"}
                 {activeSubTab === "downgrade" && "Клиенты с падением трат более чем на 50%"}
                 {activeSubTab === "growth" && "Клиенты с приростом трат более чем на 50%"}
@@ -509,7 +484,7 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-400 font-black uppercase text-[10px] tracking-wider">
+                  <tr className="border-b border-slate-200 text-slate-500 font-semibold text-xs">
                     <th className="py-3 px-4">Имя гостя</th>
                     <th className="py-3 px-4">Телефон</th>
                     {activeSubTab === "churn" && (
@@ -545,9 +520,9 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {activeSubTab === "churn" && comparison.churned.map((c) => (
                     <tr key={c.profile.phone} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3.5 px-4 font-black text-slate-900">{c.profile.name || "Гость"}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">{c.profile.name || "Гость"}</td>
                       <td className="py-3.5 px-4 text-slate-600 font-mono">{c.profile.phone}</td>
-                      <td className="py-3.5 px-4 text-right font-black text-red-600">
+                      <td className="py-3.5 px-4 text-right font-bold text-rose-600 tabular-nums">
                         {c.lostRevenue.toLocaleString("ru")} ₽
                       </td>
                       <td className="py-3.5 px-4 text-right text-slate-700">{c.prevVisits}</td>
@@ -571,12 +546,12 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
 
                   {activeSubTab === "growth" && comparison.growth.map((g) => (
                     <tr key={g.profile.phone} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3.5 px-4 font-black text-slate-900">{g.profile.name || "Гость"}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">{g.profile.name || "Гость"}</td>
                       <td className="py-3.5 px-4 text-slate-600 font-mono">{g.profile.phone}</td>
-                      <td className="py-3.5 px-4 text-right text-slate-600">{g.baseSpent.toLocaleString("ru")} ₽</td>
-                      <td className="py-3.5 px-4 text-right font-black text-emerald-600">+{g.currentSpent.toLocaleString("ru")} ₽</td>
+                      <td className="py-3.5 px-4 text-right text-slate-600 tabular-nums">{g.baseSpent.toLocaleString("ru")} ₽</td>
+                      <td className="py-3.5 px-4 text-right font-bold text-emerald-600 tabular-nums">+{g.currentSpent.toLocaleString("ru")} ₽</td>
                       <td className="py-3.5 px-4 text-center">
-                        <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                           +{g.growPercent}%
                         </span>
                       </td>
@@ -585,10 +560,10 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
 
                   {activeSubTab === "newbies" && comparison.newbies.map((n) => (
                     <tr key={n.phone} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3.5 px-4 font-black text-slate-900">{n.name || "Гость"}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">{n.name || "Гость"}</td>
                       <td className="py-3.5 px-4 text-slate-600 font-mono">{n.phone}</td>
-                      <td className="py-3.5 px-4 text-right font-black text-slate-900">{n.totalSpent.toLocaleString("ru")} ₽</td>
-                      <td className="py-3.5 px-4 text-right text-slate-700">{n.visits || n.txCount || 1}</td>
+                      <td className="py-3.5 px-4 text-right font-bold text-slate-900 tabular-nums">{n.totalSpent.toLocaleString("ru")} ₽</td>
+                      <td className="py-3.5 px-4 text-right text-slate-700 tabular-nums">{n.visits || n.txCount || 1}</td>
                       <td className="py-3.5 px-4 text-slate-500">{n.favoriteZone || "—"}</td>
                     </tr>
                   ))}
@@ -619,104 +594,91 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
 
           {/* Macro Audit Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
-              <span className="text-[10px] font-black uppercase text-slate-400">Всего в базе клуба</span>
-              <div className="text-xl font-black text-slate-900">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-1">
+              <span className="text-xs font-medium text-slate-500">Всего в базе клуба</span>
+              <div className="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
                 {singleMetrics.totalGuests.toLocaleString("ru")} чел.
               </div>
-              <span className="text-[11px] text-slate-400 block">
+              <span className="text-[11px] text-slate-400 block font-medium">
                 Зарегистрированные профили
               </span>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
-              <span className="text-[10px] font-black uppercase text-slate-400">В оттоке (&gt;30 дней)</span>
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-1">
+              <span className="text-xs font-medium text-slate-500">В оттоке (&gt;30 дней)</span>
               <div className="flex items-baseline gap-2">
-                <span className="text-xl font-black text-red-600">
+                <span className="text-2xl font-bold tracking-tight text-rose-600 tabular-nums">
                   {singleMetrics.churned.length.toLocaleString("ru")} чел.
                 </span>
-                <span className="text-xs font-bold text-red-500">
+                <span className="text-xs font-bold text-rose-500">
                   ({singleMetrics.churnPercent}%)
                 </span>
               </div>
-              <span className="text-[11px] text-slate-400 block">
+              <span className="text-[11px] text-slate-400 block font-medium">
                 Не посещали клуб более месяца
               </span>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
-              <span className="text-[10px] font-black uppercase text-slate-400">Остывают (15–30 дней)</span>
-              <div className="text-xl font-black text-amber-600">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-1">
+              <span className="text-xs font-medium text-slate-500">Остывают (15–30 дней)</span>
+              <div className="text-2xl font-bold tracking-tight text-amber-600 tabular-nums">
                 {singleMetrics.cooling.length.toLocaleString("ru")} чел.
               </div>
-              <span className="text-[11px] text-slate-400 block">
+              <span className="text-[11px] text-slate-400 block font-medium">
                 Риск перехода в отток
               </span>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
-              <span className="text-[10px] font-black uppercase text-slate-400">Забытые деньги</span>
-              <div className="text-xl font-black text-slate-900">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-1">
+              <span className="text-xs font-medium text-slate-500">Забытые деньги</span>
+              <div className="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
                 {Math.round(singleMetrics.abandonedBal).toLocaleString("ru")} ₽
               </div>
-              <span className="text-[11px] text-slate-400 block">
+              <span className="text-[11px] text-slate-400 block font-medium">
                 + {Math.round(singleMetrics.abandonedBonus).toLocaleString("ru")} Б на спящих счетах
               </span>
             </div>
           </div>
 
           {/* Subtabs for Single Snapshot Audit */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
-            <button
-              onClick={() => setActiveSubTab("churn")}
-              className={cn(
-                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
-                activeSubTab === "churn"
-                  ? "bg-red-50 text-red-700 border border-red-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <UserMinus className="w-3.5 h-3.5" />
-              <span>В оттоке 31+ дней ({singleMetrics.churned.length.toLocaleString("ru")})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSubTab("cooling")}
-              className={cn(
-                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
-                activeSubTab === "cooling"
-                  ? "bg-amber-50 text-amber-700 border border-amber-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <TrendingDown className="w-3.5 h-3.5" />
-              <span>Остывают 15–30 дней ({singleMetrics.cooling.length.toLocaleString("ru")})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveSubTab("with_balance")}
-              className={cn(
-                "px-4 py-2 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-2",
-                activeSubTab === "with_balance"
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800"
-              )}
-            >
-              <Wallet className="w-3.5 h-3.5" />
-              <span>С деньгами на балансе ({singleMetrics.withBalance.length.toLocaleString("ru")})</span>
-            </button>
+          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-xs gap-1 sm:gap-2 overflow-x-auto scrollbar-none">
+            {[
+              { id: "churn", label: "В оттоке 31+ дней", count: singleMetrics.churned.length, icon: UserMinus },
+              { id: "cooling", label: "Остывают 15–30 дней", count: singleMetrics.cooling.length, icon: TrendingDown },
+              { id: "with_balance", label: "С деньгами на балансе", count: singleMetrics.withBalance.length, icon: Wallet },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSubTab(tab.id as any)}
+                className={cn(
+                  "px-3.5 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer",
+                  activeSubTab === tab.id
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                )}
+              >
+                <tab.icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+                <span className={cn(
+                  "text-[10px] px-1.5 py-0.2 rounded-full",
+                  activeSubTab === tab.id ? "bg-slate-800 text-slate-200" : "bg-slate-100 text-slate-500"
+                )}>
+                  {tab.count.toLocaleString("ru")}
+                </span>
+              </button>
+            ))}
           </div>
 
           {/* Table Container */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 space-y-4 shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 space-y-4 shadow-xs">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
-                <h3 className="font-black text-sm uppercase tracking-wider text-slate-800">
+                <h3 className="font-bold text-sm text-slate-900">
                   {activeSubTab === "churn" && "Клиенты в оттоке (31+ дней без визита)"}
                   {activeSubTab === "cooling" && "Клиенты, которые остывают (15–30 дней)"}
                   {activeSubTab === "with_balance" && "Гости с остатком рублей или бонусов на счете"}
                 </h3>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
                   Показано {Math.min(100, filteredSingleList.length)} из {filteredSingleList.length.toLocaleString("ru")} гостей. Для полной базы нажмите «Скачать телефоны».
                 </p>
               </div>
@@ -729,7 +691,7 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
                   placeholder="Поиск по имени или телефону..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  className="w-full pl-9 pr-3 py-1.5 text-xs text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-slate-400 font-medium"
                 />
               </div>
             </div>
@@ -737,7 +699,7 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 text-slate-400 font-black uppercase text-[10px] tracking-wider">
+                  <tr className="border-b border-slate-200 text-slate-500 font-semibold text-xs">
                     <th className="py-3 px-4">Имя гостя</th>
                     <th className="py-3 px-4">Телефон</th>
                     <th className="py-3 px-4 text-right">Баланс (₽)</th>
@@ -750,9 +712,9 @@ export function RetentionTab({ clubId, activeSnapshot, currentAnalytics }: Props
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {filteredSingleList.slice(0, 100).map((p, idx) => (
                     <tr key={(p.phone || "") + idx} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3.5 px-4 font-black text-slate-900">{p.name || "Гость"}</td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">{p.name || "Гость"}</td>
                       <td className="py-3.5 px-4 text-slate-600 font-mono">{p.phone || "—"}</td>
-                      <td className="py-3.5 px-4 text-right font-black text-slate-900">
+                      <td className="py-3.5 px-4 text-right font-bold text-slate-900 tabular-nums">
                         {(p.balance || 0) > 0 ? `${(p.balance || 0).toLocaleString("ru")} ₽` : "0 ₽"}
                       </td>
                       <td className="py-3.5 px-4 text-right text-amber-600 font-semibold">

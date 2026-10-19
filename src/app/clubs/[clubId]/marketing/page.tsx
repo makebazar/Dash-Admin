@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useRouter, useSearchParams, useParams } from "next/navigation";
+import { useSearchParams, useParams, useRouter } from "next/navigation";
 import { UploadTab } from "./_components/UploadTab";
 import { AnalyticsTab } from "./_components/AnalyticsTab";
 import { HardwareTab } from "./_components/HardwareTab";
@@ -51,7 +51,12 @@ export default function MarketingPage() {
   const clubId = (params?.clubId as string) || "1";
 
   const tabParam = searchParams.get("tab") as TabId | null;
-  const [activeTab, setActiveTab] = useState<TabId>(tabParam ?? "upload");
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    if (tabParam && TABS.some((t) => t.id === tabParam)) {
+      return tabParam;
+    }
+    return "upload";
+  });
 
   // Active saved snapshot (if loaded from history)
   const [activeSnapshot, setActiveSnapshot] = useState<SnapshotFull | null>(null);
@@ -547,67 +552,77 @@ export default function MarketingPage() {
   }, [guestFileName, txFileName, summaryFileName, packageFileName, packageRows, summaryRows]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
+      <main className="mx-auto max-w-7xl w-full flex-1 px-4 sm:px-6 md:px-8 py-8 sm:py-12 md:py-16">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-2">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-black tracking-tighter italic uppercase text-slate-900">
-              База гостей <span className="text-violet-600">&amp; Аналитика</span>
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+              Маркетинг
             </h1>
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">
-              Сквозная аналитика реальной выручки, часов, зон клуба и LTV клиентов (без бонусов)
+            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+              Сквозная аналитика реальной выручки, базы гостей, задач смене и удержания клиентов
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {activeSnapshot ? (
-              <span className="flex items-center gap-1.5 text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-xl mr-2">
-                <Calendar className="w-3.5 h-3.5 text-violet-600" />
-                <span>Период: <b>{activeSnapshot.name}</b></span>
+              <span className="flex items-center gap-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 px-3.5 py-2 rounded-xl shadow-xs">
+                <Calendar className="w-4 h-4 text-slate-500" />
+                <span>Период: <b className="text-slate-900">{activeSnapshot.name}</b></span>
                 {(() => {
                   if (!activeSnapshot.period_start || !activeSnapshot.period_end) return null;
                   const s = new Date(activeSnapshot.period_start);
                   const e = new Date(activeSnapshot.period_end);
                   if (isNaN(s.getTime()) || isNaN(e.getTime())) return null;
                   return (
-                    <span className="text-[10px] text-violet-500 font-normal">
+                    <span className="text-[11px] text-slate-400 font-normal">
                       ({s.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} — {e.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })})
                     </span>
                   );
                 })()}
               </span>
             ) : loadedFilesCount > 0 ? (
-              <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 px-3 py-1.5 rounded-xl mr-2">
-                <Calendar className="w-3.5 h-3.5 text-violet-600" />
-                <span>Период: <b>{currentPeriod.name}</b></span>
-                <span className="text-[10px] text-slate-400 font-normal">
+              <span className="flex items-center gap-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 px-3.5 py-2 rounded-xl shadow-xs">
+                <Calendar className="w-4 h-4 text-slate-500" />
+                <span>Период: <b className="text-slate-900">{currentPeriod.name}</b></span>
+                <span className="text-[11px] text-slate-400 font-normal">
                   ({loadedFilesCount}/4 отчетов)
                 </span>
               </span>
             ) : null}
-
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={cn(
-                  "flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all duration-200 font-black uppercase italic text-xs tracking-wider relative",
-                  activeTab === tab.id
-                    ? "bg-slate-900 text-white shadow-md shadow-slate-900/10 scale-102"
-                    : "bg-white text-slate-400 hover:text-slate-700 border border-slate-200"
-                )}
-              >
-                <tab.icon className="w-4 h-4" />
-                <span>{tab.label}</span>
-                {tab.id === "settings" && excludedPhones.length > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-black not-italic">
-                    {excludedPhones.length}
-                  </span>
-                )}
-              </button>
-            ))}
           </div>
+        </div>
+
+        {/* Root Main Tabs */}
+        <div className="flex bg-white p-1.5 sm:p-2 rounded-2xl border border-slate-200 shadow-xs gap-1 sm:gap-2 mb-8 overflow-x-auto scrollbar-none">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id)}
+              className={cn(
+                "px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all shrink-0 cursor-pointer flex items-center gap-2 whitespace-nowrap",
+                activeTab === tab.id
+                  ? "bg-slate-900 text-white shadow-xs font-semibold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              )}
+            >
+              <tab.icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+              {tab.id === "settings" && excludedPhones.length > 0 && (
+                <span
+                  className={cn(
+                    "ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold",
+                    activeTab === tab.id
+                      ? "bg-slate-800 text-slate-200"
+                      : "bg-rose-50 text-rose-600 border border-rose-200"
+                  )}
+                >
+                  {excludedPhones.length}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Tab content */}
@@ -703,7 +718,7 @@ export default function MarketingPage() {
             onSaveExcludedPhones={handleSaveExcludedPhones}
           />
         )}
-      </div>
+      </main>
     </div>
   );
 }

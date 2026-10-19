@@ -579,18 +579,18 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
       {/* Zone Analytics Cards (from Table 4 & Workstations) */}
       {analytics.hasPackagesReport && analytics.clubZoneStats && analytics.clubZoneStats.length > 0 && (
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
               <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-violet-100 text-violet-700">
+                <span className="p-1.5 rounded-lg bg-slate-100 text-slate-700">
                   <Gamepad2 className="w-4 h-4" />
                 </span>
-                <h3 className="font-bold text-sm text-slate-800 uppercase tracking-tight">
+                <h3 className="font-bold text-sm text-slate-900">
                   Распределение по игровым зонам клуба
                 </h3>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
                 Выручка, популярность и списания бонусов по зонам (сопоставлено с оборудованием клуба)
               </p>
             </div>
@@ -598,7 +598,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
             {selectedZone !== "all" && (
               <button
                 onClick={() => setSelectedZone("all")}
-                className="text-xs font-semibold text-violet-600 hover:text-violet-800 bg-violet-50 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 w-fit"
+                className="text-xs font-medium text-slate-700 hover:text-black bg-slate-100 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 w-fit"
               >
                 <span>Сбросить фильтр зоны ({selectedZone})</span>
                 <X className="w-3.5 h-3.5" />
@@ -616,21 +616,21 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
                   className={cn(
                     "cursor-pointer rounded-xl p-3.5 border transition-all text-left flex flex-col justify-between group",
                     isSelected
-                      ? "border-violet-600 bg-violet-50/70 shadow-sm ring-1 ring-violet-500"
-                      : "border-slate-200/80 hover:border-violet-300 hover:bg-slate-50/70"
+                      ? "border-slate-900 bg-slate-50/80 shadow-xs ring-1 ring-slate-900"
+                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
                   )}
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-xs font-bold text-slate-800 truncate" title={z.zone}>
                       {z.zone}
                     </span>
-                    <span className="text-[10px] font-semibold text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
                       {z.percentOfRub}%
                     </span>
                   </div>
 
                   <div className="mt-2.5 space-y-0.5">
-                    <div className="text-base font-black tracking-tight text-slate-900 tabular-nums">
+                    <div className="text-base font-bold tracking-tight text-slate-900 tabular-nums">
                       {Math.round(z.rub).toLocaleString("ru")} ₽
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-slate-500">
@@ -644,8 +644,8 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
                   </div>
 
                   <span className={cn(
-                    "text-[10px] font-bold uppercase mt-2 pt-1 border-t text-center block transition-colors",
-                    isSelected ? "text-violet-700 border-violet-200" : "text-slate-400 border-slate-100 group-hover:text-violet-600"
+                    "text-[11px] font-medium mt-2 pt-1 border-t text-center block transition-colors",
+                    isSelected ? "text-slate-900 border-slate-300 font-semibold" : "text-slate-400 border-slate-100 group-hover:text-slate-700"
                   )}>
                     {isSelected ? "✓ Выбрано" : "Фильтровать"}
                   </span>
@@ -657,7 +657,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
           {/* Top Tariffs Bar */}
           {analytics.clubTariffStats && analytics.clubTariffStats.length > 0 && (
             <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
+              <span className="text-xs font-semibold text-slate-500 mr-1">
                 Топ тарифов клуба:
               </span>
               {analytics.clubTariffStats.slice(0, 6).map((t, idx) => (
@@ -746,7 +746,7 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         {/* Controls Toolbar */}
         <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Segment Pills */}
@@ -762,10 +762,10 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
                 key={tab.id}
                 onClick={() => setViewMode(tab.id)}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5",
+                  "px-3.5 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer",
                   viewMode === tab.id
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100"
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                 )}
               >
                 <span>{tab.label}</span>

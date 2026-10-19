@@ -36,6 +36,7 @@ export interface MarketingCampaignRecord {
   balanceCategories?: BalanceCategoryTier[];
   balanceCategoriesEnabled?: boolean;
   balanceIncludeBonuses?: boolean;
+  promoCode?: string;
 }
 
 interface Props {
@@ -58,6 +59,7 @@ const TEMPLATE_TAGS = [
   { tag: "{Дата_Отправки}", desc: "Календарная дата отправки (напр. 23.10.2026)" },
   { tag: "{Любимая_Зона}", desc: "Любимая зона" },
   { tag: "{Любимый_Тариф}", desc: "Любимый тариф" },
+  { tag: "{Промокод}", desc: "Промокод кампании" },
 ];
 
 const PRESET_TEMPLATES = [
@@ -89,6 +91,7 @@ export function SmsCampaignModal({
   const [campaignName, setCampaignName] = useState("SMS-кампания " + new Date().toLocaleDateString("ru-RU"));
   const [selectedCohort, setSelectedCohort] = useState<"balance" | "whales" | "churned" | "weekend">("balance");
   const [template, setTemplate] = useState(PRESET_TEMPLATES[0].text);
+  const [promoCode, setPromoCode] = useState("");
 
   // Filter cohort recipients
   const recipients = useMemo(() => {
@@ -118,7 +121,12 @@ export function SmsCampaignModal({
 
   // Format message for a specific client
   const renderMessageForClient = (p: ClientProfile | null): string => {
-    if (!p) return template;
+    const activePromo = promoCode.trim();
+    if (!p) {
+      return template
+        .replace(/{Промокод}/gi, activePromo)
+        .replace(/{Промо}/gi, activePromo);
+    }
     const firstName = p.name ? p.name.split(" ")[0].trim() : "друг";
     const rub = p.balance ? `${Math.round(p.balance)}` : "0";
     const bonus = p.bonusBalance ? `${Math.round(p.bonusBalance)}` : "0";
@@ -134,7 +142,9 @@ export function SmsCampaignModal({
       .replace(/{Любимый_ПК}/g, seat)
       .replace(/{Любимый_День}/g, day)
       .replace(/{Любимая_Зона}/g, zone)
-      .replace(/{Любимый_Тариф}/g, tariff);
+      .replace(/{Любимый_Тариф}/g, tariff)
+      .replace(/{Промокод}/gi, activePromo)
+      .replace(/{Промо}/gi, activePromo);
   };
 
   const previewMessage = renderMessageForClient(sampleClient);
@@ -182,6 +192,7 @@ export function SmsCampaignModal({
       templateText: template,
       targetPhones: recipients.map((r) => r.phone.replace(/\D/g, "").slice(-10)),
       createdAt: new Date().toISOString(),
+      promoCode: promoCode.trim() || undefined,
     };
 
     onCampaignCreated?.(campaignRecord);
