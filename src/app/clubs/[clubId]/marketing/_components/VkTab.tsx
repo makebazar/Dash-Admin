@@ -11,6 +11,7 @@ interface Props {
   analytics: ClubAnalytics | null;
   excludedPhones: string[];
   dateFilter?: DateFilter | null;
+  onDateFilterChange?: (filter: DateFilter | null) => void;
 }
 
 const DEFAULT_SEGMENTATION: SegmentationFilter = {
@@ -24,6 +25,7 @@ const DEFAULT_SEGMENTATION: SegmentationFilter = {
   bonusMax: "",
   visitsMin: "",
   visitsMax: "",
+  loyaltyMode: "all",
   dayType: "all",
   specificDay: "",
   preferredTime: "all",
@@ -190,6 +192,19 @@ export function VkTab({ clubId, analytics, excludedPhones, dateFilter }: Props) 
 
       // Favorite zone
       if (filters.favoriteZone !== "all" && c.favoriteZone !== filters.favoriteZone) return false;
+
+      // Loyalty / Anti-bonus-hunter check
+      if (filters.loyaltyMode === "no_bonus_hunters") {
+        if (c.valueCategory === "bonus_heavy") return false;
+        if ((c.totalSpent || 0) === 0 && ((c.bonusAccrued || 0) > 0 || (c.bonusBalance || 0) > 0)) return false;
+        const ratio = c.bonusGivenRatio ?? ((c.totalSpent || 0) > 0 ? ((c.bonusAccrued || 0) / c.totalSpent) * 100 : 0);
+        if (ratio >= 40 && (c.bonusAccrued || 0) >= 150) return false;
+      } else if (filters.loyaltyMode === "loyal_only") {
+        if ((c.totalSpent || 0) <= 0) return false;
+        if (c.valueCategory === "bonus_heavy") return false;
+        const ratio = c.bonusGivenRatio ?? ((c.totalSpent || 0) > 0 ? ((c.bonusAccrued || 0) / c.totalSpent) * 100 : 0);
+        if (ratio > 25) return false;
+      }
 
       return true;
     });
@@ -715,6 +730,19 @@ export function VkTab({ clubId, analytics, excludedPhones, dateFilter }: Props) 
                     <option value="all">Все дни недели</option>
                     <option value="weekday">Будни (Пн–Чт)</option>
                     <option value="weekend">Выходные (Пт–Вс)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-500 block">Лояльность / Бонусы</label>
+                  <select
+                    value={filters.loyaltyMode || "all"}
+                    onChange={(e) => setFilters({ ...filters, loyaltyMode: e.target.value as any })}
+                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                  >
+                    <option value="all">Все гости</option>
+                    <option value="no_bonus_hunters">Без бонусоедов (доля бонусов &lt; 40%)</option>
+                    <option value="loyal_only">Только лояльные (свои деньги, бонусы &le; 25%)</option>
                   </select>
                 </div>
               </div>

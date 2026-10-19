@@ -33,6 +33,8 @@ export function calculateClientGiftBonus(spent: number, tiers: BonusTier[], enab
   return 0;
 }
 
+export type LoyaltyFilterMode = "all" | "no_bonus_hunters" | "loyal_only";
+
 export interface SegmentationFilter {
   spentMin: number | "";
   spentMax: number | "";
@@ -44,6 +46,7 @@ export interface SegmentationFilter {
   bonusMax: number | "";
   visitsMin: number | "";
   visitsMax: number | "";
+  loyaltyMode?: LoyaltyFilterMode;
   dayType: "all" | "weekday" | "weekend" | "specific";
   specificDay: string;
   preferredTime: "all" | "night" | "morning" | "day" | "evening";
@@ -61,6 +64,7 @@ const DEFAULT_SEGMENTATION: SegmentationFilter = {
   bonusMax: "",
   visitsMin: "",
   visitsMax: "",
+  loyaltyMode: "all",
   dayType: "all",
   specificDay: "",
   preferredTime: "all",
@@ -97,6 +101,12 @@ const PRESETS = [
     filter: { ...DEFAULT_SEGMENTATION, spentMin: 2500 },
     campaignName: "VIP-бронь для постоянных гостей",
     text: "{Имя}, скоро {Любимый_День}! Твой привычный {Любимый_ПК} свободен. Бронь?",
+  },
+  {
+    name: "Только лояльные (без бонусоедов)",
+    filter: { ...DEFAULT_SEGMENTATION, loyaltyMode: "loyal_only" as const, spentMin: 500 },
+    campaignName: "Подарок постоянным и лояльным гостям",
+    text: "{Имя}, спасибо за преданность клубу! Дарим тебе {Бонус_В_Подарок} бонусов на баланс.",
   },
   {
     name: "Остывающие постоянники",
@@ -363,6 +373,19 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       // Zone
       if (filters.favoriteZone !== "all" && p.favoriteZone !== filters.favoriteZone) return false;
 
+      // Loyalty / Anti-bonus-hunter check
+      if (filters.loyaltyMode === "no_bonus_hunters") {
+        if (p.valueCategory === "bonus_heavy") return false;
+        if ((p.totalSpent || 0) === 0 && ((p.bonusAccrued || 0) > 0 || (p.bonusBalance || 0) > 0)) return false;
+        const ratio = p.bonusGivenRatio ?? ((p.totalSpent || 0) > 0 ? ((p.bonusAccrued || 0) / p.totalSpent) * 100 : 0);
+        if (ratio >= 40 && (p.bonusAccrued || 0) >= 150) return false;
+      } else if (filters.loyaltyMode === "loyal_only") {
+        if ((p.totalSpent || 0) <= 0) return false;
+        if (p.valueCategory === "bonus_heavy") return false;
+        const ratio = p.bonusGivenRatio ?? ((p.totalSpent || 0) > 0 ? ((p.bonusAccrued || 0) / p.totalSpent) * 100 : 0);
+        if (ratio > 25) return false;
+      }
+
       return true;
     });
   }, [analytics, filters, excludedPhones]);
@@ -411,6 +434,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     if (filters.balanceMin !== "") parts.push(`Баланс от ${filters.balanceMin} ₽`);
     if (filters.bonusMin !== "") parts.push(`Бонусы от ${filters.bonusMin} Б`);
     if (filters.visitsMin !== "") parts.push(`Визитов за ${periodShort} от ${filters.visitsMin}`);
+
+    if (filters.loyaltyMode === "no_bonus_hunters") parts.push("Без бонусоедов");
+    if (filters.loyaltyMode === "loyal_only") parts.push("Только лояльные гости");
 
     if (filters.dayType === "weekday") parts.push("Будни");
     if (filters.dayType === "weekend") parts.push("Выходные");
@@ -1337,6 +1363,64 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                       <option key={z} value={z}>{z}</option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              {/* Loyalty & Anti-Bonus-Hunter Filter */}
+              <div className="pt-3 border-t border-slate-200">
+                <div className="space-y-1.5">
+                  <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+                    <label className="text-xs font-bold text-slate-900 block">
+                      Фильтр лояльности (защита от бонусоедов)
+                    </label>
+                    <span className="text-[11px] text-slate-500">
+                      Отсечение гостей, приходящих только за бесплатными бонусами
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                    {[
+                      {
+                        id: "all",
+                        label: "Все клиенты",
+                        desc: "Без фильтрации по бонусам",
+                      },
+                      {
+                        id: "no_bonus_hunters",
+                        label: "Без бонусоедов",
+                        desc: "Исключить тех, у кого доля бонусов >40% или 0 ₽ трат",
+                      },
+                      {
+                        id: "loyal_only",
+                        label: "Только лояльные",
+                        desc: "Только гости с реальными деньгами (бонусы ≤25%)",
+                      },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setFilters({ ...filters, loyaltyMode: opt.id as LoyaltyFilterMode })}
+                        className={cn(
+                          "p-2.5 rounded-lg text-left border transition-colors flex flex-col justify-between",
+                          (filters.loyaltyMode || "all") === opt.id
+                            ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                            : "bg-white text-slate-700 hover:bg-slate-50 border-slate-300"
+                        )}
+                      >
+                        <span className={cn(
+                          "text-xs font-bold block",
+                          (filters.loyaltyMode || "all") === opt.id ? "text-white" : "text-slate-900"
+                        )}>
+                          {opt.label}
+                        </span>
+                        <span className={cn(
+                          "text-[10px] mt-0.5 block leading-normal",
+                          (filters.loyaltyMode || "all") === opt.id ? "text-slate-300" : "text-slate-500"
+                        )}>
+                          {opt.desc}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -2459,7 +2543,18 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   return (
                     <tr key={c.phone + idx} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-2.5 px-4 text-slate-400 font-mono">{idx + 1}</td>
-                      <td className="py-2.5 px-4 font-semibold text-slate-900">{c.name || "Гость"}</td>
+                      <td className="py-2.5 px-4">
+                        <div className="font-semibold text-slate-900 leading-tight">{c.name || "Гость"}</div>
+                        {c.valueCategory === "diamond" && (
+                          <div className="text-[10px] text-slate-400 font-mono">VIP • {c.cashShare}% свои</div>
+                        )}
+                        {c.valueCategory === "loyal" && (
+                          <div className="text-[10px] text-slate-400 font-mono">Лояльный • {c.cashShare}% свои</div>
+                        )}
+                        {c.valueCategory === "bonus_heavy" && (
+                          <div className="text-[10px] text-slate-400 font-mono">Бонусоед • {c.bonusGivenRatio}% бонусов</div>
+                        )}
+                      </td>
                       <td className="py-2.5 px-4 font-mono text-slate-600">{c.phone}</td>
                       <td className="py-2.5 px-4">
                         <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-800 rounded text-[11px] font-medium">
