@@ -59,8 +59,10 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
   const [selectedZone, setSelectedZone] = useState<string>("all");
   const [pcInput, setPcInput] = useState<string>("");
   const [daysFilter, setDaysFilter] = useState<string>("all");
+  const [visitsFilter, setVisitsFilter] = useState<string>("all");
   const [clientStatusFilter, setClientStatusFilter] = useState<string>("all");
-  const [sortMode, setSortMode] = useState<"match" | "spent_desc" | "days_desc" | "balance_desc">("match");
+  const [returnBonus, setReturnBonus] = useState<string>("200 бонусов");
+  const [sortMode, setSortMode] = useState<"match" | "spent_desc" | "days_desc" | "visits_desc" | "balance_desc">("match");
   const [shiftStatusFilter, setShiftStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -171,6 +173,13 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
         if (daysFilter === "15_30" && (days === null || days < 15 || days > 30)) return false;
         if (daysFilter === "30_plus" && (days === null || days < 31)) return false;
 
+        // Number of visits filter
+        const visits = p.visits ?? p.txCount ?? (p.totalSpent > 0 ? 1 : 0);
+        if (visitsFilter === "1" && visits !== 1) return false;
+        if (visitsFilter === "2_5" && (visits < 2 || visits > 5)) return false;
+        if (visitsFilter === "6_15" && (visits < 6 || visits > 15)) return false;
+        if (visitsFilter === "16_plus" && visits < 16) return false;
+
         // Guest lifecycle status filter
         if (clientStatusFilter === "whale" && !p.isWhale) return false;
         if (clientStatusFilter === "active" && p.status !== "active") return false;
@@ -190,6 +199,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
       .map((p) => {
         const norm = (p.phone || "").replace(/\D/g, "").slice(-10);
         const rec = recordsMap[norm];
+        const visitCount = p.visits ?? p.txCount ?? (p.totalSpent > 0 ? 1 : 0);
 
         let score = 0;
         const matchReasons: string[] = [];
@@ -274,11 +284,23 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           : selectedTime === "night" ? "на ночь"
           : "на вечер";
 
+        const isAbsentLong = (p.daysSince && p.daysSince >= 14) || p.status === "cooling" || p.status === "churned";
+        const cleanBonus = returnBonus.trim();
+        const hasPerk = cleanBonus && cleanBonus !== "Без бонуса" && cleanBonus !== "none";
+
         let script = "";
-        if ((p.balance || 0) >= 150) {
+        if (isAbsentLong) {
+          if (hasPerk) {
+            if ((p.balance || 0) >= 150) {
+              script = `Привет! Давно не виделись в Colizeum. На твоем счете ждут ${Math.round(p.balance)} ₽, плюс дарим ${cleanBonus} на 4 дня! Твой ${seatText} ${zoneText} ${targetTimeText} свободен. Забронировать место?`;
+            } else {
+              script = `Привет! Давно не виделись в Colizeum. Дарим ${cleanBonus} на твой аккаунт на 4 дня! Твой ${seatText} ${zoneText} ${targetTimeText} свободен, заглядывай на катку! Забронировать место?`;
+            }
+          } else {
+            script = `Привет! Давно не виделись в Colizeum. Твой ${seatText} ${zoneText} ${targetTimeText} ждет тебя. Забронировать место на катку?`;
+          }
+        } else if ((p.balance || 0) >= 150) {
           script = `Привет! На балансе в Colizeum тебя ждут ${Math.round(p.balance)} ₽. Твой ${seatText} ${zoneText} ${targetTimeText} свободен, заглядывай на катку! Забронировать место?`;
-        } else if (p.daysSince && p.daysSince >= 14) {
-          script = `Привет! Давно не виделись в Colizeum. Твой ${seatText} ${zoneText} ${targetTimeText} ждет тебя. Забронировать место на катку?`;
         } else {
           script = `Привет! Твой ${seatText} ${zoneText} ${targetTimeText} свободен. Забронировать за тобой место на катку?`;
         }
@@ -288,6 +310,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           normPhone: norm,
           record: rec,
           score,
+          visitCount,
           matchDesc: matchReasons.length > 0 ? matchReasons.join(" • ") : "Любое время и зона",
           script,
           attributionResult,
@@ -304,6 +327,9 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
         if (sortMode === "days_desc") {
           return (b.profile.daysSince || 0) - (a.profile.daysSince || 0);
         }
+        if (sortMode === "visits_desc") {
+          return b.visitCount - a.visitCount;
+        }
         if (sortMode === "balance_desc") {
           return (b.profile.balance || 0) - (a.profile.balance || 0);
         }
@@ -314,7 +340,9 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
     excludedPhones,
     searchQuery,
     daysFilter,
+    visitsFilter,
     clientStatusFilter,
+    returnBonus,
     selectedDay,
     todayDayName,
     selectedTime,
@@ -378,6 +406,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
     selectedZone !== "all" ||
     pcInput.trim() !== "" ||
     daysFilter !== "all" ||
+    visitsFilter !== "all" ||
     clientStatusFilter !== "all" ||
     shiftStatusFilter !== "all" ||
     searchQuery.trim() !== "";
@@ -494,7 +523,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
           </div>
         </div>
 
-        {/* Row 2: Guest Lifecycle & Filters */}
+        {/* Row 2: Guest Lifecycle, Visits & Return Perk */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1 border-t border-slate-100">
           {/* Days Since Last Visit */}
           <div className="space-y-1">
@@ -512,6 +541,25 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
               <option value="7_14">7–14 дней (остывают)</option>
               <option value="15_30">15–30 дней (засыпают)</option>
               <option value="30_plus">Более 30 дней (отток)</option>
+            </select>
+          </div>
+
+          {/* Number of Visits */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-slate-600 block">Количество визитов</label>
+            <select
+              value={visitsFilter}
+              onChange={(e) => {
+                setVisitsFilter(e.target.value);
+                setPage(1);
+              }}
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-slate-400 font-medium cursor-pointer"
+            >
+              <option value="all">Любое число визитов</option>
+              <option value="1">1 визит (новички)</option>
+              <option value="2_5">2–5 визитов</option>
+              <option value="6_15">6–15 визитов (регуляры)</option>
+              <option value="16_plus">16+ визитов (постоянники)</option>
             </select>
           </div>
 
@@ -535,9 +583,24 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
             </select>
           </div>
 
+          {/* Return Perk for absent guests */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-slate-600 block">Плюшка для остывших (&gt;14 дн.)</label>
+            <input
+              type="text"
+              value={returnBonus}
+              onChange={(e) => setReturnBonus(e.target.value)}
+              placeholder="Напр: 200 бонусов, +1 час"
+              className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none focus:border-slate-400 font-medium"
+            />
+          </div>
+        </div>
+
+        {/* Row 3: Sort, Shift Status & Search */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1 border-t border-slate-100">
           {/* Sorting */}
           <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-slate-600 block">Сортировка</label>
+            <label className="text-[11px] font-semibold text-slate-600 block">Сортировка списка</label>
             <select
               value={sortMode}
               onChange={(e) => {
@@ -548,6 +611,7 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
             >
               <option value="match">По совпадению (Match)</option>
               <option value="spent_desc">По чеку LTV (макс)</option>
+              <option value="visits_desc">По числу визитов (макс)</option>
               <option value="days_desc">Не были дольше всех</option>
               <option value="balance_desc">С балансом на счете</option>
             </select>
@@ -572,46 +636,49 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
               <option value="rejected">Отказ</option>
             </select>
           </div>
-        </div>
 
-        {/* Quick Search & Filter Reset */}
-        <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Поиск по имени или телефону..."
-              className="w-full pl-8 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400 text-xs"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 text-slate-500 text-[11px]">
-            <span>Показано: <b>{paginatedClients.length}</b> из <b>{rankedClients.length}</b></span>
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDay("all");
-                  setSelectedTime("all");
-                  setSelectedZone("all");
-                  setPcInput("");
-                  setDaysFilter("all");
-                  setClientStatusFilter("all");
-                  setShiftStatusFilter("all");
-                  setSearchQuery("");
+          {/* Quick Search */}
+          <div className="space-y-1 lg:col-span-2">
+            <label className="text-[11px] font-semibold text-slate-600 block">Поиск по имени или телефону</label>
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
                   setPage(1);
                 }}
-                className="text-slate-400 hover:text-slate-800 underline ml-1"
-              >
-                Сбросить фильтры
-              </button>
-            )}
+                placeholder="Поиск по имени или телефону..."
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:border-slate-400 text-xs"
+              />
+            </div>
           </div>
+        </div>
+
+        {/* Quick Filter Reset info */}
+        <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100 text-[11px] text-slate-500">
+          <span>Показано: <b>{paginatedClients.length}</b> из <b>{rankedClients.length}</b></span>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDay("all");
+                setSelectedTime("all");
+                setSelectedZone("all");
+                setPcInput("");
+                setDaysFilter("all");
+                setVisitsFilter("all");
+                setClientStatusFilter("all");
+                setShiftStatusFilter("all");
+                setSearchQuery("");
+                setPage(1);
+              }}
+              className="text-slate-400 hover:text-slate-800 underline ml-1"
+            >
+              Сбросить фильтры
+            </button>
+          )}
         </div>
       </div>
 
@@ -624,10 +691,10 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                 <th className="py-2.5 px-3 w-10 text-slate-400">№</th>
                 <th className="py-2.5 px-3 min-w-[130px]">Гость</th>
                 <th className="py-2.5 px-3 min-w-[125px]">Телефон</th>
-                <th className="py-2.5 px-3 min-w-[90px]">Не был</th>
+                <th className="py-2.5 px-3 min-w-[80px]">Не был</th>
                 <th className="py-2.5 px-3 min-w-[160px]">Совпадение со слотом</th>
-                <th className="py-2.5 px-3 min-w-[130px]">LTV • Баланс</th>
-                <th className="py-2.5 px-3 min-w-[280px]">Текст сообщения / скрипт</th>
+                <th className="py-2.5 px-3 min-w-[140px]">LTV • Визиты • Баланс</th>
+                <th className="py-2.5 px-3 min-w-[300px]">Текст сообщения / скрипт</th>
                 <th className="py-2.5 px-3 min-w-[130px]">Отметка смены</th>
                 <th className="py-2.5 px-3 min-w-[110px]">Результат</th>
               </tr>
@@ -718,10 +785,13 @@ export function TasksTab({ clubId, analytics, excludedPhones }: Props) {
                         )}
                       </td>
 
-                      {/* LTV & Balance */}
+                      {/* LTV, Visits & Balance */}
                       <td className="py-2.5 px-3 align-top whitespace-nowrap font-mono text-[11px]">
                         <div className="font-semibold text-slate-900">
                           {Math.round(p.totalSpent || 0).toLocaleString("ru")} ₽
+                          <span className="text-[10px] text-slate-500 font-normal ml-1">
+                            ({item.visitCount} виз.)
+                          </span>
                         </div>
                         <div className="text-slate-500 mt-0.5">
                           Баланс: {Math.round(p.balance || 0).toLocaleString("ru")} ₽
