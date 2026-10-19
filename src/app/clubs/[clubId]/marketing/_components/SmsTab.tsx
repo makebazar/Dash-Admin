@@ -51,6 +51,7 @@ const TEMPLATE_TAGS = [
   { tag: "{Баланс_Бонус}", desc: "Бонусный баланс" },
   { tag: "{Любимый_ПК}", desc: "Любимый компьютер" },
   { tag: "{Любимый_День}", desc: "Любимый день недели" },
+  { tag: "{День_Отправки}", desc: "Назначенный день недели отправки" },
   { tag: "{Любимая_Зона}", desc: "Любимая зона" },
   { tag: "{Любимый_Тариф}", desc: "Любимый тариф" },
 ];
@@ -110,6 +111,48 @@ const DAYS_OF_WEEK = [
   "Воскресенье",
 ];
 
+export type ScheduleMode = "smart_day_eve" | "smart_day" | "even" | "instant";
+
+const PREV_DAY_MAP: Record<string, string> = {
+  "Понедельник": "Воскресенье",
+  "Вторник": "Понедельник",
+  "Среда": "Вторник",
+  "Четверг": "Среда",
+  "Пятница": "Четверг",
+  "Суббота": "Пятница",
+  "Воскресенье": "Суббота",
+};
+
+export function getScheduledDay(
+  client: ClientProfile,
+  mode: ScheduleMode,
+  index: number
+): string {
+  if (mode === "instant") return "Сразу";
+
+  if (mode === "even") {
+    return DAYS_OF_WEEK[index % DAYS_OF_WEEK.length];
+  }
+
+  let day = client.favoriteDay;
+  if (!day || !DAYS_OF_WEEK.includes(day)) {
+    if (client.dayPattern === "weekend") {
+      day = index % 2 === 0 ? "Суббота" : "Воскресенье";
+    } else if (client.dayPattern === "weekday") {
+      const weekdays = ["Вторник", "Среда", "Четверг"];
+      day = weekdays[index % weekdays.length];
+    } else {
+      day = DAYS_OF_WEEK[index % DAYS_OF_WEEK.length];
+    }
+  }
+
+  if (mode === "smart_day_eve") {
+    return PREV_DAY_MAP[day] || day;
+  }
+
+  return day;
+}
+
 export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   const storageKey = `marketing_campaigns_${clubId}`;
 
@@ -125,6 +168,8 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   const [campaignName, setCampaignName] = useState("Рассылка постоянным гостям");
   const [filters, setFilters] = useState<SegmentationFilter>(PRESETS[1].filter);
   const [templateText, setTemplateText] = useState(PRESETS[1].text);
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("smart_day_eve");
+  const [activeDayFilter, setActiveDayFilter] = useState<string>("all");
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   // Extract all available zones from data
@@ -238,13 +283,14 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   }, [filters]);
 
   // Substitute tags into message
-  const renderMessage = (text: string, client: ClientProfile | null) => {
+  const renderMessage = (text: string, client: ClientProfile | null, scheduledDay?: string) => {
     if (!client) return text;
     const name = client.name ? client.name.split(" ")[0] : "друг";
     const rubBal = Math.round(client.balance || 0).toLocaleString("ru");
     const bonusBal = Math.round(client.bonusBalance || 0).toLocaleString("ru");
     const seat = client.favoriteSeat || "компьютер";
     const day = client.favoriteDay ? client.favoriteDay.toLowerCase() : "выходные";
+    const targetDay = scheduledDay ? scheduledDay.toLowerCase() : "сегодня";
     const zone = client.favoriteZone || "VIP";
     const tariff = client.favoriteTariff || "стандарт";
 
@@ -254,12 +300,32 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
       .replace(/{Баланс_Бонус}/g, bonusBal)
       .replace(/{Любимый_ПК}/g, seat)
       .replace(/{Любимый_День}/g, day)
+      .replace(/{День_Отправки}/g, targetDay)
       .replace(/{Любимая_Зона}/g, zone)
       .replace(/{Любимый_Тариф}/g, tariff);
   };
 
+  // Schedule distribution of filtered cohort across days of week
+  const scheduleDistribution = useMemo(() => {
+    const map: Record<string, ClientProfile[]> = {};
+    if (scheduleMode === "instant") {
+      map["Сразу"] = [...filteredClients];
+      return map;
+    }
+    for (const d of DAYS_OF_WEEK) {
+      map[d] = [];
+    }
+    filteredClients.forEach((client, idx) => {
+      const day = getScheduledDay(client, scheduleMode, idx);
+      if (!map[day]) map[day] = [];
+      map[day].push(client);
+    });
+    return map;
+  }, [filteredClients, scheduleMode]);
+
   const sampleClient = filteredClients[0] || null;
-  const sampleMessage = useMemo(() => renderMessage(templateText, sampleClient), [templateText, sampleClient]);
+  const sampleDay = sampleClient ? getScheduledDay(sampleClient, scheduleMode, 0) : undefined;
+  const sampleMessage = useMemo(() => renderMessage(templateText, sampleClient, sampleDay), [templateText, sampleClient, sampleDay]);
 
   // Message calculations
   const isCyrillic = /[а-яёА-ЯЁ]/.test(sampleMessage);
@@ -283,6 +349,12 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   };
 
   const handleFinishWizard = () => {
+    const scheduleDayMap: Record<string, string> = {};
+    filteredClients.forEach((c, idx) => {
+      const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+      scheduleDayMap[norm] = getScheduledDay(c, scheduleMode, idx);
+    });
+
     const record: MarketingCampaignRecord = {
       id: `sms_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       clubId,
@@ -291,6 +363,8 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
       templateText,
       targetPhones: filteredClients.map((c) => (c.phone || "").replace(/\D/g, "").slice(-10)),
       createdAt: new Date().toISOString(),
+      scheduleMode,
+      scheduleDayMap,
     };
 
     if (typeof window !== "undefined") {
@@ -306,20 +380,38 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
 
     setCampaigns((prev) => [record, ...prev]);
     setActiveCampaignId(record.id);
+    setActiveDayFilter("all");
     setViewMode("detail");
   };
 
-  const handleExportCsv = (clientList: ClientProfile[], text: string, name: string) => {
-    if (clientList.length === 0) return;
+  const handleExportCsv = (
+    clientList: ClientProfile[],
+    text: string,
+    name: string,
+    dayMap?: Record<string, string>,
+    filterDay: string = "all"
+  ) => {
+    let targetList = clientList;
+    if (filterDay !== "all" && dayMap) {
+      targetList = clientList.filter((c) => {
+        const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+        return dayMap[norm] === filterDay;
+      });
+    }
 
-    const rows = [["phone", "name", "message", "balance_rub", "bonus_balance", "favorite_pc", "favorite_day"]];
-    for (const c of clientList) {
+    if (targetList.length === 0) return;
+
+    const rows = [["phone", "name", "scheduled_day", "message", "balance_rub", "bonus_balance", "favorite_pc", "favorite_day"]];
+    for (const c of targetList) {
       const p = (c.phone || "").replace(/\D/g, "");
+      const norm = p.slice(-10);
       const fullPhone = p.length === 11 && p.startsWith("8") ? "7" + p.slice(1) : p;
-      const msg = renderMessage(text, c).replace(/"/g, '""');
+      const scheduledDay = dayMap?.[norm] || "Сразу";
+      const msg = renderMessage(text, c, scheduledDay).replace(/"/g, '""');
       rows.push([
         `+${fullPhone}`,
         `"${c.name || ""}"`,
+        `"${scheduledDay}"`,
         `"${msg}"`,
         `${Math.round(c.balance || 0)}`,
         `${Math.round(c.bonusBalance || 0)}`,
@@ -333,7 +425,8 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `${name.toLowerCase().replace(/\s+/g, "_")}_${Date.now()}.csv`);
+    const daySuffix = filterDay !== "all" ? `_${filterDay.toLowerCase()}` : "";
+    link.setAttribute("download", `${name.toLowerCase().replace(/\s+/g, "_")}${daySuffix}_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -825,6 +918,119 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                   </div>
                 </div>
               </div>
+
+              {/* Automatic Day-of-Week Schedule Distribution */}
+              <div className="space-y-4 border-t border-slate-200 pt-6">
+                <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      Автоматическое распределение по дням недели
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Алгоритм рассчитывает, в какой день отправить SMS каждому гостю на основе его истории посещений
+                    </p>
+                  </div>
+                </div>
+
+                {/* Strategy Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    {
+                      id: "smart_day_eve",
+                      title: "Накануне визита (за 1 день)",
+                      badge: "Рекомендуется",
+                      desc: "В четверг тем, кто ходит в пятницу; в пятницу — субботникам. Гость успевает забронировать место.",
+                    },
+                    {
+                      id: "smart_day",
+                      title: "В день визита",
+                      badge: "Smart Day",
+                      desc: "Отправка ровно в любимый день гостя (Пт, Сб, Вс и др.), когда он привык приходить в клуб.",
+                    },
+                    {
+                      id: "even",
+                      title: "Равномерно на 7 дней",
+                      badge: "Плавная нагрузка",
+                      desc: "Делит базу поровну по дням недели (Пн–Вс), чтобы избежать очередей и перегрузки ПК.",
+                    },
+                    {
+                      id: "instant",
+                      title: "Разово всем сразу",
+                      badge: "Без расписания",
+                      desc: "Классическая мгновенная отправка всей базе в один момент времени.",
+                    },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setScheduleMode(m.id as ScheduleMode)}
+                      className={cn(
+                        "p-3 rounded-xl border text-left transition-colors flex flex-col justify-between",
+                        scheduleMode === m.id
+                          ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                          : "border-slate-200 bg-white hover:border-slate-300 text-slate-900"
+                      )}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className={cn(
+                            "text-xs font-bold leading-tight",
+                            scheduleMode === m.id ? "text-white" : "text-slate-900"
+                          )}>
+                            {m.title}
+                          </span>
+                          <span className={cn(
+                            "text-[10px] font-mono px-1.5 py-0.5 rounded",
+                            scheduleMode === m.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                          )}>
+                            {m.badge}
+                          </span>
+                        </div>
+                        <p className={cn(
+                          "text-[11px] mt-1.5 leading-relaxed line-clamp-3",
+                          scheduleMode === m.id ? "text-slate-300" : "text-slate-500"
+                        )}>
+                          {m.desc}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Live 7-Day Schedule Preview */}
+                {scheduleMode !== "instant" && (
+                  <div className="space-y-2 pt-2">
+                    <span className="text-xs font-semibold text-slate-700 block">
+                      Прогноз распределения отправки ({cohortStats.count.toLocaleString("ru")} получателей):
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                      {DAYS_OF_WEEK.map((day) => {
+                        const count = (scheduleDistribution[day] || []).length;
+                        const share = cohortStats.count > 0 ? Math.round((count / cohortStats.count) * 100) : 0;
+                        const dayCost = Math.round(count * smsParts * costPerSms);
+                        return (
+                          <div
+                            key={day}
+                            className="p-3 bg-white border border-slate-200 rounded-lg space-y-1 text-center"
+                          >
+                            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                              {day.slice(0, 2)} • {day}
+                            </span>
+                            <p className="text-lg font-bold text-slate-900 font-mono">
+                              {count.toLocaleString("ru")} <span className="text-xs font-normal text-slate-400">чел</span>
+                            </p>
+                            <div className="text-[11px] text-slate-500 space-x-1 font-mono">
+                              <span>{share}%</span>
+                              <span>•</span>
+                              <span>~{dayCost} ₽</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Live Counter & Summary */}
@@ -1012,6 +1218,35 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                 </p>
               </div>
 
+              {/* Step 3 Schedule Summary */}
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400 block">Режим распределения отправки</span>
+                  <span className="text-xs font-semibold text-slate-800">
+                    {scheduleMode === "smart_day_eve" && "Умное: накануне визита (за 1 день)"}
+                    {scheduleMode === "smart_day" && "В день привычного визита"}
+                    {scheduleMode === "even" && "Равномерно по дням (Пн–Вс)"}
+                    {scheduleMode === "instant" && "Разово всем сразу"}
+                  </span>
+                </div>
+
+                {scheduleMode !== "instant" && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-1">
+                    {DAYS_OF_WEEK.map((day) => {
+                      const count = (scheduleDistribution[day] || []).length;
+                      const dayCost = Math.round(count * smsParts * costPerSms);
+                      return (
+                        <div key={day} className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-center">
+                          <span className="text-[11px] font-bold text-slate-700 uppercase block">{day.slice(0, 2)}</span>
+                          <p className="text-sm font-bold text-slate-900 font-mono">{count} <span className="text-[10px] font-normal text-slate-400">чел</span></p>
+                          <span className="text-[10px] text-slate-500 font-mono block">~{dayCost} ₽</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div className="pt-3 border-t border-slate-100 space-y-1">
                 <span className="text-xs text-slate-400 block">Шаблон</span>
                 <p className="text-xs text-slate-800 font-mono bg-slate-50 p-3 rounded-lg leading-relaxed">
@@ -1052,6 +1287,29 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   // -------------------------------------------------------------
   // VIEW 3: CAMPAIGN DETAIL (СТРАНИЦА СОЗДАННОЙ КАМПАНИИ)
   // -------------------------------------------------------------
+  const activeCampaignDayMap = activeCampaign?.scheduleDayMap || {};
+
+  const activeCampaignDayBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const d of DAYS_OF_WEEK) counts[d] = 0;
+    counts["Сразу"] = 0;
+    activeCampaignClients.forEach((c) => {
+      const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+      const day = activeCampaignDayMap[norm] || "Сразу";
+      counts[day] = (counts[day] || 0) + 1;
+    });
+    return counts;
+  }, [activeCampaignClients, activeCampaignDayMap]);
+
+  const displayedClients = useMemo(() => {
+    if (activeDayFilter === "all") return activeCampaignClients;
+    return activeCampaignClients.filter((c) => {
+      const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+      const day = activeCampaignDayMap[norm] || "Сразу";
+      return day === activeDayFilter;
+    });
+  }, [activeCampaignClients, activeCampaignDayMap, activeDayFilter]);
+
   return (
     <div className="space-y-8">
       {/* Detail Header Bar */}
@@ -1086,13 +1344,21 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-mono uppercase tracking-wider text-slate-400">
                 SMS-кампания
               </span>
               <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                 Готова к отправке
               </span>
+              {activeCampaign?.scheduleMode && (
+                <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                  {activeCampaign.scheduleMode === "smart_day_eve" && "Распределение: накануне визита"}
+                  {activeCampaign.scheduleMode === "smart_day" && "Распределение: в день визита"}
+                  {activeCampaign.scheduleMode === "even" && "Распределение: равномерно на 7 дней"}
+                  {activeCampaign.scheduleMode === "instant" && "Отправка: разово"}
+                </span>
+              )}
             </div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
               {activeCampaign?.name || "SMS-кампания"}
@@ -1102,20 +1368,36 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms")}
-            disabled={activeCampaignClients.length === 0}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm self-start sm:self-auto"
-          >
-            Скачать CSV для рассылки
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {activeDayFilter !== "all" && (
+              <button
+                type="button"
+                onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, activeDayFilter)}
+                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm"
+              >
+                Скачать CSV на {activeDayFilter} ({displayedClients.length})
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all")}
+              disabled={activeCampaignClients.length === 0}
+              className={cn(
+                "px-5 py-2.5 font-semibold text-xs rounded-lg transition-colors shadow-sm",
+                activeDayFilter === "all"
+                  ? "bg-slate-900 hover:bg-slate-800 text-white disabled:opacity-40"
+                  : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-300"
+              )}
+            >
+              Скачать полный CSV ({activeCampaignClients.length})
+            </button>
+          </div>
         </div>
       </div>
 
       {downloadSuccess && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 font-medium">
-          CSV-файл успешно скачан со всеми персонализированными сообщениями для SMS-шлюза.
+          CSV-файл успешно скачан с персонализированными сообщениями и разметкой очередей по дням.
         </div>
       )}
 
@@ -1153,14 +1435,97 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
 
         <div>
           <span className="text-xs text-slate-400 uppercase tracking-wider block">
-            Канал
+            Режим рассылки
           </span>
-          <p className="text-3xl font-bold text-slate-900 mt-1 font-mono">
-            SMS
+          <p className="text-base font-bold text-slate-900 mt-2">
+            {activeCampaign?.scheduleMode === "smart_day_eve" && "Накануне визита"}
+            {activeCampaign?.scheduleMode === "smart_day" && "В день визита"}
+            {activeCampaign?.scheduleMode === "even" && "Равномерно на 7 дн."}
+            {(!activeCampaign?.scheduleMode || activeCampaign?.scheduleMode === "instant") && "Разово"}
           </p>
-          <span className="text-[11px] text-slate-500 mt-0.5 block">готово к импорту в шлюз</span>
+          <span className="text-[11px] text-slate-500 mt-0.5 block">автоматический график</span>
         </div>
       </div>
+
+      {/* 7-Day Schedule Breakdown Strip & Day Filter */}
+      {activeCampaign?.scheduleMode && activeCampaign.scheduleMode !== "instant" && (
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+            <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider block">
+              Распределение отправки по дням недели
+            </span>
+            <span className="text-xs text-slate-400">
+              Нажмите на день недели, чтобы отфильтровать список и скачать CSV под этот день
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+            {/* All Days button */}
+            <button
+              type="button"
+              onClick={() => setActiveDayFilter("all")}
+              className={cn(
+                "p-3 rounded-xl border text-center transition-all",
+                activeDayFilter === "all"
+                  ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                  : "border-slate-200 bg-white hover:border-slate-300 text-slate-900"
+              )}
+            >
+              <span className={cn(
+                "text-[11px] font-bold uppercase tracking-wider block",
+                activeDayFilter === "all" ? "text-slate-300" : "text-slate-500"
+              )}>
+                Все дни
+              </span>
+              <p className="text-base font-bold font-mono mt-0.5">
+                {activeCampaignClients.length}
+              </p>
+              <span className={cn(
+                "text-[10px] block font-mono mt-0.5",
+                activeDayFilter === "all" ? "text-slate-300" : "text-slate-400"
+              )}>
+                100% базы
+              </span>
+            </button>
+
+            {/* Each day card */}
+            {DAYS_OF_WEEK.map((d) => {
+              const count = activeCampaignDayBreakdown[d] || 0;
+              const share = activeCampaignClients.length > 0 ? Math.round((count / activeCampaignClients.length) * 100) : 0;
+              const isSelected = activeDayFilter === d;
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setActiveDayFilter(isSelected ? "all" : d)}
+                  className={cn(
+                    "p-3 rounded-xl border text-center transition-all",
+                    isSelected
+                      ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+                      : "border-slate-200 bg-white hover:border-slate-300 text-slate-900"
+                  )}
+                >
+                  <span className={cn(
+                    "text-[11px] font-bold uppercase tracking-wider block",
+                    isSelected ? "text-slate-300" : "text-slate-600"
+                  )}>
+                    {d.slice(0, 2)} • {d}
+                  </span>
+                  <p className="text-base font-bold font-mono mt-0.5">
+                    {count} <span className={cn("text-[10px] font-normal", isSelected ? "text-slate-300" : "text-slate-400")}>чел</span>
+                  </p>
+                  <span className={cn(
+                    "text-[10px] block font-mono mt-0.5",
+                    isSelected ? "text-slate-300" : "text-slate-400"
+                  )}>
+                    {share}% • ~{Math.round(count * costPerSms)} ₽
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Message Template Display */}
       <div className="space-y-2">
@@ -1174,13 +1539,25 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
 
       {/* Recipient Table */}
       <div className="space-y-3 pt-2">
-        <div>
-          <h3 className="text-base font-bold text-slate-900">
-            Список сформированных сообщений ({activeCampaignClients.length.toLocaleString("ru")})
-          </h3>
-          <p className="text-xs text-slate-500">
-            Итоговый текст, сгенерированный под каждого гостя индивидуально
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">
+              Список сформированных сообщений ({displayedClients.length.toLocaleString("ru")}
+              {activeDayFilter !== "all" && ` • день: ${activeDayFilter}`})
+            </h3>
+            <p className="text-xs text-slate-500">
+              Итоговый текст, сгенерированный под каждого гостя индивидуально с учётом дня отправки
+            </p>
+          </div>
+          {activeDayFilter !== "all" && (
+            <button
+              type="button"
+              onClick={() => setActiveDayFilter("all")}
+              className="text-xs text-slate-500 hover:text-slate-900 underline"
+            >
+              Сбросить фильтр по дню
+            </button>
+          )}
         </div>
 
         <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
@@ -1191,6 +1568,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                   <th className="py-3 px-4 font-semibold w-12">№</th>
                   <th className="py-3 px-4 font-semibold min-w-[140px]">Клиент</th>
                   <th className="py-3 px-4 font-semibold min-w-[130px]">Телефон</th>
+                  <th className="py-3 px-4 font-semibold min-w-[110px]">День отправки</th>
                   <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Баланс</th>
                   <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Бонусы</th>
                   <th className="py-3 px-4 font-semibold min-w-[110px]">Любимый ПК</th>
@@ -1198,13 +1576,20 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800">
-                {activeCampaignClients.slice(0, 50).map((c, idx) => {
-                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c);
+                {displayedClients.slice(0, 50).map((c, idx) => {
+                  const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+                  const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
+                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay);
                   return (
                     <tr key={c.phone + idx} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-2.5 px-4 text-slate-400 font-mono">{idx + 1}</td>
                       <td className="py-2.5 px-4 font-semibold text-slate-900">{c.name || "Гость"}</td>
                       <td className="py-2.5 px-4 font-mono text-slate-600">{c.phone}</td>
+                      <td className="py-2.5 px-4">
+                        <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-800 rounded text-[11px] font-medium">
+                          {scheduledDay}
+                        </span>
+                      </td>
                       <td className="py-2.5 px-4 text-right font-mono">{Math.round(c.balance || 0).toLocaleString()} ₽</td>
                       <td className="py-2.5 px-4 text-right font-mono text-amber-700">{Math.round(c.bonusBalance || 0).toLocaleString()} Б</td>
                       <td className="py-2.5 px-4 text-slate-600">{c.favoriteSeat || "—"}</td>
@@ -1216,9 +1601,9 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
             </table>
           </div>
 
-          {activeCampaignClients.length > 50 && (
+          {displayedClients.length > 50 && (
             <div className="py-3 px-4 bg-slate-50 border-t border-slate-200 text-center text-xs text-slate-400">
-              Показаны первые 50 строк. При скачивании в CSV файл войдут все {activeCampaignClients.length.toLocaleString("ru")} получателей.
+              Показаны первые 50 строк. При скачивании в CSV файл войдут все {displayedClients.length.toLocaleString("ru")} получателей.
             </div>
           )}
         </div>

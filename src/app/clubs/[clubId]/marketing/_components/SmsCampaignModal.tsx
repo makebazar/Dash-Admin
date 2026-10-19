@@ -15,6 +15,8 @@ export interface MarketingCampaignRecord {
   createdAt: string;
   returnedCount?: number;
   returnedRevenue?: number;
+  scheduleMode?: "instant" | "smart_day" | "smart_day_eve" | "even";
+  scheduleDayMap?: Record<string, string>; // phone -> scheduled day
 }
 
 interface Props {
