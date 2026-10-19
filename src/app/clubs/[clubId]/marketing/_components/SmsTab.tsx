@@ -2336,8 +2336,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
-          <div>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
+          <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-mono uppercase tracking-wider text-slate-400">
                 SMS-кампания
@@ -2346,96 +2346,82 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                 Готова к отправке
               </span>
               {activeCampaign?.scheduleMode && (
-                <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                  {activeCampaign.scheduleMode === "smart_day_eve" && "Распределение: накануне визита"}
-                  {activeCampaign.scheduleMode === "smart_day" && "Распределение: в день визита"}
-                  {activeCampaign.scheduleMode === "even" && "Распределение: равномерно на 7 дней"}
+                <span className="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                  {activeCampaign.scheduleMode === "smart_day_eve" && "Расписание: накануне визита"}
+                  {activeCampaign.scheduleMode === "smart_day" && "Расписание: в день визита"}
+                  {activeCampaign.scheduleMode === "even" && "Расписание: равномерно на 7 дней"}
                   {activeCampaign.scheduleMode === "instant" && "Отправка: разово"}
                 </span>
               )}
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
               {activeCampaign?.name || "SMS-кампания"}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+            <div className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
               <span>Создана {activeCampaign?.createdAt ? new Date(activeCampaign.createdAt).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "сегодня"}</span>
               {activeCampaign?.periodLabel && (
                 <>
                   <span>•</span>
-                  <span className="text-violet-700 font-medium bg-violet-50 px-2 py-0.5 rounded border border-violet-200">
+                  <span className="text-slate-600 font-medium bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                     Период: {activeCampaign.periodLabel}
                   </span>
                 </>
               )}
-            </p>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-            {smsRuConfig?.apiId && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSmsRuSendResult(null);
-                  setSmsRuSendModalOpen(true);
-                  handleCalculateDetailCost(displayedClients);
-                }}
-                disabled={displayedClients.length === 0}
-                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>
-                  Отправить в SMS.RU {activeDayFilter !== "all" ? `(${activeDayFilter}: ${displayedClients.length})` : `(${activeCampaignClients.length})`}
-                </span>
-              </button>
-            )}
-
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
             {/* CSV Format Selector */}
-            <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
-              <span className="text-[11px] text-slate-500 font-medium">Колонки CSV:</span>
-              {[
-                { id: "standard", label: "phone; text; date; time; day" },
-                { id: "ru_date", label: "номер; текст; дата; время; день" },
-                { id: "sms_ru", label: "phone; text; date; time (шлюз)" },
-                { id: "ru_day", label: "номер; текст; день; время" },
-              ].map((fmt) => (
-                <button
-                  key={fmt.id}
-                  type="button"
-                  onClick={() => setCsvFormat(fmt.id as CsvFormatMode)}
-                  className={cn(
-                    "px-2 py-1 rounded text-[10px] font-mono border transition-colors",
-                    csvFormat === fmt.id
-                      ? "bg-slate-900 text-white border-slate-900 font-semibold shadow-xs"
-                      : "bg-white text-slate-600 hover:bg-slate-50 border-slate-300"
-                  )}
-                >
-                  {fmt.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 whitespace-nowrap">Колонки CSV:</span>
+              <select
+                value={csvFormat}
+                onChange={(e) => setCsvFormat(e.target.value as CsvFormatMode)}
+                className="py-2 px-3 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-800 focus:outline-none focus:border-slate-900"
+              >
+                <option value="standard">phone; text; date; time; day (Стандарт)</option>
+                <option value="ru_date">номер; текст; дата; время; день (Русский)</option>
+                <option value="sms_ru">phone; text; date; time (SMS-шлюз)</option>
+                <option value="ru_day">номер; текст; день; время (По дням)</option>
+              </select>
             </div>
 
-            {activeDayFilter !== "all" && (
+            <div className="flex flex-wrap items-center gap-2">
+              {activeDayFilter !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, activeDayFilter)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs"
+                >
+                  Скачать CSV ({activeDayFilter})
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, activeDayFilter)}
-                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm"
+                onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all")}
+                disabled={activeCampaignClients.length === 0}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shadow-xs"
               >
-                Скачать CSV на {activeDayFilter} ({displayedClients.length})
+                Скачать полный CSV ({activeCampaignClients.length})
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all")}
-              disabled={activeCampaignClients.length === 0}
-              className={cn(
-                "px-5 py-2.5 font-semibold text-xs rounded-lg transition-colors shadow-sm",
-                !smsRuConfig?.apiId && activeDayFilter === "all"
-                  ? "bg-slate-900 hover:bg-slate-800 text-white disabled:opacity-40"
-                  : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-300"
+
+              {smsRuConfig?.apiId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSmsRuSendResult(null);
+                    setSmsRuSendModalOpen(true);
+                    handleCalculateDetailCost(displayedClients);
+                  }}
+                  disabled={displayedClients.length === 0}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Отправить в SMS.RU</span>
+                </button>
               )}
-            >
-              Скачать полный CSV ({activeCampaignClients.length})
-            </button>
+            </div>
           </div>
         </div>
       </div>
