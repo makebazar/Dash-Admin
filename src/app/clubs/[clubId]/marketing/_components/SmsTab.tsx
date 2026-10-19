@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ClientProfile, ClubAnalytics } from "./segmentation";
 import type { MarketingCampaignRecord } from "./SmsCampaignModal";
@@ -171,6 +172,44 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("smart_day_eve");
   const [activeDayFilter, setActiveDayFilter] = useState<string>("all");
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+
+  // SMS.RU Integration State
+  const smsRuStorageKey = `marketing_sms_ru_${clubId}`;
+  const [smsRuConfig, setSmsRuConfig] = useState<{ apiId: string; senderName?: string; testMode?: boolean } | null>(null);
+  const [smsRuBalance, setSmsRuBalance] = useState<number | null>(null);
+  const [smsRuSendModalOpen, setSmsRuSendModalOpen] = useState(false);
+  const [isSendingViaSmsRu, setIsSendingViaSmsRu] = useState(false);
+  const [smsRuSendResult, setSmsRuSendResult] = useState<{ ok: boolean; sent: number; failed: number; cost: number; balance?: number } | null>(null);
+
+  const loadSmsRu = () => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(smsRuStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setSmsRuConfig(parsed);
+        if (parsed.apiId) {
+          fetch(`/api/clubs/${clubId}/marketing/sms-ru?apiId=${encodeURIComponent(parsed.apiId)}`)
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.ok && typeof d.balance === "number") setSmsRuBalance(d.balance);
+            })
+            .catch(() => {});
+        }
+      } else {
+        setSmsRuConfig(null);
+        setSmsRuBalance(null);
+      }
+    } catch (e) {
+      console.warn("Failed to read SMS.RU config:", e);
+    }
+  };
+
+  useEffect(() => {
+    loadSmsRu();
+    window.addEventListener("marketing_sms_ru_updated", loadSmsRu);
+    return () => window.removeEventListener("marketing_sms_ru_updated", loadSmsRu);
+  }, [clubId]);
 
   // Extract all available zones from data
   const availableZones = useMemo(() => {
@@ -468,6 +507,71 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
     });
   }, [activeCampaign, analytics]);
 
+  const activeCampaignDayMap = useMemo(() => {
+    return activeCampaign?.scheduleDayMap || {};
+  }, [activeCampaign]);
+
+  const handleSendSmsRuCampaign = async (targets: ClientProfile[]) => {
+    if (!smsRuConfig?.apiId) {
+      alert("Сначала укажите API-ключ SMS.RU в табе «Исключения и Настройки»");
+      return;
+    }
+    if (targets.length === 0) return;
+
+    setIsSendingViaSmsRu(true);
+    setSmsRuSendResult(null);
+
+    const messages = targets.map((c) => {
+      const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+      const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
+      const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay);
+      return {
+        phone: c.phone || "",
+        text: finalMsg,
+      };
+    });
+
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/marketing/sms-ru`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiId: smsRuConfig.apiId,
+          senderName: smsRuConfig.senderName,
+          testMode: smsRuConfig.testMode,
+          messages,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        setSmsRuSendResult({
+          ok: true,
+          sent: data.totalSent ?? targets.length,
+          failed: data.totalFailed ?? 0,
+          cost: data.totalCost ?? 0,
+          balance: data.balance,
+        });
+        if (typeof data.balance === "number") {
+          setSmsRuBalance(data.balance);
+        }
+      } else {
+        setSmsRuSendResult({
+          ok: false,
+          sent: 0,
+          failed: targets.length,
+          cost: 0,
+          balance: smsRuBalance ?? undefined,
+        });
+        alert(data.error || "Ошибка отправки через SMS.RU");
+      }
+    } catch (e: any) {
+      alert("Сетевая ошибка при обращении к SMS.RU: " + e.message);
+    } finally {
+      setIsSendingViaSmsRu(false);
+    }
+  };
+
   // -------------------------------------------------------------
   // VIEW 1: CAMPAIGNS HUB (ГЛАВНАЯ СТРАНИЦА SMS-РАССЫЛОК)
   // -------------------------------------------------------------
@@ -529,12 +633,20 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
 
           <div>
             <span className="text-xs text-slate-400 uppercase tracking-wider block">
-              Стоимость SMS
+              Шлюз SMS.RU
             </span>
             <p className="text-3xl font-bold text-slate-900 mt-1 font-mono">
-              ~3.50 ₽
+              {smsRuBalance !== null ? `${smsRuBalance.toLocaleString("ru")} ₽` : smsRuConfig?.apiId ? "Подключен" : "~3.50 ₽"}
             </p>
-            <span className="text-[11px] text-slate-500 mt-0.5 block">средний тариф шлюза</span>
+            <span className="text-[11px] text-slate-500 mt-0.5 block">
+              {smsRuConfig?.testMode
+                ? "тестовый режим (test=1)"
+                : smsRuBalance !== null
+                ? "баланс в личн. кабинете"
+                : smsRuConfig?.apiId
+                ? "ключ активен"
+                : "средний тариф шлюза"}
+            </span>
           </div>
         </div>
 
@@ -1287,8 +1399,6 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
   // -------------------------------------------------------------
   // VIEW 3: CAMPAIGN DETAIL (СТРАНИЦА СОЗДАННОЙ КАМПАНИИ)
   // -------------------------------------------------------------
-  const activeCampaignDayMap = activeCampaign?.scheduleDayMap || {};
-
   const activeCampaignDayBreakdown = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const d of DAYS_OF_WEEK) counts[d] = 0;
@@ -1369,6 +1479,23 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {smsRuConfig?.apiId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSmsRuSendResult(null);
+                  setSmsRuSendModalOpen(true);
+                }}
+                disabled={displayedClients.length === 0}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>
+                  Отправить в SMS.RU {activeDayFilter !== "all" ? `(${activeDayFilter}: ${displayedClients.length})` : `(${activeCampaignClients.length})`}
+                </span>
+              </button>
+            )}
+
             {activeDayFilter !== "all" && (
               <button
                 type="button"
@@ -1384,7 +1511,7 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
               disabled={activeCampaignClients.length === 0}
               className={cn(
                 "px-5 py-2.5 font-semibold text-xs rounded-lg transition-colors shadow-sm",
-                activeDayFilter === "all"
+                !smsRuConfig?.apiId && activeDayFilter === "all"
                   ? "bg-slate-900 hover:bg-slate-800 text-white disabled:opacity-40"
                   : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-300"
               )}
@@ -1608,6 +1735,124 @@ export function SmsTab({ clubId, analytics, excludedPhones }: Props) {
           )}
         </div>
       </div>
+
+      {/* SMS.RU Send Confirmation Modal */}
+      {smsRuSendModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+                  <Send className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Запуск отправки через SMS.RU
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Кампания: «{activeCampaign?.name}»
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSmsRuSendModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Когорта получателей:</span>
+                <span className="font-semibold text-slate-900">
+                  {activeDayFilter !== "all" ? `Только день: ${activeDayFilter}` : "Все дни рассылки"}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Количество номеров:</span>
+                <span className="font-bold text-slate-900 font-mono">{displayedClients.length} чел</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Расчетная стоимость (~3.50 ₽/SMS):</span>
+                <span className="font-bold text-slate-900 font-mono">~{Math.round(displayedClients.length * 3.5)} ₽</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Текущий баланс SMS.RU:</span>
+                <span className={cn(
+                  "font-bold font-mono",
+                  smsRuBalance !== null && smsRuBalance < displayedClients.length * 3.5
+                    ? "text-rose-600"
+                    : "text-emerald-700"
+                )}>
+                  {smsRuBalance !== null ? `${smsRuBalance.toLocaleString("ru")} ₽` : "проверяется..."}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs pt-1.5 border-t border-slate-200">
+                <span className="text-slate-500">Режим шлюза:</span>
+                <span className={cn(
+                  "font-bold text-[11px] px-2 py-0.5 rounded",
+                  smsRuConfig?.testMode
+                    ? "bg-amber-100 text-amber-800 border border-amber-200"
+                    : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                )}>
+                  {smsRuConfig?.testMode ? "ТЕСТОВЫЙ РЕЖИМ (test=1, без списаний)" : "БОЕВАЯ ОТПРАВКА (списание с баланса)"}
+                </span>
+              </div>
+            </div>
+
+            {smsRuSendResult && (
+              <div className={cn(
+                "p-4 rounded-xl text-xs space-y-1.5",
+                smsRuSendResult.ok ? "bg-emerald-50 border border-emerald-200 text-emerald-900" : "bg-rose-50 border border-rose-200 text-rose-900"
+              )}>
+                <div className="flex items-center gap-1.5 font-bold">
+                  {smsRuSendResult.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <ShieldAlert className="w-4 h-4 text-rose-600" />}
+                  <span>{smsRuSendResult.ok ? "Отправка успешно завершена!" : "Ошибка отправки"}</span>
+                </div>
+                <p className="leading-relaxed">
+                  Успешно передано в шлюз: <b>{smsRuSendResult.sent}</b> из {displayedClients.length}.
+                  {smsRuSendResult.failed > 0 && ` Ошибок: ${smsRuSendResult.failed}.`}
+                  {smsRuSendResult.cost > 0 && ` Списано: ~${Math.round(smsRuSendResult.cost)} ₽.`}
+                  {smsRuSendResult.balance !== undefined && ` Текущий баланс: ${smsRuSendResult.balance} ₽.`}
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setSmsRuSendModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+              >
+                {smsRuSendResult ? "Закрыть" : "Отмена"}
+              </button>
+
+              {!smsRuSendResult && (
+                <button
+                  type="button"
+                  onClick={() => handleSendSmsRuCampaign(displayedClients)}
+                  disabled={isSendingViaSmsRu || displayedClients.length === 0}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-2"
+                >
+                  {isSendingViaSmsRu ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Отправка в шлюз...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Подтвердить и отправить</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
