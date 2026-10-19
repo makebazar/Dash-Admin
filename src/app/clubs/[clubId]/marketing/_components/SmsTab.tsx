@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2, Pencil, Check } from "lucide-react";
+import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2, Pencil, Check, ChevronLeft, ChevronRight, Eye, Table } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ClientProfile, type ClubAnalytics, type DateFilter, type MonthOption, getAvailableMonths } from "./segmentation";
 import type { MarketingCampaignRecord, BonusTier } from "./SmsCampaignModal";
@@ -350,6 +350,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const [isEditingDetailTemplate, setIsEditingDetailTemplate] = useState(false);
   const [detailTemplateDraft, setDetailTemplateDraft] = useState("");
   const [wizardStartDate, setWizardStartDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [detailPage, setDetailPage] = useState(1);
+  const [detailPageSize, setDetailPageSize] = useState(50);
+  const [isDetailExpandedView, setIsDetailExpandedView] = useState(false);
 
   // SMS.RU Integration State
   const smsRuStorageKey = `marketing_sms_ru_${clubId}`;
@@ -815,10 +818,45 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     });
   }, [activeCampaignClients, activeCampaignDayMap, activeDayFilter]);
 
-  // Reset detail cost when campaign or day filter changes
+  // Reset detail cost and pagination when campaign or day filter changes
   useEffect(() => {
     setDetailCostSmsRu(null);
+    setDetailPage(1);
   }, [activeCampaignId, activeDayFilter]);
+
+  // Detailed cohort metrics for the campaign view
+  const detailCohortStats = useMemo(() => {
+    const list = displayedClients;
+    const count = list.length;
+    const totalSpent = list.reduce((sum, c) => sum + (c.totalSpent || 0), 0);
+    const totalBalance = list.reduce((sum, c) => sum + (c.balance || 0), 0);
+    const totalBonusBalance = list.reduce((sum, c) => sum + (c.bonusBalance || 0), 0);
+    const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
+    const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
+    const totalGiftBonus = list.reduce((sum, c) => {
+      return sum + calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
+    }, 0);
+    const totalVisits = list.reduce((sum, c) => sum + (c.visits ?? c.txCount ?? (c.totalSpent > 0 ? 1 : 0)), 0);
+    const avgSpentPerGuest = count > 0 ? Math.round(totalSpent / count) : 0;
+    const avgCheckPerVisit = totalVisits > 0 ? Math.round(totalSpent / totalVisits) : 0;
+
+    return {
+      count,
+      totalSpent,
+      totalBalance,
+      totalBonusBalance,
+      totalGiftBonus,
+      totalVisits,
+      avgSpentPerGuest,
+      avgCheckPerVisit,
+    };
+  }, [displayedClients, activeCampaign, bonusTiers, bonusTiersEnabled]);
+
+  const totalDetailPages = Math.max(1, Math.ceil(displayedClients.length / detailPageSize));
+  const paginatedClients = useMemo(() => {
+    const start = (detailPage - 1) * detailPageSize;
+    return displayedClients.slice(start, start + detailPageSize);
+  }, [displayedClients, detailPage, detailPageSize]);
 
   // Reset template editing state when campaign or view mode changes
   useEffect(() => {
@@ -2681,6 +2719,110 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
         </div>
       </div>
 
+      {/* Detailed Cohort & Financial Breakdown */}
+      <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 sm:p-5 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Аналитика аудитории кампании
+              </span>
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-800">
+                {activeDayFilter === "all" ? `Все дни (${detailCohortStats.count.toLocaleString("ru")} чел)` : `День: ${activeDayFilter} (${detailCohortStats.count.toLocaleString("ru")} чел)`}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Сводка по реальной выручке, игровым депозитам и бонусным балансам отобранных гостей
+            </p>
+          </div>
+          {activeCampaign?.periodLabel && (
+            <span className="text-xs text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg self-start sm:self-auto font-medium">
+              Период учета: <span className="font-semibold text-slate-900">{activeCampaign.periodLabel}</span>
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-1">
+          {/* 1. LTV */}
+          <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block" title="Сумма всех реальных пополнений этих гостей в клубе за выбранный период (без бонусов)">
+              Принесли в клуб (LTV)
+            </span>
+            <p className="text-lg font-bold text-slate-900 font-mono mt-0.5">
+              {Math.round(detailCohortStats.totalSpent).toLocaleString("ru")} <span className="text-xs font-normal text-slate-400">₽</span>
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5 leading-tight">
+              реальная выручка за период
+            </span>
+          </div>
+
+          {/* 2. Real Balance */}
+          <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block" title="Сумма реальных рублей, которая сейчас лежит на игровых счетах этих клиентов">
+              Остаток на балансах (₽)
+            </span>
+            <p className="text-lg font-bold text-slate-900 font-mono mt-0.5">
+              {Math.round(detailCohortStats.totalBalance).toLocaleString("ru")} <span className="text-xs font-normal text-slate-400">₽</span>
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5 leading-tight">
+              деньги на счетах гостей
+            </span>
+          </div>
+
+          {/* 3. Bonus Balance */}
+          <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl shadow-2xs">
+            <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block" title="Сумма бонусных баллов, которая сейчас лежит на клубных картах этих клиентов">
+              Остаток бонусов у гостей
+            </span>
+            <p className="text-lg font-bold text-amber-950 font-mono mt-0.5">
+              {Math.round(detailCohortStats.totalBonusBalance).toLocaleString("ru")} <span className="text-xs font-normal text-amber-600">Б</span>
+            </p>
+            <span className="text-[10px] text-amber-700 block mt-0.5 leading-tight">
+              накопленные баллы гостей
+            </span>
+          </div>
+
+          {/* 4. Gift Bonus */}
+          <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block" title="Суммарное количество бонусов, которое будет подарено этой когорте гостей по шкале">
+              Подарки по шкале (Б)
+            </span>
+            <p className="text-lg font-bold text-slate-900 font-mono mt-0.5">
+              {Math.round(detailCohortStats.totalGiftBonus).toLocaleString("ru")} <span className="text-xs font-normal text-slate-400">Б</span>
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5 leading-tight">
+              к начислению в рассылке
+            </span>
+          </div>
+
+          {/* 5. Avg Spent */}
+          <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block" title="Сколько денег суммарно принес один отобранный гость за выбранный период">
+              Траты на 1 гостя (LTV)
+            </span>
+            <p className="text-lg font-bold text-slate-900 font-mono mt-0.5">
+              {detailCohortStats.avgSpentPerGuest.toLocaleString("ru")} <span className="text-xs font-normal text-slate-400">₽</span>
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5 leading-tight">
+              в среднем на 1 человека
+            </span>
+          </div>
+
+          {/* 6. Avg Check per Visit */}
+          <div className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block" title="Средний чек одного визита в клуб среди отобранных клиентов">
+              Чек за 1 визит
+            </span>
+            <p className="text-lg font-bold text-slate-900 font-mono mt-0.5">
+              {detailCohortStats.avgCheckPerVisit.toLocaleString("ru")} <span className="text-xs font-normal text-slate-400">₽</span>
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5 leading-tight">
+              пополнение за сессию ({detailCohortStats.totalVisits.toLocaleString("ru")} визитов)
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* 7-Day Schedule Breakdown Strip & Day Filter */}
       {activeCampaign?.scheduleMode && activeCampaign.scheduleMode !== "instant" && (
         <div className="space-y-3">
@@ -2892,42 +3034,96 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
       {/* Recipient Table */}
       <div className="space-y-3 pt-2">
-        <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-slate-900">
               Список сформированных сообщений ({displayedClients.length.toLocaleString("ru")}
               {activeDayFilter !== "all" && ` • день: ${activeDayFilter}`})
             </h3>
             <p className="text-xs text-slate-500">
-              Итоговый текст, сгенерированный под каждого гостя индивидуально с учётом дня отправки
+              {isDetailExpandedView
+                ? "Подробная аналитическая база: проверяйте реальные траты (LTV), балансы депозитов и привычки гостей"
+                : "Итоговый текст, сгенерированный под каждого гостя индивидуально с учётом дня и времени отправки"}
             </p>
           </div>
-          {activeDayFilter !== "all" && (
-            <button
-              type="button"
-              onClick={() => setActiveDayFilter("all")}
-              className="text-xs text-slate-500 hover:text-slate-900 underline"
-            >
-              Сбросить фильтр по дню
-            </button>
-          )}
+
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+            {activeDayFilter !== "all" && (
+              <button
+                type="button"
+                onClick={() => setActiveDayFilter("all")}
+                className="text-xs text-slate-500 hover:text-slate-900 underline mr-2"
+              >
+                Сбросить день
+              </button>
+            )}
+
+            {/* Toggle: Compact vs Expanded Database View */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setIsDetailExpandedView(false)}
+                className={cn(
+                  "px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5",
+                  !isDetailExpandedView
+                    ? "bg-white text-slate-900 shadow-2xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900"
+                )}
+                title="Компактный список сообщений"
+              >
+                <Table className="w-3.5 h-3.5" />
+                <span>Компактно</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDetailExpandedView(true)}
+                className={cn(
+                  "px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1.5",
+                  isDetailExpandedView
+                    ? "bg-white text-slate-900 shadow-2xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900"
+                )}
+                title="Расширенные данные: LTV, балансы, бонусы, визиты, ПК"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Подробная база данных</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <th className="py-3 px-4 font-semibold w-12">№</th>
-                  <th className="py-3 px-4 font-semibold min-w-[130px]">Телефон (7xxx)</th>
-                  <th className="py-3 px-4 font-semibold min-w-[140px]">Клиент</th>
-                  <th className="py-3 px-4 font-semibold min-w-[170px]">Отправка (дата и время)</th>
-                  <th className="py-3 px-4 font-semibold min-w-[90px] text-right">Подарок Б</th>
-                  <th className="py-3 px-4 font-semibold min-w-[340px]">Итоговый текст сообщения</th>
+                <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold">
+                  <th className="py-3 px-3 w-12 text-slate-400">№</th>
+                  <th className="py-3 px-3 min-w-[115px]">Телефон</th>
+                  <th className="py-3 px-3 min-w-[130px]">Клиент</th>
+                  {isDetailExpandedView ? (
+                    <>
+                      <th className="py-3 px-3 text-right min-w-[95px]" title="Реальная выручка клиента за выбранный период">Траты LTV</th>
+                      <th className="py-3 px-3 text-right min-w-[90px]" title="Деньги на депозите в клубе">Баланс ₽</th>
+                      <th className="py-3 px-3 text-right min-w-[90px]" title="Бонусные баллы на карте">Бонусы Б</th>
+                      <th className="py-3 px-3 text-center min-w-[65px]" title="Количество визитов / транзакций">Визиты</th>
+                      <th className="py-3 px-3 text-center min-w-[70px]" title="Дней с последнего визита в клуб">Не был</th>
+                      <th className="py-3 px-3 min-w-[110px]" title="Любимый компьютер и игровая зона">ПК • Зона</th>
+                      <th className="py-3 px-3 min-w-[160px]">Отправка</th>
+                      <th className="py-3 px-3 text-right min-w-[85px]">Подарок Б</th>
+                      <th className="py-3 px-3 min-w-[320px]">Итоговый текст SMS</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="py-3 px-4 min-w-[170px]">Отправка (дата и время)</th>
+                      <th className="py-3 px-4 min-w-[90px] text-right">Подарок Б</th>
+                      <th className="py-3 px-4 min-w-[340px]">Итоговый текст сообщения</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800">
-                {displayedClients.slice(0, 50).map((c, idx) => {
+                {paginatedClients.map((c, idx) => {
+                  const globalIdx = (detailPage - 1) * detailPageSize + idx + 1;
                   const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
                   const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
                   const scheduledDate = activeCampaign?.scheduleDateMap?.[norm] || getScheduledDate(scheduledDay, activeCampaignStartDate);
@@ -2936,9 +3132,69 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
                   const giftBonus = calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
                   const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate);
+
+                  if (isDetailExpandedView) {
+                    return (
+                      <tr key={c.phone + idx} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">{globalIdx}</td>
+                        <td className="py-2.5 px-3 font-mono font-medium text-slate-900 whitespace-nowrap">7{norm}</td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-semibold text-slate-900 leading-tight truncate max-w-[140px]">{c.name || "Гость"}</div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {c.valueCategory === "diamond" && (
+                              <span className="text-[10px] text-violet-700 bg-violet-50 px-1.5 py-0.2 rounded border border-violet-200 font-medium">VIP</span>
+                            )}
+                            {c.valueCategory === "loyal" && (
+                              <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 font-medium">Лояльный</span>
+                            )}
+                            {c.valueCategory === "bonus_heavy" && (
+                              <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-medium">Бонусоед</span>
+                            )}
+                            {c.cashShare != null && (
+                              <span className="text-[10px] text-slate-400 font-mono">{c.cashShare}% свои</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-900 whitespace-nowrap">
+                          {Math.round(c.totalSpent || 0).toLocaleString("ru")} ₽
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-800 whitespace-nowrap">
+                          {Math.round(c.balance || 0).toLocaleString("ru")} ₽
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-medium text-amber-900 whitespace-nowrap">
+                          {Math.round(c.bonusBalance || 0).toLocaleString("ru")} Б
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono text-slate-700">
+                          {c.visits ?? c.txCount ?? "—"}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono text-slate-600 whitespace-nowrap">
+                          {c.daysSince != null ? `${c.daysSince} дн.` : "—"}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <div className="text-slate-900 font-medium truncate max-w-[110px]">{c.favoriteSeat || "ПК"}</div>
+                          <div className="text-[10px] text-slate-400 truncate max-w-[110px]">{c.favoriteZone || "Стандарт"}</div>
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <div className="font-semibold text-slate-900 font-mono text-[11px]">
+                            {scheduledDay} • {scheduledDate}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                            {scheduledTime} ({getScheduledTimeLabel(c)})
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                          {giftBonus > 0 ? `+${giftBonus.toLocaleString()} Б` : "—"}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-700 italic max-w-sm truncate text-xs" title={finalMsg}>
+                          {finalMsg}
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   return (
                     <tr key={c.phone + idx} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-2.5 px-4 text-slate-400 font-mono">{idx + 1}</td>
+                      <td className="py-2.5 px-4 text-slate-400 font-mono">{globalIdx}</td>
                       <td className="py-2.5 px-4 font-mono font-medium text-slate-900">7{norm}</td>
                       <td className="py-2.5 px-4">
                         <div className="font-semibold text-slate-900 leading-tight">{c.name || "Гость"}</div>
@@ -2963,7 +3219,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                       <td className="py-2.5 px-4 text-right font-mono font-medium text-slate-900">
                         {giftBonus > 0 ? `+${giftBonus.toLocaleString()} Б` : "—"}
                       </td>
-                      <td className="py-2.5 px-4 text-slate-700 italic max-w-md truncate">{finalMsg}</td>
+                      <td className="py-2.5 px-4 text-slate-700 italic max-w-md truncate" title={finalMsg}>
+                        {finalMsg}
+                      </td>
                     </tr>
                   );
                 })}
@@ -2971,11 +3229,93 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
             </table>
           </div>
 
-          {displayedClients.length > 50 && (
-            <div className="py-3 px-4 bg-slate-50 border-t border-slate-200 text-center text-xs text-slate-400">
-              Показаны первые 50 строк. При скачивании в CSV файл войдут все {displayedClients.length.toLocaleString("ru")} получателей.
+          {/* Interactive Pagination Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-slate-50/80 border-t border-slate-200">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs text-slate-500">
+                Показано{" "}
+                <span className="font-semibold text-slate-900 font-mono">
+                  {displayedClients.length > 0 ? (detailPage - 1) * detailPageSize + 1 : 0}
+                </span>
+                –
+                <span className="font-semibold text-slate-900 font-mono">
+                  {Math.min(detailPage * detailPageSize, displayedClients.length)}
+                </span>{" "}
+                из{" "}
+                <span className="font-semibold text-slate-900 font-mono">
+                  {displayedClients.length.toLocaleString("ru")}
+                </span>{" "}
+                гостей
+              </span>
+
+              <div className="flex items-center gap-1.5 pl-3 border-l border-slate-200">
+                <span className="text-xs text-slate-400">На странице:</span>
+                {[25, 50, 100].map((sz) => (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => {
+                      setDetailPageSize(sz);
+                      setDetailPage(1);
+                    }}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-xs font-mono transition-colors",
+                      detailPageSize === sz
+                        ? "bg-slate-900 text-white font-semibold shadow-2xs"
+                        : "bg-white hover:bg-slate-200 text-slate-700 border border-slate-200"
+                    )}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
+
+            {totalDetailPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={detailPage <= 1}
+                  onClick={() => setDetailPage(1)}
+                  className="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                >
+                  « Первая
+                </button>
+                <button
+                  type="button"
+                  disabled={detailPage <= 1}
+                  onClick={() => setDetailPage((p) => Math.max(1, p - 1))}
+                  className="p-1 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                  title="Предыдущая страница"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <span className="text-xs text-slate-700 font-medium px-2">
+                  Стр. <span className="font-bold text-slate-900 font-mono">{detailPage}</span> из{" "}
+                  <span className="font-mono">{totalDetailPages}</span>
+                </span>
+
+                <button
+                  type="button"
+                  disabled={detailPage >= totalDetailPages}
+                  onClick={() => setDetailPage((p) => Math.min(totalDetailPages, p + 1))}
+                  className="p-1 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                  title="Следующая страница"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  disabled={detailPage >= totalDetailPages}
+                  onClick={() => setDetailPage(totalDetailPages)}
+                  className="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                >
+                  Последняя »
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
