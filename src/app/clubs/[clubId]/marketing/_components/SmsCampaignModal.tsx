@@ -36,6 +36,8 @@ export interface MarketingCampaignRecord {
   balanceCategories?: BalanceCategoryTier[];
   balanceCategoriesEnabled?: boolean;
   balanceIncludeBonuses?: boolean;
+  sendTimeMode?: "fixed" | "smart";
+  fixedSendTime?: string;
 }
 
 interface Props {

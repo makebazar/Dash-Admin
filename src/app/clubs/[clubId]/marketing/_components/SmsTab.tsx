@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2, Pencil, Check, ChevronLeft, ChevronRight, Eye, Table } from "lucide-react";
+import { Send, Key, RefreshCw, CheckCircle2, ShieldAlert, X, Calculator, Calendar, AlertTriangle, Plus, Trash2, Pencil, Check, ChevronLeft, ChevronRight, Eye, Table, Clock, Download, Layers, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type ClientProfile, type ClubAnalytics, type DateFilter, type MonthOption, getAvailableMonths } from "./segmentation";
 import type { MarketingCampaignRecord, BonusTier, BalanceCategoryTier } from "./SmsCampaignModal";
@@ -274,7 +274,14 @@ export function getScheduledDate(dayName: string, baseDateInput?: Date | string 
   return `${dd}.${mm}.${yyyy}`;
 }
 
-export function getScheduledTime(client: ClientProfile): string {
+export function getScheduledTime(
+  client: ClientProfile,
+  timeMode: "fixed" | "smart" = "fixed",
+  fixedTime: string = "18:00"
+): string {
+  if (timeMode === "fixed") {
+    return fixedTime || "18:00";
+  }
   switch (client.preferredTime) {
     case "morning":
       return "10:30";
@@ -285,11 +292,18 @@ export function getScheduledTime(client: ClientProfile): string {
     case "night":
       return "19:30";
     default:
-      return "14:00";
+      return "18:00";
   }
 }
 
-export function getScheduledTimeLabel(client: ClientProfile): string {
+export function getScheduledTimeLabel(
+  client: ClientProfile,
+  timeMode: "fixed" | "smart" = "fixed",
+  fixedTime: string = "18:00"
+): string {
+  if (timeMode === "fixed") {
+    return `Единое (${fixedTime || "18:00"})`;
+  }
   switch (client.preferredTime) {
     case "morning":
       return "Утро (10:30)";
@@ -300,7 +314,7 @@ export function getScheduledTimeLabel(client: ClientProfile): string {
     case "night":
       return "Ночник (19:30)";
     default:
-      return "День (14:00)";
+      return "Вечер (18:00)";
   }
 }
 
@@ -389,6 +403,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
   const [detailPage, setDetailPage] = useState(1);
   const [detailPageSize, setDetailPageSize] = useState(50);
   const [isDetailExpandedView, setIsDetailExpandedView] = useState(false);
+  const [sendTimeMode, setSendTimeMode] = useState<"fixed" | "smart">("fixed");
+  const [fixedSendTime, setFixedSendTime] = useState<string>("18:00");
+  const [detailFixedTimeInput, setDetailFixedTimeInput] = useState<string>("18:00");
 
   // SMS.RU Integration State
   const smsRuStorageKey = `marketing_sms_ru_${clubId}`;
@@ -593,7 +610,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     campaignStartDate?: string | Date,
     customBalanceCategories?: BalanceCategoryTier[],
     isBalCatEnabled?: boolean,
-    includeBonusesBal?: boolean
+    includeBonusesBal?: boolean,
+    customTimeMode?: "fixed" | "smart",
+    customFixedTime?: string
   ) => {
     if (!client) return text;
     const name = client.name ? client.name.split(" ")[0] : "друг";
@@ -618,7 +637,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const balCatLabel = balCat ? balCat.label : (effectiveBal > 0 ? `${effectiveBal.toLocaleString("ru")} ₽` : "0 ₽");
     const totalBalFormatted = `${effectiveBal.toLocaleString("ru")} ₽`;
 
-    const scheduledTime = getScheduledTime(client);
+    const activeTimeMode = customTimeMode ?? activeCampaign?.sendTimeMode ?? sendTimeMode;
+    const activeFixedTime = customFixedTime ?? activeCampaign?.fixedSendTime ?? fixedSendTime;
+    const scheduledTime = getScheduledTime(client, activeTimeMode, activeFixedTime);
     const scheduledDate = getScheduledDate(scheduledDay || "Сразу", campaignStartDate);
 
     return text
@@ -669,7 +690,9 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       wizardStartDate,
       balanceCategories,
       balanceCategoriesEnabled,
-      balanceIncludeBonuses
+      balanceIncludeBonuses,
+      sendTimeMode,
+      fixedSendTime
     ),
     [
       templateText,
@@ -681,6 +704,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       balanceCategories,
       balanceCategoriesEnabled,
       balanceIncludeBonuses,
+      sendTimeMode,
+      fixedSendTime,
     ]
   );
 
@@ -722,7 +747,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
       const day = getScheduledDay(c, scheduleMode, idx);
       scheduleDayMap[norm] = day;
-      scheduleTimeMap[norm] = getScheduledTime(c);
+      scheduleTimeMap[norm] = getScheduledTime(c, sendTimeMode, fixedSendTime);
       scheduleDateMap[norm] = getScheduledDate(day, wizardStartDate);
     });
 
@@ -745,6 +770,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       balanceCategories: balanceCategoriesEnabled ? balanceCategories : undefined,
       balanceCategoriesEnabled,
       balanceIncludeBonuses,
+      sendTimeMode,
+      fixedSendTime,
     };
 
     if (typeof window !== "undefined") {
@@ -772,7 +799,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     dayMap?: Record<string, string>,
     filterDay: string = "all",
     formatMode: CsvFormatMode = csvFormat,
-    filterCategory: number | "all" = "all"
+    filterCategory: number | "all" = "all",
+    customFileName?: string
   ) => {
     let targetList = clientList;
     if (filterDay !== "all" && dayMap) {
@@ -800,6 +828,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const curBalCats = activeCampaign?.balanceCategories ?? balanceCategories;
     const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
     const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
+    const timeMode = activeCampaign?.sendTimeMode ?? sendTimeMode;
+    const fixedTime = activeCampaign?.fixedSendTime ?? fixedSendTime;
 
     let headerRow: string[];
     if (formatMode === "ru_date") {
@@ -821,8 +851,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
       const phone7 = `7${norm}`;
       const scheduledDay = dayMap?.[norm] || getScheduledDay(c, scheduleMode, 0);
       const scheduledDate = activeCampaign?.scheduleDateMap?.[norm] || getScheduledDate(scheduledDay, baseDate);
-      const scheduledTime = activeCampaign?.scheduleTimeMap?.[norm] || getScheduledTime(c);
-      const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate, curBalCats, curBalCatOn, curBalIncBon).replace(/"/g, '""');
+      const scheduledTime = activeCampaign?.scheduleTimeMap?.[norm] || getScheduledTime(c, timeMode, fixedTime);
+      const msg = renderMessage(text, c, scheduledDay, currentTiers, isTiersOn, baseDate, curBalCats, curBalCatOn, curBalIncBon, timeMode, fixedTime).replace(/"/g, '""');
 
       if (formatMode === "ru_date") {
         rows.push([phone7, `"${msg}"`, `"${scheduledDate}"`, `"${scheduledTime}"`, `"${scheduledDay}"`]);
@@ -841,7 +871,8 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
     const link = document.createElement("a");
     link.href = url;
     const daySuffix = filterDay !== "all" ? `_${filterDay.toLowerCase()}` : "";
-    link.setAttribute("download", `${name.toLowerCase().replace(/\s+/g, "_")}${daySuffix}_${Date.now()}.csv`);
+    const fileName = customFileName || `${name.toLowerCase().replace(/\s+/g, "_")}${daySuffix}_${Date.now()}.csv`;
+    link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -849,6 +880,72 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
 
     setDownloadSuccess(true);
     setTimeout(() => setDownloadSuccess(false), 3000);
+  };
+
+  const handleExportCategoryBatches = (formatMode: CsvFormatMode = csvFormat) => {
+    if (!activeCampaign) return;
+    const curBalCats = (activeCampaign.balanceCategories ?? balanceCategories)
+      .slice()
+      .sort((a, b) => b.minBalance - a.minBalance);
+    const curBalCatOn = activeCampaign.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
+    const curBalIncBon = activeCampaign.balanceIncludeBonuses ?? balanceIncludeBonuses;
+
+    let delay = 0;
+    curBalCats.forEach((cat) => {
+      const catClients = activeCampaignClients.filter((c) => {
+        const cCat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
+        return cCat && cCat.minBalance === cat.minBalance;
+      });
+      if (catClients.length > 0) {
+        setTimeout(() => {
+          handleExportCsv(
+            catClients,
+            activeCampaign.templateText,
+            activeCampaign.name,
+            activeCampaignDayMap,
+            "all",
+            formatMode,
+            cat.minBalance,
+            `colizeum_${clubId}_balans_${cat.minBalance}_plus_${catClients.length}clients.csv`
+          );
+        }, delay);
+        delay += 450;
+      }
+    });
+  };
+
+  const handleExportWaves = (formatMode: CsvFormatMode = csvFormat) => {
+    if (!activeCampaign) return;
+    const weekdaysList = activeCampaignClients.filter((c) => c.dayPattern !== "weekend");
+    const weekendsList = activeCampaignClients.filter((c) => c.dayPattern === "weekend");
+
+    if (weekdaysList.length > 0) {
+      handleExportCsv(
+        weekdaysList,
+        activeCampaign.templateText,
+        activeCampaign.name,
+        activeCampaignDayMap,
+        "all",
+        formatMode,
+        "all",
+        `colizeum_${clubId}_volna_1_budni_${weekdaysList.length}clients.csv`
+      );
+    }
+
+    if (weekendsList.length > 0) {
+      setTimeout(() => {
+        handleExportCsv(
+          weekendsList,
+          activeCampaign.templateText,
+          activeCampaign.name,
+          activeCampaignDayMap,
+          "all",
+          formatMode,
+          "all",
+          `colizeum_${clubId}_volna_2_vykhodnye_${weekendsList.length}clients.csv`
+        );
+      }, 450);
+    }
   };
 
   const handleDeleteCampaign = (id: string) => {
@@ -1089,6 +1186,116 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
         localStorage.setItem(storageKey, JSON.stringify(updatedList));
       } catch (e) {
         console.warn("Failed to persist updated campaign start date:", e);
+      }
+    }
+  };
+
+  const handleUpdateCampaignTime = (newMode: "fixed" | "smart", newTime: string) => {
+    if (!activeCampaignId || !activeCampaign) return;
+
+    const updatedTimeMap: Record<string, string> = {};
+    activeCampaignClients.forEach((c) => {
+      const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+      updatedTimeMap[norm] = getScheduledTime(c, newMode, newTime);
+    });
+
+    const updated = campaigns.map((c) => {
+      if (c.id === activeCampaignId) {
+        return {
+          ...c,
+          sendTimeMode: newMode,
+          fixedSendTime: newTime,
+          scheduleTimeMap: updatedTimeMap,
+        };
+      }
+      return c;
+    });
+    setCampaigns(updated);
+
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        const list: MarketingCampaignRecord[] = saved ? JSON.parse(saved) : [];
+        const updatedList = list.map((c) => {
+          if (c.id === activeCampaignId) {
+            return {
+              ...c,
+              sendTimeMode: newMode,
+              fixedSendTime: newTime,
+              scheduleTimeMap: updatedTimeMap,
+            };
+          }
+          return c;
+        });
+        localStorage.setItem(storageKey, JSON.stringify(updatedList));
+      } catch (e) {
+        console.warn("Failed to persist updated campaign time:", e);
+      }
+    }
+  };
+
+  const handleUnifyCampaignDates = (unifyMode: "single_day" | "two_waves" | "by_days") => {
+    if (!activeCampaignId || !activeCampaign) return;
+
+    const updatedDayMap: Record<string, string> = {};
+    const updatedDateMap: Record<string, string> = {};
+    const baseDate = activeCampaign.startDate || new Date();
+
+    if (unifyMode === "single_day") {
+      const singleDateStr = getScheduledDate("Сразу", baseDate);
+      activeCampaignClients.forEach((c) => {
+        const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+        updatedDayMap[norm] = "Сразу";
+        updatedDateMap[norm] = singleDateStr;
+      });
+    } else if (unifyMode === "two_waves") {
+      const weekdayDate = getScheduledDate("Вторник", baseDate);
+      const weekendDate = getScheduledDate("Суббота", baseDate);
+      activeCampaignClients.forEach((c) => {
+        const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+        const isWeekend = c.dayPattern === "weekend";
+        updatedDayMap[norm] = isWeekend ? "Суббота" : "Вторник";
+        updatedDateMap[norm] = isWeekend ? weekendDate : weekdayDate;
+      });
+    } else {
+      const mode = activeCampaign.scheduleMode || "smart_day_eve";
+      activeCampaignClients.forEach((c, idx) => {
+        const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
+        const day = getScheduledDay(c, mode, idx);
+        updatedDayMap[norm] = day;
+        updatedDateMap[norm] = getScheduledDate(day, baseDate);
+      });
+    }
+
+    const updated = campaigns.map((c) => {
+      if (c.id === activeCampaignId) {
+        return {
+          ...c,
+          scheduleDayMap: updatedDayMap,
+          scheduleDateMap: updatedDateMap,
+        };
+      }
+      return c;
+    });
+    setCampaigns(updated);
+
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        const list: MarketingCampaignRecord[] = saved ? JSON.parse(saved) : [];
+        const updatedList = list.map((c) => {
+          if (c.id === activeCampaignId) {
+            return {
+              ...c,
+              scheduleDayMap: updatedDayMap,
+              scheduleDateMap: updatedDateMap,
+            };
+          }
+          return c;
+        });
+        localStorage.setItem(storageKey, JSON.stringify(updatedList));
+      } catch (e) {
+        console.warn("Failed to persist unified campaign dates:", e);
       }
     }
   };
@@ -1984,6 +2191,70 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                       </div>
                     </button>
                   ))}
+                </div>
+
+                {/* Send Time Mode Selection */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-slate-700 shrink-0" />
+                      <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        Время отправки SMS
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-500">
+                      Для быстрого запуска менеджером без десятков очередей
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSendTimeMode("fixed");
+                        setFixedSendTime("18:00");
+                      }}
+                      className={cn(
+                        "py-1.5 px-3 rounded-lg text-xs font-medium border transition-colors flex items-center gap-1.5",
+                        sendTimeMode === "fixed" && fixedSendTime === "18:00"
+                          ? "bg-slate-900 text-white border-slate-900 shadow-2xs font-semibold"
+                          : "bg-white text-slate-700 hover:bg-slate-100 border-slate-300"
+                      )}
+                    >
+                      <span>Фиксированное 18:00 (Рекомендуется)</span>
+                    </button>
+
+                    <div className={cn(
+                      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border bg-white transition-colors",
+                      sendTimeMode === "fixed" && fixedSendTime !== "18:00"
+                        ? "border-slate-900 ring-1 ring-slate-900"
+                        : "border-slate-300"
+                    )}>
+                      <span className="text-xs text-slate-600 font-medium">Свое время:</span>
+                      <input
+                        type="time"
+                        value={fixedSendTime}
+                        onChange={(e) => {
+                          setSendTimeMode("fixed");
+                          setFixedSendTime(e.target.value);
+                        }}
+                        className="text-xs font-mono font-semibold text-slate-900 bg-transparent border-none focus:outline-none cursor-pointer p-0 w-16"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSendTimeMode("smart")}
+                      className={cn(
+                        "py-1.5 px-3 rounded-lg text-xs font-medium border transition-colors",
+                        sendTimeMode === "smart"
+                          ? "bg-slate-900 text-white border-slate-900 shadow-2xs font-semibold"
+                          : "bg-white text-slate-700 hover:bg-slate-100 border-slate-300"
+                      )}
+                    >
+                      <span>Умное время (10:30, 13:30, 17:00, 19:30)</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Live 7-Day Schedule Preview */}
@@ -3013,6 +3284,232 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
         </div>
       </div>
 
+      {/* MANAGER BATCH STANDARDIZATION & EXPORT PANEL */}
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 md:p-6 shadow-md border border-slate-700 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-700/80 pb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Layers className="w-5 h-5 text-emerald-400" />
+              <h3 className="text-base font-bold text-white tracking-wide">
+                Пакетная стандартизация и выгрузка для менеджера
+              </h3>
+              <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                Решение для быстрого запуска
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+              Устраняет проблему десятков разрозненных очередей и текстов. Фиксирует единое время отправки (18:00) и формирует стандартизированные пакеты под модерацию любого SMS-сервиса (SMS.RU, МТС Маркетолог и др.).
+            </p>
+          </div>
+          <div className="text-xs text-slate-300 bg-slate-800/80 border border-slate-600 rounded-lg px-3 py-1.5 self-start md:self-auto font-mono">
+            База: <span className="text-white font-bold">{activeCampaignClients.length}</span> чел
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {/* Controls: Time & Dates */}
+          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 space-y-4">
+            {/* 1. Time Slot Standardization */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-blue-400" />
+                  1. Единое время отправки
+                </span>
+                <span className="text-[11px] font-mono text-emerald-400 font-semibold">
+                  Текущее: {activeCampaign?.sendTimeMode === "smart" ? "Смарт (по гостям)" : `Единое (${activeCampaign?.fixedSendTime || "18:00"})`}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateCampaignTime("fixed", "18:00")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                    (!activeCampaign?.sendTimeMode || (activeCampaign.sendTimeMode === "fixed" && (activeCampaign.fixedSendTime || "18:00") === "18:00"))
+                      ? "bg-emerald-600 text-white font-bold shadow-sm ring-1 ring-emerald-400"
+                      : "bg-slate-700/80 hover:bg-slate-700 text-slate-200 border border-slate-600"
+                  )}
+                >
+                  ✓ 18:00 (Стандарт Colizeum)
+                </button>
+
+                <div className="inline-flex items-center gap-1.5 bg-slate-700/80 border border-slate-600 rounded-lg px-2.5 py-1">
+                  <span className="text-[11px] text-slate-300">Свое:</span>
+                  <input
+                    type="time"
+                    value={detailFixedTimeInput}
+                    onChange={(e) => setDetailFixedTimeInput(e.target.value)}
+                    className="text-xs font-mono font-bold text-white bg-transparent border-none focus:outline-none w-16 p-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateCampaignTime("fixed", detailFixedTimeInput)}
+                    className="text-[11px] bg-slate-600 hover:bg-slate-500 text-white font-medium px-2 py-0.5 rounded transition-colors"
+                  >
+                    Задать
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleUpdateCampaignTime("smart", "18:00")}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                    activeCampaign?.sendTimeMode === "smart"
+                      ? "bg-emerald-600 text-white font-bold shadow-sm ring-1 ring-emerald-400"
+                      : "bg-slate-700/80 hover:bg-slate-700 text-slate-200 border border-slate-600"
+                  )}
+                  title="Отправлять в индивидуальное время каждого гостя (10:30, 13:30, 17:00, 19:30)"
+                >
+                  Умное время
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Days Schedule Simplification */}
+            <div className="space-y-2 pt-2 border-t border-slate-700/60">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                  2. График и объединение дат
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Дата старта: {activeCampaignStartDate}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleUnifyCampaignDates("single_day")}
+                  className="px-3 py-1.5 bg-slate-700/80 hover:bg-slate-700 text-white rounded-lg text-xs font-medium border border-slate-600 transition-colors"
+                  title="Назначить всем клиентам единую дату старта рассылки"
+                >
+                  ⚡ Все в 1 день ({activeCampaignStartDate})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUnifyCampaignDates("two_waves")}
+                  className="px-3 py-1.5 bg-slate-700/80 hover:bg-slate-700 text-white rounded-lg text-xs font-medium border border-slate-600 transition-colors"
+                  title="Разделить клиентов на 2 волны: Будни (Вторник) и Выходные (Суббота)"
+                >
+                  🌊 2 волны (Будни / Выходные)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUnifyCampaignDates("by_days")}
+                  className="px-3 py-1.5 bg-slate-700/80 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-600 transition-colors"
+                  title="Восстановить распределение по 7 дням недели"
+                >
+                  🗓 По 7 дням недели
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Batch Downloads Section */}
+          <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                3. Готовые пакеты выгрузки (CSV)
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Формат: 7XXXXXXXXXX
+              </span>
+            </div>
+
+            {/* Option A: 3 Balance Category Batches */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-400">
+                  Вариант А: 3 пакета по категориям баланса (Рекомендуется)
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  3 файла со 100% единым текстом
+                </span>
+              </div>
+
+              {/* 1-click batch download button */}
+              <button
+                type="button"
+                onClick={() => handleExportCategoryBatches(csvFormat)}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                <span>Скачать все 3 пакета в 1 клик (3 отдельных CSV)</span>
+              </button>
+
+              {/* Individual Category Batch Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                {((activeCampaign?.balanceCategories ?? balanceCategories) || [])
+                  .slice()
+                  .sort((a, b) => b.minBalance - a.minBalance)
+                  .map((cat) => {
+                    const count = activeCampaignCategoryBreakdown.counts[cat.minBalance] || 0;
+                    return (
+                      <button
+                        key={cat.minBalance}
+                        type="button"
+                        onClick={() => {
+                          const curBalCats = (activeCampaign?.balanceCategories ?? balanceCategories).slice().sort((a, b) => b.minBalance - a.minBalance);
+                          const curBalCatOn = activeCampaign?.balanceCategoriesEnabled ?? balanceCategoriesEnabled;
+                          const curBalIncBon = activeCampaign?.balanceIncludeBonuses ?? balanceIncludeBonuses;
+                          const catClients = activeCampaignClients.filter((c) => {
+                            const cCat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
+                            return cCat && cCat.minBalance === cat.minBalance;
+                          });
+                          handleExportCsv(
+                            catClients,
+                            activeCampaign?.templateText || "",
+                            activeCampaign?.name || "sms",
+                            activeCampaignDayMap,
+                            "all",
+                            csvFormat,
+                            cat.minBalance,
+                            `colizeum_${clubId}_balans_${cat.minBalance}_plus_${catClients.length}clients.csv`
+                          );
+                        }}
+                        disabled={count === 0}
+                        className="p-2 bg-slate-700/80 hover:bg-slate-700 disabled:opacity-40 text-left rounded-lg border border-slate-600 transition-colors"
+                      >
+                        <span className="text-[10px] text-slate-300 block uppercase font-mono font-medium">
+                          {cat.label}
+                        </span>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <span className="text-xs font-bold text-white font-mono">{count} чел</span>
+                          <span className="text-[10px] text-emerald-400 font-medium">CSV ↓</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Option B & C: Unified or 2 Waves */}
+            <div className="pt-3 border-t border-slate-700/60 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleExportCsv(activeCampaignClients, activeCampaign?.templateText || "", activeCampaign?.name || "sms", activeCampaignDayMap, "all", csvFormat, "all", `colizeum_${clubId}_vse_${activeCampaignClients.length}clients.csv`)}
+                className="px-3 py-1.5 bg-slate-700/90 hover:bg-slate-700 text-white rounded-lg text-xs font-medium border border-slate-600 transition-colors flex items-center gap-1.5"
+              >
+                <FileText className="w-3.5 h-3.5 text-blue-400" />
+                <span>1 общий файл на всю базу ({activeCampaignClients.length} чел)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleExportWaves(csvFormat)}
+                className="px-3 py-1.5 bg-slate-700/90 hover:bg-slate-700 text-white rounded-lg text-xs font-medium border border-slate-600 transition-colors flex items-center gap-1.5"
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-400" />
+                <span>2 волны (Будни / Выходные)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Detailed Cohort & Financial Breakdown */}
       <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-4 sm:p-5 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
@@ -3550,7 +4047,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   const norm = (c.phone || "").replace(/\D/g, "").slice(-10);
                   const scheduledDay = activeCampaignDayMap[norm] || "Сразу";
                   const scheduledDate = activeCampaign?.scheduleDateMap?.[norm] || getScheduledDate(scheduledDay, activeCampaignStartDate);
-                  const scheduledTime = activeCampaign?.scheduleTimeMap?.[norm] || getScheduledTime(c);
+                  const scheduledTime = activeCampaign?.scheduleTimeMap?.[norm] || getScheduledTime(c, activeCampaign?.sendTimeMode, activeCampaign?.fixedSendTime);
                   const currentTiers = activeCampaign?.bonusTiers ?? bonusTiers;
                   const isTiersOn = activeCampaign?.bonusTiersEnabled ?? bonusTiersEnabled;
                   const curBalCats = activeCampaign?.balanceCategories ?? balanceCategories;
@@ -3559,7 +4056,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                   const clientCat = getClientBalanceCategory(c, curBalCats, curBalCatOn, curBalIncBon);
                   const effectiveBal = getClientEffectiveBalance(c, curBalIncBon);
                   const giftBonus = calculateClientGiftBonus(c.totalSpent || 0, currentTiers, isTiersOn);
-                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate, curBalCats, curBalCatOn, curBalIncBon);
+                  const finalMsg = renderMessage(activeCampaign?.templateText || "", c, scheduledDay, currentTiers, isTiersOn, activeCampaignStartDate, curBalCats, curBalCatOn, curBalIncBon, activeCampaign?.sendTimeMode, activeCampaign?.fixedSendTime);
 
                   if (isDetailExpandedView) {
                     return (
@@ -3615,7 +4112,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                             {scheduledDay} • {scheduledDate}
                           </div>
                           <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                            {scheduledTime} ({getScheduledTimeLabel(c)})
+                            {scheduledTime} ({getScheduledTimeLabel(c, activeCampaign?.sendTimeMode, activeCampaign?.fixedSendTime)})
                           </div>
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
@@ -3656,7 +4153,7 @@ export function SmsTab({ clubId, analytics, excludedPhones, dateFilter, onDateFi
                           {scheduledDay} • {scheduledDate}
                         </div>
                         <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          {scheduledTime} ({getScheduledTimeLabel(c)})
+                          {scheduledTime} ({getScheduledTimeLabel(c, activeCampaign?.sendTimeMode, activeCampaign?.fixedSendTime)})
                         </div>
                       </td>
                       <td className="py-2.5 px-4 text-right font-mono font-medium text-slate-900">
