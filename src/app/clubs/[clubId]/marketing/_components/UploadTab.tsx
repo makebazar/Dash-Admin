@@ -239,13 +239,16 @@ export function UploadTab({
             )}
             <div className="text-center">
               <span className="font-semibold text-xs text-slate-900 block">
-                1. Сводка по гостям (Операционный)
+                1. Анализ посещаемости клуба/сети
               </span>
               <span className="text-[11px] text-slate-500 mt-1 block">
-                {summaryFileName
-                  ? `${summaryFileName} (${summaryRows?.length.toLocaleString("ru")} строк)`
-                  : "Часы в ПК, визиты, ЛК, моб. приложение, бар"}
+                Langame: Аналитика → Анализ посещаемости клуба/сети
               </span>
+              {summaryFileName && (
+                <span className="text-[10px] text-slate-400 mt-0.5 block truncate max-w-[220px] mx-auto font-mono">
+                  {summaryFileName}
+                </span>
+              )}
             </div>
             {summaryRows ? (
               <span className="text-[11px] font-medium bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200">
@@ -258,7 +261,7 @@ export function UploadTab({
             )}
           </div>
 
-          {/* Слот 2: База гостей (1-я таблица) */}
+          {/* Слот 2: База гостей (Статистика и балансы гостей) */}
           <div
             onClick={() => guestInputRef.current?.click()}
             className={cn(
@@ -287,10 +290,13 @@ export function UploadTab({
                 2. Статистика и балансы гостей
               </span>
               <span className="text-[11px] text-slate-500 mt-1 block">
-                {guestFileName
-                  ? `${guestFileName} (${guestRows?.length.toLocaleString("ru")} строк)`
-                  : "Реальные остатки на счетах, бонусы, возраст, пол"}
+                Langame: Работа с гостями → Статистика и балансы гостей
               </span>
+              {guestFileName && (
+                <span className="text-[10px] text-slate-400 mt-0.5 block truncate max-w-[220px] mx-auto font-mono">
+                  {guestFileName}
+                </span>
+              )}
             </div>
             {guestRows ? (
               <span className="text-[11px] font-medium bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200">
@@ -303,7 +309,7 @@ export function UploadTab({
             )}
           </div>
 
-          {/* Слот 3: Лог кассы (2-я таблица) */}
+          {/* Слот 3: Лог ручных начислений/списаний */}
           <div
             onClick={() => txInputRef.current?.click()}
             className={cn(
@@ -329,13 +335,16 @@ export function UploadTab({
             )}
             <div className="text-center">
               <span className="font-semibold text-xs text-slate-900 block">
-                3. Лог начислений / списаний
+                3. Лог ручных начислений/списаний
               </span>
               <span className="text-[11px] text-slate-500 mt-1 block">
-                {txFileName
-                  ? `${txFileName} (${txRows?.length.toLocaleString("ru")} операций)`
-                  : "История чеков кассы администраторов"}
+                Langame: Работа с гостями → Лог ручных начислений/списаний
               </span>
+              {txFileName && (
+                <span className="text-[10px] text-slate-400 mt-0.5 block truncate max-w-[220px] mx-auto font-mono">
+                  {txFileName}
+                </span>
+              )}
             </div>
             {txRows ? (
               <span className="text-[11px] font-medium bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200">
@@ -348,7 +357,7 @@ export function UploadTab({
             )}
           </div>
 
-          {/* Слот 4: Покупка пакетов и тарифов (4-я таблица) */}
+          {/* Слот 4: Покупка пакетов */}
           <div
             onClick={() => packageInputRef.current?.click()}
             className={cn(
@@ -374,13 +383,16 @@ export function UploadTab({
             )}
             <div className="text-center">
               <span className="font-semibold text-xs text-slate-900 block">
-                4. Покупка пакетов и тарифов
+                4. Покупка пакетов
               </span>
               <span className="text-[11px] text-slate-500 mt-1 block">
-                {packageFileName
-                  ? `${packageFileName} (${packageRows?.length.toLocaleString("ru")} строк)`
-                  : "Тарифы, ПК, зоны клуба, списания (руб / бонусы)"}
+                Langame: Аналитика → Покупка пакетов
               </span>
+              {packageFileName && (
+                <span className="text-[10px] text-slate-400 mt-0.5 block truncate max-w-[220px] mx-auto font-mono">
+                  {packageFileName}
+                </span>
+              )}
             </div>
             {packageRows ? (
               <span className="text-[11px] font-medium bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-200">

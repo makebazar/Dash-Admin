@@ -729,6 +729,7 @@ export default function MarketingPage() {
           <BonusesTab
             clubId={clubId}
             txRows={txRows}
+            packageRows={packageRows}
             activeSnapshot={activeSnapshot}
             dateFilter={dateFilter}
             onUploadTxRows={(r, name) => {

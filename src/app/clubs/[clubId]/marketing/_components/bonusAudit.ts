@@ -30,6 +30,11 @@ export interface BonusOperation {
   matchedEmployeeName?: string | null;
   matchedShiftType?: string | null;
   isOffShift?: boolean;
+
+  // PC & Tariff matching (from package sessions, comments, or guest profile)
+  matchedPC?: string | null;
+  matchedPCSource?: "session_exact" | "session_day" | "comment" | "favorite" | null;
+  matchedTariffName?: string | null;
 }
 
 export interface ShiftInfo {
@@ -330,6 +335,174 @@ export function matchOperationsWithShifts(
         riskReasons,
       };
     }
+  });
+}
+
+export interface PackageSession {
+  phone: string;
+  pc: string;
+  tariffName: string;
+  startDate: Date;
+  endDate: Date;
+}
+
+/**
+ * Parses package sessions from packageRows (Table 4)
+ */
+export function extractPackageSessions(packageRows: Record<string, unknown>[]): PackageSession[] {
+  if (!packageRows || packageRows.length === 0) return [];
+  const s = packageRows[0];
+  const keys = Object.keys(s);
+
+  const findKey = (candidates: string[]) => {
+    return keys.find((k) => {
+      const lower = k.toLowerCase();
+      return candidates.some((c) => lower.includes(c.toLowerCase()));
+    });
+  };
+
+  const colPhone = findKey(["Телефон", "phone", "тел"]);
+  const colPC = findKey(["Номер ПК", "ПК", "Компьютер", "Место", "pc"]);
+  const colDate = findKey(["Дата покупки тарифа", "Дата покупки", "Дата", "date"]);
+  const colTariff = findKey(["Название тарифа", "Тариф", "tariff"]);
+
+  const sessions: PackageSession[] = [];
+
+  for (const row of packageRows) {
+    const rawPhone = colPhone ? String(row[colPhone] || "") : "";
+    const phone = rawPhone.replace(/\D/g, "").slice(-10);
+    if (!phone) continue;
+
+    const pc = colPC ? String(row[colPC] || "").trim() : "";
+    if (!pc) continue;
+
+    const dateVal = colDate ? parseTxDate(row[colDate]) : null;
+    if (!dateVal) continue;
+
+    const tariffName = colTariff ? String(row[colTariff] || "").trim() : "";
+    const lowerT = tariffName.toLowerCase();
+
+    let durationHours = 1;
+    if (lowerT.includes("ночь")) {
+      durationHours = 9;
+    } else {
+      const hm = lowerT.match(/(\d+)\s*(?:час|ч)/);
+      if (hm) durationHours = parseInt(hm[1], 10);
+      else if (lowerT.includes("пакет") || lowerT.includes("утро") || lowerT.includes("вечер")) {
+        durationHours = 3;
+      }
+    }
+
+    const startDate = dateVal;
+    // Buffer session by 30 mins after end for handover/extension
+    const endDate = new Date(startDate.getTime() + (durationHours * 60 + 30) * 60 * 1000);
+
+    sessions.push({
+      phone,
+      pc,
+      tariffName,
+      startDate,
+      endDate,
+    });
+  }
+
+  return sessions;
+}
+
+/**
+ * Extracts explicit PC/seat mentions from comment text (e.g. "вылет на 15 пк", "завис pc-2", "пересадка с 5 на 9")
+ */
+export function extractPcFromComment(comment: string): string | null {
+  if (!comment) return null;
+  const c = comment.trim();
+
+  // Pattern: "с 5 на 9" -> "5 → 9"
+  const mMove = c.match(/(?:с|c)\s*(\d{1,3})\s*(?:на|в)\s*(\d{1,3})/i);
+  if (mMove) {
+    return `ПК ${mMove[1]} → ${mMove[2]}`;
+  }
+
+  // Pattern: "пк 15", "pc 15", "pc-15", "пк15", "компьютер 12"
+  const mPc = c.match(/(?:пк|pc|комп|компьютер|место|месте|компе|компом)\s*[-#№]?\s*(\d{1,3})\b/i);
+  if (mPc) {
+    return `ПК ${mPc[1]}`;
+  }
+
+  // Pattern: "15 пк", "15 pc", "15 комп"
+  const mRev = c.match(/\b(\d{1,3})\s*(?:пк|pc|комп|компьютер)/i);
+  if (mRev) {
+    return `ПК ${mRev[1]}`;
+  }
+
+  return null;
+}
+
+/**
+ * Matches bonus operations with package sessions, comments, and guest favorite seats
+ */
+export function matchOperationsWithPC(
+  operations: BonusOperation[],
+  packageSessions: PackageSession[],
+  guestSeatsMap?: Map<string, string>
+): BonusOperation[] {
+  return operations.map((op) => {
+    const fromComment = extractPcFromComment(op.comment);
+
+    if (op.phone && packageSessions.length > 0 && op.date) {
+      const opTime = op.date.getTime();
+
+      // 1. Direct active session match (check-in <= op.date <= check-out)
+      const exactMatch = packageSessions.find(
+        (s) => s.phone === op.phone && opTime >= s.startDate.getTime() && opTime <= s.endDate.getTime()
+      );
+
+      if (exactMatch) {
+        return {
+          ...op,
+          matchedPC: exactMatch.pc,
+          matchedPCSource: "session_exact",
+          matchedTariffName: exactMatch.tariffName,
+        };
+      }
+
+      // 2. Same-day session match (same calendar day)
+      const opDayStr = op.date.toDateString();
+      const dayMatch = packageSessions.find(
+        (s) => s.phone === op.phone && s.startDate.toDateString() === opDayStr
+      );
+
+      if (dayMatch) {
+        return {
+          ...op,
+          matchedPC: dayMatch.pc,
+          matchedPCSource: "session_day",
+          matchedTariffName: dayMatch.tariffName,
+        };
+      }
+    }
+
+    // 3. Extracted from comment
+    if (fromComment) {
+      return {
+        ...op,
+        matchedPC: fromComment,
+        matchedPCSource: "comment",
+      };
+    }
+
+    // 4. Favorite/frequent seat of guest from profiles
+    if (op.phone && guestSeatsMap && guestSeatsMap.has(op.phone)) {
+      const fav = guestSeatsMap.get(op.phone);
+      if (fav && fav !== "—") {
+        return {
+          ...op,
+          matchedPC: fav,
+          matchedPCSource: "favorite",
+        };
+      }
+    }
+
+    return op;
   });
 }
 
