@@ -3,20 +3,11 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { 
-  Monitor, 
-  Cpu, 
   AlertTriangle, 
-  CheckCircle2, 
-  Clock, 
   TrendingDown, 
   TrendingUp, 
-  Wrench, 
   ExternalLink, 
-  Search, 
-  Filter, 
-  Sparkles,
-  Layers,
-  HelpCircle
+  Search 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ClubAnalytics, ClubPcStat, ClubZoneStat } from "./segmentation";
@@ -125,13 +116,12 @@ export function HardwareTab({ clubId, analytics }: Props) {
 
   if (!analytics || pcStats.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
-        <Monitor className="w-10 h-10 text-slate-300 mx-auto" />
+      <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-1.5 shadow-xs">
         <h3 className="font-bold text-base text-slate-900">
           Данные по ПК не загружены
         </h3>
         <p className="text-xs text-slate-500 max-w-md mx-auto font-medium">
-          Для анализа экономики мест и доходности оборудования загрузите отчет «Покупка пакетов и тарифов» во вкладке «Срезы и Загрузка».
+          Для анализа экономики мест и доходности оборудования загрузите отчет «Покупка пакетов и тарифов» во вкладке «Загрузка».
         </p>
       </div>
     );
@@ -142,14 +132,13 @@ export function HardwareTab({ clubId, analytics }: Props) {
       {/* Zone Economics Cards */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-slate-600" />
-            <span>Экономика игровых зон</span>
+          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Экономика игровых зон
           </h2>
           {selectedZone && (
             <button
               onClick={() => setSelectedZone(null)}
-              className="text-xs font-medium text-slate-600 hover:text-black transition-colors"
+              className="text-xs font-medium text-slate-600 hover:text-black transition-colors cursor-pointer"
             >
               Сбросить фильтр зоны (выбрана: {selectedZone})
             </button>
@@ -211,9 +200,8 @@ export function HardwareTab({ clubId, analytics }: Props) {
       <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 space-y-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h3 className="text-lg font-bold tracking-tight text-slate-900 flex items-center gap-2">
-              <Monitor className="w-5 h-5 text-slate-700" />
-              <span>Рейтинг мест и аудит оборудования</span>
+            <h3 className="text-lg font-bold tracking-tight text-slate-900">
+              Рейтинг мест и аудит оборудования
             </h3>
             <p className="text-slate-500 text-xs mt-1 font-medium">
               Сравнение выручки каждого ПК со средней нормой его зоны. Интеграция с модулем «Оборудование» DashAdmin подсвечивает открытые поломки.
@@ -224,27 +212,25 @@ export function HardwareTab({ clubId, analytics }: Props) {
             <button
               onClick={() => setFilterUnderperformingOnly(!filterUnderperformingOnly)}
               className={cn(
-                "px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5",
+                "px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer",
                 filterUnderperformingOnly
-                  ? "bg-amber-500 text-white border-amber-600 shadow-sm"
+                  ? "bg-amber-500 text-white border-amber-600 shadow-xs"
                   : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
               )}
             >
-              <TrendingDown className="w-3.5 h-3.5" />
-              <span>Отстающие (&lt;80% нормы)</span>
+              Отстающие (&lt;80% нормы)
             </button>
 
             <button
               onClick={() => setFilterIssueOnly(!filterIssueOnly)}
               className={cn(
-                "px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5",
+                "px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer",
                 filterIssueOnly
-                  ? "bg-red-600 text-white border-red-700 shadow-sm"
+                  ? "bg-rose-600 text-white border-rose-700 shadow-xs"
                   : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
               )}
             >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              <span>С открытыми поломками</span>
+              С открытыми поломками
             </button>
           </div>
         </div>

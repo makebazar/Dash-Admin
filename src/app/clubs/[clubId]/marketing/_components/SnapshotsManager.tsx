@@ -19,11 +19,13 @@ import { cn } from "@/lib/utils";
 import type { SnapshotSummary, SnapshotFull } from "./types";
 import type { ClubAnalytics } from "./segmentation";
 import { detectPeriod, formatPeriod } from "./periodDetection";
+import { extractBonusOperations } from "./bonusAudit";
 
 interface Props {
   clubId: string;
   analytics: ClubAnalytics | null;
   fileNames: (string | null)[];
+  txRows?: Record<string, unknown>[] | null;
   summaryRows?: Record<string, unknown>[] | null;
   packageRows?: Record<string, unknown>[] | null;
   activeSnapshot: SnapshotFull | null;
@@ -35,6 +37,7 @@ export function SnapshotsManager({
   clubId,
   analytics,
   fileNames,
+  txRows = null,
   summaryRows = null,
   packageRows = null,
   activeSnapshot,
@@ -167,6 +170,30 @@ export function SnapshotsManager({
         }
       }
 
+      // Extract bonus operations if txRows available, or preserve from activeSnapshot
+      let bonusOperations: any = undefined;
+      if (txRows && txRows.length > 0) {
+        const ops = extractBonusOperations(txRows);
+        if (ops.length > 0) {
+          bonusOperations = ops.map((op) => ({
+            id: op.id,
+            phone: op.phone,
+            guestName: op.guestName,
+            amount: op.amount,
+            dateStr: op.dateStr,
+            source: op.source,
+            rawAuthor: op.rawAuthor,
+            comment: op.comment,
+            category: op.category,
+            categoryLabel: op.categoryLabel,
+            riskLevel: op.riskLevel,
+            riskReasons: op.riskReasons,
+          }));
+        }
+      } else if (activeSnapshot?.summary_metrics?.bonus_operations) {
+        bonusOperations = activeSnapshot.summary_metrics.bonus_operations;
+      }
+
       const payload = {
         name: (snapshotName || detected.name || "Срез данных").trim(),
         period_start: startDate || detected.periodStart || null,
@@ -187,6 +214,7 @@ export function SnapshotsManager({
           abandonedBalance: analytics.abandonedBalance,
           abandonedBonus: analytics.abandonedBonus,
           monthlyBreakdown: Object.keys(monthlyBreakdown).length > 0 ? monthlyBreakdown : undefined,
+          bonus_operations: bonusOperations,
         },
         guests_data: compactProfiles,
         pc_data: analytics.clubPcStats || [],

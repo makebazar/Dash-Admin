@@ -440,13 +440,12 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
 
   if (!analytics) {
     return (
-      <div className="bg-white border border-slate-200 rounded-3xl p-16 text-center space-y-3">
-        <Users className="w-12 h-12 text-slate-300 mx-auto" />
-        <h3 className="font-bold text-sm text-slate-700">
+      <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-1.5 shadow-xs">
+        <h3 className="font-bold text-sm text-slate-900">
           Данные не загружены
         </h3>
-        <p className="text-xs text-slate-400 max-w-sm mx-auto">
-          Перейдите на вкладку «Загрузка отчетов» и загрузите один или несколько файлов Langame.
+        <p className="text-xs text-slate-500 max-w-sm mx-auto">
+          Перейдите на вкладку «Загрузка» и загрузите один или несколько файлов Langame.
         </p>
       </div>
     );
@@ -582,14 +581,9 @@ export function AnalyticsTab({ analytics, dateFilter, onDateFilterChange }: Prop
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-slate-100 text-slate-700">
-                  <Gamepad2 className="w-4 h-4" />
-                </span>
-                <h3 className="font-bold text-sm text-slate-900">
-                  Распределение по игровым зонам клуба
-                </h3>
-              </div>
+              <h3 className="font-bold text-sm text-slate-900">
+                Распределение по игровым зонам клуба
+              </h3>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
                 Выручка, популярность и списания бонусов по зонам (сопоставлено с оборудованием клуба)
               </p>

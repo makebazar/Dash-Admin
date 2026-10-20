@@ -422,6 +422,7 @@ export function UploadTab({
         clubId={clubId}
         analytics={analytics}
         fileNames={[guestFileName, txFileName, summaryFileName, packageFileName]}
+        txRows={txRows}
         summaryRows={summaryRows}
         packageRows={packageRows}
         activeSnapshot={activeSnapshot}

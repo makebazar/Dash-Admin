@@ -10,6 +10,7 @@ import { SettingsTab } from "./_components/SettingsTab";
 import { SmsTab } from "./_components/SmsTab";
 import { VkTab } from "./_components/VkTab";
 import { AttributionTab } from "./_components/AttributionTab";
+import { BonusesTab } from "./_components/BonusesTab";
 import { cn } from "@/lib/utils";
 import { Calendar } from "lucide-react";
 import { buildClubAnalytics, type ClubAnalytics, type WorkstationInfo, type ClientProfile, type DateFilter, type ClubPcStat } from "./_components/segmentation";
@@ -19,6 +20,7 @@ import type { SnapshotFull } from "./_components/types";
 const MAIN_TABS = [
   { id: "analytics", label: "Гости" },
   { id: "tasks", label: "Задачи" },
+  { id: "bonuses", label: "Бонусы" },
   { id: "sms", label: "SMS" },
   { id: "vk", label: "VK" },
   { id: "attribution", label: "Сквозная" },
@@ -720,6 +722,20 @@ export default function MarketingPage() {
             clubId={clubId} 
             analytics={analytics} 
             excludedPhones={excludedPhones}
+          />
+        )}
+
+        {activeTab === "bonuses" && (
+          <BonusesTab
+            clubId={clubId}
+            txRows={txRows}
+            activeSnapshot={activeSnapshot}
+            dateFilter={dateFilter}
+            onUploadTxRows={(r, name) => {
+              setTxRows(r);
+              setTxFileName(name);
+              setActiveSnapshot(null);
+            }}
           />
         )}
 
