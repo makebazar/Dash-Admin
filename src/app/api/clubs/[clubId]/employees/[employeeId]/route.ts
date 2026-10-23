@@ -6,7 +6,7 @@ import { normalizePhone } from "@/lib/phone-utils";
 import { ensureOwnerSubscriptionActive } from "@/lib/club-subscription-guard";
 import { requireModuleAccess } from "@/lib/club-api-access";
 
-import { hasColumn } from "@/lib/db-compat";
+import { releaseClubEmployeeAssignments } from "@/lib/maintenance-task-logic";
 
 const SALT_ROUNDS = 10;
 
@@ -29,25 +29,6 @@ export async function PATCH(
       "edit",
     );
     if (!guard.ok) return guard.response;
-
-    const hasIsActiveColumn = await hasColumn("club_employees", "is_active");
-    const hasShowInScheduleColumn = await hasColumn(
-      "club_employees",
-      "show_in_schedule",
-    );
-    if (!hasIsActiveColumn || !hasShowInScheduleColumn) {
-      await query(`
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_employees' AND column_name='is_active') THEN
-                        ALTER TABLE club_employees ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
-                    END IF;
-                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_employees' AND column_name='show_in_schedule') THEN
-                        ALTER TABLE club_employees ADD COLUMN show_in_schedule BOOLEAN DEFAULT TRUE;
-                    END IF;
-                END $$;
-            `);
-    }
 
     const {
       full_name,
@@ -194,63 +175,7 @@ export async function PATCH(
       (dismissed_at !== undefined && dismissed_at !== null && is_active !== true);
 
     if (isDismissing) {
-      // 1. Close open shifts in this club
-      await query(
-        `UPDATE shifts
-         SET check_out = NOW(),
-             status = CASE WHEN status = 'ACTIVE' THEN 'CLOSED' ELSE status END
-         WHERE club_id = $1 AND user_id = $2 AND check_out IS NULL`,
-        [clubId, employeeId],
-      );
-
-      // 2. Unassign zones, workstations, and equipment owned by this employee
-      await query(
-        `UPDATE club_zones SET assigned_user_id = NULL WHERE club_id = $1 AND assigned_user_id = $2`,
-        [clubId, employeeId],
-      );
-      await query(
-        `UPDATE club_workstations SET assigned_user_id = NULL WHERE club_id = $1 AND assigned_user_id = $2`,
-        [clubId, employeeId],
-      );
-      await query(
-        `UPDATE equipment
-         SET assigned_user_id = NULL,
-             assignment_mode = 'FREE_POOL',
-             updated_at = CURRENT_TIMESTAMP
-         WHERE club_id = $1 AND assigned_user_id = $2`,
-        [clubId, employeeId],
-      );
-
-      // 3. Release open maintenance tasks back to active equipment owner or free pool
-      await query(
-        `UPDATE equipment_maintenance_tasks mt
-         SET assigned_user_id = CASE
-               WHEN e.assignment_mode = 'DIRECT'
-                    AND e.assigned_user_id IS NOT NULL
-                    AND e.assigned_user_id <> $2
-                    AND EXISTS (
-                      SELECT 1 FROM club_employees ce
-                      WHERE ce.club_id = e.club_id
-                        AND ce.user_id = e.assigned_user_id
-                        AND ce.is_active = TRUE
-                        AND ce.dismissed_at IS NULL
-                    )
-               THEN e.assigned_user_id
-               ELSE NULL
-             END,
-             status = CASE
-               WHEN mt.verification_status = 'REJECTED' THEN 'REWORK'
-               ELSE 'PENDING'
-             END,
-             session_id = NULL,
-             updated_at = CURRENT_TIMESTAMP
-         FROM equipment e
-         WHERE mt.equipment_id = e.id
-           AND e.club_id = $1
-           AND mt.assigned_user_id = $2
-           AND mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
-        [clubId, employeeId],
-      );
+      await releaseClubEmployeeAssignments(clubId, employeeId);
     }
 
     if (userUpdates.length === 0 && empUpdates.length === 0) {

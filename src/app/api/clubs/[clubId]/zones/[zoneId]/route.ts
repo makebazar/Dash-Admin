@@ -20,15 +20,6 @@ export async function PATCH(
 
         await requireClubFullAccess(clubId)
 
-        await query(`
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='club_zones' AND column_name='display_order') THEN
-                    ALTER TABLE club_zones ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0;
-                END IF;
-            END $$;
-        `);
-
         if (move === 'UP' || move === 'DOWN') {
             const dir = move === 'UP' ? 'UP' : 'DOWN'
             const row = await query(

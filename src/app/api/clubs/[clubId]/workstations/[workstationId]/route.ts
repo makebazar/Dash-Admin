@@ -69,7 +69,9 @@ export async function PATCH(
                      assignment_mode = CASE
                         WHEN $1::uuid IS NULL THEN 'FREE_POOL'
                         ELSE 'DIRECT'
-                     END
+                     END,
+                     maintenance_enabled = TRUE,
+                     updated_at = CURRENT_TIMESTAMP
                  WHERE workstation_id = $2`,
                 [assignedUserId, workstationId]
             );

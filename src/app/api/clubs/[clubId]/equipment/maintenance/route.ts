@@ -4,6 +4,11 @@ import { cookies } from "next/headers";
 import { calculateMaintenanceQualityMetrics } from "@/lib/maintenance-kpi-quality";
 import { hasColumn } from "@/lib/db-compat";
 import { formatDateKeyInTimezone, formatLocalDate } from "@/lib/utils";
+import {
+  effectiveEquipmentAssigneeSql,
+  effectiveStatusSql,
+  effectiveTaskAssigneeSql,
+} from "@/lib/maintenance-task-logic";
 
 // GET - List maintenance tasks
 export async function GET(
@@ -61,63 +66,6 @@ export async function GET(
     // But if we're filtering for REJECTED tasks specifically, we want all of them
     const useDistinct =
       !verificationStatus && !status && !hasDateRange && !sortBy;
-
-    const effectiveEquipmentAssigneeSql = `
-            CASE
-                WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE AND ce_equip.dismissed_at IS NULL THEN e.assigned_user_id
-                ELSE NULL
-            END
-        `;
-
-    const effectiveTaskAssigneeSql = `
-            CASE
-                WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE AND ce_task.dismissed_at IS NULL AND (
-                    mt.verification_status = 'REJECTED'
-                    OR (
-                        mt.updated_at > NOW() - INTERVAL '12 hours'
-                        AND (
-                            mt.session_id IS NOT NULL
-                            OR ce_task.role_id IN (2, 5142)
-                            OR mt.updated_at > NOW() - INTERVAL '2 hours'
-                            OR EXISTS (
-                                SELECT 1 FROM shifts s_active
-                                WHERE s_active.user_id = mt.assigned_user_id
-                                  AND s_active.club_id = e.club_id
-                                  AND s_active.check_out IS NULL
-                                  AND s_active.check_in > NOW() - INTERVAL '16 hours'
-                            )
-                        )
-                    )
-                ) THEN mt.assigned_user_id
-                ELSE ${effectiveEquipmentAssigneeSql}
-            END
-        `;
-
-    const effectiveStatusSql = `
-            CASE
-                WHEN mt.status = 'IN_PROGRESS' AND (
-                    mt.assigned_user_id IS NULL
-                    OR ce_task.user_id IS NULL
-                    OR ce_task.is_active = FALSE
-                    OR ce_task.dismissed_at IS NOT NULL
-                    OR mt.updated_at <= NOW() - INTERVAL '12 hours'
-                    OR (
-                        mt.session_id IS NULL
-                        AND COALESCE(ce_task.role_id, 0) NOT IN (2, 5142)
-                        AND mt.updated_at <= NOW() - INTERVAL '2 hours'
-                        AND NOT EXISTS (
-                            SELECT 1 FROM shifts s_active
-                            WHERE s_active.user_id = mt.assigned_user_id
-                              AND s_active.club_id = e.club_id
-                              AND s_active.check_out IS NULL
-                              AND s_active.check_in > NOW() - INTERVAL '16 hours'
-                        )
-                    )
-                ) THEN
-                    CASE WHEN mt.verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
-                ELSE mt.status
-            END
-        `;
 
     let sql = `
             SELECT ${useDistinct ? "DISTINCT ON (mt.equipment_id)" : ""}
@@ -507,30 +455,6 @@ export async function POST(
       ? `COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days)`
       : `e.cleaning_interval_days`;
 
-    // Normalize legacy inherited assignments into explicit equipment-level state.
-    await query(
-      `UPDATE equipment e
-             SET assigned_user_id = w.assigned_user_id,
-                 assignment_mode = CASE
-                     WHEN w.assigned_user_id IS NULL THEN 'FREE_POOL'
-                     ELSE 'DIRECT'
-                 END
-             FROM club_workstations w
-             WHERE e.club_id = $1
-               AND e.assignment_mode = 'INHERIT'
-               AND e.workstation_id = w.id`,
-      [clubId],
-    );
-    await query(
-      `UPDATE equipment
-             SET assigned_user_id = NULL,
-                 assignment_mode = 'FREE_POOL'
-             WHERE club_id = $1
-               AND assignment_mode = 'INHERIT'
-               AND workstation_id IS NULL`,
-      [clubId],
-    );
-
     // Self-heal assignments to dismissed/inactive employees and fix inconsistent assignment_mode
     await query(
       `UPDATE club_zones z
@@ -582,6 +506,7 @@ export async function POST(
          AND (
            (e.assignment_mode = 'DIRECT' AND e.assigned_user_id IS NULL)
            OR (e.assignment_mode = 'FREE_POOL' AND e.assigned_user_id IS NOT NULL)
+           OR e.assignment_mode NOT IN ('DIRECT', 'FREE_POOL')
          )`,
       [clubId],
     );

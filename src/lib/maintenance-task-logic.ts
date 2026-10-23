@@ -5,8 +5,137 @@ import {
   ensureMaintenanceTaskInitialHistory,
   getMaintenanceTaskCurrentCycle,
 } from "@/lib/maintenance-task-events";
-import { hasColumn } from "@/lib/db-compat";
-import { isLaundryEquipmentType } from "@/lib/utils";
+import { formatDateKeyInTimezone, isLaundryEquipmentType } from "@/lib/utils";
+
+const isManagerRoleSql = (alias: string) => `
+  (
+    COALESCE(${alias}.role_id, 0) IN (2, 5142)
+    OR LOWER(COALESCE(${alias}.role, '')) LIKE '%управ%'
+    OR LOWER(COALESCE(${alias}.role, '')) LIKE '%manager%'
+  )
+`;
+
+export const effectiveEquipmentAssigneeSql = `
+  CASE
+    WHEN e.assignment_mode = 'DIRECT'
+         AND ce_equip.is_active = TRUE
+         AND ce_equip.dismissed_at IS NULL
+    THEN e.assigned_user_id
+    ELSE NULL
+  END
+`;
+
+export const effectiveTaskAssigneeSql = `
+  CASE
+    WHEN mt.assigned_user_id IS NOT NULL
+         AND ce_task.is_active = TRUE
+         AND ce_task.dismissed_at IS NULL
+         AND (
+           mt.verification_status = 'REJECTED'
+           OR (
+             mt.updated_at > NOW() - INTERVAL '12 hours'
+             AND (
+               mt.session_id IS NOT NULL
+               OR ${isManagerRoleSql("ce_task")}
+               OR mt.updated_at > NOW() - INTERVAL '2 hours'
+               OR EXISTS (
+                 SELECT 1 FROM shifts s_active
+                 WHERE s_active.user_id = mt.assigned_user_id
+                   AND s_active.club_id = e.club_id
+                   AND s_active.check_out IS NULL
+                   AND s_active.check_in > NOW() - INTERVAL '16 hours'
+               )
+             )
+           )
+         )
+    THEN mt.assigned_user_id
+    ELSE ${effectiveEquipmentAssigneeSql}
+  END
+`;
+
+export const effectiveStatusSql = `
+  CASE
+    WHEN mt.status = 'IN_PROGRESS' AND (
+      mt.assigned_user_id IS NULL
+      OR ce_task.user_id IS NULL
+      OR ce_task.is_active = FALSE
+      OR ce_task.dismissed_at IS NOT NULL
+      OR mt.updated_at <= NOW() - INTERVAL '12 hours'
+      OR (
+        mt.session_id IS NULL
+        AND NOT ${isManagerRoleSql("ce_task")}
+        AND mt.updated_at <= NOW() - INTERVAL '2 hours'
+        AND NOT EXISTS (
+          SELECT 1 FROM shifts s_active
+          WHERE s_active.user_id = mt.assigned_user_id
+            AND s_active.club_id = e.club_id
+            AND s_active.check_out IS NULL
+            AND s_active.check_in > NOW() - INTERVAL '16 hours'
+        )
+      )
+    ) THEN
+      CASE WHEN mt.verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
+    ELSE mt.status
+  END
+`;
+
+export async function releaseClubEmployeeAssignments(
+  clubId: string | number,
+  employeeId: string,
+) {
+  await query(
+    `UPDATE shifts
+     SET check_out = NOW(),
+         status = CASE WHEN status = 'ACTIVE' THEN 'CLOSED' ELSE status END
+     WHERE club_id = $1 AND user_id = $2 AND check_out IS NULL`,
+    [clubId, employeeId],
+  );
+  await query(
+    `UPDATE club_zones SET assigned_user_id = NULL WHERE club_id = $1 AND assigned_user_id = $2`,
+    [clubId, employeeId],
+  );
+  await query(
+    `UPDATE club_workstations SET assigned_user_id = NULL WHERE club_id = $1 AND assigned_user_id = $2`,
+    [clubId, employeeId],
+  );
+  await query(
+    `UPDATE equipment
+     SET assigned_user_id = NULL,
+         assignment_mode = 'FREE_POOL',
+         updated_at = CURRENT_TIMESTAMP
+     WHERE club_id = $1 AND assigned_user_id = $2`,
+    [clubId, employeeId],
+  );
+  await query(
+    `UPDATE equipment_maintenance_tasks mt
+     SET assigned_user_id = CASE
+           WHEN e.assignment_mode = 'DIRECT'
+                AND e.assigned_user_id IS NOT NULL
+                AND e.assigned_user_id <> $2
+                AND EXISTS (
+                  SELECT 1 FROM club_employees ce
+                  WHERE ce.club_id = e.club_id
+                    AND ce.user_id = e.assigned_user_id
+                    AND ce.is_active = TRUE
+                    AND ce.dismissed_at IS NULL
+                )
+           THEN e.assigned_user_id
+           ELSE NULL
+         END,
+         status = CASE
+           WHEN mt.verification_status = 'REJECTED' THEN 'REWORK'
+           ELSE 'PENDING'
+         END,
+         session_id = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     FROM equipment e
+     WHERE mt.equipment_id = e.id
+       AND e.club_id = $1
+       AND mt.assigned_user_id = $2
+       AND mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
+    [clubId, employeeId],
+  );
+}
 
 export async function completeMaintenanceTask(params: {
   clubId: string;
@@ -49,12 +178,15 @@ export async function completeMaintenanceTask(params: {
     const currentCycle = await getMaintenanceTaskCurrentCycle(taskId);
 
     // 2. Unassign and return to pool
-    await query(
+    const skippedRes = await query(
       `UPDATE equipment_maintenance_tasks
        SET assigned_user_id = NULL,
-           status = 'PENDING',
-           notes = COALESCE(notes || E'\n', '') || $2
-       WHERE id = $1`,
+           session_id = NULL,
+           status = CASE WHEN verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END,
+           notes = COALESCE(notes || E'\n', '') || $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING *`,
       [
         taskId,
         `[${new Date().toISOString()}] Отложено через терминал. Причина: ${notes || "Не указана"}. Был назначен: ${task.assignee_name || "Неизвестно"}`,
@@ -70,7 +202,7 @@ export async function completeMaintenanceTask(params: {
       note: notes || "Отложено через терминал",
     });
 
-    return { success: true };
+    return { success: true, task: skippedRes.rows[0] };
   }
 
   const taskHistorySnapshotRes = await query(
@@ -222,6 +354,7 @@ export async function completeMaintenanceTask(params: {
          SET status = 'COMPLETED',
              verification_status = 'PENDING',
              completed_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP,
              completed_by = $2,
              assigned_user_id = $2,
              photos = $3,
@@ -290,13 +423,29 @@ export async function completeMaintenanceTask(params: {
   // Auto-create next task
   if (kpiBonus?.auto_create_next_task !== false) {
     const equipmentInfo = await query(
-      `SELECT e.id, e.assigned_user_id, e.cleaning_interval_days, e.cleaning_interval_override_days
-             FROM equipment e
-             WHERE e.id = $1`,
+      `SELECT e.id,
+              e.maintenance_enabled,
+              e.cleaning_interval_days,
+              e.cleaning_interval_override_days,
+              CASE
+                WHEN e.assignment_mode = 'DIRECT'
+                     AND ce.is_active = TRUE
+                     AND ce.dismissed_at IS NULL
+                THEN e.assigned_user_id
+                ELSE NULL
+              END as effective_assigned_user_id,
+              COALESCE(c.timezone, 'Europe/Moscow') as timezone
+       FROM equipment e
+       LEFT JOIN clubs c ON c.id = e.club_id
+       LEFT JOIN club_employees ce ON ce.club_id = e.club_id AND ce.user_id = e.assigned_user_id
+       WHERE e.id = $1`,
       [equipmentId],
     );
 
-    if (equipmentInfo.rows.length > 0) {
+    if (
+      equipmentInfo.rows.length > 0 &&
+      equipmentInfo.rows[0].maintenance_enabled !== false
+    ) {
       const eq = equipmentInfo.rows[0];
       const intervalDays = Math.max(
         1,
@@ -308,7 +457,24 @@ export async function completeMaintenanceTask(params: {
       const nextDueDate = new Date();
       nextDueDate.setHours(0, 0, 0, 0);
       nextDueDate.setDate(nextDueDate.getDate() + intervalDays);
-      const nextDueDateStr = nextDueDate.toISOString().split("T")[0];
+      let finalDueDateStr = formatDateKeyInTimezone(
+        nextDueDate,
+        eq.timezone || "Europe/Moscow",
+      );
+      const finalAssignedUserId = eq.effective_assigned_user_id || null;
+
+      if (finalAssignedUserId) {
+        const shiftRes = await query(
+          `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
+           FROM work_schedules
+           WHERE club_id = $1 AND user_id = $2 AND date >= $3
+           ORDER BY date ASC LIMIT 1`,
+          [clubId, finalAssignedUserId, finalDueDateStr],
+        );
+        if (shiftRes.rows[0]?.date) {
+          finalDueDateStr = String(shiftRes.rows[0].date);
+        }
+      }
 
       const existingTask = await query(
         `SELECT id FROM equipment_maintenance_tasks
@@ -322,8 +488,15 @@ export async function completeMaintenanceTask(params: {
         await query(
           `INSERT INTO equipment_maintenance_tasks
                      (club_id, equipment_id, task_type, due_date, assigned_user_id, status, created_by, cycle_no)
-                     VALUES ($1, $2, 'CLEANING', $3, $4, 'PENDING', $5, 1)`,
-          [clubId, equipmentId, nextDueDateStr, eq.assigned_user_id, userId],
+                     VALUES ($1, $2, 'CLEANING', $3, $4, 'PENDING', $5, 1)
+                     ON CONFLICT DO NOTHING`,
+          [
+            clubId,
+            equipmentId,
+            finalDueDateStr,
+            finalAssignedUserId,
+            userId,
+          ],
         );
       }
     }

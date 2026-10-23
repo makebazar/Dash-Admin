@@ -9,6 +9,7 @@ import {
   requireClubFullAccess,
   requireModuleAccess,
 } from "@/lib/club-api-access";
+import { releaseClubEmployeeAssignments } from "@/lib/maintenance-task-logic";
 
 async function syncOwnersSubscriptionForClub(clubId: string | number) {
   // Логика синхронизации через пользователей отключена,
@@ -26,43 +27,12 @@ export async function GET(
 
     let ownerRoleId: number | null = null;
     try {
-      await query(
-        `INSERT INTO roles (name, default_kpi_settings) VALUES ('Владелец', '{}'::jsonb) ON CONFLICT (name) DO NOTHING`,
-      );
       const ownerRoleRes = await query(
         `SELECT id FROM roles WHERE name = 'Владелец' LIMIT 1`,
       );
       ownerRoleId = ownerRoleRes.rows[0]?.id
         ? Number(ownerRoleRes.rows[0].id)
         : null;
-    } catch {}
-
-    try {
-      await query(`
-                CREATE TABLE IF NOT EXISTS club_employee_roles (
-                    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
-                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
-                    priority INTEGER NOT NULL DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT NOW(),
-                    updated_at TIMESTAMP DEFAULT NOW(),
-                    UNIQUE(club_id, user_id, role_id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_club_employee_roles_club_user ON club_employee_roles(club_id, user_id);
-            `);
-    } catch {}
-    try {
-      await query(`
-                CREATE TABLE IF NOT EXISTS employee_role_salary_assignments (
-                    club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
-                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE RESTRICT,
-                    scheme_id INTEGER NULL REFERENCES salary_schemes(id) ON DELETE SET NULL,
-                    assigned_at TIMESTAMP DEFAULT NOW(),
-                    UNIQUE(club_id, user_id, role_id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_employee_role_salary_assignments_club_user ON employee_role_salary_assignments(club_id, user_id);
-            `);
     } catch {}
 
     // Get employees with salary scheme assignments
@@ -385,59 +355,7 @@ export async function DELETE(
       [clubId, employeeId],
     );
 
-    // Release open shifts, zones, workstations, equipment, and maintenance tasks
-    await query(
-      `UPDATE shifts
-       SET check_out = NOW(),
-           status = CASE WHEN status = 'ACTIVE' THEN 'CLOSED' ELSE status END
-       WHERE club_id = $1 AND user_id = $2 AND check_out IS NULL`,
-      [clubId, employeeId],
-    );
-    await query(
-      `UPDATE club_zones SET assigned_user_id = NULL WHERE club_id = $1 AND assigned_user_id = $2`,
-      [clubId, employeeId],
-    );
-    await query(
-      `UPDATE club_workstations SET assigned_user_id = NULL WHERE club_id = $1 AND assigned_user_id = $2`,
-      [clubId, employeeId],
-    );
-    await query(
-      `UPDATE equipment
-       SET assigned_user_id = NULL,
-           assignment_mode = 'FREE_POOL',
-           updated_at = CURRENT_TIMESTAMP
-       WHERE club_id = $1 AND assigned_user_id = $2`,
-      [clubId, employeeId],
-    );
-    await query(
-      `UPDATE equipment_maintenance_tasks mt
-       SET assigned_user_id = CASE
-             WHEN e.assignment_mode = 'DIRECT'
-                  AND e.assigned_user_id IS NOT NULL
-                  AND e.assigned_user_id <> $2
-                  AND EXISTS (
-                    SELECT 1 FROM club_employees ce
-                    WHERE ce.club_id = e.club_id
-                      AND ce.user_id = e.assigned_user_id
-                      AND ce.is_active = TRUE
-                      AND ce.dismissed_at IS NULL
-                  )
-             THEN e.assigned_user_id
-             ELSE NULL
-           END,
-           status = CASE
-             WHEN mt.verification_status = 'REJECTED' THEN 'REWORK'
-             ELSE 'PENDING'
-           END,
-           session_id = NULL,
-           updated_at = CURRENT_TIMESTAMP
-       FROM equipment e
-       WHERE mt.equipment_id = e.id
-         AND e.club_id = $1
-         AND mt.assigned_user_id = $2
-         AND mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
-      [clubId, employeeId],
-    );
+    await releaseClubEmployeeAssignments(clubId, employeeId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

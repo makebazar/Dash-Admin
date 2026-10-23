@@ -954,9 +954,6 @@ export default function MaintenanceSchedule() {
           ?.full_name || null
       : null;
     const nextAssignmentMode = assignedUserId ? "DIRECT" : "FREE_POOL";
-    const workstationEquipment = equipment.filter(
-      (item) => item.workstation_id === workstationId,
-    );
 
     setTasks((prev) =>
       prev.map((task) =>
@@ -998,20 +995,6 @@ export default function MaintenanceSchedule() {
           free_pool: assignedUserId === null,
         }),
       });
-
-      await Promise.all(
-        workstationEquipment.map((item) =>
-          fetch(`/api/clubs/${clubId}/equipment/${item.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              assignment_mode: nextAssignmentMode,
-              assigned_user_id: assignedUserId,
-              maintenance_enabled: true,
-            }),
-          }),
-        ),
-      );
       fetchData(true);
     } catch (error) {
       console.error("Error assigning place owner:", error);
