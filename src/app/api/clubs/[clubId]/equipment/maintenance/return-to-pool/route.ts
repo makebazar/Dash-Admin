@@ -27,18 +27,17 @@ export async function POST(
       );
     }
 
-    // Verify user belongs to club
+    // Lookup user name (including dismissed or removed employees)
     const userCheck = await query(
-      `SELECT ce.user_id, u.full_name
-             FROM club_employees ce
-             JOIN users u ON u.id = ce.user_id
-             WHERE ce.club_id = $1 AND ce.user_id = $2 AND ce.is_active = TRUE AND ce.dismissed_at IS NULL`,
-      [clubId, user_id],
+      `SELECT u.id as user_id, u.full_name
+             FROM users u
+             WHERE u.id = $1`,
+      [user_id],
     );
 
     if (userCheck.rowCount === 0) {
       return NextResponse.json(
-        { error: "Сотрудник не найден или неактивен" },
+        { error: "Сотрудник не найден" },
         { status: 404 },
       );
     }
@@ -49,10 +48,10 @@ export async function POST(
     if (task_ids && task_ids.length > 0) {
       tasksToUpdate = task_ids;
     } else {
-      // Find all PENDING tasks assigned to this user
+      // Find all open tasks assigned to this user
       const pendingResult = await query(
         `SELECT id FROM equipment_maintenance_tasks
-                 WHERE club_id = $1 AND assigned_user_id = $2 AND status = 'PENDING'`,
+                 WHERE club_id = $1 AND assigned_user_id = $2 AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
         [clubId, user_id],
       );
       tasksToUpdate = pendingResult.rows.map((r: any) => r.id);
@@ -69,13 +68,19 @@ export async function POST(
     const result = await query(
       `UPDATE equipment_maintenance_tasks
              SET assigned_user_id = NULL,
+                 session_id = NULL,
+                 status = CASE
+                   WHEN verification_status = 'REJECTED' THEN 'REWORK'
+                   ELSE 'PENDING'
+                 END,
                  notes = COALESCE(notes || E'\n', '') || $1,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = ANY($2) AND status = 'PENDING'
+             WHERE id = ANY($2) AND club_id = $3 AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
              RETURNING id`,
       [
         `[${new Date().toISOString()}] Возврат в пул: сотрудник ${userName}. Причина: ${reason || "Не указана"}`,
         tasksToUpdate,
+        clubId,
       ],
     );
 

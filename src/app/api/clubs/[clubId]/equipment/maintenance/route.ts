@@ -64,23 +64,29 @@ export async function GET(
 
     const effectiveEquipmentAssigneeSql = `
             CASE
-                WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE THEN e.assigned_user_id
+                WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE AND ce_equip.dismissed_at IS NULL THEN e.assigned_user_id
                 ELSE NULL
             END
         `;
 
     const effectiveTaskAssigneeSql = `
             CASE
-                WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE AND (
+                WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE AND ce_task.dismissed_at IS NULL AND (
                     mt.verification_status = 'REJECTED'
-                    OR mt.session_id IS NOT NULL
-                    OR ce_task.role_id IN (2, 5142)
-                    OR mt.updated_at > NOW() - INTERVAL '2 hours'
-                    OR EXISTS (
-                        SELECT 1 FROM shifts s_active
-                        WHERE s_active.user_id = mt.assigned_user_id
-                          AND s_active.club_id = e.club_id
-                          AND s_active.check_out IS NULL
+                    OR (
+                        mt.updated_at > NOW() - INTERVAL '12 hours'
+                        AND (
+                            mt.session_id IS NOT NULL
+                            OR ce_task.role_id IN (2, 5142)
+                            OR mt.updated_at > NOW() - INTERVAL '2 hours'
+                            OR EXISTS (
+                                SELECT 1 FROM shifts s_active
+                                WHERE s_active.user_id = mt.assigned_user_id
+                                  AND s_active.club_id = e.club_id
+                                  AND s_active.check_out IS NULL
+                                  AND s_active.check_in > NOW() - INTERVAL '16 hours'
+                            )
+                        )
                     )
                 ) THEN mt.assigned_user_id
                 ELSE ${effectiveEquipmentAssigneeSql}
@@ -90,18 +96,21 @@ export async function GET(
     const effectiveStatusSql = `
             CASE
                 WHEN mt.status = 'IN_PROGRESS' AND (
-                    mt.assigned_user_id IS NOT NULL AND (
-                        ce_task.is_active = FALSE
-                        OR (
-                            mt.session_id IS NULL
-                            AND COALESCE(ce_task.role_id, 0) NOT IN (2, 5142)
-                            AND mt.updated_at <= NOW() - INTERVAL '2 hours'
-                            AND NOT EXISTS (
-                                SELECT 1 FROM shifts s_active
-                                WHERE s_active.user_id = mt.assigned_user_id
-                                  AND s_active.club_id = e.club_id
-                                  AND s_active.check_out IS NULL
-                            )
+                    mt.assigned_user_id IS NULL
+                    OR ce_task.user_id IS NULL
+                    OR ce_task.is_active = FALSE
+                    OR ce_task.dismissed_at IS NOT NULL
+                    OR mt.updated_at <= NOW() - INTERVAL '12 hours'
+                    OR (
+                        mt.session_id IS NULL
+                        AND COALESCE(ce_task.role_id, 0) NOT IN (2, 5142)
+                        AND mt.updated_at <= NOW() - INTERVAL '2 hours'
+                        AND NOT EXISTS (
+                            SELECT 1 FROM shifts s_active
+                            WHERE s_active.user_id = mt.assigned_user_id
+                              AND s_active.club_id = e.club_id
+                              AND s_active.check_out IS NULL
+                              AND s_active.check_in > NOW() - INTERVAL '16 hours'
                         )
                     )
                 ) THEN
@@ -522,6 +531,130 @@ export async function POST(
       [clubId],
     );
 
+    // Self-heal assignments to dismissed/inactive employees and fix inconsistent assignment_mode
+    await query(
+      `UPDATE club_zones z
+       SET assigned_user_id = NULL
+       WHERE z.club_id = $1
+         AND z.assigned_user_id IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM club_employees ce
+           WHERE ce.club_id = z.club_id AND ce.user_id = z.assigned_user_id AND ce.is_active = TRUE AND ce.dismissed_at IS NULL
+           UNION ALL
+           SELECT 1 FROM clubs c WHERE c.id = z.club_id AND c.owner_id = z.assigned_user_id
+         )`,
+      [clubId],
+    );
+    await query(
+      `UPDATE club_workstations w
+       SET assigned_user_id = NULL
+       WHERE w.club_id = $1
+         AND w.assigned_user_id IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM club_employees ce
+           WHERE ce.club_id = w.club_id AND ce.user_id = w.assigned_user_id AND ce.is_active = TRUE AND ce.dismissed_at IS NULL
+           UNION ALL
+           SELECT 1 FROM clubs c WHERE c.id = w.club_id AND c.owner_id = w.assigned_user_id
+         )`,
+      [clubId],
+    );
+    await query(
+      `UPDATE equipment e
+       SET assigned_user_id = NULL,
+           assignment_mode = 'FREE_POOL'
+       WHERE e.club_id = $1
+         AND e.assigned_user_id IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM club_employees ce
+           WHERE ce.club_id = e.club_id AND ce.user_id = e.assigned_user_id AND ce.is_active = TRUE AND ce.dismissed_at IS NULL
+           UNION ALL
+           SELECT 1 FROM clubs c WHERE c.id = e.club_id AND c.owner_id = e.assigned_user_id
+         )`,
+      [clubId],
+    );
+    await query(
+      `UPDATE equipment e
+       SET assignment_mode = CASE
+             WHEN e.assigned_user_id IS NOT NULL THEN 'DIRECT'
+             ELSE 'FREE_POOL'
+           END
+       WHERE e.club_id = $1
+         AND (
+           (e.assignment_mode = 'DIRECT' AND e.assigned_user_id IS NULL)
+           OR (e.assignment_mode = 'FREE_POOL' AND e.assigned_user_id IS NOT NULL)
+         )`,
+      [clubId],
+    );
+
+    // Release tasks stuck on dismissed/inactive employees or abandoned in IN_PROGRESS
+    await query(
+      `UPDATE equipment_maintenance_tasks mt
+       SET status = CASE
+             WHEN mt.verification_status = 'REJECTED' THEN 'REWORK'
+             ELSE 'PENDING'
+           END,
+           session_id = NULL,
+           assigned_user_id = CASE
+             WHEN e.assignment_mode = 'DIRECT'
+                  AND e.assigned_user_id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1 FROM club_employees ce_eq
+                    WHERE ce_eq.club_id = e.club_id
+                      AND ce_eq.user_id = e.assigned_user_id
+                      AND ce_eq.is_active = TRUE
+                      AND ce_eq.dismissed_at IS NULL
+                  )
+             THEN e.assigned_user_id
+             ELSE NULL
+           END,
+           updated_at = CURRENT_TIMESTAMP
+       FROM equipment e
+       WHERE mt.equipment_id = e.id
+         AND e.club_id = $1
+         AND mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
+         AND (
+           (
+             mt.assigned_user_id IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM club_employees ce_t
+               WHERE ce_t.club_id = e.club_id
+                 AND ce_t.user_id = mt.assigned_user_id
+                 AND ce_t.is_active = TRUE
+                 AND ce_t.dismissed_at IS NULL
+               UNION ALL
+               SELECT 1 FROM clubs c
+               WHERE c.id = e.club_id
+                 AND c.owner_id = mt.assigned_user_id
+             )
+           )
+           OR (
+             mt.status = 'IN_PROGRESS'
+             AND (
+               mt.assigned_user_id IS NULL
+               OR mt.updated_at <= NOW() - INTERVAL '12 hours'
+               OR (
+                 mt.session_id IS NULL
+                 AND mt.updated_at <= NOW() - INTERVAL '2 hours'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM club_employees ce_m
+                   WHERE ce_m.club_id = e.club_id
+                     AND ce_m.user_id = mt.assigned_user_id
+                     AND ce_m.role_id IN (2, 5142)
+                 )
+                 AND NOT EXISTS (
+                   SELECT 1 FROM shifts s_active
+                   WHERE s_active.user_id = mt.assigned_user_id
+                     AND s_active.club_id = e.club_id
+                     AND s_active.check_out IS NULL
+                     AND s_active.check_in > NOW() - INTERVAL '16 hours'
+                 )
+               )
+             )
+           )
+         )`,
+      [clubId],
+    );
+
     const baseParams = [clubId, task_type];
     let queryStr = `
             SELECT
@@ -706,6 +839,18 @@ export async function POST(
               [activeTask.id, finalDueDate, finalAssignedUserId],
             );
           }
+        } else if (
+          activeTask.status === "REWORK" &&
+          (!activeTask.assigned_user_id ||
+            !activeEmployeeIds.has(activeTask.assigned_user_id))
+        ) {
+          await query(
+            `UPDATE equipment_maintenance_tasks
+             SET assigned_user_id = $2,
+                 session_id = NULL
+             WHERE id = $1`,
+            [activeTask.id, finalAssignedUserId],
+          );
         }
         continue;
       }

@@ -121,18 +121,29 @@ export async function PATCH(
                 await query(
                     `UPDATE equipment 
                      SET assigned_user_id = $1::uuid,
+                         assignment_mode = CASE WHEN $1::uuid IS NULL THEN 'FREE_POOL' ELSE 'DIRECT' END,
                          maintenance_enabled = CASE WHEN $2::boolean THEN TRUE ELSE (CASE WHEN $1::uuid IS NULL THEN FALSE ELSE TRUE END) END
                      WHERE workstation_id = ANY($3)`,
                     [assigned_user_id ?? null, freePool, wsIds]
                 );
 
-                // Propagate to PENDING maintenance tasks
+                // Propagate to open maintenance tasks
                 await query(
                     `UPDATE equipment_maintenance_tasks 
-                     SET assigned_user_id = $1::uuid
+                     SET status = CASE
+                           WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN
+                             CASE WHEN verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
+                           ELSE status
+                         END,
+                         session_id = CASE
+                           WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN NULL
+                           ELSE session_id
+                         END,
+                         assigned_user_id = $1::uuid,
+                         updated_at = CURRENT_TIMESTAMP
                      WHERE equipment_id IN (
                         SELECT id FROM equipment WHERE workstation_id = ANY($2)
-                     ) AND status = 'PENDING'`,
+                     ) AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
                     [assigned_user_id ?? null, wsIds]
                 );
 

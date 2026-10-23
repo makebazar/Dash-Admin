@@ -49,20 +49,31 @@ export async function PATCH(
                 // 1. Update equipment assigned user
                 await query(
                     `UPDATE equipment 
-                     SET assigned_user_id = $1,
-                         maintenance_enabled = CASE WHEN $1 IS NOT NULL THEN TRUE ELSE FALSE END
+                     SET assigned_user_id = $1::uuid,
+                         assignment_mode = CASE WHEN $1::uuid IS NULL THEN 'FREE_POOL' ELSE 'DIRECT' END,
+                         maintenance_enabled = CASE WHEN $1::uuid IS NOT NULL THEN TRUE ELSE FALSE END
                      WHERE workstation_id = ANY($2)`,
-                    [assignedUserId, workstationIds]
+                    [assignedUserId || null, workstationIds]
                 );
 
-                // 2. Update PENDING maintenance tasks for all affected equipment
+                // 2. Update open maintenance tasks for all affected equipment
                 await query(
                     `UPDATE equipment_maintenance_tasks 
-                     SET assigned_user_id = $1
+                     SET status = CASE
+                           WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN
+                             CASE WHEN verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
+                           ELSE status
+                         END,
+                         session_id = CASE
+                           WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN NULL
+                           ELSE session_id
+                         END,
+                         assigned_user_id = $1::uuid,
+                         updated_at = CURRENT_TIMESTAMP
                      WHERE equipment_id IN (
                          SELECT id FROM equipment WHERE workstation_id = ANY($2)
-                     ) AND status = 'PENDING'`,
-                    [assignedUserId, workstationIds]
+                     ) AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
+                    [assignedUserId || null, workstationIds]
                 );
 
                 // 3. Trigger generation for equipment that doesn't have active tasks

@@ -35,30 +35,40 @@ export async function POST(
     // 2. Assign tasks to session and update their status to IN_PROGRESS
     // Only bind tasks that are currently PENDING, REWORK, or IN_PROGRESS (if assigned to this user, unassigned, or expired/abandoned)
     const updateResult = await query(
-      `UPDATE equipment_maintenance_tasks
-             SET session_id = $1, status = 'IN_PROGRESS', assigned_user_id = $4
-             WHERE id = ANY($2) 
-               AND club_id = $3
+      `UPDATE equipment_maintenance_tasks mt
+             SET session_id = $1,
+                 status = 'IN_PROGRESS',
+                 assigned_user_id = $4,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE mt.id = ANY($2) 
+               AND mt.club_id = $3
                AND (
-                 status = 'PENDING' 
-                 OR status = 'REWORK' 
+                 mt.status = 'PENDING' 
+                 OR mt.status = 'REWORK' 
                  OR (
-                   status = 'IN_PROGRESS' 
+                   mt.status = 'IN_PROGRESS' 
                    AND (
-                     assigned_user_id = $4 
-                     OR assigned_user_id IS NULL
-                     OR updated_at <= NOW() - INTERVAL '2 hours'
+                     mt.assigned_user_id = $4 
+                     OR mt.assigned_user_id IS NULL
+                     OR mt.updated_at <= NOW() - INTERVAL '2 hours'
+                     OR NOT EXISTS (
+                       SELECT 1 FROM club_employees ce
+                       WHERE ce.club_id = $3
+                         AND ce.user_id = mt.assigned_user_id
+                         AND ce.is_active = TRUE
+                         AND ce.dismissed_at IS NULL
+                     )
                      OR NOT EXISTS (
                        SELECT 1 FROM shifts s_active
-                       WHERE s_active.user_id = equipment_maintenance_tasks.assigned_user_id
+                       WHERE s_active.user_id = mt.assigned_user_id
                          AND s_active.club_id = $3
                          AND s_active.check_out IS NULL
+                         AND s_active.check_in > NOW() - INTERVAL '16 hours'
                      )
                    )
                  )
                )
-               AND session_id IS NULL
-             RETURNING id`,
+             RETURNING mt.id`,
       [sessionId, taskIds, clubId, userId],
     );
 

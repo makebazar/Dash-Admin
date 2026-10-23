@@ -189,6 +189,70 @@ export async function PATCH(
       await query(queryText, empValues);
     }
 
+    const isDismissing =
+      is_active === false ||
+      (dismissed_at !== undefined && dismissed_at !== null && is_active !== true);
+
+    if (isDismissing) {
+      // 1. Close open shifts in this club
+      await query(
+        `UPDATE shifts
+         SET check_out = NOW(),
+             status = CASE WHEN status = 'ACTIVE' THEN 'CLOSED' ELSE status END
+         WHERE club_id = $1 AND user_id = $2 AND check_out IS NULL`,
+        [clubId, employeeId],
+      );
+
+      // 2. Unassign zones, workstations, and equipment owned by this employee
+      await query(
+        `UPDATE club_zones SET assigned_user_id = NULL WHERE club_id = $1 AND assigned_user_id = $2`,
+        [clubId, employeeId],
+      );
+      await query(
+        `UPDATE club_workstations SET assigned_user_id = NULL WHERE club_id = $1 AND assigned_user_id = $2`,
+        [clubId, employeeId],
+      );
+      await query(
+        `UPDATE equipment
+         SET assigned_user_id = NULL,
+             assignment_mode = 'FREE_POOL',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE club_id = $1 AND assigned_user_id = $2`,
+        [clubId, employeeId],
+      );
+
+      // 3. Release open maintenance tasks back to active equipment owner or free pool
+      await query(
+        `UPDATE equipment_maintenance_tasks mt
+         SET assigned_user_id = CASE
+               WHEN e.assignment_mode = 'DIRECT'
+                    AND e.assigned_user_id IS NOT NULL
+                    AND e.assigned_user_id <> $2
+                    AND EXISTS (
+                      SELECT 1 FROM club_employees ce
+                      WHERE ce.club_id = e.club_id
+                        AND ce.user_id = e.assigned_user_id
+                        AND ce.is_active = TRUE
+                        AND ce.dismissed_at IS NULL
+                    )
+               THEN e.assigned_user_id
+               ELSE NULL
+             END,
+             status = CASE
+               WHEN mt.verification_status = 'REJECTED' THEN 'REWORK'
+               ELSE 'PENDING'
+             END,
+             session_id = NULL,
+             updated_at = CURRENT_TIMESTAMP
+         FROM equipment e
+         WHERE mt.equipment_id = e.id
+           AND e.club_id = $1
+           AND mt.assigned_user_id = $2
+           AND mt.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
+        [clubId, employeeId],
+      );
+    }
+
     if (userUpdates.length === 0 && empUpdates.length === 0) {
       return NextResponse.json(
         { error: "No fields to update" },

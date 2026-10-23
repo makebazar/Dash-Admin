@@ -402,7 +402,17 @@ export async function PATCH(
       // 2. Update existing PENDING and IN_PROGRESS tasks that are due today or in the future, or are active in work
       await query(
         `UPDATE equipment_maintenance_tasks
-         SET assigned_user_id = $1
+         SET status = CASE
+               WHEN assigned_user_id IS DISTINCT FROM $1 THEN
+                 CASE WHEN verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
+               ELSE status
+             END,
+             session_id = CASE
+               WHEN assigned_user_id IS DISTINCT FROM $1 THEN NULL
+               ELSE session_id
+             END,
+             assigned_user_id = $1,
+             updated_at = CURRENT_TIMESTAMP
          WHERE equipment_id = $2 
            AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
            AND (due_date >= $3 OR status = 'IN_PROGRESS' OR status = 'REWORK')`,
@@ -445,37 +455,19 @@ export async function PATCH(
       body.assigned_user_id !== undefined ||
       body.assignment_mode !== undefined
     ) {
-      // Get the club timezone to determine "today" date accurately
-      const clubRes = await query(
-        `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
-         FROM clubs
-         WHERE id = $1`,
-        [clubId],
-      );
-      const todayDate = formatDateKeyInTimezone(
-        new Date(),
-        clubRes.rows[0]?.timezone || "Europe/Moscow",
-      );
-
-      // 1. Skip past overdue pending tasks so they don't fall on the new assignee
+      // Moving to FREE_POOL: release open tasks into the pool without skipping overdue ones
       await query(
         `UPDATE equipment_maintenance_tasks
-         SET status = 'SKIPPED',
-             notes = COALESCE(notes || E'\n', '') || $1
+         SET status = CASE
+               WHEN verification_status = 'REJECTED' THEN 'REWORK'
+               ELSE 'PENDING'
+             END,
+             session_id = NULL,
+             assigned_user_id = $1,
+             updated_at = CURRENT_TIMESTAMP
          WHERE equipment_id = $2
-           AND status = 'PENDING'
-           AND due_date < $3`,
-        [`[Система] Пропущено автоматически при смене ответственного`, equipmentId, todayDate],
-      );
-
-      // 2. Just sync if maintenance_enabled wasn't part of the trigger but assignment changed
-      await query(
-        `UPDATE equipment_maintenance_tasks
-         SET assigned_user_id = $1
-         WHERE equipment_id = $2
-           AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
-           AND (due_date >= $3 OR status = 'IN_PROGRESS' OR status = 'REWORK')`,
-        [effectiveAssignedUserId, equipmentId, todayDate],
+           AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
+        [effectiveAssignedUserId, equipmentId],
       );
     }
 

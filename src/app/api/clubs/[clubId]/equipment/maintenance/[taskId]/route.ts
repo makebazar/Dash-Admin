@@ -32,23 +32,29 @@ export async function GET(
 
     const effectiveEquipmentAssigneeSql = `
       CASE
-        WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE THEN e.assigned_user_id
+        WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE AND ce_equip.dismissed_at IS NULL THEN e.assigned_user_id
         ELSE NULL
       END
     `;
 
     const effectiveTaskAssigneeSql = `
       CASE
-        WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE AND (
+        WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE AND ce_task.dismissed_at IS NULL AND (
           mt.verification_status = 'REJECTED'
-          OR mt.session_id IS NOT NULL
-          OR ce_task.role_id IN (2, 5142)
-          OR mt.updated_at > NOW() - INTERVAL '2 hours'
-          OR EXISTS (
-            SELECT 1 FROM shifts s_active
-            WHERE s_active.user_id = mt.assigned_user_id
-              AND s_active.club_id = e.club_id
-              AND s_active.check_out IS NULL
+          OR (
+            mt.updated_at > NOW() - INTERVAL '12 hours'
+            AND (
+              mt.session_id IS NOT NULL
+              OR ce_task.role_id IN (2, 5142)
+              OR mt.updated_at > NOW() - INTERVAL '2 hours'
+              OR EXISTS (
+                SELECT 1 FROM shifts s_active
+                WHERE s_active.user_id = mt.assigned_user_id
+                  AND s_active.club_id = e.club_id
+                  AND s_active.check_out IS NULL
+                  AND s_active.check_in > NOW() - INTERVAL '16 hours'
+              )
+            )
           )
         ) THEN mt.assigned_user_id
         ELSE ${effectiveEquipmentAssigneeSql}
@@ -58,18 +64,21 @@ export async function GET(
     const effectiveStatusSql = `
       CASE
         WHEN mt.status = 'IN_PROGRESS' AND (
-          mt.assigned_user_id IS NOT NULL AND (
-            ce_task.is_active = FALSE
-            OR (
-              mt.session_id IS NULL
-              AND COALESCE(ce_task.role_id, 0) NOT IN (2, 5142)
-              AND mt.updated_at <= NOW() - INTERVAL '2 hours'
-              AND NOT EXISTS (
-                SELECT 1 FROM shifts s_active
-                WHERE s_active.user_id = mt.assigned_user_id
-                  AND s_active.club_id = e.club_id
-                  AND s_active.check_out IS NULL
-              )
+          mt.assigned_user_id IS NULL
+          OR ce_task.user_id IS NULL
+          OR ce_task.is_active = FALSE
+          OR ce_task.dismissed_at IS NOT NULL
+          OR mt.updated_at <= NOW() - INTERVAL '12 hours'
+          OR (
+            mt.session_id IS NULL
+            AND COALESCE(ce_task.role_id, 0) NOT IN (2, 5142)
+            AND mt.updated_at <= NOW() - INTERVAL '2 hours'
+            AND NOT EXISTS (
+              SELECT 1 FROM shifts s_active
+              WHERE s_active.user_id = mt.assigned_user_id
+                AND s_active.club_id = e.club_id
+                AND s_active.check_out IS NULL
+                AND s_active.check_in > NOW() - INTERVAL '16 hours'
             )
           )
         ) THEN
@@ -220,33 +229,39 @@ export async function PATCH(
     const taskCheck = await query(
       `SELECT mt.*, e.id as equipment_id,
               CASE 
-                WHEN e.assignment_mode = 'DIRECT' THEN 'DIRECT'
+                WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE AND ce_equip.dismissed_at IS NULL THEN 'DIRECT'
                 WHEN e.assignment_mode = 'FREE_POOL' THEN 'FREE_POOL'
                 WHEN e.assignment_mode = 'INHERIT' THEN
                   CASE WHEN w.assigned_user_id IS NOT NULL THEN 'DIRECT' ELSE 'FREE_POOL' END
                 ELSE 'FREE_POOL'
               END as effective_assignment_mode,
               CASE 
-                WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
+                WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE AND ce_equip.dismissed_at IS NULL THEN e.assigned_user_id
                 WHEN e.assignment_mode = 'FREE_POOL' THEN NULL
                 WHEN e.assignment_mode = 'INHERIT' THEN w.assigned_user_id
                 ELSE NULL
               END as effective_assigned_user_id,
               CASE
-                WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE AND (
+                WHEN mt.assigned_user_id IS NOT NULL AND ce_task.is_active = TRUE AND ce_task.dismissed_at IS NULL AND (
                   mt.verification_status = 'REJECTED'
-                  OR mt.session_id IS NOT NULL
-                  OR ce_task.role_id IN (2, 5142)
-                  OR mt.updated_at > NOW() - INTERVAL '2 hours'
-                  OR EXISTS (
-                    SELECT 1 FROM shifts s_active
-                    WHERE s_active.user_id = mt.assigned_user_id
-                      AND s_active.club_id = e.club_id
-                      AND s_active.check_out IS NULL
+                  OR (
+                    mt.updated_at > NOW() - INTERVAL '12 hours'
+                    AND (
+                      mt.session_id IS NOT NULL
+                      OR ce_task.role_id IN (2, 5142)
+                      OR mt.updated_at > NOW() - INTERVAL '2 hours'
+                      OR EXISTS (
+                        SELECT 1 FROM shifts s_active
+                        WHERE s_active.user_id = mt.assigned_user_id
+                          AND s_active.club_id = e.club_id
+                          AND s_active.check_out IS NULL
+                          AND s_active.check_in > NOW() - INTERVAL '16 hours'
+                      )
+                    )
                   )
                 ) THEN mt.assigned_user_id
                 ELSE CASE
-                  WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE THEN e.assigned_user_id
+                  WHEN e.assignment_mode = 'DIRECT' AND ce_equip.is_active = TRUE AND ce_equip.dismissed_at IS NULL THEN e.assigned_user_id
                   ELSE NULL
                 END
               END as effective_task_assigned_user_id
@@ -277,13 +292,18 @@ export async function PATCH(
       paramIndex++;
 
       updates.push(`status = 'IN_PROGRESS'`);
+      updates.push(`session_id = NULL`);
     } else {
       if (status !== undefined) {
+        const resolvedStatus =
+          status === "PENDING" && task.verification_status === "REJECTED"
+            ? "REWORK"
+            : status;
         updates.push(`status = $${paramIndex}`);
-        values.push(status);
+        values.push(resolvedStatus);
         paramIndex++;
 
-        if (status === "PENDING") {
+        if (status === "PENDING" || status === "REWORK") {
           updates.push(`session_id = NULL`);
           if (assigned_user_id === undefined) {
             if (task.effective_assignment_mode === "FREE_POOL") {
@@ -563,7 +583,7 @@ export async function PATCH(
 
     const result = await query(
       `UPDATE equipment_maintenance_tasks
-             SET ${updates.join(", ")}
+             SET ${updates.join(", ")}, updated_at = CURRENT_TIMESTAMP
              WHERE id = $${paramIndex}
              RETURNING *`,
       values,

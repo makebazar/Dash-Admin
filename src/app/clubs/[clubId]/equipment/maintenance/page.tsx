@@ -49,7 +49,7 @@ interface MaintenanceTask {
   verification_status?: "PENDING" | "APPROVED" | "REJECTED" | null;
   verified_at?: string | null;
   rejection_reason?: string | null;
-  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "REWORK";
   completed_at: string | null;
   completed_by_name: string | null;
   task_type: string;
@@ -409,6 +409,20 @@ export default function MaintenanceSchedule() {
     }
   };
 
+  const handleResetTask = async (taskId: string) => {
+    try {
+      await fetch(`/api/clubs/${clubId}/equipment/maintenance/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "PENDING" }),
+      });
+      fetchData(true);
+    } catch (error) {
+      console.error("Error resetting task:", error);
+      fetchData(true);
+    }
+  };
+
   const stats = useMemo(() => {
     const todayKey = getLocalDateKey();
 
@@ -425,8 +439,9 @@ export default function MaintenanceSchedule() {
       inProgress: tasks.filter((task) => task.status === "IN_PROGRESS").length,
       rework: tasks.filter(
         (task) =>
-          task.status === "IN_PROGRESS" &&
-          task.verification_status === "REJECTED",
+          task.status === "REWORK" ||
+          (task.status === "IN_PROGRESS" &&
+            task.verification_status === "REJECTED"),
       ).length,
       unassigned: tasks.filter(
         (task) => task.status !== "COMPLETED" && !task.assigned_user_id,
@@ -817,18 +832,21 @@ export default function MaintenanceSchedule() {
       }
 
       if (
-        task.status === "IN_PROGRESS" &&
-        task.verification_status === "REJECTED"
+        task.status === "REWORK" ||
+        (task.status === "IN_PROGRESS" &&
+          task.verification_status === "REJECTED")
       ) {
         zone.rework++;
         place.rework++;
         device.rework++;
       }
 
-      if (task.status === "IN_PROGRESS") {
-        zone.inProgress++;
-        place.inProgress++;
-        device.inProgress++;
+      if (task.status === "IN_PROGRESS" || task.status === "REWORK") {
+        if (task.status === "IN_PROGRESS") {
+          zone.inProgress++;
+          place.inProgress++;
+          device.inProgress++;
+        }
         device.activeTasks.push(task);
         return;
       }
@@ -1727,6 +1745,29 @@ export default function MaintenanceSchedule() {
                                                   Изменить
                                                 </Button>
                                               </div>
+                                              {device.activeTasks.some(
+                                                (t) => t.status === "IN_PROGRESS",
+                                              ) && (
+                                                <Button
+                                                  type="button"
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  className="h-7 w-full rounded-lg text-xs text-blue-700 hover:bg-blue-50 hover:text-blue-800"
+                                                  onClick={() => {
+                                                    const inProg =
+                                                      device.activeTasks.find(
+                                                        (t) =>
+                                                          t.status ===
+                                                          "IN_PROGRESS",
+                                                      );
+                                                    if (inProg) {
+                                                      handleResetTask(inProg.id);
+                                                    }
+                                                  }}
+                                                >
+                                                  Вернуть из «В работе»
+                                                </Button>
+                                              )}
                                             </div>
                                           )}
                                         </div>

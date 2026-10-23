@@ -22,7 +22,7 @@ export async function POST(
 
     // Get task info
     const taskResult = await query(
-      `SELECT id, assigned_user_id, equipment_id, status, due_date
+      `SELECT id, assigned_user_id, equipment_id, status, due_date, session_id
              FROM equipment_maintenance_tasks
              WHERE id = $1 AND club_id = $2`,
       [taskId, clubId],
@@ -34,28 +34,36 @@ export async function POST(
 
     const task = taskResult.rows[0];
 
-    if (task.status !== "PENDING") {
+    if (!["PENDING", "IN_PROGRESS", "REWORK"].includes(task.status)) {
       return NextResponse.json(
-        { error: "Можно вернуть в пул только задачи в статусе PENDING" },
+        { error: "Нельзя вернуть в пул уже завершенную или отмененную задачу" },
         { status: 400 },
       );
     }
 
-    if (!task.assigned_user_id) {
+    if (!task.assigned_user_id && task.status === "PENDING" && !task.session_id) {
       return NextResponse.json({ error: "Задача уже в пуле" }, { status: 400 });
     }
 
     // Get previous assignee name for audit
-    const userResult = await query(
-      `SELECT full_name FROM users WHERE id = $1`,
-      [task.assigned_user_id],
-    );
-    const previousAssigneeName = userResult.rows[0]?.full_name || "Неизвестно";
+    let previousAssigneeName = "Не назначен";
+    if (task.assigned_user_id) {
+      const userResult = await query(
+        `SELECT full_name FROM users WHERE id = $1`,
+        [task.assigned_user_id],
+      );
+      previousAssigneeName = userResult.rows[0]?.full_name || "Неизвестно";
+    }
 
     // Return task to pool
     const updateResult = await query(
       `UPDATE equipment_maintenance_tasks
              SET assigned_user_id = NULL,
+                 session_id = NULL,
+                 status = CASE
+                   WHEN verification_status = 'REJECTED' THEN 'REWORK'
+                   ELSE 'PENDING'
+                 END,
                  notes = COALESCE(notes || E'\n', '') || $1,
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = $2

@@ -74,13 +74,23 @@ export async function PATCH(
                 [assignedUserId, workstationId]
             );
 
-            // Propagate to PENDING maintenance tasks
+            // Propagate to open maintenance tasks
             await query(
                 `UPDATE equipment_maintenance_tasks 
-                 SET assigned_user_id = $1::uuid
+                 SET status = CASE
+                       WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN
+                         CASE WHEN verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
+                       ELSE status
+                     END,
+                     session_id = CASE
+                       WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN NULL
+                       ELSE session_id
+                     END,
+                     assigned_user_id = $1::uuid,
+                     updated_at = CURRENT_TIMESTAMP
                  WHERE equipment_id IN (
                     SELECT id FROM equipment WHERE workstation_id = $2
-                 ) AND status = 'PENDING'`,
+                 ) AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
                 [assignedUserId, workstationId]
             );
 
