@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { query } from '@/db';
+import { hasActiveClubAccess } from '@/lib/maintenance-task-logic';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,14 +20,7 @@ export async function PATCH(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const accessCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-             UNION
-             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((accessCheck.rowCount || 0) === 0) {
+        if (!(await hasActiveClubAccess(clubId, userId))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -35,7 +29,7 @@ export async function PATCH(
         }
 
         const requestCheck = await query(
-            `SELECT id
+            `SELECT id, maintenance_task_id
              FROM equipment_laundry_requests
              WHERE id = $1 AND club_id = $2`,
             [requestId, clubId]
@@ -56,6 +50,22 @@ export async function PATCH(
              RETURNING *`,
             [status, userId, requestId]
         );
+
+        const maintenanceTaskId = requestCheck.rows[0]?.maintenance_task_id;
+        if (maintenanceTaskId && ['RETURNED', 'CANCELLED'].includes(status)) {
+            const statusLabel = status === 'RETURNED' ? 'Возвращён из стирки' : 'Стирка отменена';
+            await query(
+                `UPDATE equipment_maintenance_tasks
+                 SET notes = CASE
+                       WHEN notes IS NULL OR notes = '' THEN $1
+                       WHEN POSITION($1 IN notes) > 0 THEN notes
+                       ELSE notes || E'\n' || $1
+                     END,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $2`,
+                [`[Стирка] ${statusLabel}`, maintenanceTaskId]
+            );
+        }
 
         return NextResponse.json(result.rows[0]);
     } catch (error) {

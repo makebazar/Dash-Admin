@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
+import { appendMaintenanceTaskEvent } from "@/lib/maintenance-task-events";
 import {
-  appendMaintenanceTaskEvent,
-  ensureMaintenanceTaskInitialHistory,
-  getMaintenanceTaskCurrentCycle,
-} from "@/lib/maintenance-task-events";
+  effectiveEquipmentAssigneeSql,
+  hasActiveClubAccess,
+} from "@/lib/maintenance-task-logic";
 
 export const dynamic = "force-dynamic";
 
@@ -29,15 +29,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify access (employee or owner)
-    const accessCheck = await query(
-      `SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
-       UNION
-       SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-      [clubId, userId],
-    );
-
-    if ((accessCheck.rowCount || 0) === 0) {
+    if (!(await hasActiveClubAccess(clubId, userId))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -53,8 +45,30 @@ export async function POST(
     }
 
     const taskRes = await query(
-      `SELECT id, equipment_id, task_type, notes, photos, cycle_no FROM equipment_maintenance_tasks WHERE id = $1`,
-      [taskId],
+      `SELECT mt.id,
+              mt.status,
+              mt.equipment_id,
+              mt.task_type,
+              mt.notes,
+              mt.photos,
+              mt.cycle_no,
+              mt.assigned_user_id,
+              CASE
+                WHEN mt.assigned_user_id IS NOT NULL
+                     AND (
+                       (ce_task.is_active = TRUE AND ce_task.dismissed_at IS NULL)
+                       OR c.owner_id = mt.assigned_user_id
+                     )
+                THEN mt.assigned_user_id
+                ELSE (${effectiveEquipmentAssigneeSql})
+              END as rework_assignee_id
+       FROM equipment_maintenance_tasks mt
+       JOIN equipment e ON mt.equipment_id = e.id
+       LEFT JOIN clubs c ON c.id = e.club_id
+       LEFT JOIN club_employees ce_task ON ce_task.user_id = mt.assigned_user_id AND ce_task.club_id = e.club_id
+       LEFT JOIN club_employees ce_equip ON ce_equip.user_id = e.assigned_user_id AND ce_equip.club_id = e.club_id
+       WHERE mt.id = $1 AND e.club_id = $2`,
+      [taskId, clubId],
     );
     const task = taskRes.rows[0];
     if (!task) {
@@ -66,18 +80,25 @@ export async function POST(
     let queryParams: any[] = [];
 
     if (action === "APPROVE") {
+      if (task.status !== "COMPLETED") {
+        return NextResponse.json(
+          { error: "Можно одобрить только выполненную задачу" },
+          { status: 409 },
+        );
+      }
       updateQuery = `
                 UPDATE equipment_maintenance_tasks
                 SET verification_status = 'APPROVED',
                     verified_at = CURRENT_TIMESTAMP,
                     verified_by = $2,
-                    verification_note = $3
+                    verification_note = $3,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE id = $1
                 RETURNING id
             `;
       queryParams = [taskId, userId, comment || null];
     } else if (action === "REJECT") {
-      // 1. Cleanup
+      // 1. Cleanup future pending tasks for this equipment
       await query(
         `DELETE FROM equipment_maintenance_tasks
                  WHERE equipment_id = $1
@@ -87,7 +108,7 @@ export async function POST(
         [task.equipment_id, task.task_type, taskId],
       );
 
-      // 2. Revert equipment
+      // 2. Revert equipment last_cleaned_at
       if (task.task_type === "CLEANING") {
         const previousCompletedTask = await query(
           `SELECT completed_at
@@ -112,26 +133,28 @@ export async function POST(
         );
       }
 
-      // 3. Prepare the update query for rejection
-      // We also clear photos_before/after so employee can re-upload them if needed
-      // OR we keep them but set status to REJECTED.
+      // 3. Reject task into REWORK (or reassign to active equipment owner / free pool if completer was dismissed)
       updateQuery = `
                 UPDATE equipment_maintenance_tasks
                 SET verification_status = 'REJECTED',
                     status = 'REWORK',
+                    session_id = NULL,
+                    assigned_user_id = $4,
                     verified_at = CURRENT_TIMESTAMP,
                     verified_by = $2,
                     rejection_reason = $3,
                     completed_at = NULL,
                     bonus_earned = 0,
+                    overdue_penalty = 0,
                     kpi_points = 0,
                     overdue_days_at_completion = 0,
                     was_overdue = FALSE,
-                    responsible_user_id_at_completion = NULL
+                    responsible_user_id_at_completion = NULL,
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE id = $1
                 RETURNING id
             `;
-      queryParams = [taskId, userId, comment];
+      queryParams = [taskId, userId, comment, task.rework_assignee_id || null];
     }
 
     const result = await query(updateQuery, queryParams);

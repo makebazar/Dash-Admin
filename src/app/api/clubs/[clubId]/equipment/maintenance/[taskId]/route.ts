@@ -6,6 +6,7 @@ import {
   effectiveEquipmentAssigneeSql,
   effectiveStatusSql,
   effectiveTaskAssigneeSql,
+  hasActiveClubAccess,
 } from "@/lib/maintenance-task-logic";
 
 // GET - Retrieve single task details, including equipment, instructions, settings, and rework rejection history
@@ -21,15 +22,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify access
-    const accessCheck = await query(
-      `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-             UNION
-             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-      [clubId, userId],
-    );
-
-    if ((accessCheck.rowCount || 0) === 0) {
+    if (!(await hasActiveClubAccess(clubId, userId))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -159,15 +152,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify access
-    const accessCheck = await query(
-      `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-             UNION
-             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-      [clubId, userId],
-    );
-
-    if ((accessCheck.rowCount || 0) === 0) {
+    if (!(await hasActiveClubAccess(clubId, userId))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

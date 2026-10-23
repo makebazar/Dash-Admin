@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
+import { hasActiveClubAccess } from "@/lib/maintenance-task-logic";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,10 @@ export async function GET(
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!(await hasActiveClubAccess(clubId, userId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Active tab must include both current tasks and legacy completed tasks

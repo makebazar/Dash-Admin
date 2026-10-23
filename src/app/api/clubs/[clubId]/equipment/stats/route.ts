@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
 import { hasColumn } from "@/lib/db-compat";
+import { hasActiveClubAccess } from "@/lib/maintenance-task-logic";
+import { formatDateKeyInTimezone } from "@/lib/utils";
 
 export async function GET(
   request: Request,
@@ -15,19 +17,20 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify access
-    const accessCheck = await query(
-      `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-             UNION
-             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-      [clubId, userId],
-    );
-
-    if ((accessCheck.rowCount || 0) === 0) {
+    if (!(await hasActiveClubAccess(clubId, userId))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const startTime = Date.now();
+    const clubRes = await query(
+      `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone FROM clubs WHERE id = $1`,
+      [clubId],
+    );
+    const todayStr = formatDateKeyInTimezone(
+      new Date(),
+      clubRes.rows[0]?.timezone || "Europe/Moscow",
+    );
+
     const hasEquipmentStatusColumn = await hasColumn("equipment", "status");
     const activeEquipmentCondition = hasEquipmentStatusColumn
       ? `COALESCE(status, CASE WHEN is_active = FALSE THEN 'WRITTEN_OFF' WHEN workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END) != 'WRITTEN_OFF'`
@@ -38,6 +41,9 @@ export async function GET(
     const repairEquipmentCondition = hasEquipmentStatusColumn
       ? `COALESCE(status, CASE WHEN is_active = FALSE THEN 'WRITTEN_OFF' WHEN workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END) = 'REPAIR'`
       : `FALSE`;
+    const scheduledEquipmentCondition = hasEquipmentStatusColumn
+      ? `COALESCE(e.status, CASE WHEN e.is_active = FALSE THEN 'WRITTEN_OFF' WHEN e.workstation_id IS NULL THEN 'STORAGE' ELSE 'ACTIVE' END) = 'ACTIVE' AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)`
+      : `e.is_active = TRUE AND e.workstation_id IS NOT NULL AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)`;
 
     // Combined stats query for efficiency
     const statsQuery = `
@@ -47,13 +53,13 @@ export async function GET(
                 (SELECT COUNT(*) FROM equipment WHERE club_id = $1 AND ${storageEquipmentCondition}) as storage_count,
                 (SELECT COUNT(*) FROM equipment WHERE club_id = $1 AND ${repairEquipmentCondition}) as repair_count,
                 (SELECT COUNT(*) FROM equipment_issues i JOIN equipment e ON i.equipment_id = e.id WHERE e.club_id = $1 AND i.status IN ('OPEN', 'IN_PROGRESS')) as active_issues,
-                (SELECT COUNT(*) FROM equipment_maintenance_tasks t JOIN equipment e ON t.equipment_id = e.id WHERE e.club_id = $1 AND t.due_date < CURRENT_DATE AND t.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')) as overdue_tasks,
-                (SELECT COUNT(*) FROM equipment_maintenance_tasks t JOIN equipment e ON t.equipment_id = e.id WHERE e.club_id = $1 AND t.due_date = CURRENT_DATE AND t.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')) as due_today_tasks,
-                (SELECT COUNT(*) FROM equipment WHERE club_id = $1 AND warranty_expires >= CURRENT_DATE AND warranty_expires < CURRENT_DATE + INTERVAL '30 days') as expiring_warranty
+                (SELECT COUNT(*) FROM equipment_maintenance_tasks t JOIN equipment e ON t.equipment_id = e.id WHERE e.club_id = $1 AND ${scheduledEquipmentCondition} AND t.due_date < $2 AND t.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')) as overdue_tasks,
+                (SELECT COUNT(*) FROM equipment_maintenance_tasks t JOIN equipment e ON t.equipment_id = e.id WHERE e.club_id = $1 AND ${scheduledEquipmentCondition} AND t.due_date = $2 AND t.status IN ('PENDING', 'IN_PROGRESS', 'REWORK')) as due_today_tasks,
+                (SELECT COUNT(*) FROM equipment WHERE club_id = $1 AND warranty_expires >= $2 AND warranty_expires < $2::date + INTERVAL '30 days') as expiring_warranty
             FROM (SELECT 1) dummy
         `;
 
-    const result = await query(statsQuery, [clubId]);
+    const result = await query(statsQuery, [clubId, todayStr]);
     const stats = result.rows[0];
 
     const duration = Date.now() - startTime;

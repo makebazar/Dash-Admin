@@ -29,7 +29,7 @@ interface MaintenanceTask {
     equipment_type_name: string
     workstation_name: string | null
     due_date: string
-    status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED'
+    status: 'PENDING' | 'IN_PROGRESS' | 'REWORK' | 'COMPLETED' | 'SKIPPED'
     bonus_potential?: number
 }
 
@@ -49,8 +49,7 @@ export default function MyMaintenanceTasks() {
     const fetchData = useCallback(async () => {
         setIsLoading(true)
         try {
-            // Fetch tasks assigned to current user (the API should handle filtering by current session user)
-            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS`)
+            const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance?assigned=me&status=PENDING,IN_PROGRESS,REWORK`)
             const data = await res.json()
             if (res.ok) setTasks(data.tasks || [])
         } catch (error) {
@@ -92,7 +91,7 @@ export default function MyMaintenanceTasks() {
         const todayKey = getLocalDateKey()
         const total = tasks.length
         const in_progress = tasks.filter(t => t.status === 'IN_PROGRESS').length
-        const overdue = tasks.filter(t => t.status === 'PENDING' && t.due_date < todayKey).length
+        const overdue = tasks.filter(t => (t.status === 'PENDING' || t.status === 'REWORK') && (t.due_date < todayKey || t.status === 'REWORK')).length
         return { total, in_progress, overdue }
     }, [tasks])
 

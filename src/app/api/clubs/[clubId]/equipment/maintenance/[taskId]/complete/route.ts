@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
-import { completeMaintenanceTask } from "@/lib/maintenance-task-logic";
+import {
+  completeMaintenanceTask,
+  hasActiveClubAccess,
+} from "@/lib/maintenance-task-logic";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +29,9 @@ export async function POST(
     const photosAfterRaw = body.photos_after;
     const photos_after = Array.isArray(photosAfterRaw)
       ? photosAfterRaw
-      : (photos.length > 0 ? photos : []);
+      : photos.length > 0
+        ? photos
+        : [];
     const notes = body.notes || null;
     const performance_data = body.performance_data || null;
 
@@ -34,53 +39,65 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify access (employee or owner)
-    const accessCheck = await query(
-      `SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
-             UNION
-             SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-      [clubId, userId],
-    );
-
-    if ((accessCheck.rowCount || 0) === 0) {
+    if (!(await hasActiveClubAccess(clubId, userId))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Validation (require photos, comments etc.)
-    try {
-      const settingsRes = await query(
-        `SELECT require_photos_on_completion, min_photos, require_notes_on_completion
-                 FROM club_maintenance_settings
-                 WHERE club_id = $1`,
-        [clubId],
+    // Validation (require photos, comments etc. from club + per-type settings)
+    const settingsRes = await query(
+      `SELECT
+          COALESCE(s.require_photo_before, gs.require_photo_before, FALSE) as require_photo_before,
+          COALESCE(s.min_photos_before, gs.min_photos_before, 0) as min_photos_before,
+          COALESCE(s.require_photo_after, gs.require_photo_after, TRUE) as require_photo_after,
+          COALESCE(s.min_photos_after, gs.min_photos_after, 1) as min_photos_after,
+          COALESCE(
+            s.require_comment_mode,
+            CASE WHEN gs.require_notes_on_completion THEN 'ALWAYS' ELSE 'ON_ISSUE' END,
+            'ON_ISSUE'
+          ) as require_comment_mode
+       FROM equipment_maintenance_tasks mt
+       JOIN equipment e ON mt.equipment_id = e.id
+       LEFT JOIN club_maintenance_settings gs ON gs.club_id = e.club_id
+       LEFT JOIN club_equipment_type_maintenance_settings s
+         ON s.club_id = e.club_id AND s.equipment_type_code = e.type
+       WHERE mt.id = $1 AND e.club_id = $2`,
+      [taskId, clubId],
+    );
+
+    if ((settingsRes.rowCount || 0) === 0) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    const settingsRow = settingsRes.rows[0];
+    const minBefore = settingsRow.require_photo_before
+      ? Math.max(0, Number(settingsRow.min_photos_before) || 0)
+      : 0;
+    const minAfter = settingsRow.require_photo_after
+      ? Math.max(0, Number(settingsRow.min_photos_after) || 0)
+      : 0;
+
+    if (photos_before.length < minBefore) {
+      return NextResponse.json(
+        { error: `Нужно приложить минимум фото ДО: ${minBefore}` },
+        { status: 400 },
       );
-      const settingsRow = settingsRes.rows[0] || null;
-      const requirePhotos = settingsRow?.require_photos_on_completion !== false;
-      const minPhotos = requirePhotos
-        ? Math.max(1, Number(settingsRow?.min_photos) || 1)
-        : 0;
-      const requireNotes = settingsRow?.require_notes_on_completion === true;
+    }
 
-      const totalPhotosCount = photos_before.length + photos_after.length;
+    if (photos_after.length < minAfter) {
+      return NextResponse.json(
+        { error: `Нужно приложить минимум фото ПОСЛЕ: ${minAfter}` },
+        { status: 400 },
+      );
+    }
 
-      if (minPhotos > 0 && totalPhotosCount < minPhotos) {
+    if (settingsRow.require_comment_mode === "ALWAYS") {
+      const noteStr = String(notes || "").trim();
+      if (!noteStr) {
         return NextResponse.json(
-          { error: `Нужно приложить минимум фото: ${minPhotos}` },
+          { error: "Нужно заполнить комментарий к выполнению" },
           { status: 400 },
         );
       }
-
-      if (requireNotes) {
-        const noteStr = String(notes || "").trim();
-        if (!noteStr) {
-          return NextResponse.json(
-            { error: "Нужно заполнить комментарий к выполнению" },
-            { status: 400 },
-          );
-        }
-      }
-    } catch (e) {
-      // Fallback if settings query fails
     }
 
     // Delegate to shared business logic service

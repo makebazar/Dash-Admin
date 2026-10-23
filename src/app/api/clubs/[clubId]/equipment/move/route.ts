@@ -3,6 +3,10 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { hasColumn } from '@/lib/db-compat';
 import { resolveEquipmentStateForPersistence } from '@/lib/equipment-status';
+import {
+    hasActiveClubAccess,
+    syncMovedEquipmentMaintenance,
+} from '@/lib/maintenance-task-logic';
 
 // POST - Move equipment or Swap
 export async function POST(
@@ -18,15 +22,7 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify access (employee or owner)
-        const accessCheck = await query(
-            `SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
-             UNION
-             SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((accessCheck.rowCount || 0) === 0) {
+        if (!(await hasActiveClubAccess(clubId, userId))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -103,6 +99,11 @@ export async function POST(
 
                 // Move Target -> Source
                 await query(targetUpdate.sql, targetUpdate.params);
+                await syncMovedEquipmentMaintenance({
+                    clubId,
+                    equipmentId: targetOccupant.id,
+                    targetWorkstationId: targetResolvedState.workstation_id,
+                });
                 
                 // Log movement for Target device
                 await query(
@@ -125,6 +126,11 @@ export async function POST(
 
                 // Move Target -> Warehouse (NULL)
                 await query(targetUpdate.sql, targetUpdate.params);
+                await syncMovedEquipmentMaintenance({
+                    clubId,
+                    equipmentId: targetOccupant.id,
+                    targetWorkstationId: null,
+                });
 
                 // Log movement for Target device
                 await query(
@@ -146,6 +152,11 @@ export async function POST(
 
             // MOVE PRIMARY DEVICE (Source -> Target)
             await query(sourceUpdate.sql, sourceUpdate.params);
+            await syncMovedEquipmentMaintenance({
+                clubId,
+                equipmentId: equipment_id,
+                targetWorkstationId: sourceResolvedState.workstation_id,
+            });
 
             // Log movement for Source device
             await query(

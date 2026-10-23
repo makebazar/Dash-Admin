@@ -43,16 +43,32 @@ export async function POST(
     }
 
     const workstationsRes = await query(
-        `SELECT id, name
-         FROM club_workstations
-         WHERE club_id = $1
-           AND id = ANY($2::uuid[])`,
+        `SELECT w.id,
+                w.name,
+                CASE
+                  WHEN w.assigned_user_id IS NOT NULL
+                       AND (
+                         (ce.is_active = TRUE AND ce.dismissed_at IS NULL)
+                         OR c.owner_id = w.assigned_user_id
+                       )
+                  THEN w.assigned_user_id
+                  ELSE NULL
+                END as assigned_user_id
+         FROM club_workstations w
+         LEFT JOIN clubs c ON c.id = w.club_id
+         LEFT JOIN club_employees ce ON ce.club_id = w.club_id AND ce.user_id = w.assigned_user_id
+         WHERE w.club_id = $1
+           AND w.id = ANY($2::uuid[])`,
         [clubId, [sourceId, ...targetIds]]
     )
 
-    const wsById = new Map<string, { id: string; name: string }>()
+    const wsById = new Map<string, { id: string; name: string; assigned_user_id: string | null }>()
     for (const ws of workstationsRes.rows) {
-        wsById.set(String(ws.id), { id: String(ws.id), name: String(ws.name) })
+        wsById.set(String(ws.id), {
+            id: String(ws.id),
+            name: String(ws.name),
+            assigned_user_id: ws.assigned_user_id ? String(ws.assigned_user_id) : null,
+        })
     }
 
     if (!wsById.has(sourceId)) {
@@ -138,10 +154,23 @@ export async function POST(
         }))
 
         if (toClear.length > 0) {
+            const clearedIds = toClear.map((row: { id: string }) => row.id)
             const updateSql = hasStatus
-                ? `UPDATE equipment SET workstation_id = NULL, status = 'STORAGE' WHERE id = ANY($1::uuid[])`
-                : `UPDATE equipment SET workstation_id = NULL WHERE id = ANY($1::uuid[])`
-            await client.query(updateSql, [toClear.map((row: { id: string }) => row.id)])
+                ? `UPDATE equipment SET workstation_id = NULL, status = 'STORAGE', assigned_user_id = NULL, assignment_mode = 'FREE_POOL', updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1::uuid[])`
+                : `UPDATE equipment SET workstation_id = NULL, assigned_user_id = NULL, assignment_mode = 'FREE_POOL', updated_at = CURRENT_TIMESTAMP WHERE id = ANY($1::uuid[])`
+            await client.query(updateSql, [clearedIds])
+
+            await client.query(
+                `UPDATE equipment_maintenance_tasks
+                 SET status = 'SKIPPED',
+                     session_id = NULL,
+                     assigned_user_id = NULL,
+                     notes = COALESCE(notes || E'\n', '') || '[Система] Оборудование перемещено на склад при клонировании рабочего места',
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE equipment_id = ANY($1::uuid[])
+                   AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
+                [clearedIds]
+            )
 
             for (const row of toClear) {
                 await client.query(
@@ -175,6 +204,7 @@ export async function POST(
 
         let createdCount = 0
         for (const targetId of targetIds) {
+            const targetOwnerId = wsById.get(targetId)?.assigned_user_id || null
             for (const item of sourceItems) {
                 const values: any[] = [
                     clubId,
@@ -193,8 +223,8 @@ export async function POST(
                 ]
                 if (hasStatus) values.push('ACTIVE')
                 if (hasMaintenanceEnabled) values.push(item.maintenance_enabled !== false)
-                if (hasAssignedUserId) values.push(null)
-                if (hasAssignmentMode) values.push('FREE_POOL')
+                if (hasAssignedUserId) values.push(targetOwnerId)
+                if (hasAssignmentMode) values.push(targetOwnerId ? 'DIRECT' : 'FREE_POOL')
 
                 const placeholders = insertColumns.map((_, idx) => `$${idx + 1}`).join(', ')
                 const inserted = await client.query(

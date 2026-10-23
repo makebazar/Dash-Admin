@@ -5,7 +5,11 @@ import {
   ensureMaintenanceTaskInitialHistory,
   getMaintenanceTaskCurrentCycle,
 } from "@/lib/maintenance-task-events";
-import { formatDateKeyInTimezone, isLaundryEquipmentType } from "@/lib/utils";
+import {
+  formatDateKeyInTimezone,
+  isLaundryEquipmentType,
+  parseDateKey,
+} from "@/lib/utils";
 
 const isManagerRoleSql = (alias: string) => `
   (
@@ -79,6 +83,20 @@ export const effectiveStatusSql = `
   END
 `;
 
+export async function hasActiveClubAccess(
+  clubId: string | number,
+  userId: string,
+): Promise<boolean> {
+  const res = await query(
+    `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
+     UNION
+     SELECT 1 FROM club_employees
+     WHERE club_id = $1 AND user_id = $2 AND is_active = TRUE AND dismissed_at IS NULL`,
+    [clubId, userId],
+  );
+  return (res.rowCount || 0) > 0;
+}
+
 export async function releaseClubEmployeeAssignments(
   clubId: string | number,
   employeeId: string,
@@ -137,6 +155,90 @@ export async function releaseClubEmployeeAssignments(
   );
 }
 
+export async function syncMovedEquipmentMaintenance(params: {
+  clubId: string | number;
+  equipmentId: string;
+  targetWorkstationId: string | null;
+  note?: string;
+  runQuery?: (text: string, values?: any[]) => Promise<any>;
+}) {
+  const {
+    clubId,
+    equipmentId,
+    targetWorkstationId,
+    note = "[Система] Оборудование перемещено на склад",
+    runQuery = query,
+  } = params;
+
+  if (!targetWorkstationId) {
+    await runQuery(
+      `UPDATE equipment
+       SET assigned_user_id = NULL,
+           assignment_mode = 'FREE_POOL',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND club_id = $2`,
+      [equipmentId, clubId],
+    );
+    await runQuery(
+      `UPDATE equipment_maintenance_tasks
+       SET status = 'SKIPPED',
+           session_id = NULL,
+           assigned_user_id = NULL,
+           notes = COALESCE(notes || E'\n', '') || $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE equipment_id = $2
+         AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
+      [note, equipmentId],
+    );
+    return;
+  }
+
+  const wsOwnerRes = await runQuery(
+    `SELECT CASE
+              WHEN w.assigned_user_id IS NOT NULL
+                   AND (
+                     (ce.is_active = TRUE AND ce.dismissed_at IS NULL)
+                     OR c.owner_id = w.assigned_user_id
+                   )
+              THEN w.assigned_user_id
+              ELSE NULL
+            END as active_owner_id
+     FROM club_workstations w
+     LEFT JOIN clubs c ON c.id = w.club_id
+     LEFT JOIN club_employees ce ON ce.club_id = w.club_id AND ce.user_id = w.assigned_user_id
+     WHERE w.id = $1 AND w.club_id = $2`,
+    [targetWorkstationId, clubId],
+  );
+  const nextOwnerId = wsOwnerRes.rows[0]?.active_owner_id || null;
+
+  await runQuery(
+    `UPDATE equipment
+     SET assigned_user_id = $1::uuid,
+         assignment_mode = CASE WHEN $1::uuid IS NULL THEN 'FREE_POOL' ELSE 'DIRECT' END,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $2 AND club_id = $3`,
+    [nextOwnerId, equipmentId, clubId],
+  );
+
+  await runQuery(
+    `UPDATE equipment_maintenance_tasks
+     SET status = CASE
+           WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN
+             CASE WHEN verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
+           ELSE status
+         END,
+         session_id = CASE
+           WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN NULL
+           ELSE session_id
+         END,
+         assigned_user_id = $1::uuid,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE equipment_id = $2
+       AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
+    [nextOwnerId, equipmentId],
+  );
+}
+
 export async function completeMaintenanceTask(params: {
   clubId: string;
   taskId: string;
@@ -163,7 +265,6 @@ export async function completeMaintenanceTask(params: {
   } = params;
 
   if (status_mode === "SKIPPED") {
-    // 1. Get task snapshot for history
     const taskResult = await query(
       `SELECT mt.*, u.full_name as assignee_name
        FROM equipment_maintenance_tasks mt
@@ -177,7 +278,6 @@ export async function completeMaintenanceTask(params: {
     await ensureMaintenanceTaskInitialHistory(task);
     const currentCycle = await getMaintenanceTaskCurrentCycle(taskId);
 
-    // 2. Unassign and return to pool
     const skippedRes = await query(
       `UPDATE equipment_maintenance_tasks
        SET assigned_user_id = NULL,
@@ -193,7 +293,6 @@ export async function completeMaintenanceTask(params: {
       ],
     );
 
-    // 3. Log event
     await appendMaintenanceTaskEvent({
       taskId,
       cycleNo: currentCycle,
@@ -225,12 +324,27 @@ export async function completeMaintenanceTask(params: {
     : Math.max(currentCycle, 1);
 
   const taskRes = await query(
-    `
-        SELECT mt.due_date, mt.task_type, e.type as equipment_type, e.id as equipment_id
-        FROM equipment_maintenance_tasks mt
-        JOIN equipment e ON mt.equipment_id = e.id
-        WHERE mt.id = $1
-    `,
+    `SELECT mt.due_date,
+            mt.task_type,
+            e.type as equipment_type,
+            e.id as equipment_id,
+            CASE
+              WHEN e.assignment_mode = 'DIRECT'
+                   AND (
+                     (ce_equip.is_active = TRUE AND ce_equip.dismissed_at IS NULL)
+                     OR c.owner_id = e.assigned_user_id
+                   )
+              THEN 'DIRECT'
+              ELSE 'FREE_POOL'
+            END as effective_assignment_mode,
+            (${effectiveTaskAssigneeSql}) as effective_task_assigned_user_id,
+            COALESCE(c.timezone, 'Europe/Moscow') as timezone
+     FROM equipment_maintenance_tasks mt
+     JOIN equipment e ON mt.equipment_id = e.id
+     LEFT JOIN clubs c ON c.id = e.club_id
+     LEFT JOIN club_employees ce_task ON ce_task.user_id = mt.assigned_user_id AND ce_task.club_id = e.club_id
+     LEFT JOIN club_employees ce_equip ON ce_equip.user_id = e.assigned_user_id AND ce_equip.club_id = e.club_id
+     WHERE mt.id = $1`,
     [taskId],
   );
 
@@ -238,21 +352,22 @@ export async function completeMaintenanceTask(params: {
   if (!task) throw new Error("Task details not found");
 
   const equipmentId = task.equipment_id;
-
-  // KPI and Bonus Logic (simplified for brevity here, normally I'd copy full logic)
-  // For now, let's keep it robust as in the original route.
+  const clubTimezone = task.timezone || "Europe/Moscow";
+  const isFreePool = task.effective_assignment_mode === "FREE_POOL";
+  const responsibleUserIdAtCompletion =
+    task.effective_task_assigned_user_id || userId;
 
   const rolesRes = await query(
     `SELECT role_id FROM club_employee_roles WHERE club_id = $1 AND user_id = $2 ORDER BY priority ASC`,
     [clubId, userId],
   );
 
-  let rolesList = rolesRes.rows.map((r: any) => r.role_id);
+  const rolesList = rolesRes.rows.map((r: any) => r.role_id);
 
   if (rolesList.length === 0) {
     const userRes = await query(
       `SELECT role_id FROM users WHERE id = $1`,
-      [userId]
+      [userId],
     );
     if (userRes.rows[0]?.role_id) {
       rolesList.push(userRes.rows[0].role_id);
@@ -304,52 +419,73 @@ export async function completeMaintenanceTask(params: {
 
   let bonusEarned = 0;
   if (kpiBonus) {
-    const perTypeRewards = kpiBonus.per_equipment_type_rewards || [];
+    const perTypeRewards =
+      kpiBonus.per_equipment_type_rewards ||
+      kpiBonus.equipment_type_rewards ||
+      kpiBonus.equipment_types ||
+      [];
     const equipmentTypeCode = task.equipment_type;
-    const typeReward = perTypeRewards.find(
-      (r: any) =>
-        r.equipment_type_code?.trim().toLowerCase() ===
-        equipmentTypeCode?.trim().toLowerCase(),
-    );
+    const typeReward = perTypeRewards.find((r: any) => {
+      const rewardCode = (
+        r.equipment_type_code ||
+        r.type_code ||
+        r.code ||
+        r.type ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+      return rewardCode === (equipmentTypeCode || "").trim().toLowerCase();
+    });
     const baseValue = typeReward
-      ? Number(typeReward.amount)
+      ? Number(
+          typeReward.amount ||
+            typeReward.reward ||
+            typeReward.value ||
+            typeReward.bonus ||
+            0,
+        )
       : Number(kpiBonus.amount) || 0;
     bonusEarned = baseValue;
   }
 
-  const overdueDaysAtCompletion = Math.max(
+  const completedDateKey = formatDateKeyInTimezone(new Date(), clubTimezone);
+  const dueDateKey =
+    typeof task.due_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(task.due_date)
+      ? task.due_date
+      : formatDateKeyInTimezone(new Date(task.due_date), clubTimezone);
+  const rawOverdueDays = Math.max(
     0,
     Math.floor(
-      (new Date(new Date().toDateString()).getTime() -
-        new Date(new Date(task.due_date).toDateString()).getTime()) /
+      (parseDateKey(completedDateKey).getTime() -
+        parseDateKey(dueDateKey).getTime()) /
         (1000 * 60 * 60 * 24),
     ),
   );
+  const overdueDaysAtCompletion = isFreePool ? 0 : rawOverdueDays;
   const wasOverdue = overdueDaysAtCompletion > 0;
 
-  const overduePenaltyPreview = calculateMaintenanceOverduePenalty(
-    {
-      overdue_tolerance_days: kpiBonus?.overdue_tolerance_days,
-      overdue_penalty_mode: kpiBonus?.overdue_penalty_mode,
-      overdue_penalty_amount: kpiBonus?.overdue_penalty_amount,
-      late_penalty_multiplier: kpiBonus?.late_penalty_multiplier,
-    },
-    [
-      {
-        overdue_days_at_completion: overdueDaysAtCompletion,
-        bonus_earned: bonusEarned,
-        was_overdue: wasOverdue,
-      },
-    ],
-  );
+  const overduePenalty = isFreePool
+    ? 0
+    : calculateMaintenanceOverduePenalty(
+        {
+          overdue_tolerance_days: kpiBonus?.overdue_tolerance_days,
+          overdue_penalty_mode: kpiBonus?.overdue_penalty_mode,
+          overdue_penalty_amount: kpiBonus?.overdue_penalty_amount,
+          late_penalty_multiplier: kpiBonus?.late_penalty_multiplier,
+        },
+        [
+          {
+            overdue_days_at_completion: overdueDaysAtCompletion,
+            bonus_earned: bonusEarned,
+            was_overdue: wasOverdue,
+          },
+        ],
+      ).total;
 
-  const overduePenalty = overduePenaltyPreview.total;
-
-  // Use photos_after for the main 'photos' column to maintain backward compatibility for now
-  // while also populating the new specific columns.
   const allPhotos = [...photos_before, ...photos_after];
 
-  await query(
+  const completedRes = await query(
     `UPDATE equipment_maintenance_tasks
          SET status = 'COMPLETED',
              verification_status = 'PENDING',
@@ -360,7 +496,7 @@ export async function completeMaintenanceTask(params: {
              photos = $3,
              photos_before = $4,
              photos_after = $5,
-             notes = $6,
+             notes = COALESCE($6, notes),
              verified_at = NULL,
              verified_by = NULL,
              verification_note = NULL,
@@ -369,19 +505,23 @@ export async function completeMaintenanceTask(params: {
              overdue_penalty = $8,
              overdue_days_at_completion = $9,
              was_overdue = $10,
-             responsible_user_id_at_completion = $2
-         WHERE id = $1`,
+             responsible_user_id_at_completion = $11,
+             cycle_no = $12
+         WHERE id = $1
+         RETURNING *`,
     [
       taskId,
       userId,
       allPhotos,
       photos_before,
       photos_after,
-      notes,
+      notes ?? null,
       bonusEarned,
       overduePenalty,
       overdueDaysAtCompletion,
       wasOverdue,
+      responsibleUserIdAtCompletion,
+      nextCycle,
     ],
   );
 
@@ -396,15 +536,15 @@ export async function completeMaintenanceTask(params: {
     photos_after,
   });
 
-  // Update equipment last_cleaned_at
-  await query(
-    `UPDATE equipment
-         SET last_cleaned_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
-    [equipmentId],
-  );
+  if (task.task_type === "CLEANING") {
+    await query(
+      `UPDATE equipment
+           SET last_cleaned_at = CURRENT_TIMESTAMP
+           WHERE id = $1`,
+      [equipmentId],
+    );
+  }
 
-  // Performance Log
   if (performance_data && Object.keys(performance_data).length > 0) {
     await query(
       `INSERT INTO equipment_performance_logs (equipment_id, club_id, recorded_by, metrics_data, notes, maintenance_task_id)
@@ -429,12 +569,13 @@ export async function completeMaintenanceTask(params: {
               e.cleaning_interval_override_days,
               CASE
                 WHEN e.assignment_mode = 'DIRECT'
-                     AND ce.is_active = TRUE
-                     AND ce.dismissed_at IS NULL
+                     AND (
+                       (ce.is_active = TRUE AND ce.dismissed_at IS NULL)
+                       OR c.owner_id = e.assigned_user_id
+                     )
                 THEN e.assigned_user_id
                 ELSE NULL
-              END as effective_assigned_user_id,
-              COALESCE(c.timezone, 'Europe/Moscow') as timezone
+              END as effective_assigned_user_id
        FROM equipment e
        LEFT JOIN clubs c ON c.id = e.club_id
        LEFT JOIN club_employees ce ON ce.club_id = e.club_id AND ce.user_id = e.assigned_user_id
@@ -454,13 +595,9 @@ export async function completeMaintenanceTask(params: {
         ) || 30,
       );
 
-      const nextDueDate = new Date();
-      nextDueDate.setHours(0, 0, 0, 0);
+      const nextDueDate = parseDateKey(completedDateKey);
       nextDueDate.setDate(nextDueDate.getDate() + intervalDays);
-      let finalDueDateStr = formatDateKeyInTimezone(
-        nextDueDate,
-        eq.timezone || "Europe/Moscow",
-      );
+      let finalDueDateStr = formatDateKeyInTimezone(nextDueDate, clubTimezone);
       const finalAssignedUserId = eq.effective_assigned_user_id || null;
 
       if (finalAssignedUserId) {
@@ -476,34 +613,33 @@ export async function completeMaintenanceTask(params: {
         }
       }
 
-      const existingTask = await query(
-        `SELECT id FROM equipment_maintenance_tasks
-                 WHERE equipment_id = $1 AND task_type = 'CLEANING'
-                 AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
-                 LIMIT 1`,
-        [equipmentId],
+      await query(
+        `DELETE FROM equipment_maintenance_tasks
+         WHERE equipment_id = $1
+           AND task_type = $2
+           AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
+           AND id != $3`,
+        [equipmentId, task.task_type, taskId],
       );
 
-      if (existingTask.rows.length === 0) {
-        await query(
-          `INSERT INTO equipment_maintenance_tasks
-                     (club_id, equipment_id, task_type, due_date, assigned_user_id, status, created_by, cycle_no)
-                     VALUES ($1, $2, 'CLEANING', $3, $4, 'PENDING', $5, 1)
-                     ON CONFLICT DO NOTHING`,
-          [
-            clubId,
-            equipmentId,
-            finalDueDateStr,
-            finalAssignedUserId,
-            userId,
-          ],
-        );
-      }
+      await query(
+        `INSERT INTO equipment_maintenance_tasks
+             (club_id, equipment_id, task_type, due_date, assigned_user_id, status, created_by, cycle_no)
+         VALUES ($1, $2, $3, $4, $5, 'PENDING', $6, 1)
+         ON CONFLICT DO NOTHING`,
+        [
+          clubId,
+          equipmentId,
+          task.task_type,
+          finalDueDateStr,
+          finalAssignedUserId,
+          userId,
+        ],
+      );
     }
   }
 
   // Side effects: ISSUE and LAUNDRY
-
   if (status_mode === "ISSUE" && issue_title) {
     await query(
       `INSERT INTO equipment_issues (
@@ -523,7 +659,6 @@ export async function completeMaintenanceTask(params: {
     issue_title &&
     isLaundryEquipmentType(task.equipment_type)
   ) {
-    // Check for existing active laundry request
     const existingLaundry = await query(
       `SELECT id FROM equipment_laundry_requests
          WHERE club_id = $1 AND equipment_id = $2
@@ -550,5 +685,5 @@ export async function completeMaintenanceTask(params: {
     }
   }
 
-  return { success: true };
+  return { success: true, task: completedRes.rows[0] };
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { query } from '@/db'
 import { cookies } from 'next/headers'
 import { appendMaintenanceTaskEvent, ensureMaintenanceTaskInitialHistory, getMaintenanceTaskCurrentCycle } from '@/lib/maintenance-task-events'
+import { hasActiveClubAccess } from '@/lib/maintenance-task-logic'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,14 +18,7 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const accessCheck = await query(
-            `SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2
-             UNION
-             SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2`,
-            [clubId, userId]
-        )
-
-        if ((accessCheck.rowCount || 0) === 0) {
+        if (!(await hasActiveClubAccess(clubId, userId))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 

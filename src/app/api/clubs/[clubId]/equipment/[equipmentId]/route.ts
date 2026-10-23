@@ -348,11 +348,18 @@ export async function PATCH(
 
     const effectiveAssigneeResult = await query(
       `SELECT CASE
-                        WHEN e.assignment_mode = 'DIRECT' THEN e.assigned_user_id
-                        ELSE NULL
-                    END as effective_assigned_user_id
-             FROM equipment e
-             WHERE e.id = $1 AND e.club_id = $2`,
+                WHEN e.assignment_mode = 'DIRECT'
+                     AND (
+                       (ce.is_active = TRUE AND ce.dismissed_at IS NULL)
+                       OR c.owner_id = e.assigned_user_id
+                     )
+                THEN e.assigned_user_id
+                ELSE NULL
+              END as effective_assigned_user_id
+       FROM equipment e
+       LEFT JOIN clubs c ON c.id = e.club_id
+       LEFT JOIN club_employees ce ON ce.club_id = e.club_id AND ce.user_id = e.assigned_user_id
+       WHERE e.id = $1 AND e.club_id = $2`,
       [equipmentId, clubId],
     );
 
@@ -363,13 +370,16 @@ export async function PATCH(
       await query(
         `UPDATE equipment_maintenance_tasks
                  SET status = 'SKIPPED',
+                     session_id = NULL,
+                     assigned_user_id = NULL,
+                     updated_at = CURRENT_TIMESTAMP,
                      notes = CASE
                          WHEN notes IS NULL OR notes = '' THEN $1
                          WHEN POSITION($1 IN notes) > 0 THEN notes
                          ELSE notes || E'\n' || $1
                      END
                  WHERE equipment_id = $2
-                   AND status = 'PENDING'`,
+                   AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
         [
           `Автоматически пропущено: статус оборудования "${updatedEquipment.status}" не участвует в графике чисток.`,
           equipmentId,

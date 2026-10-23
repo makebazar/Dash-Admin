@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
+import { hasActiveClubAccess } from "@/lib/maintenance-task-logic";
 
 export async function POST(
   request: Request,
@@ -13,6 +14,10 @@ export async function POST(
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!(await hasActiveClubAccess(clubId, userId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { taskIds } = body;
@@ -101,6 +106,10 @@ export async function GET(
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!(await hasActiveClubAccess(clubId, userId))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const result = await query(

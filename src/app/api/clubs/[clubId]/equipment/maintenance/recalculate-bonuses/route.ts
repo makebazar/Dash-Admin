@@ -3,6 +3,7 @@ import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { calculateMaintenanceOverduePenalty } from '@/lib/maintenance-penalties';
 import { requireClubFullAccess } from '@/lib/club-api-access';
+import { formatDateKeyInTimezone, parseDateKey } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,12 +27,16 @@ export async function POST(
         const month = parseInt(searchParams.get('month') || (now.getMonth() + 1).toString());
         const year = parseInt(searchParams.get('year') || now.getFullYear().toString());
 
+        const clubRes = await query(
+            `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone FROM clubs WHERE id = $1`,
+            [clubId]
+        );
+        const clubTimezone = clubRes.rows[0]?.timezone || 'Europe/Moscow';
+
         const startOfMonth = new Date(year, month - 1, 1);
         const endOfMonth = new Date(year, month, 0, 23, 59, 59);
 
         // 1. Get all completed tasks for the month
-        // Include FREE_POOL tasks (employee gets bonus for doing the work)
-        // but we will suppress the overdue penalty for them below
         const tasksToRecalculate = await query(
             `SELECT 
                 mt.id as task_id,
@@ -39,9 +44,19 @@ export async function POST(
                 mt.completed_at,
                 mt.due_date,
                 e.type as equipment_type,
-                e.assignment_mode
+                CASE
+                  WHEN e.assignment_mode = 'DIRECT'
+                       AND (
+                         (ce.is_active = TRUE AND ce.dismissed_at IS NULL)
+                         OR c.owner_id = e.assigned_user_id
+                       )
+                  THEN 'DIRECT'
+                  ELSE 'FREE_POOL'
+                END as assignment_mode
              FROM equipment_maintenance_tasks mt
              JOIN equipment e ON mt.equipment_id = e.id
+             LEFT JOIN clubs c ON c.id = e.club_id
+             LEFT JOIN club_employees ce ON ce.club_id = e.club_id AND ce.user_id = e.assigned_user_id
              WHERE e.club_id = $1
                AND mt.status = 'COMPLETED'
                AND mt.completed_at >= $2
@@ -153,8 +168,12 @@ export async function POST(
     
                 const bonusEarned = baseValue;
 
+                const completedDateKey = formatDateKeyInTimezone(new Date(task.completed_at), clubTimezone);
+                const dueDateKey = typeof task.due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(task.due_date)
+                    ? task.due_date
+                    : formatDateKeyInTimezone(new Date(task.due_date), clubTimezone);
                 const overdueDaysAtCompletion = Math.max(0, Math.floor(
-                    (new Date(new Date(task.completed_at).toDateString()).getTime() - new Date(new Date(task.due_date).toDateString()).getTime()) / (1000 * 60 * 60 * 24)
+                    (parseDateKey(completedDateKey).getTime() - parseDateKey(dueDateKey).getTime()) / (1000 * 60 * 60 * 24)
                 ));
                 const wasOverdue = overdueDaysAtCompletion > 0;
 
