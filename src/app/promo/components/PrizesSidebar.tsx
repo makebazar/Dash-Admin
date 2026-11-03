@@ -10,7 +10,6 @@ interface Prize {
   type: string;
   value: string | number;
   image_url?: string;
-  target_level?: number;
   probability?: string | number;
   win_condition?: {
     dice_sums?: number[];
@@ -22,48 +21,33 @@ interface PrizesSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   prizes: Prize[];
-  playerLevel?: number;
 }
 
 export const PrizesSidebar = ({
   isOpen,
   onClose,
   prizes,
-  playerLevel,
 }: PrizesSidebarProps) => {
-  // Group prizes by level
-  const groupedPrizes = React.useMemo(() => {
-    const sorted = [...prizes].sort((a, b) => {
-      const levelA = a.target_level || 0;
-      const levelB = b.target_level || 0;
-      return levelA - levelB;
-    });
-
-    const groups: { [key: number]: Prize[] } = {};
-    sorted.forEach((prize) => {
-      const level = prize.target_level || 0;
-      if (!groups[level]) groups[level] = [];
-      groups[level].push(prize);
-    });
-
-    return groups;
-  }, [prizes]);
-
-  const levels = React.useMemo(
-    () =>
-      Object.keys(groupedPrizes)
-        .map(Number)
-        .sort((a, b) => a - b),
-    [groupedPrizes],
-  );
+  const visiblePrizes = prizes.filter((p) => {
+    const nameLower = String(p?.name || "").trim().toLowerCase();
+    return (
+      p?.type !== "none" &&
+      p?.type !== "bonus" &&
+      nameLower !== "пусто" &&
+      nameLower !== "попробуй еще" &&
+      nameLower !== "ничего" &&
+      (p?.type === "physical" || (parseFloat(String(p?.value)) || 0) > 0)
+    );
+  });
 
   const getPrizeIcon = (type: string) => {
     switch (type) {
       case "virtual":
+      case "bonus_limitless":
         return <Coins className="w-5 h-5 text-yellow-500" />;
       case "attempt":
         return <Ticket className="w-5 h-5 text-orange-500" />;
-      case "bonus":
+      case "withdraw_boost":
         return <Star className="w-5 h-5 text-purple-500" />;
       default:
         return <Package className="w-5 h-5 text-blue-500" />;
@@ -74,15 +58,26 @@ export const PrizesSidebar = ({
     switch (type) {
       case "virtual":
         return "Баланс";
+      case "bonus_limitless":
+        return "Безлимит";
       case "attempt":
         return "Попытки";
-      case "bonus":
-        return "Бонус";
+      case "withdraw_boost":
+        return "Буст вывода";
       case "physical":
         return "Приз";
       default:
         return "Подарок";
     }
+  };
+
+  const formatPrizeValue = (prize: Prize) => {
+    const num = Math.round(parseFloat(String(prize.value)) || 0);
+    if (num <= 0) return null;
+    if (prize.type === "virtual" || prize.type === "bonus_limitless") return `${num} ₽`;
+    if (prize.type === "attempt") return `+${num} шт`;
+    if (prize.type === "withdraw_boost") return `+${num}%`;
+    return String(num);
   };
 
   const renderWinCondition = (condition?: Prize["win_condition"]) => {
@@ -154,8 +149,8 @@ export const PrizesSidebar = ({
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide">
-              {levels.length === 0 ? (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
+              {visiblePrizes.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8">
                   <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-4 border border-white/10 opacity-20">
                     <Package className="w-8 h-8 text-white" />
@@ -165,87 +160,51 @@ export const PrizesSidebar = ({
                   </p>
                 </div>
               ) : (
-                levels.map((level) => (
-                  <div key={level} className="space-y-3">
-                    <div className="flex items-center gap-3 px-2">
-                      <div className="h-px flex-1 bg-white/5" />
-                      <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">
-                        Уровень {level || 1}
-                      </span>
-                      <div className="h-px flex-1 bg-white/5" />
-                    </div>
-
-                    <div className="space-y-3">
-                      {groupedPrizes[level].map((prize, idx) => (
-                        <motion.div
-                          key={prize.id || `${level}-${idx}`}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: idx * 0.05 }}
-                          className={`p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col gap-2 group hover:bg-white/10 transition-colors ${
-                            playerLevel && level > playerLevel
-                              ? "opacity-50 grayscale"
-                              : ""
-                          }`}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-black/40 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform overflow-hidden border border-white/5">
-                              {prize.image_url ? (
-                                <img
-                                  src={prize.image_url}
-                                  className="w-full h-full object-cover"
-                                  alt={prize.name}
-                                />
-                              ) : (
-                                getPrizeIcon(prize.type)
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="text-sm font-black text-white uppercase italic leading-tight">
-                                  {prize.name}
-                                </div>
-                                {level > 0 && (
-                                  <div
-                                    className={`px-2 py-0.5 border rounded-md shrink-0 ${
-                                      playerLevel && level <= playerLevel
-                                        ? "bg-orange-500/10 border-orange-500/20"
-                                        : "bg-white/5 border-white/10"
-                                    }`}
-                                  >
-                                    <span
-                                      className={`text-[9px] font-black uppercase tracking-tight ${
-                                        playerLevel && level <= playerLevel
-                                          ? "text-orange-500"
-                                          : "text-gray-500"
-                                      }`}
-                                    >
-                                      Lvl {level}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                                  {getPrizeTypeLabel(prize.type)}
-                                </span>
-                                {prize.value && (
-                                  <>
-                                    <span className="w-1 h-1 bg-white/10 rounded-full" />
-                                    <span className="text-[10px] font-black text-orange-500 uppercase">
-                                      {prize.value}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
+                visiblePrizes.map((prize, idx) => {
+                  const valText = formatPrizeValue(prize);
+                  return (
+                    <motion.div
+                      key={prize.id || idx}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.04 }}
+                      className="p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col gap-2 group hover:bg-white/10 transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-black/40 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform overflow-hidden border border-white/5">
+                          {prize.image_url ? (
+                            <img
+                              src={prize.image_url}
+                              className="w-full h-full object-cover"
+                              alt={prize.name}
+                            />
+                          ) : (
+                            getPrizeIcon(prize.type)
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-black text-white uppercase italic leading-tight">
+                            {prize.name}
                           </div>
-                          {renderWinCondition(prize.win_condition)}
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                ))
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                              {getPrizeTypeLabel(prize.type)}
+                            </span>
+                            {valText && (
+                              <>
+                                <span className="w-1 h-1 bg-white/10 rounded-full" />
+                                <span className="text-[10px] font-black text-orange-500 uppercase">
+                                  {valText}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {renderWinCondition(prize.win_condition)}
+                    </motion.div>
+                  );
+                })
               )}
             </div>
 

@@ -91,33 +91,28 @@ export async function POST(request: Request) {
     );
 
     // 4. Issue tickets
-    await query(
-      `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
-             SELECT $1, $2, 'available', 'admin_manual', NULL
-             FROM generate_series(1, $3)`,
-      [playerId, numericClubId, finalTicketsCount],
+    const histRes = await query(
+      `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
+       VALUES ($1, $2, 'ADMIN_MANUAL', $3) RETURNING id`,
+      [
+        playerId,
+        numericClubId,
+        JSON.stringify({
+          processed_by: userId,
+          tickets: finalTicketsCount,
+          mode,
+          amount: mode === "amount" ? amount : undefined,
+        }),
+      ],
     );
+    const historyId = histRes.rows[0]?.id;
 
-    // 5. Process Quests (if amount was used)
-    if (mode === "amount" && parseFloat(amount) > 0) {
-      try {
-        const { getClient } = await import("@/db");
-        const { processBalanceTopupEvent } = await import("@/lib/promo-quests");
-        const client = await getClient();
-        try {
-          await processBalanceTopupEvent(
-            client,
-            numericClubId,
-            playerId,
-            parseFloat(amount),
-          );
-        } finally {
-          client.release();
-        }
-      } catch (e) {
-        console.error("Quest Balance Topup Processing Error:", e);
-      }
-    }
+    await query(
+      `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at, history_id)
+             SELECT $1, $2, 'available', 'admin_manual', NULL, $3
+             FROM generate_series(1, $4)`,
+      [playerId, numericClubId, historyId, finalTicketsCount],
+    );
 
     return NextResponse.json({
       success: true,

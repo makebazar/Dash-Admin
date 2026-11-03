@@ -64,7 +64,8 @@ export default function PlayerTournamentsPage() {
         
         // Default to active tournament, or first in list
         if (list.length > 0) {
-          const active = list.find((t) => t.status === "active");
+          const isTActive = (t: any) => String(t.status).toLowerCase() === "active" && new Date(t.end_date).getTime() > Date.now();
+          const active = list.find(isTActive);
           setActiveTournament(active || list[0]);
           setSelectedTournamentId(active ? active.id : list[0].id);
         }
@@ -109,8 +110,9 @@ export default function PlayerTournamentsPage() {
     );
   }
 
-  const activeSeasons = tournaments.filter(t => t.status === "active");
-  const pastSeasons = tournaments.filter(t => t.status === "completed");
+  const isTournamentActive = (t: any) => String(t.status).toLowerCase() === "active" && new Date(t.end_date).getTime() > Date.now();
+  const activeSeasons = tournaments.filter(isTournamentActive);
+  const pastSeasons = tournaments.filter(t => !isTournamentActive(t));
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white pb-32 font-sans selection:bg-indigo-500/30 overflow-x-hidden">
@@ -186,9 +188,9 @@ export default function PlayerTournamentsPage() {
                         <span className="text-[9px] font-bold text-gray-400 uppercase">Статус</span>
                         <div className={cn(
                           "text-[10px] font-black uppercase mt-0.5",
-                          activeTournament.status === "active" ? "text-emerald-400" : "text-gray-500"
+                          isTournamentActive(activeTournament) ? "text-emerald-400" : "text-gray-500"
                         )}>
-                          {activeTournament.status === "active" ? "Активен" : "Завершен"}
+                          {isTournamentActive(activeTournament) ? "Активен" : "Завершен"}
                         </div>
                       </div>
                     </div>

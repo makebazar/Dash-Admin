@@ -162,6 +162,27 @@ export async function POST(request: Request) {
            WHERE player_id = $1 AND club_id = $2 AND (program_id = 'legacy_streak' OR program_id = 'legacy')`,
           [item.player_id, item.club_id]
         );
+      } else {
+        // Dynamic program_id: check if program exists in club settings
+        const matchedProg = settings.loyalty_programs?.find((p: any) => p.id === item.loyalty_type);
+        if (matchedProg) {
+          const progTarget = matchedProg.target || 1;
+          if (matchedProg.type === "visit_streak") {
+            await client.query(
+              `UPDATE promo_package_progress 
+               SET current_count = 0, updated_at = NOW()
+               WHERE player_id = $1 AND club_id = $2 AND program_id = $3`,
+              [item.player_id, item.club_id, item.loyalty_type]
+            );
+          } else {
+            await client.query(
+              `UPDATE promo_package_progress 
+               SET current_count = GREATEST(0, current_count - $1), updated_at = NOW()
+               WHERE player_id = $2 AND club_id = $3 AND program_id = $4`,
+              [progTarget, item.player_id, item.club_id, item.loyalty_type]
+            );
+          }
+        }
       }
 
       // Credit digital rewards

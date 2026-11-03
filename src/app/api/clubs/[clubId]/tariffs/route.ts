@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const tariffs: Array<{ id: string | number; name: string; duration?: number; source?: string }> = [];
-    let zones: Array<{ id: string | number; title: string }> = [];
+    let zones: Array<{ id: string | number; title: string; source?: string }> = [];
 
     // 1. Fetch from SmartShell
     const ssClient = await getSmartShellClientForClub(clubIdInt);
@@ -50,6 +50,19 @@ export async function GET(
           tariffs.push({
             id: String(r.id),
             name: r.name,
+            source: "custom",
+          });
+        }
+      }
+    }
+
+    // 3. Fetch custom zones from promo_settings
+    if (Array.isArray(promoSettings.zones)) {
+      for (const z of promoSettings.zones) {
+        if (z.id && z.title && !zones.some(existing => String(existing.id) === String(z.id))) {
+          zones.push({
+            id: String(z.id),
+            title: z.title,
             source: "custom",
           });
         }

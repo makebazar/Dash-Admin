@@ -140,12 +140,12 @@ export async function POST(request: Request) {
     // Fetch club's max_bonus_per_match tariff setting if configured
     let finalEarned = Number(earnedBonuses) || 0;
     const clubSettingsRes = await client.query(
-      `SELECT settings FROM clubs WHERE id = $1`,
+      `SELECT promo_settings, promo_settings->'frag'->'tariffs' as frag_tariffs FROM clubs WHERE id = $1`,
       [activeClubId]
     );
-    const clubFragTariffs = clubSettingsRes.rows[0]?.settings?.frag?.tariffs;
+    const clubFragTariffs = clubSettingsRes.rows[0]?.frag_tariffs || clubSettingsRes.rows[0]?.promo_settings?.frag?.tariffs;
     if (clubFragTariffs && typeof clubFragTariffs.max_bonus_per_match === "number") {
-      const cap = clubFragTariffs.max_bonus_per_match;
+      const cap = Number(clubFragTariffs.max_bonus_per_match);
       if (cap > 0 && finalEarned > cap) {
         finalEarned = cap;
       }

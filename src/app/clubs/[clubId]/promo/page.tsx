@@ -12,11 +12,12 @@ import {
   User,
   Disc,
   Gamepad2,
-  CheckCircle2,
-  ShoppingCart,
-  Users,
   Package,
   Award,
+  ExternalLink,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,13 +28,9 @@ import {
 import { HistoryTab } from "@/app/clubs/[clubId]/promo/_components/HistoryTab";
 import { PlayersTab } from "@/app/clubs/[clubId]/promo/_components/PlayersTab";
 import { GeneralTab } from "@/app/clubs/[clubId]/promo/_components/GeneralTab";
-import { QuestsTab } from "@/app/clubs/[clubId]/promo/_components/QuestsTab";
 import { LoyaltyTab } from "@/app/clubs/[clubId]/promo/_components/LoyaltyTab";
-import { VerificationTab } from "@/app/clubs/[clubId]/promo/_components/VerificationTab";
 import { ServicesTab } from "@/app/clubs/[clubId]/promo/_components/ServicesTab";
 import { AccrualTab } from "@/app/clubs/[clubId]/promo/_components/AccrualTab";
-import { BarTab } from "@/app/clubs/[clubId]/promo/_components/BarTab";
-import { ReferralsTab } from "@/app/clubs/[clubId]/promo/_components/ReferralsTab";
 import { CasesTab } from "@/app/clubs/[clubId]/promo/_components/CasesTab";
 import {
   GamesTab,
@@ -51,6 +48,7 @@ export default function PromotionsPage() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
 
+  const initialTab = (tabParam as any) || "queue";
   const [activeTab, setActiveTab] = useState<
     | "queue"
     | "players"
@@ -58,33 +56,48 @@ export default function PromotionsPage() {
     | "games"
     | "general"
     | "services"
-    | "bar"
-    | "quests"
     | "loyalty"
-    | "verification"
     | "accrual"
-    | "referrals"
     | "cases"
-  >((tabParam as any) || "queue");
+  >(initialTab);
 
-  // Sync activeTab if search param changes externally
-  useEffect(() => {
-    if (tabParam && tabParam !== activeTab) {
-      setActiveTab(tabParam as any);
-    }
-  }, [tabParam, activeTab]);
+  const [mountedTabs, setMountedTabs] = useState<Record<string, boolean>>(() => ({
+    [initialTab]: true,
+  }));
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId as any);
-    const params = new URLSearchParams(window.location.search);
-    params.set("tab", tabId);
-    if (tabId !== "players") {
-      params.delete("playerId");
+    setMountedTabs((prev) => (prev[tabId] ? prev : { ...prev, [tabId]: true }));
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("tab", tabId);
+      if (tabId !== "players") {
+        params.delete("playerId");
+      }
+      const qs = params.toString();
+      const newUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+      window.history.replaceState(null, "", newUrl);
     }
-    router.replace(`?${params.toString()}`);
   };
 
+  useEffect(() => {
+    const handlePopState = () => {
+      const p = new URLSearchParams(window.location.search).get("tab") || "queue";
+      setActiveTab(p as any);
+      setMountedTabs((prev) => (prev[p] ? prev : { ...prev, [p]: true }));
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   const [settings, setSettings] = useState<any>(null);
+  const [isSmartShellEnabled, setIsSmartShellEnabled] = useState(false);
+  const [isSyncingSmartShell, setIsSyncingSmartShell] = useState(false);
+  const [syncStatusMessage, setSyncStatusMessage] = useState<{
+    text: string;
+    type: "success" | "error";
+  } | null>(null);
+
   const [prizes, setPrizes] = useState<Prize[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [logs, setLogs] = useState<{
@@ -102,6 +115,40 @@ export default function PromotionsPage() {
   const [tariffs, setTariffs] = useState<any[]>([]);
   const [zones, setZones] = useState<any[]>([]);
   const [selectedGame, setSelectedGame] = useState<string>("wheel");
+
+  const handleSyncSmartShell = async () => {
+    if (isSyncingSmartShell) return;
+    setIsSyncingSmartShell(true);
+    setSyncStatusMessage(null);
+    try {
+      const res = await fetch(`/api/promo/admin/sync-smartshell`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSyncStatusMessage({
+          text: `Синхронизировано: ${data.processedCount || 0} платежей (+${data.totalTicketsAwarded || 0} билетов), ${data.visitsProcessed || 0} визитов`,
+          type: "success",
+        });
+        fetchData();
+      } else {
+        setSyncStatusMessage({
+          text: data.error || data.message || "Ошибка синхронизации со SmartShell",
+          type: "error",
+        });
+      }
+    } catch (e: any) {
+      setSyncStatusMessage({
+        text: e.message || "Сетевая ошибка при синхронизации",
+        type: "error",
+      });
+    } finally {
+      setIsSyncingSmartShell(false);
+      setTimeout(() => setSyncStatusMessage(null), 6000);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -173,7 +220,9 @@ export default function PromotionsPage() {
       const productsData = await productsRes.json();
       const tariffsData = await tariffsRes.json();
 
-      setSettings(settingsData.club?.promo_settings || {});
+      const club = settingsData.club || {};
+      setSettings(club.promo_settings || {});
+      setIsSmartShellEnabled(Boolean(club.is_smartshell_enabled));
       setPrizes(prizesData.prizes || []);
       setQueue(queueData.queue || []);
       setLogs({
@@ -251,144 +300,173 @@ export default function PromotionsPage() {
     }
   };
 
-  const handleReject = async (id: string) => {
-    try {
-      await fetch(`/api/promo/admin/queue/claim`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action: "reject" }),
-      });
-      fetchData();
-    } catch (error) {
-      console.error("Reject Prize Error:", error);
-    }
-  };
-
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
+      <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6 md:px-8 py-8 sm:py-12 md:py-16">
         {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-4">
-          <div className="space-y-1">
-            <h1 className="text-4xl font-black tracking-tighter italic uppercase">
-              Promo <span className="text-orange-500">Engine</span>
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+              Промо-система
             </h1>
-            <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">
-              Управление маркетингом и лояльностью
+            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+              Управление маркетингом, лояльностью, билетами и выдачей призов
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { id: "queue", label: "Очередь", icon: Trophy, color: "orange" },
-              { id: "players", label: "Игроки", icon: User, color: "blue" },
-              {
-                id: "history",
-                label: "История",
-                icon: History,
-                color: "emerald",
-              },
-              { id: "loyalty", label: "Лояльность", icon: Award, color: "amber" },
-              { id: "quests", label: "Квесты", icon: Plus, color: "pink" },
-              { id: "games", label: "Игры", icon: Gamepad2, color: "indigo" },
-              { id: "cases", label: "Кейсы", icon: Package, color: "orange" },
-              {
-                id: "verification",
-                label: "Верификация",
-                icon: CheckCircle2,
-                color: "emerald",
-              },
-              { id: "services", label: "Услуги", icon: Disc, color: "blue" },
-              {
-                id: "accrual",
-                label: "Начисления",
-                icon: Plus,
-                color: "orange",
-              },
-              {
-                id: "bar",
-                label: "Маркет",
-                icon: ShoppingCart,
-                color: "emerald",
-              },
-              {
-                id: "referrals",
-                label: "Рефералы",
-                icon: Users,
-                color: "orange",
-              },
-              {
-                id: "general",
-                label: "Настройки",
-                icon: Settings,
-                color: "slate",
-              },
-            ].map((tab) => (
+          <div className="flex items-center gap-2">
+            {isSmartShellEnabled && (
+              <button
+                onClick={handleSyncSmartShell}
+                disabled={isSyncingSmartShell}
+                className="inline-flex items-center gap-2 h-10 sm:h-11 rounded-xl px-3.5 sm:px-4 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm transition-all shadow-xs cursor-pointer disabled:opacity-60"
+                title="Синхронизировать платежи, сессии и тарифы SmartShell"
+              >
+                <RefreshCw
+                  className={cn(
+                    "w-3.5 h-3.5 text-slate-400",
+                    isSyncingSmartShell && "animate-spin text-blue-600"
+                  )}
+                />
+                <span>
+                  {isSyncingSmartShell ? "Синхронизация..." : "Синхронизация SmartShell"}
+                </span>
+              </button>
+            )}
+
+            <a
+              href={`/promo?clubId=${clubId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 h-10 sm:h-11 rounded-xl px-4 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm transition-all shadow-xs"
+            >
+              <span>Приложение гостя</span>
+              <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+            </a>
+          </div>
+        </div>
+
+        {syncStatusMessage && (
+          <div
+            className={cn(
+              "mb-4 p-3 sm:p-4 rounded-xl text-xs sm:text-sm font-medium flex items-center justify-between gap-3 border shadow-xs animate-in fade-in duration-200",
+              syncStatusMessage.type === "success"
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                : "bg-rose-50 text-rose-800 border-rose-200"
+            )}
+          >
+            <div className="flex items-center gap-2">
+              {syncStatusMessage.type === "success" ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span>{syncStatusMessage.text}</span>
+            </div>
+            <button
+              onClick={() => setSyncStatusMessage(null)}
+              className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Root Tabs */}
+        <div className="flex items-center bg-white p-1 sm:p-1.5 rounded-xl border border-slate-200 shadow-xs gap-1 mb-6 overflow-x-auto scrollbar-hide">
+          {[
+            { id: "queue", label: "Очередь", count: queue.length },
+            { id: "players", label: "Игроки", count: players.length },
+            { id: "history", label: "История" },
+            { id: "loyalty", label: "Лояльность" },
+            { id: "games", label: "Игры" },
+            { id: "cases", label: "Кейсы" },
+            { id: "services", label: "Услуги" },
+            { id: "accrual", label: "Начисления" },
+            { id: "general", label: "Настройки" },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
               <button
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
                 className={cn(
-                  "flex items-center gap-2.5 px-5 py-2.5 rounded-2xl transition-all duration-300 font-black uppercase italic text-xs tracking-wider",
-                  activeTab === tab.id
-                    ? `bg-${tab.color}-500 text-white shadow-lg shadow-${tab.color}-500/20 scale-105`
-                    : "bg-white text-slate-400 hover:text-slate-600 border border-slate-200",
+                  "px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                  tab.id === "general" && "ml-auto",
+                  isActive
+                    ? "bg-slate-900 text-white shadow-xs font-semibold"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                 )}
               >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
+                <span>{tab.label}</span>
+                {typeof tab.count === "number" && tab.count > 0 && (
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono px-1.5 py-0.2 rounded-md font-bold",
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                )}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
-        <AnimatePresence mode="wait">
-          {activeTab === "queue" && (
-            <QueueTab
-              queue={queue}
-              handleClaim={handleClaim}
-              handleCancel={handleCancel}
-            />
+        <div>
+          {mountedTabs["queue"] && (
+            <div className={activeTab === "queue" ? "block" : "hidden"}>
+              <QueueTab
+                queue={queue}
+                handleClaim={handleClaim}
+                handleCancel={handleCancel}
+              />
+            </div>
           )}
 
-          {activeTab === "history" && <HistoryTab logs={logs} clubId={clubId as string} />}
-
-          {activeTab === "players" && (
-            <PlayersTab
-              clubId={clubId as string}
-              players={players}
-              onRefresh={fetchData}
-              settings={settings}
-            />
+          {mountedTabs["history"] && (
+            <div className={activeTab === "history" ? "block" : "hidden"}>
+              <HistoryTab logs={logs} clubId={clubId as string} />
+            </div>
           )}
 
-          {activeTab === "loyalty" && (
-            <LoyaltyTab
-              clubId={clubId as string}
-              products={products}
-              categories={categories}
-              tariffs={tariffs}
-              zones={zones}
-              settings={settings}
-              saveSettings={saveSettings}
-            />
+          {mountedTabs["players"] && (
+            <div className={activeTab === "players" ? "block" : "hidden"}>
+              <PlayersTab
+                clubId={clubId as string}
+                players={players}
+                onRefresh={fetchData}
+                settings={settings}
+              />
+            </div>
           )}
 
-          {activeTab === "games" && (
-            <motion.div
-              key="games"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              className="space-y-8"
-            >
+          {mountedTabs["loyalty"] && (
+            <div className={activeTab === "loyalty" ? "block" : "hidden"}>
+              <LoyaltyTab
+                clubId={clubId as string}
+                tariffs={tariffs}
+                zones={zones}
+                settings={settings}
+                saveSettings={saveSettings}
+                isSmartShellEnabled={isSmartShellEnabled}
+              />
+            </div>
+          )}
+
+          {mountedTabs["games"] && (
+            <div className={activeTab === "games" ? "block" : "hidden"}>
               <GamesTab
                 clubId={clubId as string}
                 settings={settings}
@@ -396,53 +474,46 @@ export default function PromotionsPage() {
                 prizes={prizes}
                 setPrizes={setPrizes}
               />
-            </motion.div>
+            </div>
           )}
 
-          {activeTab === "general" && (
-            <GeneralTab
-              settings={settings}
-              saveSettings={saveSettings}
-              clubId={clubId as string}
-            />
+          {mountedTabs["general"] && (
+            <div className={activeTab === "general" ? "block" : "hidden"}>
+              <GeneralTab
+                settings={settings}
+                saveSettings={saveSettings}
+                clubId={clubId as string}
+                zones={zones}
+                onZonesUpdated={fetchData}
+              />
+            </div>
           )}
 
-          {activeTab === "quests" && (
-            <QuestsTab
-              clubId={clubId as string}
-              products={products}
-              categories={categories}
-              serviceRules={serviceRules}
-              zones={zones}
-              settings={settings}
-              saveSettings={saveSettings}
-            />
+          {mountedTabs["cases"] && (
+            <div className={activeTab === "cases" ? "block" : "hidden"}>
+              <CasesTab clubId={clubId as string} products={products} serviceRules={serviceRules} categories={categories} />
+            </div>
           )}
-          {activeTab === "cases" && (
-            <CasesTab clubId={clubId as string} products={products} serviceRules={serviceRules} categories={categories} />
+
+          {mountedTabs["services"] && (
+            <div className={activeTab === "services" ? "block" : "hidden"}>
+              <ServicesTab
+                settings={settings}
+                saveSettings={saveSettings}
+                tariffs={tariffs}
+                zones={zones}
+                isSmartShellEnabled={isSmartShellEnabled}
+              />
+            </div>
           )}
-          {activeTab === "verification" && (
-            <VerificationTab clubId={clubId as string} />
+
+          {mountedTabs["accrual"] && (
+            <div className={activeTab === "accrual" ? "block" : "hidden"}>
+              <AccrualTab settings={settings} saveSettings={saveSettings} />
+            </div>
           )}
-          {activeTab === "services" && (
-            <ServicesTab settings={settings} saveSettings={saveSettings} tariffs={tariffs} zones={zones} />
-          )}
-          {activeTab === "accrual" && (
-            <AccrualTab settings={settings} saveSettings={saveSettings} />
-          )}
-          {activeTab === "bar" && (
-            <BarTab
-              settings={settings}
-              saveSettings={saveSettings}
-              products={products}
-              categories={categories}
-            />
-          )}
-          {activeTab === "referrals" && (
-            <ReferralsTab settings={settings} saveSettings={saveSettings} />
-          )}
-        </AnimatePresence>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

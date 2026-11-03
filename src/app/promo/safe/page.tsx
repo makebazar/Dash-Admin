@@ -12,11 +12,11 @@ import { PrizesSidebar } from "../components/PrizesSidebar";
  */
 
 const GENERATE_CODES = () => {
-  const codes = [];
-  for (let i = 0; i < 6; i++) {
-    codes.push(Math.floor(1000 + Math.random() * 9000).toString());
+  const codes = new Set<string>();
+  while (codes.size < 6) {
+    codes.add(Math.floor(1000 + Math.random() * 9000).toString());
   }
-  return codes;
+  return Array.from(codes);
 };
 
 type GameStatus = "idle" | "entering" | "verifying" | "success" | "fail";
@@ -121,9 +121,12 @@ export default function DeepDiveSafeDemo() {
     osc.stop(ctx.currentTime + duration);
   };
 
+  const ticketCost =
+    player?.settings?.game_configs?.safe?.tickets_per_play || 1;
+
   const handleCodeClick = async (code: string) => {
     if (status !== "idle") return;
-    if (ticketsCount <= 0) {
+    if (ticketsCount < ticketCost) {
       showError("НЕТ БИЛЕТОВ");
       return;
     }
@@ -167,7 +170,8 @@ export default function DeepDiveSafeDemo() {
         return;
       }
 
-      setTicketsCount((prev) => prev - 1);
+      const spent = data.ticketsSpent || ticketCost;
+      setTicketsCount((prev) => Math.max(0, prev - spent));
 
       // 3. Lock in the selected code on the display
       setDecryptionText(code);
@@ -175,32 +179,22 @@ export default function DeepDiveSafeDemo() {
       await new Promise((r) => setTimeout(r, 800));
 
       // 4. Result evaluation
-      const isActualWin = data.won && data.prize;
-      const isEmptyPrize =
-        isActualWin &&
-        (data.prize.type === "none" ||
-          data.prize.name.toLowerCase() === "пусто" ||
-          data.prize.name.toLowerCase() === "попробуй еще" ||
-          parseFloat(data.prize.value) === 0);
+      const isActualWin = Boolean(data.isCodeCorrect && data.won && data.prize);
 
-      if (data.isCodeCorrect) {
-        if (isActualWin && !isEmptyPrize) {
-          setWonPrize(data.prize);
+      if (isActualWin) {
+        setWonPrize(data.prize);
 
-          // Update counters instantly for the animation
-          if (data.prize.type === "virtual" || data.prize.type === "bonus_limitless") {
-            setBonusBalance((prev) => prev + parseFloat(data.prize.value));
-          } else if (data.prize.type === "attempt") {
-            setTicketsCount(
-              (prev) => prev + Math.floor(parseFloat(data.prize.value) || 1),
-            );
-          }
-        } else {
-          // Correct code but NO PRIZE or EMPTY PRIZE
-          setWonPrize({ name: "Пусто", type: "none", value: 0 });
+        if (
+          data.prize.type === "virtual" ||
+          data.prize.type === "bonus_limitless"
+        ) {
+          setBonusBalance((prev) => prev + parseFloat(data.prize.value));
+        } else if (data.prize.type === "attempt") {
+          setTicketsCount(
+            (prev) => prev + Math.floor(parseFloat(data.prize.value) || 1),
+          );
         }
 
-        // Handle Quest Rewards
         if (data.questRewards && data.questRewards.length > 0) {
           data.questRewards.forEach((q: any) => {
             if (q.rewardBonusBalance > 0) {
@@ -219,7 +213,25 @@ export default function DeepDiveSafeDemo() {
         setTimeout(() => playBeep(400, "square", 0.1), 100);
         setTimeout(() => playBeep(800, "sine", 0.8), 200);
       } else {
-        const winningCodeFromServer = data.winningCode || code;
+        const fallbackOther =
+          codes.find((c) => c !== code) || GENERATE_CODES()[0];
+        const winningCodeFromServer =
+          data.winningCode && data.winningCode !== code
+            ? data.winningCode
+            : fallbackOther;
+
+        if (data.questRewards && data.questRewards.length > 0) {
+          data.questRewards.forEach((q: any) => {
+            if (q.rewardBonusBalance > 0) {
+              setBonusBalance(
+                (prev) => prev + parseFloat(q.rewardBonusBalance),
+              );
+            }
+            if (q.rewardTickets > 0) {
+              setTicketsCount((prev) => prev + parseInt(q.rewardTickets));
+            }
+          });
+        }
 
         setStatus("fail");
         playBeep(200, "sawtooth", 0.6);
@@ -262,7 +274,6 @@ export default function DeepDiveSafeDemo() {
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
         prizes={prizes}
-        playerLevel={player?.level?.currentLevel}
       />
 
       <AnimatePresence>
@@ -408,9 +419,7 @@ export default function DeepDiveSafeDemo() {
                     ? "🎟️"
                     : wonPrize?.type === "virtual" || wonPrize?.type === "bonus_limitless"
                       ? "💎"
-                      : wonPrize?.type === "bonus"
-                        ? "⚡"
-                        : "🎁"}
+                      : "🎁"}
                 </motion.div>
 
                 <div className="text-[10px] font-bold text-green-400 tracking-[0.5em] mb-2 uppercase opacity-90 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]">
@@ -423,10 +432,10 @@ export default function DeepDiveSafeDemo() {
                 {wonPrize?.value > 0 && (
                   <div className="mt-4 px-4 py-1.5 bg-green-500/20 rounded-full border border-green-500/60 text-green-400 font-bold tracking-widest text-lg shadow-[0_0_20px_rgba(74,222,128,0.2)]">
                     +{wonPrize.value}{" "}
-                    {wonPrize.type === "bonus"
-                      ? "XP"
-                      : wonPrize.type === "virtual" || wonPrize.type === "bonus_limitless"
-                        ? "₽"
+                    {wonPrize.type === "virtual" || wonPrize.type === "bonus_limitless"
+                      ? "₽"
+                      : wonPrize.type === "withdraw_boost"
+                        ? "%"
                         : "шт"}
                   </div>
                 )}

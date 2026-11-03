@@ -14,13 +14,15 @@ export async function GET(request: Request) {
 
     const result = await query(
       `SELECT i.id, i.status, i.created_at, i.activated_at, i.claimed_at, i.bar_product_id,
-              COALESCE(p.name, ci.name) as name, 
-              ci.description, ci.reward_type, 
-              COALESCE(p.selling_price, ci.reward_value) as reward_value, 
-              ci.image_url, ci.is_rare,
+              COALESCE(i.reward_name, p.name, ci.name, 'Подарок') as name, 
+              ci.description,
+              COALESCE(i.reward_type, ci.reward_type, 'custom') as reward_type, 
+              COALESCE(p.selling_price, ci.reward_value, (i.metadata->>'reward_value')::numeric, 0) as reward_value, 
+              ci.image_url, COALESCE(ci.is_rare, false) as is_rare,
+              i.service_id, i.metadata,
               q.id as queue_id, q.status as queue_status
        FROM promo_player_inventory i
-       JOIN promo_case_items ci ON i.item_id = ci.id
+       LEFT JOIN promo_case_items ci ON i.item_id = ci.id
        LEFT JOIN warehouse_products p ON i.bar_product_id = p.id
        LEFT JOIN promo_prize_queue q ON q.inventory_item_id = i.id
        WHERE i.player_id = $1 AND i.club_id = $2
@@ -52,9 +54,13 @@ export async function POST(request: Request) {
 
     const invRes = await client.query(
       `SELECT i.id, i.status, i.item_id, i.bar_product_id as resolved_bar_product_id, 
-              ci.name, ci.reward_type, ci.reward_value, ci.bar_product_id as config_bar_product_id
+              COALESCE(i.reward_name, ci.name, 'Подарок') as name,
+              COALESCE(i.reward_type, ci.reward_type, 'custom') as reward_type,
+              COALESCE(ci.reward_value, (i.metadata->>'reward_value')::numeric, 0) as reward_value,
+              ci.bar_product_id as config_bar_product_id,
+              i.service_id, i.metadata
        FROM promo_player_inventory i
-       JOIN promo_case_items ci ON i.item_id = ci.id
+       LEFT JOIN promo_case_items ci ON i.item_id = ci.id
        WHERE i.id = $1 AND i.player_id = $2 AND i.club_id = $3
        FOR UPDATE`,
       [inventoryId, playerId, parseInt(clubId)]

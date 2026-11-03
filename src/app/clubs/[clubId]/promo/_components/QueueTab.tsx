@@ -24,85 +24,72 @@ interface QueueTabProps {
 
 export function QueueTab({ queue, handleClaim, handleCancel }: QueueTabProps) {
   return (
-    <motion.div
-      key="queue"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="space-y-6"
-    >
-      <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
-        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-orange-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20">
-              <Trophy className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-black uppercase italic tracking-tight">
-                Очередь <span className="text-orange-500">выдачи</span>
-              </h2>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Призы, ожидающие подтверждения
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl">
-            <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-              Live Stream
-            </span>
+    <div className="space-y-6">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+        <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+              Очередь выдачи
+            </h2>
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
+              Призы и бонусы, ожидающие подтверждения администратора
+            </p>
           </div>
         </div>
 
-        <div className="min-h-100">
+        <div>
           {queue.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 space-y-4 opacity-30">
-              <Trophy className="w-16 h-16 text-slate-300" />
-              <p className="text-xs font-black uppercase italic tracking-widest text-slate-400">
-                Очередь пуста
-              </p>
+            <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+              <p className="text-sm font-semibold text-slate-900">Очередь пуста</p>
+              <p className="text-xs text-slate-500 mt-1">Все запросы на выдачу призов обработаны</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-50">
+            <div className="divide-y divide-slate-100">
               {queue.map((item) => (
                 <div
                   key={item.id}
-                  className="group p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-slate-50/50 transition-colors"
+                  className="p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors"
                 >
-                  <div className="flex items-center gap-5">
-                    <div className="w-14 h-14 bg-white border border-slate-200 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-                      <User className="w-6 h-6 text-slate-400" />
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 shrink-0">
+                      <User className="w-5 h-5" />
                     </div>
                     <div className="space-y-1">
-                      <div className="font-black text-lg tracking-tight uppercase italic">
+                      <div className="font-semibold text-base text-slate-900">
                         {item.player_name}
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-700">
                           {item.player_phone}
                         </span>
-                        <span className="text-[10px] font-medium text-slate-300">
-                          {new Date(item.created_at).toLocaleString()}
+                        <span>•</span>
+                        <span>
+                          {new Date(item.created_at).toLocaleString("ru-RU", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-8">
-                    <div className="text-right space-y-1">
-                      <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-between md:justify-end gap-4 sm:gap-6">
+                    <div className="text-left md:text-right space-y-1">
+                      <div className="flex items-center md:justify-end gap-2">
                         <span
                           className={cn(
-                             "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest",
+                            "px-2.5 py-0.5 rounded-md text-[11px] font-semibold uppercase tracking-wider",
                             item.prize_type === "physical"
-                              ? "bg-purple-100 text-purple-600"
-                              : "bg-emerald-100 text-emerald-600",
+                              ? "bg-purple-50 text-purple-700 border border-purple-200/60"
+                              : "bg-emerald-50 text-emerald-700 border border-emerald-200/60",
                           )}
                         >
                           {item.prize_type === "physical" ? "Товар" : "Бонус"}
                         </span>
                       </div>
-                      <div className="font-black text-xl italic text-slate-900 tracking-tight">
+                      <div className="font-bold text-base text-slate-900">
                         {item.prize_name}
                       </div>
                     </div>
@@ -116,7 +103,7 @@ export function QueueTab({ queue, handleClaim, handleCancel }: QueueTabProps) {
                               `Введите сумму к выдаче (максимум ${withdrawAmt} ₽):`,
                               String(withdrawAmt)
                             );
-                            if (val === null) return; // отмена
+                            if (val === null) return;
                             const parsed = parseFloat(val);
                             if (isNaN(parsed) || parsed < 0 || parsed > withdrawAmt) {
                               alert("Некорректная сумма");
@@ -127,14 +114,15 @@ export function QueueTab({ queue, handleClaim, handleCancel }: QueueTabProps) {
                             await handleClaim(item.id);
                           }
                         }}
-                        className="h-12 px-6 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl flex items-center gap-2 font-black uppercase italic text-xs transition-all active:scale-95"
+                        className="h-10 sm:h-11 px-4 sm:px-5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl flex items-center gap-2 font-medium text-xs sm:text-sm transition-all shadow-xs cursor-pointer active:scale-98"
                       >
-                        <CheckCircle2 className="w-4 h-4" />
-                        Выдать
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>Выдать</span>
                       </button>
                       <button
                         onClick={() => handleCancel(item.id)}
-                        className="h-12 w-12 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 rounded-2xl flex items-center justify-center transition-all active:scale-95"
+                        className="h-10 sm:h-11 w-10 sm:w-11 bg-white border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-98"
+                        title="Отклонить"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -146,6 +134,6 @@ export function QueueTab({ queue, handleClaim, handleCancel }: QueueTabProps) {
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

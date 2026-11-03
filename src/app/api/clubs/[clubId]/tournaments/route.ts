@@ -691,6 +691,15 @@ export async function GET(
     }
 
     // 2. Fetch list of all tournaments for this club
+    // Auto-finalize any active tournaments if all playoff/bracket matches finished
+    const activeTourneys = await client.query(
+      `SELECT id FROM club_tournaments WHERE club_id = $1 AND status = 'ACTIVE'`,
+      [parsedClubId]
+    ).catch(() => ({ rows: [] }));
+    for (const at of activeTourneys.rows) {
+      await checkAndFinalizeTournament(client, at.id).catch(() => {});
+    }
+
     const cookieStore = await cookies();
     const playerId = cookieStore.get("promo_player_id")?.value;
 
@@ -2289,6 +2298,7 @@ export async function POST(
       }
 
       await client.query("COMMIT");
+      await checkAndFinalizeTournament(client, match.tournament_id).catch(() => {});
       await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(match.tournament_id)]).catch(() => {});
       await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(matchId)]).catch(() => {});
       return NextResponse.json({ success: true });
@@ -2383,9 +2393,28 @@ export async function POST(
       }
 
       await client.query("COMMIT");
+      await checkAndFinalizeTournament(client, match.tournament_id).catch(() => {});
       await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(match.tournament_id)]).catch(() => {});
       await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(matchId)]).catch(() => {});
       return NextResponse.json({ success: true });
+    }
+
+    // Action: FINISH TOURNAMENT (Manual completion by Admin)
+    if (action === "finish_tournament" || action === "complete_tournament") {
+      const { id } = body;
+      if (!id) {
+        return NextResponse.json({ error: "ID турнира обязателен" }, { status: 400 });
+      }
+
+      await client.query(
+        `UPDATE club_tournaments
+         SET status = 'FINISHED', finished_at = NOW(), updated_at = NOW()
+         WHERE id = $1 AND club_id = $2`,
+        [id, parsedClubId]
+      );
+
+      await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(id)]).catch(() => {});
+      return NextResponse.json({ success: true, status: "FINISHED" });
     }
 
     // Action: PAYOUT PRIZE
@@ -2849,6 +2878,7 @@ export async function POST(
         }
 
         await client.query("COMMIT");
+        await checkAndFinalizeTournament(client, match.tournament_id).catch(() => {});
 
         await client.query(`SELECT pg_notify('tournament_updates', $1)`, [String(match.tournament_id)]).catch(() => {});
         await client.query(`SELECT pg_notify('match_lobby_updates', $1)`, [String(matchId)]).catch(() => {});

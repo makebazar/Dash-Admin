@@ -54,6 +54,21 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
+const isStatusActive = (status?: string) => {
+  const s = String(status || "").toUpperCase();
+  return s === "ACTIVE" || s === "LIVE" || s === "IN_PROGRESS";
+};
+
+const isStatusRegistration = (status?: string) => {
+  const s = String(status || "").toUpperCase();
+  return s === "REGISTRATION";
+};
+
+const isStatusFinished = (status?: string) => {
+  const s = String(status || "").toUpperCase();
+  return s === "FINISHED" || s === "COMPLETED";
+};
+
 export function TournamentsFeedTab({
   player,
   tournaments,
@@ -391,12 +406,12 @@ export function TournamentsFeedTab({
 
             {/* Right: Clean Status Typography without container clutter */}
             <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end gap-2.5 shrink-0">
-              {activeTournament.status === "ACTIVE" ? (
+              {isStatusActive(activeTournament.status) ? (
                 <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-red-400">
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
                   <span>LIVE • Идет турнир</span>
                 </div>
-              ) : activeTournament.status === "REGISTRATION" ? (
+              ) : isStatusRegistration(activeTournament.status) ? (
                 <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-emerald-400">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span>Регистрация открыта</span>
@@ -1027,12 +1042,11 @@ export function TournamentsFeedTab({
     if (searchQuery && !t.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (statusFilter !== "all") {
       if (statusFilter === "registration") {
-        if (t.status !== "REGISTRATION") return false;
+        if (!isStatusRegistration(t.status)) return false;
       } else if (statusFilter === "finished") {
-        if (t.status !== "FINISHED" && t.status !== "COMPLETED") return false;
-      } else {
-        const statusMap: Record<string, string> = { active: "ACTIVE" };
-        if (t.status !== statusMap[statusFilter]) return false;
+        if (!isStatusFinished(t.status)) return false;
+      } else if (statusFilter === "active") {
+        if (!isStatusActive(t.status)) return false;
       }
     }
     if (formatFilter !== "all") {
@@ -1267,7 +1281,7 @@ export function TournamentsFeedTab({
                           </div>
 
                           <div className="flex flex-col items-end gap-1 shrink-0">
-                            {t.status === "ACTIVE" ? (
+                            {isStatusActive(t.status) ? (
                               <span className="relative overflow-hidden text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-xl border bg-red-500/10 text-red-400 border-red-500/20 block text-center">
                                 <span className="relative z-10">● LIVE</span>
                               </span>
@@ -1275,12 +1289,12 @@ export function TournamentsFeedTab({
                               <span
                                 className={cn(
                                   "text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-xl border block text-center",
-                                  t.status === "REGISTRATION"
+                                  isStatusRegistration(t.status)
                                     ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
                                     : "bg-white/5 text-gray-400 border-white/10"
                                 )}
                               >
-                                {t.status === "REGISTRATION" ? "Регистрация" : "Завершен"}
+                                {isStatusRegistration(t.status) ? "Регистрация" : "Завершен"}
                               </span>
                             )}
                           </div>

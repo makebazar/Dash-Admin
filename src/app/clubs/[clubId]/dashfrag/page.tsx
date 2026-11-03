@@ -52,26 +52,26 @@ export default function DashFragPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans p-4 md:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
-          <div className="space-y-1">
-            <h1 className="text-4xl font-black tracking-tight text-slate-900 uppercase italic">
-              Dash<span className="text-indigo-600">Frag</span>
+    <div className="flex min-h-screen bg-[#FAFAFA] flex-col font-sans text-slate-900 selection:bg-black/10">
+      <main className="mx-auto max-w-6xl w-full flex-1 px-4 sm:px-6 md:px-8 py-8 sm:py-12 md:py-16 space-y-6">
+        {/* Header Section (matches /promo design code) */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-2">
+          <div>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
+              DashFrag
             </h1>
-            <p className="text-slate-500 font-semibold text-sm">
-              Модуль киберспортивной аналитики, турниров и авто-начислений бонусов за фраги
+            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+              Киберспортивная аналитика, рейтинги игроков и авто-начисление бонусов за матчи
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <a
               href="/dashlock.zip"
               download
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer no-underline shadow-xs"
+              className="inline-flex items-center gap-2 h-10 sm:h-11 rounded-xl px-4 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm transition-all shadow-xs cursor-pointer no-underline"
             >
-              <Download className="w-4 h-4" />
-              Скачать Agent (.exe)
+              <span>Скачать Agent (.exe)</span>
             </a>
           </div>
         </div>
@@ -87,7 +87,7 @@ export default function DashFragPage() {
             clubId={clubId as string}
           />
         </Suspense>
-      </div>
+      </main>
     </div>
   );
 }

@@ -113,14 +113,6 @@ export default function RealisticWheel() {
           const allPrizes = prizesData.prizes || [];
           setRawPrizes(allPrizes);
 
-          // Get player level from playerData if possible, or fallback to currentLevel
-          const currentLevel = playerData.player?.level?.currentLevel || 1;
-
-          // Filter prizes for the wheel: only current level
-          const wheelPrizes = allPrizes.filter(
-            (p: any) => (p.target_level || 1) === currentLevel,
-          );
-
           interface Sector {
             id: string | number;
             label: string;
@@ -128,23 +120,44 @@ export default function RealisticWheel() {
             isPrize: boolean;
           }
 
-          // Build sectors.
-          let newSectors: Sector[] = wheelPrizes.map((p: any, i: number) => {
-            const isEmpty =
-              p.type === "none" ||
-              p.name.toLowerCase() === "пусто" ||
-              p.name.toLowerCase() === "попробуй еще" ||
-              p.value === 0;
+          const isEmptyPrize = (p: any) => {
+            const nameLower = String(p?.name || "").trim().toLowerCase();
+            return (
+              p?.type === "none" ||
+              nameLower === "пусто" ||
+              nameLower === "попробуй еще" ||
+              nameLower === "ничего" ||
+              (p?.type !== "physical" && (parseFloat(p?.value) || 0) <= 0)
+            );
+          };
 
+          // Build sectors from active prizes
+          let newSectors: Sector[] = allPrizes.map((p: any, i: number) => {
+            const empty = isEmptyPrize(p);
             return {
               id: p.id,
               label: p.name,
-              color: COLORS[i % COLORS.length],
-              isPrize: !isEmpty,
+              color: empty ? "#334155" : COLORS[i % COLORS.length],
+              isPrize: !empty,
             };
           });
 
-          // If too few sectors, add some empty ones for balance
+          const totalProb = allPrizes.reduce(
+            (sum: number, p: any) => sum + (parseFloat(p.probability) || 0),
+            0,
+          );
+          const hasEmptySector = newSectors.some((s) => !s.isPrize);
+
+          // Always ensure at least one empty sector if total probability < 100% or < 8 sectors
+          if (!hasEmptySector && totalProb < 99.9) {
+            newSectors.push({
+              id: "fallback-empty-miss",
+              label: "Пусто",
+              color: "#334155",
+              isPrize: false,
+            });
+          }
+
           if (newSectors.length < 8) {
             const needed = 8 - newSectors.length;
             for (let i = 0; i < needed; i++) {
@@ -157,13 +170,10 @@ export default function RealisticWheel() {
             }
           }
 
-          // If too many sectors (unlikely with level filtering, but for safety), limit them
-          if (newSectors.length > 16) {
-            newSectors = newSectors.slice(0, 16);
-          }
-
           // Shuffle sectors
-          const shuffledSectors = newSectors.sort(() => Math.random() - 0.5);
+          const shuffledSectors = [...newSectors].sort(
+            () => Math.random() - 0.5,
+          );
           setSectors(shuffledSectors);
         }
       } catch (err) {
@@ -239,11 +249,14 @@ export default function RealisticWheel() {
     return () => unsubscribe();
   }, [wheelRotation, sectors, sectorAngle]);
 
+  const ticketCost =
+    player?.settings?.game_configs?.wheel?.tickets_per_play || 1;
+
   const spinWheel = async () => {
     if (isSpinning || sectors.length === 0) return;
 
-    if (ticketsCount <= 0) {
-      showError("У вас нет билетов!");
+    if (ticketsCount < ticketCost) {
+      showError("У вас недостаточно билетов!");
       return;
     }
 
@@ -272,24 +285,30 @@ export default function RealisticWheel() {
         return;
       }
 
-      setTicketsCount((prev) => prev - 1);
+      const spent = data.ticketsSpent || ticketCost;
+      setTicketsCount((prev) => Math.max(0, prev - spent));
 
       let targetSector;
-      if (data.won) {
-        // Find sector by prize ID
-        targetSector = sectors.find((s) => s.id === data.prize.id);
-        // Fallback if ID didn't match (e.g. dynamic sectors)
+      if (data.won && data.prize) {
+        targetSector = sectors.find((s) => String(s.id) === String(data.prize.id));
         if (!targetSector) {
           targetSector = sectors.find((s) => s.isPrize) || sectors[0];
         }
       } else {
-        const emptySectors = sectors.filter((s) => !s.isPrize);
-        targetSector =
-          emptySectors[Math.floor(Math.random() * emptySectors.length)] ||
-          sectors[0];
+        if (data.matchedSectorId) {
+          targetSector = sectors.find(
+            (s) => String(s.id) === String(data.matchedSectorId) && !s.isPrize,
+          );
+        }
+        if (!targetSector) {
+          const emptySectors = sectors.filter((s) => !s.isPrize);
+          targetSector =
+            emptySectors[Math.floor(Math.random() * emptySectors.length)] ||
+            sectors[0];
+        }
       }
 
-      const idx = sectors.indexOf(targetSector);
+      const idx = Math.max(0, sectors.indexOf(targetSector));
       const currentRot = wheelRotation.get();
 
       const extraSpins = 8 + Math.floor(Math.random() * 4);
@@ -297,8 +316,8 @@ export default function RealisticWheel() {
       const jitter = (Math.random() - 0.5) * (sectorAngle * 0.6);
 
       // Target angle: 360 - (idx * sectorAngle)
-      const targetMod = (360 - idx * sectorAngle + jitter) % 360;
-      const currentMod = baseRot % 360;
+      const targetMod = (360 - idx * sectorAngle + jitter + 360) % 360;
+      const currentMod = ((baseRot % 360) + 360) % 360;
       let diff = targetMod - currentMod;
       if (diff < 0) diff += 360;
 
@@ -310,11 +329,18 @@ export default function RealisticWheel() {
         ease: [0.15, 0, 0.1, 1],
       });
 
-      setResult(targetSector);
+      setResult(
+        data.won && data.prize
+          ? { ...targetSector, label: data.prize.name, isPrize: true }
+          : { ...targetSector, isPrize: false },
+      );
 
-      // Update counters instantly for the animation
+      // Update counters after animation completes
       if (data.won && data.prize) {
-        if (data.prize.type === "virtual" || data.prize.type === "bonus_limitless") {
+        if (
+          data.prize.type === "virtual" ||
+          data.prize.type === "bonus_limitless"
+        ) {
           setBonusBalance((prev) => prev + parseFloat(data.prize.value));
         } else if (data.prize.type === "attempt") {
           setTicketsCount(
@@ -323,7 +349,7 @@ export default function RealisticWheel() {
         }
       }
 
-      // Handle Quest Rewards (Show a notification or update balance)
+      // Handle Quest Rewards
       if (data.questRewards && data.questRewards.length > 0) {
         data.questRewards.forEach((q: any) => {
           if (q.rewardBonusBalance > 0) {
@@ -364,7 +390,6 @@ export default function RealisticWheel() {
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
         prizes={rawPrizes}
-        playerLevel={player?.level?.currentLevel}
       />
 
       <AnimatePresence>

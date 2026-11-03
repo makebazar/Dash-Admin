@@ -130,18 +130,22 @@ export default function LuckyCardsGame() {
 
   // Helper to map DB prize to visual Card
   const mapPrizeToCard = useCallback((prize: any, index: number): Card => {
-    const nameLower = prize?.name?.toLowerCase() || "";
+    const nameLower = String(prize?.name || "").trim().toLowerCase();
     const isLose =
+      !prize ||
+      prize?.type === "none" ||
       nameLower.includes("пусто") ||
+      nameLower.includes("попробуй еще") ||
       nameLower.includes("ничего") ||
-      prize?.value == 0;
-    const isBonus = prize?.type === "attempt" || nameLower.includes("билет");
+      (prize?.type !== "physical" && (parseFloat(prize?.value) || 0) <= 0);
+    const isBonus =
+      !isLose && (prize?.type === "attempt" || nameLower.includes("билет"));
 
     return {
       id: index + 1,
       prizeId: prize?.id || `fallback-${index}`,
       value: isLose ? "❌" : isBonus ? "🎟" : "🎁",
-      label: prize?.name || "Приз",
+      label: isLose ? "Пусто" : prize?.name || "Приз",
       type: isLose ? "lose" : isBonus ? "bonus" : "win",
       color: isLose
         ? "from-gray-600 to-gray-800"
@@ -175,7 +179,7 @@ export default function LuckyCardsGame() {
       } else {
         newCards.push({
           id: i + 1,
-          prizeId: i + 1,
+          prizeId: `empty-${i}`,
           value: "❌",
           type: "lose",
           label: "Пусто",
@@ -186,37 +190,62 @@ export default function LuckyCardsGame() {
     return newCards;
   }, []);
 
-  const getLevelCards = useCallback((prizesList: any[], level: number): Card[] => {
-    // Filter for current level
-    const levelPrizes = prizesList.filter(
-      (p: any) => (p.target_level || 1) === level,
-    );
+  const buildDeckCards = useCallback(
+    (prizesList: any[]): Card[] => {
+      let mapped = prizesList.map((p: any, i: number) => mapPrizeToCard(p, i));
 
-    // Map and limit to 5
-    let mapped = levelPrizes.map((p: any, i: number) =>
-      mapPrizeToCard(p, i),
-    );
-
-    if (mapped.length > 5) {
-      mapped = mapped.slice(0, 5);
-    }
-
-    // Ensure at least 3 cards for a good look
-    if (mapped.length < 3) {
-      const needed = 3 - mapped.length;
-      for (let i = 0; i < needed; i++) {
-        mapped.push({
-          id: mapped.length + 1,
-          prizeId: `empty-${i}`,
-          value: "❌",
-          type: "lose",
-          label: "Пусто",
-          color: "from-gray-600 to-gray-800",
-        });
+      if (mapped.length > 5) {
+        mapped = mapped.slice(0, 5);
       }
-    }
-    return mapped;
-  }, [mapPrizeToCard]);
+
+      const totalProb = prizesList.reduce(
+        (sum: number, p: any) => sum + (parseFloat(p.probability) || 0),
+        0,
+      );
+      const hasLoseCard = mapped.some((c) => c.type === "lose");
+
+      // If no empty card is in the deck (e.g. only real prizes configured with totalProb < 100%), ensure at least one "Пусто" card
+      if (!hasLoseCard && totalProb < 99.9) {
+        if (mapped.length >= 5) {
+          mapped[mapped.length - 1] = {
+            id: mapped.length,
+            prizeId: "empty-miss",
+            value: "❌",
+            type: "lose",
+            label: "Пусто",
+            color: "from-gray-600 to-gray-800",
+          };
+        } else {
+          mapped.push({
+            id: mapped.length + 1,
+            prizeId: "empty-miss",
+            value: "❌",
+            type: "lose",
+            label: "Пусто",
+            color: "from-gray-600 to-gray-800",
+          });
+        }
+      }
+
+      // Ensure at least 3 cards for a good look
+      if (mapped.length < 3) {
+        const needed = 3 - mapped.length;
+        for (let i = 0; i < needed; i++) {
+          mapped.push({
+            id: mapped.length + 1,
+            prizeId: `empty-${i}`,
+            value: "❌",
+            type: "lose",
+            label: "Пусто",
+            color: "from-gray-600 to-gray-800",
+          });
+        }
+      }
+
+      return mapped.map((c, idx) => ({ ...c, id: idx + 1 }));
+    },
+    [mapPrizeToCard],
+  );
 
   // Fetch initial data
   useEffect(() => {
@@ -239,14 +268,7 @@ export default function LuckyCardsGame() {
         if (prizesData.success && prizesData.prizes?.length > 0) {
           const allPrizes = prizesData.prizes;
           setRawPrizes(allPrizes);
-
-          // Get player level
-          const currentLevel = playerData.player?.level?.currentLevel || 1;
-
-          // Map and filter prizes for level using helper
-          const mapped = getLevelCards(allPrizes, currentLevel);
-
-          setCards(mapped);
+          setCards(buildDeckCards(allPrizes));
         } else {
           setCards(generateDefaultCards(3));
         }
@@ -258,17 +280,15 @@ export default function LuckyCardsGame() {
       }
     }
     fetchData();
-  }, [generateDefaultCards, getLevelCards]);
+  }, [generateDefaultCards, buildDeckCards]);
 
-  const currentLevel = player?.level?.currentLevel || 1;
-  const levelPrizesCount = rawPrizes.filter(
-    (p: any) => (p.target_level || 1) === currentLevel,
-  ).length;
-  const cardCount = Math.min(5, Math.max(3, levelPrizesCount));
+  const cardCount = Math.min(5, Math.max(3, cards.length || 3));
+  const ticketCost =
+    gameSettings?.game_configs?.cards?.tickets_per_play || 1;
 
   const startGameSequence = async () => {
     if (gameState !== "idle" && gameState !== "result") return;
-    if (tickets <= 0) return;
+    if (tickets < ticketCost) return;
 
     setGameMessage(null);
     setSelectedId(null);
@@ -293,14 +313,13 @@ export default function LuckyCardsGame() {
       }
 
       setServerResult(data);
-      setTickets((prev) => prev - 1);
+      const spent = data.ticketsSpent || ticketCost;
+      setTickets((prev) => Math.max(0, prev - spent));
 
-      // Setup initial face-up cards based on raw prizes filtered by level
-      const currentLevel = player?.level?.currentLevel || 1;
-      let initialCards =
+      const initialCards =
         rawPrizes.length > 0
-          ? getLevelCards(rawPrizes, currentLevel)
-          : generateDefaultCards(cardCount);
+          ? buildDeckCards(rawPrizes)
+          : generateDefaultCards(3);
 
       setCards(initialCards);
 
@@ -314,14 +333,14 @@ export default function LuckyCardsGame() {
       // 3. Gathering State - Flip face down and move to a single stack in the center
       setGameState("gathering");
       playSound("gather");
-      await new Promise((resolve) => setTimeout(resolve, 600)); // wait for them to gather
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
       // 4. Shuffling State - Vibrate in the center to simulate shuffling
       setGameState("shuffling");
 
-      let shuffleInterval = setInterval(() => playSound("shuffle"), 150);
+      const shuffleInterval = setInterval(() => playSound("shuffle"), 150);
 
-      // Actually randomize the array visually while they are in the center
+      // Randomize the array visually while they are in the center
       const shuffled = [...initialCards].sort(() => Math.random() - 0.5);
       setCards(shuffled);
 
@@ -330,7 +349,7 @@ export default function LuckyCardsGame() {
 
       // 5. Playing State - Deal them back out
       setGameState("playing");
-      playSound("flip"); // Sound for dealing out
+      playSound("flip");
     } catch (err) {
       console.error("Play error:", err);
       setGameMessage({
@@ -347,57 +366,50 @@ export default function LuckyCardsGame() {
     playSound("flip");
     setSelectedId(id);
 
-    // At this moment, we manipulate the `cards` array so that the clicked card (id)
-    // receives the `serverResult.prize` (if any), and the other cards receive the remaining prizes.
+    const isActualWin = Boolean(serverResult.won && serverResult.prize);
 
-    let wonPrize = serverResult.prize;
-    
-    // Filter level prizes for correct fallback and remaining prize distribution
-    const currentLevel = player?.level?.currentLevel || 1;
-    const levelPrizes = rawPrizes.filter(
-      (p: any) => (p.target_level || 1) === currentLevel,
-    );
+    // Build the card that goes into the clicked slot (`id`)
+    const chosenCard: Card = isActualWin
+      ? { ...mapPrizeToCard(serverResult.prize, 0), id }
+      : {
+          id,
+          prizeId: `empty-chosen-${id}`,
+          value: "❌",
+          type: "lose",
+          label: "Пусто",
+          color: "from-gray-600 to-gray-800",
+        };
 
-    // If somehow the server didn't return a prize (e.g. lost and no generic 'lose' prize returned),
-    // we fallback to the first 'lose' prize or generic empty
-    if (!wonPrize) {
-      wonPrize =
-        levelPrizes.find((p) => p.name.toLowerCase().includes("пусто")) ||
-        levelPrizes[0];
+    // Take the remaining cards from the current deck (excluding one matching card so the revealed set stays honest)
+    const deckPool = [...cards];
+    const matchIdx = isActualWin
+      ? deckPool.findIndex(
+          (c) => String(c.prizeId) === String(serverResult.prize.id),
+        )
+      : deckPool.findIndex((c) => c.type === "lose");
+    if (matchIdx !== -1) {
+      deckPool.splice(matchIdx, 1);
+    } else {
+      deckPool.pop();
     }
+    deckPool.sort(() => Math.random() - 0.5);
 
-    const wonCard = wonPrize
-      ? mapPrizeToCard(wonPrize, 0)
-      : generateDefaultCards(1)[0];
-    wonCard.id = id; // Give it the ID of the clicked card so Framer Motion maps it correctly
-
-    // Get up to 5 active prizes for level, filter out the won prize
-    let activePrizes = levelPrizes;
-    if (activePrizes.length > 5) {
-      activePrizes = activePrizes.slice(0, 5);
-    }
-    const remainingPrizes = activePrizes.filter((p) => p.id !== wonPrize?.id);
     const newCardsState = cards.map((c) => {
       if (c.id === id) {
-        return wonCard;
-      } else {
-        const nextPrize = remainingPrizes.pop();
-        if (nextPrize) {
-          const mapped = mapPrizeToCard(nextPrize, c.id);
-          mapped.id = c.id;
-          return mapped;
-        } else {
-          // If we run out of level prizes, fill with a "lose" (empty) card
-          return {
-            id: c.id,
-            prizeId: `empty-reveal-${c.id}`,
-            value: "❌",
-            type: "lose" as const,
-            label: "Пусто",
-            color: "from-gray-600 to-gray-800",
-          };
-        }
+        return chosenCard;
       }
+      const next = deckPool.pop();
+      if (next) {
+        return { ...next, id: c.id };
+      }
+      return {
+        id: c.id,
+        prizeId: `empty-reveal-${c.id}`,
+        value: "❌",
+        type: "lose" as const,
+        label: "Пусто",
+        color: "from-gray-600 to-gray-800",
+      };
     });
 
     setCards(newCardsState);
@@ -405,17 +417,9 @@ export default function LuckyCardsGame() {
     setTimeout(() => {
       setGameState("result");
 
-      setHistory((prev) => [wonCard.label, ...prev].slice(0, 10));
+      setHistory((prev) => [chosenCard.label, ...prev].slice(0, 10));
 
-      const isActualWin = serverResult.won && serverResult.prize;
-      const isEmptyPrize =
-        isActualWin &&
-        (serverResult.prize.type === "none" ||
-          serverResult.prize.name.toLowerCase() === "пусто" ||
-          serverResult.prize.name.toLowerCase() === "попробуй еще" ||
-          parseFloat(serverResult.prize.value) === 0);
-
-      if (isActualWin && !isEmptyPrize) {
+      if (isActualWin) {
         playSound("win");
         if (serverResult.prize.type === "attempt") {
           setTickets(
@@ -445,8 +449,8 @@ export default function LuckyCardsGame() {
 
       if (
         isActualWin &&
-        !isEmptyPrize &&
-        (serverResult.prize.type === "virtual" || serverResult.prize.type === "bonus_limitless")
+        (serverResult.prize.type === "virtual" ||
+          serverResult.prize.type === "bonus_limitless")
       ) {
         setBonusBalance((prev) => prev + parseFloat(serverResult.prize.value));
       }
@@ -470,11 +474,10 @@ export default function LuckyCardsGame() {
     setSelectedId(null);
     setGameMessage(null);
     setServerResult(null);
-    const currentLevel = player?.level?.currentLevel || 1;
     setCards(
       rawPrizes.length > 0
-        ? getLevelCards(rawPrizes, currentLevel)
-        : generateDefaultCards(cardCount),
+        ? buildDeckCards(rawPrizes)
+        : generateDefaultCards(3),
     );
   };
 
@@ -484,7 +487,7 @@ export default function LuckyCardsGame() {
     gameState === "gathering" ||
     gameState === "shuffling" ||
     (gameState === "playing" && selectedId === null) ||
-    (gameState === "idle" && tickets <= 0);
+    (gameState === "idle" && tickets < ticketCost);
 
   if (loading) {
     return (
@@ -511,7 +514,6 @@ export default function LuckyCardsGame() {
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
         prizes={rawPrizes}
-        playerLevel={player?.level?.currentLevel}
       />
 
       <main className="flex-1 w-full flex flex-col items-center justify-center p-4 pt-24 pb-36 min-h-0">
@@ -761,7 +763,7 @@ export default function LuckyCardsGame() {
               </span>
             ) : gameState === "result" ? (
               "ЕЩЕ РАЗ"
-            ) : tickets <= 0 ? (
+            ) : tickets < ticketCost ? (
               "НЕТ БИЛЕТОВ"
             ) : gameState === "playing" ? (
               "ВЫБЕРИ КАРТУ"
@@ -769,12 +771,12 @@ export default function LuckyCardsGame() {
               <div className="flex flex-col items-center">
                 <span className="drop-shadow-md">ИГРАТЬ</span>
                 <span className="text-[10px] font-bold opacity-80 -mt-1 tracking-widest uppercase">
-                  1 Билет за игру
+                  {ticketCost} {ticketCost === 1 ? "Билет" : ticketCost < 5 ? "Билета" : "Билетов"} за игру
                 </span>
               </div>
             )}
 
-            {!isActionDisabled && tickets > 0 && gameState !== "playing" && (
+            {!isActionDisabled && tickets >= ticketCost && gameState !== "playing" && (
               <motion.div
                 animate={{ x: ["-100%", "250%"] }}
                 transition={{ repeat: Infinity, duration: 2.5, ease: "linear" }}

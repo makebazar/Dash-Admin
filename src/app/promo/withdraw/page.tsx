@@ -43,8 +43,7 @@ const getActiveStepInfo = (
   limitGroups?: any[]
 ): {
   percent: number;
-  percentBp: number;
-  steps: Array<{ threshold: number; percent: number; percentBp: number; isActive: boolean; isAchieved: boolean }>;
+  steps: Array<{ threshold: number; percent: number; isActive: boolean; isAchieved: boolean }>;
   nextTierAt: number | null;
   nextPercent: number | null;
 } => {
@@ -56,7 +55,6 @@ const getActiveStepInfo = (
       .map((s) => ({
         threshold: getStepThreshold(s, limitGroupId),
         percent: parseFloat(s.percent) || 0,
-        percentBp: parseFloat(s.percent_bp) || parseFloat(s.percent) || 0,
       }))
       .sort((a, b) => a.threshold - b.threshold);
 
@@ -78,13 +76,8 @@ const getActiveStepInfo = (
       isAchieved: i <= activeIdx,
     }));
 
-    // If no step reached yet, use first step's percent as baseline or 0
-    const basePercent = activeStep ? activeStep.percent : (sorted[0]?.percent || 0);
-    const basePercentBp = activeStep ? activeStep.percentBp : (sorted[0]?.percentBp || 0);
-
     return {
-      percent: activeStep ? activeStep.percent : 0,
-      percentBp: activeStep ? activeStep.percentBp : 0,
+      percent: activeStep ? activeStep.percent : (sorted[0]?.percent || 0),
       steps: stepsWithStatus,
       nextTierAt: nextStep ? nextStep.threshold : null,
       nextPercent: nextStep ? nextStep.percent : null,
@@ -93,8 +86,6 @@ const getActiveStepInfo = (
 
   // Legacy fallback: t1/t2/t3 from group or defaults
   let t1 = 1000, t2 = 3000, t3 = 5000;
-  const defaultPercent = parseFloat(settings?.withdraw_limit_percent) || 30;
-  const defaultPercentBp = parseFloat(settings?.withdraw_limit_percent_bp) || 80;
 
   if (limitGroupId && Array.isArray(limitGroups)) {
     const group = limitGroups.find((g: any) => g.id === limitGroupId);
@@ -106,10 +97,10 @@ const getActiveStepInfo = (
   }
 
   const legacySteps = [
-    { threshold: 0, percent: 30, percentBp: defaultPercentBp },
-    { threshold: t1, percent: 50, percentBp: defaultPercentBp },
-    { threshold: t2, percent: 70, percentBp: defaultPercentBp },
-    { threshold: t3, percent: 90, percentBp: defaultPercentBp },
+    { threshold: 0, percent: 30 },
+    { threshold: t1, percent: 50 },
+    { threshold: t2, percent: 70 },
+    { threshold: t3, percent: 90 },
   ];
 
   let activeIdx = -1;
@@ -126,7 +117,6 @@ const getActiveStepInfo = (
 
   return {
     percent: activeIdx >= 0 ? legacySteps[activeIdx].percent : 30,
-    percentBp: defaultPercentBp,
     steps: stepsWithStatus,
     nextTierAt: nextStep ? nextStep.threshold : null,
     nextPercent: nextStep ? nextStep.percent : null,
@@ -212,10 +202,9 @@ export default function PromoWithdraw() {
       const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
       const extraLimit = parseFloat(player?.extraWithdrawLimit || 0);
 
-      const { percent: basePercent, percentBp } = getActiveStepInfo(
+      const { percent: finalPercent } = getActiveStepInfo(
         monthlyTopups, player?.settings, player?.limitGroupId, player?.settings?.limit_groups
       );
-      const finalPercent = player?.hasPremiumBp ? Math.min(100, percentBp) : basePercent;
       const allowedLimit = (monthlyTopups * (finalPercent / 100)) + extraLimit;
       const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
 
@@ -276,10 +265,9 @@ export default function PromoWithdraw() {
             ? limitGroups.find((g: any) => g.id === player.limitGroupId)
             : null;
 
-          const { percent: basePercent, percentBp, steps, nextTierAt, nextPercent } = getActiveStepInfo(
+          const { percent: limitPercent, steps, nextTierAt, nextPercent } = getActiveStepInfo(
             monthlyTopups, player?.settings, player?.limitGroupId, limitGroups
           );
-          const limitPercent = player?.hasPremiumBp ? Math.min(100, percentBp) : basePercent;
           const allowedLimit = (monthlyTopups * (limitPercent / 100)) + extraLimit;
           const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
           const progressPercent = allowedLimit > 0 ? (monthlyTopups / allowedLimit) * 100 : 0;
@@ -451,9 +439,6 @@ export default function PromoWithdraw() {
                             )}>
                               {step.percent}%
                             </div>
-                            {step.percentBp !== step.percent && (
-                              <div className="text-[9px] font-bold text-indigo-400/70">BP: {step.percentBp}%</div>
-                            )}
                           </div>
 
                           {/* Active badge */}
@@ -484,47 +469,13 @@ export default function PromoWithdraw() {
                   </div>
                 )}
 
-                {/* BP upsell */}
-                <div className="mt-4">
-                  {player?.hasPremiumBp ? (
-                    <div className="bg-indigo-500/[0.03] border border-indigo-500/10 rounded-2xl p-3 flex items-center gap-2">
-                      <span className="text-[9px] font-black text-indigo-400 uppercase tracking-wider">🌟 Premium BP активен — повышенный лимит!</span>
-                    </div>
-                  ) : (
-                    player?.settings?.bp_enabled !== false && (
-                      <Link
-                        href="/promo"
-                        className="bg-gradient-to-r from-indigo-950/20 to-purple-950/20 border border-indigo-500/15 hover:border-indigo-500/30 transition-all rounded-2xl p-3 flex items-center justify-between group"
-                      >
-                        <div className="space-y-0.5">
-                          <div className="text-[9px] font-black text-indigo-400 uppercase tracking-wider">
-                            ⚡ Получить Premium BP → лимит до {player?.settings?.withdraw_limit_percent_bp ?? 80}%
-                          </div>
-                          <div className="text-[8px] text-gray-500 font-medium uppercase tracking-wider">
-                            Активируй Battle Pass для повышенного вывода!
-                          </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-indigo-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
-                      </Link>
-                    )
-                  )}
-                </div>
-
                 {/* Bar breakdown */}
-                {(player?.monthlyBarReal > 0 || player?.monthlyBarBonus > 0) && (
+                {player?.monthlyBarReal > 0 && (
                   <div className="border-t border-white/5 pt-3 mt-3 space-y-1.5 text-[9px] font-bold text-gray-500 uppercase tracking-wider">
-                    {player?.monthlyBarReal > 0 && (
-                      <div className="flex justify-between">
-                        <span>Покупки в баре (рубли):</span>
-                        <span className="text-white">+{Math.floor(player.monthlyBarReal)} ₽</span>
-                      </div>
-                    )}
-                    {player?.monthlyBarBonus > 0 && (
-                      <div className="flex justify-between">
-                        <span>Покупки в баре (бонусы):</span>
-                        <span className="text-rose-400">-{Math.floor(player.monthlyBarBonus)} 🪙</span>
-                      </div>
-                    )}
+                    <div className="flex justify-between">
+                      <span>Покупки в баре:</span>
+                      <span className="text-white">+{Math.floor(player.monthlyBarReal)} ₽</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -585,11 +536,9 @@ export default function PromoWithdraw() {
                     const monthlyWithdrawn = player?.monthlyWithdrawn || 0;
                     const extraLimit = parseFloat(player?.extraWithdrawLimit || 0);
 
-                    const { percent: basePercent, percentBp } = getActiveStepInfo(
+                    const { percent: limitPercent } = getActiveStepInfo(
                       monthlyTopups, player?.settings, player?.limitGroupId, player?.settings?.limit_groups
                     );
-                    
-                    const limitPercent = player?.hasPremiumBp ? Math.min(100, percentBp) : basePercent;
                     const allowedLimit = (monthlyTopups * (limitPercent / 100)) + extraLimit;
                     const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);
                     maxAllowed = Math.min(maxAllowed, Math.floor(remainingLimit));

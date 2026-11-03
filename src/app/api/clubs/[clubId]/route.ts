@@ -12,7 +12,7 @@ export async function GET(
 
     // Получить клуб
     const result = await query(
-      `SELECT id, name, address, owner_id, promo_settings, created_at FROM clubs WHERE id = $1`,
+      `SELECT id, name, address, owner_id, promo_settings, inventory_settings, created_at FROM clubs WHERE id = $1`,
       [clubId],
     );
 
@@ -21,8 +21,19 @@ export async function GET(
     }
 
     const club = result.rows[0];
+    const invSettings = club.inventory_settings || {};
+    const hasAuth = Boolean(
+      (invSettings.smartshell_login && invSettings.smartshell_password && invSettings.smartshell_company_id) ||
+      invSettings.smartshell_api_key
+    );
+    const isSmartShellEnabled = Boolean(invSettings.smartshell_integration_enabled && hasAuth);
 
-    return NextResponse.json({ club });
+    return NextResponse.json({
+      club: {
+        ...club,
+        is_smartshell_enabled: isSmartShellEnabled,
+      },
+    });
   } catch (error: any) {
     const status = error?.status;
     if (status) {

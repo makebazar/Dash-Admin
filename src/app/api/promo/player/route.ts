@@ -203,8 +203,21 @@ export async function GET(request: Request) {
       );
       const pendingPrizes = pendingPrizesRes.rows;
 
+      const clubTz = data.promo_settings?.timezone || "Europe/Moscow";
+      const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: clubTz });
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toLocaleDateString("en-CA", { timeZone: clubTz });
+
+      const streakProgramIds = new Set<string>();
+      if (Array.isArray(data.promo_settings?.loyalty_programs)) {
+        for (const lp of data.promo_settings.loyalty_programs) {
+          if (lp.type === "visit_streak") {
+            streakProgramIds.add(lp.id);
+          }
+        }
+      }
       const programProgress: Record<string, { current_count: number; last_event_date: string | null }> = {};
-      
       let accumulated_packages = 0;
       let accumulated_visits = 0;
       let current_streak = 0;
@@ -212,19 +225,31 @@ export async function GET(request: Request) {
       let last_visit_date = null;
 
       for (const row of allProgressRes.rows) {
+        let count = row.current_count;
+        const rowDateStr = row.last_event_date
+          ? new Date(row.last_event_date).toLocaleDateString("en-CA", { timeZone: clubTz })
+          : null;
+
+        // Auto-reset broken streak if more than 1 day skipped
+        if (streakProgramIds.has(row.program_id)) {
+          if (rowDateStr && rowDateStr !== todayStr && rowDateStr !== yesterdayStr) {
+            count = 0;
+          }
+        }
+
         programProgress[row.program_id] = {
-          current_count: row.current_count,
+          current_count: count,
           last_event_date: row.last_event_date,
         };
 
         if (row.program_id === "legacy_packages" || row.program_id === "legacy") {
-          accumulated_packages = row.current_count;
+          accumulated_packages = count;
           last_purchase_date = row.last_event_date;
         } else if (row.program_id === "legacy_visits") {
-          accumulated_visits = row.current_count;
+          accumulated_visits = count;
           last_visit_date = row.last_event_date;
         } else if (row.program_id === "legacy_streak") {
-          current_streak = row.current_count;
+          current_streak = count;
         }
       }
 

@@ -58,7 +58,23 @@ graphify-out/.graphify_python
 
 # scratch & temp
 /scratch/
+.scratch/
 wizard_full.txt
+vitest_output.txt
+task.md
+billing_system_spec.md
+analyse_yuri*.js
+get_yuri*.js
+summarize_yuri.js
+test_yuri.js
+check-db-settings.js
+check-mango.js
+
+# local database & external projects
+*.sqlite
+db.sqlite
+MatchZy_repo/
+dashlock/
 
 # logs
 *.log

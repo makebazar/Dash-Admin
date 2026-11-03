@@ -396,7 +396,8 @@ export default function FragPage() {
 
             {/* Displaying active or most recent tournament summary */}
             {(() => {
-              const activeT = tournaments.find(t => t.status === "active") || tournaments[0];
+              const activeT = tournaments.find(t => (String(t.status).toLowerCase() === "active") && (new Date(t.end_date).getTime() > Date.now())) || tournaments[0];
+              const isTournamentActive = (String(activeT.status).toLowerCase() === "active") && (new Date(activeT.end_date).getTime() > Date.now());
               const daysLeft = (() => {
                 const diffTime = new Date(activeT.end_date).getTime() - new Date().getTime();
                 if (diffTime <= 0) return 0;
@@ -415,10 +416,19 @@ export default function FragPage() {
                   <div className="flex justify-between items-start gap-4 relative z-10">
                     <div className="space-y-1">
                       <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span className="text-emerald-400">Активен</span>
-                        <span className="text-gray-600 select-none">•</span>
-                        <span>{daysLeft > 0 ? `Осталось: ${daysLeft} дн.` : "Сезон завершен"}</span>
+                        {isTournamentActive ? (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="text-emerald-400">Активен</span>
+                            <span className="text-gray-600 select-none">•</span>
+                            <span>Осталось: {daysLeft} дн.</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+                            <span className="text-gray-400">Завершен</span>
+                          </>
+                        )}
                       </div>
                       <h4 className="text-base font-black uppercase italic leading-tight text-white mt-1.5 group-hover:text-indigo-300 transition-colors">
                         {activeT.title}

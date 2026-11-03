@@ -130,8 +130,13 @@ export async function POST(request: Request) {
       }
     }
 
+    const updatedRes = await client.query(
+      `SELECT * FROM promo_prizes WHERE club_id = $1 AND is_active = TRUE ORDER BY probability DESC`,
+      [numericClubId],
+    );
+
     await client.query("COMMIT");
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, prizes: updatedRes.rows });
   } catch (error) {
     if (client) await client.query("ROLLBACK");
     console.error("Save Prizes Error:", error);

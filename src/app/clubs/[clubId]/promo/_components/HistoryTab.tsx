@@ -23,6 +23,93 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const getGameTypeRussian = (type: string) => {
+  const t = type?.toLowerCase() || "";
+  switch (t) {
+    case "service_award":
+      return "Услуга";
+    case "service_award_voided":
+      return "Отмена услуги";
+    case "topup":
+    case "smartshell_topup":
+      return "Пополнение";
+    case "topup_voided":
+      return "Отмена пополнения";
+    case "withdraw":
+      return "Вывод";
+    case "bar_bonus_purchase":
+    case "pos_sale":
+      return "Покупка в баре";
+    case "case_open":
+      return "Открытие кейса";
+    case "case_refund":
+      return "Возврат за кейс";
+    case "wheel":
+      return "Колесо фортуны";
+    case "safe":
+      return "Сейф";
+    case "dice":
+      return "Кости";
+    case "cards":
+      return "Карты";
+    case "defuse":
+      return "Сапёр C4";
+    case "flappy":
+      return "Флаппи";
+    case "mines":
+      return "Мины";
+    case "rocket":
+      return "Ракета";
+    case "plinko":
+      return "Плинко";
+    case "tower":
+      return "Башня";
+    case "coinflip":
+      return "Монетка";
+    case "hilo":
+      return "Hi-Lo";
+    case "visit":
+      return "Визит";
+    case "tournament":
+      return "Турнир";
+    case "frag":
+      return "Матч / Фраги";
+    case "quest_reward":
+      return "Квест";
+    case "referral_fixed_award":
+    case "referral_percent_award":
+      return "Реферал";
+    default:
+      if (t.startsWith("inventory_use")) return "Предмет";
+      return type || "Действие";
+  }
+};
+
+const getTicketSourceRussian = (src: string) => {
+  switch (src?.toLowerCase()) {
+    case "topup":
+      return "Пополнение";
+    case "pos_sale":
+      return "Бар / Продажа";
+    case "service_award":
+      return "Услуга";
+    case "admin_manual":
+    case "admin_edit":
+      return "Администратор";
+    case "quest_reward":
+      return "Квест";
+    case "bp_reward":
+      return "Battle Pass";
+    case "registration_bonus":
+    case "welcome_bonus":
+      return "Регистрация";
+    case "login_bonus":
+      return "Вход";
+    default:
+      return src || "Система";
+  }
+};
+
 interface HistoryTabProps {
   logs: {
     issuance: any[];
@@ -41,9 +128,9 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
   const [dateRange, setDateRange] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
-  const [totalLogs, setTotalLogs] = useState(0);
-  const [currentLogs, setCurrentLogs] = useState<any[]>([]);
-  const [isFetching, setIsFetching] = useState(true);
+  const [totalLogs, setTotalLogs] = useState(() => (logs?.games?.length || 0));
+  const [currentLogs, setCurrentLogs] = useState<any[]>(() => logs?.games || []);
+  const [isFetching, setIsFetching] = useState(() => !logs?.games?.length);
 
   // Debounce search query
   useEffect(() => {
@@ -88,462 +175,194 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
   const totalPages = Math.max(1, Math.ceil(totalLogs / pageSize));
 
   return (
-    <motion.div
-      key="history"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="space-y-8"
-    >
+    <div className="space-y-8">
       {/* Stats Header */}
-      <div className="space-y-6">
-        {/* Row 1: Активность сегодня */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 px-4">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-              Пульс клуба (Сегодня)
-            </h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Ticket className="w-4 h-4 text-orange-600" />
-                </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Выдано билетов
-                </div>
-              </div>
-              <div className="text-2xl font-black italic">
-                {logs.stats?.tickets_issued_today || 0}{" "}
-                <span className="text-xs not-italic font-bold text-slate-300">
-                  шт.
-                </span>
-              </div>
-            </div>
+      {(() => {
+        const realTopupMonth = Math.round(parseFloat(logs.stats?.real_topup_month || 0));
+        const realTopupToday = Math.round(parseFloat(logs.stats?.real_topup_today || 0));
+        const bonusesUsedMonth = Math.round(parseFloat(logs.stats?.bonuses_used_month || 0));
+        const bonusesUsedToday = Math.round(parseFloat(logs.stats?.bonuses_used_today || 0));
+        const cashbackPercent =
+          realTopupMonth > 0 ? Math.round((bonusesUsedMonth / realTopupMonth) * 100) : 0;
+        const totalBonusOnHands = Math.round(parseFloat(logs.stats?.total_bonus_debt || 0));
+        const ticketsToday = logs.stats?.tickets_issued_today || 0;
+        const gamesToday = logs.stats?.games_played_today || 0;
+        const playersToday = logs.stats?.active_players_today || 0;
 
-            <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Gamepad2 className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Сыграно игр
-                </div>
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Принесли в кассу */}
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
+              <div className="text-xs font-semibold text-slate-500">
+                Принесли в кассу (месяц)
               </div>
-              <div className="text-2xl font-black italic">
-                {logs.stats?.games_played_today || 0}{" "}
-                <span className="text-xs not-italic font-bold text-slate-300">
-                  сессий
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <User className="w-4 h-4 text-purple-600" />
+              <div className="mt-2">
+                <div className="text-2xl font-bold tracking-tight text-slate-900">
+                  {realTopupMonth.toLocaleString("ru-RU")}{" "}
+                  <span className="text-sm font-medium text-slate-400">₽</span>
                 </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Активные игроки
-                </div>
-              </div>
-              <div className="text-2xl font-black italic">
-                {logs.stats?.active_players_today || 0}{" "}
-                <span className="text-xs not-italic font-bold text-slate-300">
-                  чел.
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2: Экономика месяца */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 px-4">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-              Экономика и КПД (Месяц)
-            </h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-amber-500/20">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <Coins className="w-4 h-4 text-amber-600" />
-                </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Пополнения (Касса)
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <div className="text-2xl font-black italic">
-                  {Math.round(parseFloat(logs.stats?.real_topup_month || 0))}{" "}
-                  <span className="text-xs not-italic font-bold text-slate-300">
-                    ₽
-                  </span>
-                </div>
-                <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
+                <div className="text-xs font-medium text-slate-500 mt-1.5">
                   Сегодня:{" "}
-                  <span className="text-amber-600">
-                    +{Math.round(parseFloat(logs.stats?.real_topup_today || 0))} ₽
+                  <span className="text-emerald-600 font-semibold">
+                    +{realTopupToday.toLocaleString("ru-RU")} ₽
                   </span>
                 </div>
               </div>
             </div>
 
-            {(() => {
-              const prizeMoneyMonth = parseFloat(logs.stats?.prize_money_month || 0);
-              const bettingLossesMonth = parseFloat(logs.stats?.betting_losses_month || 0);
-              const burnRateMonth = prizeMoneyMonth > 0 ? Math.round(bettingLossesMonth / prizeMoneyMonth * 100) : 0;
-              let burnLabel = "🟢 В норме (35-50%)";
-              let burnColor = "text-emerald-600 bg-emerald-50 border-emerald-100";
-              if (burnRateMonth < 35) {
-                burnLabel = "🟡 Низкое (риск инфляции)";
-                burnColor = "text-amber-600 bg-amber-50 border-amber-100";
-              } else if (burnRateMonth > 50) {
-                burnLabel = "🔴 Высокое (риск выгорания)";
-                burnColor = "text-rose-600 bg-rose-50 border-rose-100";
-              }
-
-              return (
-                <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-emerald-500/20">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
-                      <Plus className="w-4 h-4 text-emerald-600" />
-                    </div>
-                    <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                      Новые бонусы (Net)
-                    </div>
-                  </div>
-                  <div className="flex flex-col">
-                    <div className="text-2xl font-black italic">
-                      {Math.round(prizeMoneyMonth)}{" "}
-                      <span className="text-xs not-italic font-bold text-slate-300">
-                        ₽
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1.5 mt-1.5">
-                      <div className="flex items-center gap-2">
-                        <div className="text-[9px] font-bold text-slate-400 uppercase">
-                          СЕГОДНЯ: <span className="text-emerald-600">+{Math.round(parseFloat(logs.stats?.prize_money_today || 0))} ₽</span>
-                        </div>
-                        <div className="text-[9px] font-bold text-slate-300 uppercase border-l border-slate-100 pl-2">
-                          СГОРЕЛО: <span className="text-slate-400">-{Math.round(parseFloat(logs.stats?.betting_losses_today || 0))} ₽</span>
-                        </div>
-                      </div>
-                      <div className={cn("text-[8px] font-black uppercase px-2 py-0.5 rounded border inline-block w-fit tracking-wider", burnColor)}>
-                        Сгорание: {burnRateMonth}% • {burnLabel}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-red-500/20">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                  <ShoppingCart className="w-4 h-4 text-red-600" />
-                </div>
-                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                  Оказано услуг
-                </div>
+            {/* 2. Забрали бонусами */}
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-semibold text-slate-500">
+                  Забрали бонусами (месяц)
+                </span>
+                <span
+                  className={cn(
+                    "text-xs font-semibold whitespace-nowrap shrink-0",
+                    cashbackPercent <= 25
+                      ? "text-emerald-600"
+                      : cashbackPercent <= 40
+                        ? "text-amber-600"
+                        : "text-rose-600"
+                  )}
+                  title="Доля выведенных бонусов от суммы пополнений за месяц"
+                >
+                  {cashbackPercent}% от кассы
+                </span>
               </div>
-              <div className="flex flex-col">
-                <div className="text-2xl font-black italic">
-                  {Math.round(parseFloat(logs.stats?.bonuses_used_month || 0))}{" "}
-                  <span className="text-xs not-italic font-bold text-slate-300">
-                    ₽
-                  </span>
+              <div className="mt-2">
+                <div className="text-2xl font-bold tracking-tight text-slate-900">
+                  {bonusesUsedMonth.toLocaleString("ru-RU")}{" "}
+                  <span className="text-sm font-medium text-slate-400">₽</span>
                 </div>
-                <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
-                  СЕГОДНЯ:{" "}
-                  <span className="text-red-600">
-                    {Math.round(parseFloat(logs.stats?.bonuses_used_today || 0))} ₽
+                <div className="text-xs font-medium text-slate-500 mt-1.5">
+                  Сегодня:{" "}
+                  <span className="text-slate-900 font-semibold">
+                    {bonusesUsedToday.toLocaleString("ru-RU")} ₽
                   </span>
                 </div>
               </div>
             </div>
 
-            {(() => {
-              const realTopupMonth = parseFloat(logs.stats?.real_topup_month || 0);
-              const bonusesUsedMonth = parseFloat(logs.stats?.bonuses_used_month || 0);
-              const nomROI = bonusesUsedMonth > 0 ? Math.round(realTopupMonth / bonusesUsedMonth * 100) : 0;
-              let roiLabel = "👍 В пределах нормы (65-85%)";
-              let roiBadgeColor = "bg-white/20 text-white border-white/30";
-              if (nomROI < 65) {
-                roiLabel = "⚠️ Низкий КПД (лимиты мягкие)";
-                roiBadgeColor = "bg-rose-500/30 text-rose-100 border-rose-400/30";
-              } else if (nomROI > 85) {
-                roiLabel = "🔥 Высокая окупаемость (>85%)";
-                roiBadgeColor = "bg-emerald-500/30 text-emerald-100 border-emerald-400/30";
-              }
-
-              return (
-                <div className="bg-indigo-600 p-5 rounded-3xl shadow-xl shadow-indigo-200 relative overflow-hidden group">
-                  <div className="flex items-center gap-3 mb-2 relative z-10">
-                    <div className="w-8 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center">
-                      <Target className="w-4 h-4 text-white" />
-                    </div>
-                    <div className="text-[9px] font-black text-white/60 uppercase tracking-widest">
-                      Окупаемость (ROI)
-                    </div>
-                  </div>
-                  <div className="flex flex-col relative z-10">
-                    <div className="text-2xl font-black italic text-white">
-                      {nomROI}
-                      <span className="text-xs not-italic font-bold text-indigo-200 ml-1">
-                        %
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1.5 mt-1.5">
-                      <div className="text-[10px] font-bold text-white/60 uppercase">
-                        Номинальный КПД
-                      </div>
-                      <div className={cn("text-[8px] font-black uppercase px-2 py-0.5 rounded border inline-block w-fit tracking-wider", roiBadgeColor)}>
-                        {roiLabel}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-white/20 transition-colors" />
+            {/* 3. Бонусов на руках */}
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
+              <div className="text-xs font-semibold text-slate-500">
+                Бонусов на руках у игроков
+              </div>
+              <div className="mt-2">
+                <div className="text-2xl font-bold tracking-tight text-slate-900">
+                  {totalBonusOnHands.toLocaleString("ru-RU")}{" "}
+                  <span className="text-sm font-medium text-slate-400">₽</span>
                 </div>
-              );
-            })()}
+                <div className="text-xs text-slate-400 mt-1.5">
+                  Накоплено на балансах, ещё не выведено
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Активность сегодня */}
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-xs font-semibold text-slate-500">
+                  Активность сегодня
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-2 pt-1">
+                <div>
+                  <div className="text-xl font-bold text-slate-900 leading-none">
+                    {ticketsToday}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-1">билетов</div>
+                </div>
+                <div className="border-l border-slate-100 pl-3">
+                  <div className="text-xl font-bold text-slate-900 leading-none">
+                    {gamesToday}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-1">игр</div>
+                </div>
+                <div className="border-l border-slate-100 pl-3">
+                  <div className="text-xl font-bold text-slate-900 leading-none">
+                    {playersToday}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-1">игроков</div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-
-        {/* Row 3: Детализация расходов и Реальная окупаемость */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 px-4">
-            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-              Детализация расходов и Реальная Окупаемость (Месяц)
-            </h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {(() => {
-              const withdrawsMonth = parseFloat(logs.stats?.withdraws_month || 0);
-              const withdrawsToday = parseFloat(logs.stats?.withdraws_today || 0);
-              const barBonusRetailMonth = parseFloat(logs.stats?.bar_bonus_retail_month || 0);
-              const barBonusRetailToday = parseFloat(logs.stats?.bar_bonus_retail_today || 0);
-              const barBonusCostMonth = parseFloat(logs.stats?.bar_bonus_cost_month || 0);
-              const barBonusCostToday = parseFloat(logs.stats?.bar_bonus_cost_today || 0);
-              const realTopupMonth = parseFloat(logs.stats?.real_topup_month || 0);
-
-              const realExpense = withdrawsMonth + barBonusCostMonth;
-              const realROI = realExpense > 0 
-                ? Math.round(realTopupMonth / realExpense * 100) 
-                : 0;
-              const netProfit = realTopupMonth - realExpense;
-
-              let realRoiLabel = "👍 Хорошая окупаемость";
-              let realRoiBadgeColor = "bg-white/20 text-white border-white/30";
-              if (realROI > 120) {
-                realRoiLabel = "🔥 Отличная окупаемость (>120%)";
-                realRoiBadgeColor = "bg-white/30 text-white border-white/40 shadow-sm animate-pulse";
-              } else if (realROI < 100) {
-                realRoiLabel = "⚠️ Внимание: окупаемость < 100%";
-                realRoiBadgeColor = "bg-rose-500/30 text-rose-100 border-rose-400/30";
-              }
-
-              return (
-                <>
-                  {/* Card 1: Выводы на ПК */}
-                  <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-sky-500/20">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-8 h-8 bg-sky-100 rounded-lg flex items-center justify-center">
-                        <Coins className="w-4 h-4 text-sky-600" />
-                      </div>
-                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                        Выводы на баланс
-                      </div>
-                    </div>
-                    <div className="flex flex-col">
-                      <div className="text-2xl font-black italic">
-                        {Math.round(withdrawsMonth)}{" "}
-                        <span className="text-xs not-italic font-bold text-slate-300">
-                          ₽
-                        </span>
-                      </div>
-                      <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
-                        Сегодня:{" "}
-                        <span className="text-sky-600">
-                          +{Math.round(withdrawsToday)} ₽
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 2: Покупки в баре (розница) */}
-                  <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-orange-500/20">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
-                        <ShoppingCart className="w-4 h-4 text-orange-600" />
-                      </div>
-                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                        Покупки в баре (Розница)
-                      </div>
-                    </div>
-                    <div className="flex flex-col">
-                      <div className="text-2xl font-black italic">
-                        {Math.round(barBonusRetailMonth)}{" "}
-                        <span className="text-xs not-italic font-bold text-slate-300">
-                          бон.
-                        </span>
-                      </div>
-                      <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
-                        Сегодня:{" "}
-                        <span className="text-orange-600">
-                          +{Math.round(barBonusRetailToday)} бон.
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 3: Себестоимость подарков */}
-                  <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm border-b-4 border-b-rose-500/20">
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center">
-                        <Target className="w-4 h-4 text-rose-600" />
-                      </div>
-                      <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                        Себестоимость подарков
-                      </div>
-                    </div>
-                    <div className="flex flex-col">
-                      <div className="text-2xl font-black italic">
-                        {Math.round(barBonusCostMonth)}{" "}
-                        <span className="text-xs not-italic font-bold text-slate-300">
-                          ₽
-                        </span>
-                      </div>
-                      <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
-                        Сегодня:{" "}
-                        <span className="text-rose-600">
-                          +{Math.round(barBonusCostToday)} ₽
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 4: Реальный ROI (по себестоимости) */}
-                  <div className="bg-emerald-600 p-5 rounded-3xl shadow-xl shadow-emerald-200 relative overflow-hidden group">
-                    <div className="flex items-center gap-3 mb-2 relative z-10">
-                      <div className="w-8 h-8 bg-white/20 backdrop-blur-md rounded-lg flex items-center justify-center">
-                        <Trophy className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="text-[9px] font-black text-white/60 uppercase tracking-widest">
-                        Реальный ROI (Чистый КПД)
-                      </div>
-                    </div>
-                    <div className="flex flex-col relative z-10">
-                      <div className="text-2xl font-black italic text-white">
-                        {realROI}
-                        <span className="text-xs not-italic font-bold text-emerald-200 ml-1">
-                          %
-                        </span>
-                      </div>
-                      <div className="flex flex-col gap-1 mt-1">
-                        <div className="text-[10px] font-bold text-white/80 uppercase">
-                          Профит:{" "}
-                          <span className="text-white font-black">
-                            {netProfit > 0 ? `+${Math.round(netProfit)}` : Math.round(netProfit)} ₽
-                          </span>
-                        </div>
-                        <div className={cn("text-[8px] font-black uppercase px-2 py-0.5 rounded border inline-block w-fit tracking-wider", realRoiBadgeColor)}>
-                          {realRoiLabel}
-                        </div>
-                      </div>
-                    </div>
-                    {/* Pattern background */}
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-3xl group-hover:bg-white/20 transition-colors" />
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* EXTENDED LOGS EXPLORER */}
-      <div className="space-y-6 bg-white border border-slate-200 p-6 md:p-8 rounded-[2.5rem] shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         {/* Header & Sub-Tabs */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-50 rounded-2xl flex items-center justify-center">
-              <History className="w-5 h-5 text-indigo-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-black uppercase italic text-slate-900">
-                Журнал <span className="text-indigo-600">операций</span>
-              </h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                Просмотр и фильтрация всех логов
-              </p>
-            </div>
+        <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+              Журнал операций
+            </h3>
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
+              Просмотр и фильтрация всех логов промо-системы
+            </p>
           </div>
 
           {/* Sub Tab Switcher */}
-          <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit">
+          <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
             <button
               onClick={() => setActiveSubTab("games")}
               className={cn(
-                "flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-200 font-black uppercase italic text-xs tracking-wider",
+                "px-3.5 py-1.5 rounded-lg transition-all text-xs font-medium cursor-pointer",
                 activeSubTab === "games"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-400 hover:text-slate-600"
+                  ? "bg-slate-900 text-white shadow-xs font-semibold"
+                  : "text-slate-600 hover:text-slate-900"
               )}
             >
-              <Gamepad2 className="w-3.5 h-3.5" />
-              Игры и Действия
+              <span>Игры и Действия</span>
             </button>
             <button
               onClick={() => setActiveSubTab("issuance")}
               className={cn(
-                "flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-200 font-black uppercase italic text-xs tracking-wider",
+                "px-3.5 py-1.5 rounded-lg transition-all text-xs font-medium cursor-pointer",
                 activeSubTab === "issuance"
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-400 hover:text-slate-600"
+                  ? "bg-slate-900 text-white shadow-xs font-semibold"
+                  : "text-slate-600 hover:text-slate-900"
               )}
             >
-              <Ticket className="w-3.5 h-3.5" />
-              Начисления билетов
+              <span>Начисления билетов</span>
             </button>
           </div>
         </div>
 
         {/* Filter Controls Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-5 sm:p-6 bg-slate-50/50 border-b border-slate-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search Input */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium text-slate-600">
               Поиск игрока
             </label>
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Имя или телефон..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-2xl py-3.5 pl-11 pr-4 text-xs font-bold transition-all outline-none"
+                className="w-full bg-white border border-slate-200 rounded-xl h-10 pl-9 pr-3 text-xs font-medium text-slate-900 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all outline-none"
               />
             </div>
           </div>
 
           {/* Date Filter Select */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium text-slate-600">
               Период времени
             </label>
             <div className="relative">
-              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <select
                 value={dateRange}
                 onChange={(e) => setDateRange(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-2xl py-3.5 pl-11 pr-10 text-xs font-bold transition-all outline-none appearance-none cursor-pointer"
+                className="w-full bg-white border border-slate-200 rounded-xl h-10 pl-9 pr-8 text-xs font-medium text-slate-900 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all outline-none appearance-none cursor-pointer"
               >
                 <option value="all">За всё время</option>
                 <option value="today">Сегодня</option>
@@ -556,29 +375,27 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
 
           {/* Game Type Filter (Only for Games tab) */}
           {activeSubTab === "games" && (
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-600">
                 Тип операции
               </label>
               <div className="relative">
-                <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <select
                   value={gameFilter}
                   onChange={(e) => setGameFilter(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 hover:border-slate-300 focus:border-indigo-500 rounded-2xl py-3.5 pl-11 pr-10 text-xs font-bold transition-all outline-none appearance-none cursor-pointer"
+                  className="w-full bg-white border border-slate-200 rounded-xl h-10 pl-9 pr-8 text-xs font-medium text-slate-900 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-all outline-none appearance-none cursor-pointer"
                 >
                   <option value="all">Все операции</option>
-                  <option value="mines">Mines (Мины)</option>
-                  <option value="rocket">Rocket (Краш)</option>
+                  <option value="wheel">Колесо фортуны</option>
                   <option value="dice">Кости</option>
                   <option value="safe">Сейф</option>
                   <option value="cards">Карты</option>
-                  <option value="flappy">Flappy</option>
+                  <option value="defuse">Сапёр C4</option>
                   <option value="CASE_OPEN">Открытие кейсов</option>
                   <option value="CASE_REFUND">Возврат за кейсы</option>
-                  <option value="BAR_BONUS_PURCHASE">Покупки в Маркете</option>
                   <option value="WITHDRAW">Выводы на ПК</option>
-                  <option value="rewards">Пополнения и квесты</option>
+                  <option value="rewards">Пополнения и награды</option>
                   <option value="other_games">Прочие действия</option>
                 </select>
               </div>
@@ -587,12 +404,12 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
         </div>
 
         {/* Logs Table Area */}
-        <div className="bg-slate-50 border border-slate-100 rounded-3xl overflow-hidden relative min-h-[300px]">
+        <div className="relative min-h-[300px]">
           {isFetching && (
             <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] z-10 flex items-center justify-center">
               <div className="flex flex-col items-center gap-2">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                <span className="text-xs font-medium text-slate-500">
                   Загрузка логов...
                 </span>
               </div>
@@ -600,7 +417,7 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
           )}
 
           {currentLogs.length === 0 ? (
-            <div className="p-16 text-center text-slate-400 font-bold uppercase italic text-xs flex flex-col items-center gap-2">
+            <div className="p-16 text-center text-slate-400 font-medium text-xs flex flex-col items-center gap-2">
               <History className="w-8 h-8 text-slate-300 mb-1" />
               Логи не найдены
             </div>
@@ -608,12 +425,12 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider bg-slate-100/50">
-                    <th className="px-6 py-4">Игрок</th>
+                  <tr className="border-b border-slate-200/70 text-xs font-semibold text-slate-500 bg-slate-50/80">
+                    <th className="px-6 py-3.5">Игрок</th>
                     {activeSubTab === "games" ? (
                       <>
-                        <th className="px-6 py-4">Тип действия</th>
-                        <th className="px-6 py-4">Событие / Результат</th>
+                        <th className="px-6 py-3.5">Тип действия</th>
+                        <th className="px-6 py-3.5">Событие / Результат</th>
                       </>
                     ) : (
                       <>
@@ -641,8 +458,8 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
                         <>
                           {/* Column 2 (Games): Action type */}
                           <td className="px-6 py-4">
-                            <span className="px-2.5 py-1 bg-slate-100 rounded-lg text-[9px] font-black text-slate-600 uppercase tracking-wider">
-                              {log.game_type}
+                            <span className="text-xs font-medium text-slate-700">
+                              {getGameTypeRussian(log.game_type)}
                             </span>
                           </td>
                           {/* Column 3 (Games): Result / Prize */}
@@ -655,8 +472,8 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
                                     ? "text-blue-600"
                                     : log.prize_type === "bar"
                                       ? "text-orange-600"
-                                      : log.prize_type === "withdraw"
-                                        ? "text-red-600"
+                                      : log.prize_type === "withdraw" || log.game_type === "WITHDRAW"
+                                        ? "text-rose-600"
                                         : log.prize_type === "bet"
                                           ? "text-slate-400 font-medium"
                                           : "text-emerald-600"
@@ -664,7 +481,7 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
                               >
                                 {log.prize_type === "topup" && <Plus className="w-3.5 h-3.5" />}
                                 {log.prize_type === "bar" && <ShoppingCart className="w-3.5 h-3.5" />}
-                                {log.prize_type === "withdraw" && <Clock className="w-3.5 h-3.5" />}
+                                {(log.prize_type === "withdraw" || log.game_type === "WITHDRAW") && <Clock className="w-3.5 h-3.5" />}
                                 {log.prize_type === "quest" && <Target className="w-3.5 h-3.5" />}
                                 {log.prize_type === "bet" && <RefreshCw className="w-3.5 h-3.5" />}
                                 {![
@@ -673,7 +490,7 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
                                   "withdraw",
                                   "quest",
                                   "bet",
-                                ].includes(log.prize_type) && <Trophy className="w-3.5 h-3.5" />}
+                                ].includes(log.prize_type) && log.game_type !== "WITHDRAW" && <Trophy className="w-3.5 h-3.5" />}
                                 {log.prize_name}
                               </div>
                             ) : (
@@ -687,8 +504,8 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
                         <>
                           {/* Column 2 (Issuance): Source */}
                           <td className="px-6 py-4">
-                            <span className="px-2.5 py-1 bg-slate-100 rounded-lg text-[9px] font-black text-slate-600 uppercase tracking-wider">
-                              {log.source === "admin_manual" ? "Админ" : "Автоматически"}
+                            <span className="text-xs font-medium text-slate-700">
+                              {getTicketSourceRussian(log.source)}
                             </span>
                           </td>
                           {/* Column 3 (Issuance): Count */}
@@ -719,37 +536,39 @@ export function HistoryTab({ logs, clubId }: HistoryTabProps) {
 
         {/* Pagination Row */}
         {totalLogs > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 border-t border-slate-100 bg-white">
             {/* Logs Count Info */}
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            <div className="text-xs font-medium text-slate-500">
               Показано {currentLogs.length} из {totalLogs} записей
             </div>
 
             {/* Pagination Controls */}
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1 || isFetching}
-                className="p-2.5 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 rounded-xl transition-all outline-none"
+                className="h-9 px-3 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 rounded-lg transition-all text-xs font-medium text-slate-700 flex items-center gap-1 cursor-pointer"
               >
-                <ChevronLeft className="w-4 h-4 text-slate-600" />
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Назад</span>
               </button>
 
-              <div className="text-xs font-black uppercase italic tracking-wider text-slate-900 px-4">
-                Страница {page} из {totalPages}
+              <div className="text-xs font-semibold text-slate-900 px-2">
+                {page} / {totalPages}
               </div>
 
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages || isFetching}
-                className="p-2.5 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 rounded-xl transition-all outline-none"
+                className="h-9 px-3 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 rounded-lg transition-all text-xs font-medium text-slate-700 flex items-center gap-1 cursor-pointer"
               >
-                <ChevronRight className="w-4 h-4 text-slate-600" />
+                <span>Вперед</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

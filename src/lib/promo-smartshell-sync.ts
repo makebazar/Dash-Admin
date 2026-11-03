@@ -1,7 +1,7 @@
 import { query, getClient } from "@/db";
 import { normalizePhone } from "@/lib/phone-utils";
 import { calculateTicketsForAmount, calculateTicketsForBarAmount } from "@/lib/promo-accrual";
-import { processBalanceTopupEvent, processReceiptEvent, processServiceEvent, processVisitEvent, ReceiptItem } from "@/lib/promo-quests";
+import { processPackagePurchase, processPlayerVisit } from "@/lib/promo-packages";
 import { getSmartShellClientForClub } from "@/lib/smartshell/shift-sync";
 
 export interface ProcessPaymentResult {
@@ -76,7 +76,6 @@ export async function processSmartShellPaymentForPromo(
   let topupAmount = 0;
   let barAmount = 0;
   const barProductNames: string[] = [];
-  const barReceiptItems: ReceiptItem[] = [];
   const packageItems: Array<{ id: string; title: string; quantity: number }> = [];
 
   if (Array.isArray(payment.items) && payment.items.length > 0) {
@@ -103,23 +102,6 @@ export async function processSmartShellPaymentForPromo(
         }
         const title = item.entity?.title || "Товар";
         barProductNames.push(`${title} x${itemQty}`);
-
-        let matchedProductId: number | null = item.entity?.id ? Number(item.entity.id) : null;
-        if (item.entity?.title) {
-          const wpMatch = await dbClient.query(
-            `SELECT id FROM warehouse_products WHERE club_id = $1 AND (id = $2 OR LOWER(TRIM(name)) = LOWER(TRIM($3))) LIMIT 1`,
-            [clubId, matchedProductId || -1, item.entity.title]
-          );
-          if (wpMatch.rows.length > 0) {
-            matchedProductId = wpMatch.rows[0].id;
-          }
-        }
-        if (matchedProductId) {
-          barReceiptItems.push({
-            product_id: matchedProductId,
-            quantity: itemQty,
-          });
-        }
       }
     }
   }
@@ -171,6 +153,29 @@ export async function processSmartShellPaymentForPromo(
 
   // 7. Обработка пополнения баланса / тарифов
   if (topupAmount > 0 || packageItems.length > 0) {
+    // Apply active withdraw boost if exists
+    if (topupAmount > 0) {
+      const boostCheck = await dbClient.query(
+        `SELECT active_boost_percent FROM promo_player_balances 
+         WHERE player_id = $1::uuid AND club_id = $2::int FOR UPDATE`,
+        [playerId, clubId]
+      );
+      if (boostCheck.rows.length > 0) {
+        const activeBoostPercent = parseInt(boostCheck.rows[0].active_boost_percent || 0);
+        if (activeBoostPercent > 0) {
+          const extraLimit = (topupAmount * activeBoostPercent) / 100;
+          await dbClient.query(
+            `UPDATE promo_player_balances 
+             SET extra_withdraw_limit = COALESCE(extra_withdraw_limit, 0) + $1,
+                 active_boost_percent = 0,
+                 updated_at = NOW()
+             WHERE player_id = $2::uuid AND club_id = $3::int`,
+            [extraLimit, playerId, clubId]
+          );
+        }
+      }
+    }
+
     const topupTickets = topupAmount > 0 && promoSettings.topup_accrual_enabled !== false
       ? calculateTicketsForAmount(topupAmount, promoSettings)
       : 0;
@@ -230,21 +235,17 @@ export async function processSmartShellPaymentForPromo(
       totalTicketsAwarded += packageTickets;
     }
 
-    // Продвижение квестов на пополнение баланса (только реальные деньги)
-    if (topupAmount > 0) {
+    // Продвижение программ лояльности на покупку пакетов/тарифов
+    if (packageItems.length > 0) {
       try {
-        await processBalanceTopupEvent(dbClient, clubId, playerId, topupAmount);
-      } catch (questErr) {
-        console.warn("[Promo Sync] Quest topup progress error:", questErr);
-      }
-    }
-
-    // Продвижение квестов и лояльности на покупку пакетов/тарифов
-    for (const pkg of packageItems) {
-      try {
-        await processServiceEvent(dbClient, clubId, playerId, pkg.id, pkg.quantity);
+        await processPackagePurchase(
+          dbClient,
+          clubId,
+          playerId,
+          packageItems.map((pkg) => ({ service_id: pkg.id, quantity: pkg.quantity }))
+        );
       } catch (pkgErr) {
-        console.warn("[Promo Sync] Package loyalty/quest progress error:", pkgErr);
+        console.warn("[Promo Sync] Package loyalty progress error:", pkgErr);
       }
     }
   }
@@ -281,20 +282,6 @@ export async function processSmartShellPaymentForPromo(
         [playerId, clubId, barHistoryId, Math.floor(barTickets)]
       );
       totalTicketsAwarded += barTickets;
-    }
-
-    // Продвижение квестов на покупки в баре
-    try {
-      await processReceiptEvent(
-        dbClient,
-        clubId,
-        playerId,
-        paymentId,
-        barAmount,
-        barReceiptItems
-      );
-    } catch (questErr) {
-      console.warn("[Promo Sync] Quest bar progress error:", questErr);
     }
   }
 
@@ -399,8 +386,12 @@ export async function syncSmartShellSessionsForVisits(
             ]
           );
 
-          // Продвигаем квесты на серии посещений и лояльность с учетом зоны
-          await processVisitEvent(dbClient, clubIdInt, playerId, host.alias || undefined, zoneId);
+          // Продвигаем лояльность на серии посещений с учетом зоны
+          try {
+            await processPlayerVisit(dbClient, clubIdInt, playerId, zoneId);
+          } catch (visitErr) {
+            console.warn("[Promo Sync] Player visit loyalty progress error:", visitErr);
+          }
           visitCount++;
         }
       }

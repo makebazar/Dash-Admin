@@ -78,7 +78,7 @@ export function PromoHeader({
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-40 w-full bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 px-4 sm:px-6 py-3">
+      <header className="fixed top-0 left-0 right-0 z-40 w-full bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 px-3.5 sm:px-6 py-2.5 sm:py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex flex-col min-w-0 pr-2">
             <div className="text-[9px] sm:text-[10px] font-black text-orange-500 uppercase tracking-widest leading-tight mb-0.5 truncate">
@@ -136,7 +136,7 @@ export function PromoHeader({
         </div>
       </header>
       {/* Spacer to prevent content overlap */}
-      <div className="h-[60px] sm:h-[68px] shrink-0" />
+      <div className="h-[54px] sm:h-[62px] shrink-0" />
     </>
   );
 }

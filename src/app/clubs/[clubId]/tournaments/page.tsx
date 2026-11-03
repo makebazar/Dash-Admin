@@ -708,6 +708,31 @@ export default function AdminTournaments() {
     }
   };
 
+  const handleFinishTournament = async () => {
+    if (!activeTournament?.id) return;
+    if (!confirm("Вы действительно хотите завершить этот турнир и зафиксировать финальные результаты?")) return;
+    try {
+      const res = await fetch(`/api/clubs/${clubId}/tournaments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "finish_tournament",
+          id: activeTournament.id,
+        }),
+      });
+      if (res.ok) {
+        await fetchTournamentDetails(activeTournament.id);
+        await fetchTournamentsList();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Не удалось завершить турнир");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка сети");
+    }
+  };
+
   const handleRebuildBracket = async () => {
     if (!activeTournament) return;
     setIsRebuildingBracket(true);
@@ -1133,6 +1158,7 @@ export default function AdminTournaments() {
             onStartTournament={() => handleStartTournament(false)}
             onPublish={handlePublishTournament}
             onRevertToDraft={handleRevertToDraft}
+            onFinishTournament={handleFinishTournament}
             onOpenRebuildModal={() => {
               setRebuildBracketType(
                 activeTournament.config?.bracketType || "single_elimination"

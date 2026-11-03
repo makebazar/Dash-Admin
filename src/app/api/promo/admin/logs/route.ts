@@ -11,6 +11,7 @@ export async function GET(request: Request) {
     const search = searchParams.get("search");
     const gameType = searchParams.get("gameType");
     const dateFilter = searchParams.get("dateFilter"); // 'today', 'yesterday', 'week', 'month', 'all'
+    const month = searchParams.get("month"); // 'current', '2026-10', 'all', etc.
     const limit = searchParams.get("limit");
     const offset = searchParams.get("offset");
     const userId = (await cookies()).get("session_user_id")?.value;
@@ -23,7 +24,22 @@ export async function GET(request: Request) {
     let dateFrom: Date | null = null;
     let dateTo: Date | null = null;
 
-    if (dateFilter && dateFilter !== "all") {
+    if (month) {
+      if (month === "all") {
+        dateFrom = null;
+        dateTo = null;
+      } else if (month === "current") {
+        const now = new Date();
+        dateFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+        dateTo = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      } else {
+        const [y, m] = month.split("-").map(Number);
+        if (y && m) {
+          dateFrom = new Date(y, m - 1, 1);
+          dateTo = new Date(y, m, 1);
+        }
+      }
+    } else if (dateFilter && dateFilter !== "all") {
       const now = new Date();
       if (dateFilter === "today") {
         dateFrom = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -65,8 +81,9 @@ export async function GET(request: Request) {
           FROM promo_tickets t
           JOIN promo_players p ON t.player_id = p.id
           LEFT JOIN promo_history h ON t.history_id = h.id
+          LEFT JOIN users u ON u.id::text = COALESCE(h.result_data->>'processed_by', h.result_data->>'admin_id')
           WHERE ${countWhere}
-          GROUP BY p.full_name, p.phone_number, t.source, t.created_at, t.player_id, t.history_id, h.game_type, h.result_data::text
+          GROUP BY p.full_name, p.phone_number, t.source, t.created_at, t.player_id, t.history_id, h.game_type, h.result_data::text, u.full_name
         ) as grouped_tickets
       `;
       const countRes = await query(countQuery, countParams);
@@ -86,12 +103,14 @@ export async function GET(request: Request) {
           t.created_at,
           COUNT(*)::int as batch_count,
           h.game_type as history_game_type,
-          h.result_data::text as history_result_data
+          h.result_data::text as history_result_data,
+          COALESCE(u.full_name, h.result_data->>'admin_name') as admin_name
         FROM promo_tickets t
         JOIN promo_players p ON t.player_id = p.id
         LEFT JOIN promo_history h ON t.history_id = h.id
+        LEFT JOIN users u ON u.id::text = COALESCE(h.result_data->>'processed_by', h.result_data->>'admin_id')
         WHERE ${countWhere}
-        GROUP BY p.full_name, p.phone_number, t.source, t.created_at, t.player_id, t.history_id, h.game_type, h.result_data::text
+        GROUP BY p.full_name, p.phone_number, t.source, t.created_at, t.player_id, t.history_id, h.game_type, h.result_data::text, u.full_name
         ORDER BY t.created_at DESC 
         LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}
       `;
@@ -119,7 +138,7 @@ export async function GET(request: Request) {
       }
       if (gameType && gameType !== "all") {
         if (gameType === "games_tickets") {
-          countWhere += ` AND h.game_type IN ('wheel', 'safe', 'dice', 'cards', 'flappy')`;
+          countWhere += ` AND h.game_type IN ('wheel', 'safe', 'dice', 'cards', 'defuse', 'flappy')`;
         } else if (gameType === "games_bets") {
           countWhere += ` AND h.game_type IN ('mines', 'rocket')`;
         } else if (gameType === "cases") {
@@ -182,6 +201,7 @@ export async function GET(request: Request) {
               WHEN h.game_type = 'dice' THEN 'Кости: Сумма ' || COALESCE(h.result_data->'diceResult'->>'sum', '?') || ' (' || COALESCE(h.result_data->'diceResult'->>'d1', '?') || ':' || COALESCE(h.result_data->'diceResult'->>'d2', '?') || ')'
               WHEN h.game_type = 'safe' THEN 'Сейф: Неверный код (' || COALESCE(h.result_data->>'selectedCode', '?') || ')'
               WHEN h.game_type = 'cards' THEN 'Карты: Проигрыш'
+              WHEN h.game_type = 'defuse' THEN 'Сапёр C4: Взрыв (' || COALESCE(h.result_data->>'selectedWire', '?') || ')'
               WHEN h.game_type = 'flappy' THEN 'Flappy: Счет ' || COALESCE(h.result_data->>'score', '0')
               WHEN h.game_type LIKE 'TOPUP%' THEN 'Пополнение: ' || COALESCE(h.result_data->>'amount', '0') || ' ₽'
               WHEN h.game_type LIKE 'SERVICE_AWARD%' THEN COALESCE(h.result_data->>'rule_name', 'Начисление услуг')
@@ -235,6 +255,14 @@ export async function GET(request: Request) {
       issuanceWhere += ` AND t.player_id = $2`;
       issuanceParams.push(playerId);
     }
+    if (dateFrom) {
+      issuanceWhere += ` AND t.created_at >= $${issuanceParams.length + 1}`;
+      issuanceParams.push(dateFrom);
+    }
+    if (dateTo) {
+      issuanceWhere += ` AND t.created_at < $${issuanceParams.length + 1}`;
+      issuanceParams.push(dateTo);
+    }
 
     const issuanceQuery = `SELECT
         MIN(t.id::text) as id,
@@ -244,12 +272,14 @@ export async function GET(request: Request) {
         t.created_at,
         COUNT(*)::int as batch_count,
         h.game_type as history_game_type,
-        h.result_data::text as history_result_data
+        h.result_data::text as history_result_data,
+        COALESCE(u.full_name, h.result_data->>'admin_name') as admin_name
        FROM promo_tickets t
        JOIN promo_players p ON t.player_id = p.id
        LEFT JOIN promo_history h ON t.history_id = h.id
+       LEFT JOIN users u ON u.id::text = COALESCE(h.result_data->>'processed_by', h.result_data->>'admin_id')
        WHERE ${issuanceWhere}
-       GROUP BY p.full_name, p.phone_number, t.source, t.created_at, t.player_id, t.history_id, h.game_type, h.result_data::text
+       GROUP BY p.full_name, p.phone_number, t.source, t.created_at, t.player_id, t.history_id, h.game_type, h.result_data::text, u.full_name
        ORDER BY t.created_at DESC LIMIT 100`;
 
     const issuanceLogs = await query(issuanceQuery, issuanceParams);
@@ -276,6 +306,7 @@ export async function GET(request: Request) {
             WHEN h.game_type = 'dice' THEN 'Кости: Сумма ' || COALESCE(h.result_data->'diceResult'->>'sum', '?') || ' (' || COALESCE(h.result_data->'diceResult'->>'d1', '?') || ':' || COALESCE(h.result_data->'diceResult'->>'d2', '?') || ')'
             WHEN h.game_type = 'safe' THEN 'Сейф: Неверный код (' || COALESCE(h.result_data->>'selectedCode', '?') || ')'
             WHEN h.game_type = 'cards' THEN 'Карты: Проигрыш'
+            WHEN h.game_type = 'defuse' THEN 'Сапёр C4: Взрыв (' || COALESCE(h.result_data->>'selectedWire', '?') || ')'
             WHEN h.game_type = 'flappy' THEN 'Flappy: Счет ' || COALESCE(h.result_data->>'score', '0')
             WHEN h.game_type LIKE 'TOPUP%' THEN 'Пополнение: ' || COALESCE(h.result_data->>'amount', '0') || ' ₽'
             WHEN h.game_type LIKE 'SERVICE_AWARD%' THEN COALESCE(h.result_data->>'rule_name', 'Начисление услуг')
@@ -316,6 +347,14 @@ export async function GET(request: Request) {
     if (playerId) {
       gameQuery += ` AND h.player_id = $2`;
       gameParams.push(playerId);
+    }
+    if (dateFrom) {
+      gameQuery += ` AND h.created_at >= $${gameParams.length + 1}`;
+      gameParams.push(dateFrom);
+    }
+    if (dateTo) {
+      gameQuery += ` AND h.created_at < $${gameParams.length + 1}`;
+      gameParams.push(dateTo);
     }
     gameQuery += ` ORDER BY h.created_at DESC LIMIT 200`;
 

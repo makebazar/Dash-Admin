@@ -4,24 +4,21 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import * as THREE from "three";
 import * as CANNON from "cannon-es";
 import { motion, AnimatePresence } from "framer-motion";
-import { Ticket, History, ChevronLeft, Gift } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { GameHeader } from "../components/GameHeader";
 import { PrizesSidebar } from "../components/PrizesSidebar";
 
 /**
- * КУБИКИ В ТАРЕЛКЕ (MOBILE OPTIMIZED)
+ * КУБИКИ В ТАРЕЛКЕ — ЧИСТАЯ РЕАЛЬНАЯ ФИЗИКА (БЕЗ ПРЕДСКАЗАНИЯ)
  *
- * - Адаптивная верстка под любые экраны
- * - Оптимизированная физика и рендер
- * - Улучшенный UI для тач-устройств
+ * - Мгновенный бросок по нажатию кнопки без предсимуляции и фризов
+ * - Расширенная чаша (радиус поля увеличен в 1.5 раза)
+ * - Что реально выпало по физике (верхние грани кубиков) — то и отправляется на сервер для выдачи приза
  */
 
 export default function BowlPhysicsDice() {
-  const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const [isRolling, setIsRolling] = useState(false);
-  const [tickets, setTickets] = useState(3);
+  const [tickets, setTickets] = useState(0);
   const [bonusBalance, setBonusBalance] = useState(0);
   const [player, setPlayer] = useState<any>(null);
   const [showPrizes, setShowPrizes] = useState(false);
@@ -38,25 +35,58 @@ export default function BowlPhysicsDice() {
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const showError = (msg: string) => {
-    setErrorMsg(msg);
-    setTimeout(() => setErrorMsg(null), 3000);
-  };
-
   const sceneRef = useRef<THREE.Scene | null>(null);
   const worldRef = useRef<CANNON.World | null>(null);
   const diceRefs = useRef<{ mesh: THREE.Mesh; body: CANNON.Body }[]>([]);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const requestRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const meshOffsetsRef = useRef<THREE.Quaternion[]>([new THREE.Quaternion(), new THREE.Quaternion()]);
-  const isFastForwardingRef = useRef<boolean>(false);
+
+  // Live roll tracking refs
+  const activeRollRef = useRef<{
+    active: boolean;
+    startTime: number;
+    settledFrames: number;
+    nudges: number;
+    onSettled: ((d1: number, d2: number) => void) | null;
+  }>({
+    active: false,
+    startTime: 0,
+    settledFrames: 0,
+    nudges: 0,
+    onSettled: null,
+  });
+
+  const getUpsideValue = useCallback((body: CANNON.Body) => {
+    // BoxGeometry material index order: +X=1, -X=6, +Y=3, -Y=4, +Z=2, -Z=5
+    const faces: { vec: CANNON.Vec3; val: number }[] = [
+      { vec: new CANNON.Vec3(1, 0, 0), val: 1 },
+      { vec: new CANNON.Vec3(-1, 0, 0), val: 6 },
+      { vec: new CANNON.Vec3(0, 1, 0), val: 3 },
+      { vec: new CANNON.Vec3(0, -1, 0), val: 4 },
+      { vec: new CANNON.Vec3(0, 0, 1), val: 2 },
+      { vec: new CANNON.Vec3(0, 0, -1), val: 5 },
+    ];
+    const invQuat = body.quaternion.inverse();
+    const localUp = invQuat.vmult(new CANNON.Vec3(0, 1, 0));
+
+    let bestVal = 1;
+    let maxDot = -Infinity;
+    for (const f of faces) {
+      const dot = localUp.dot(f.vec);
+      if (dot > maxDot) {
+        maxDot = dot;
+        bestVal = f.val;
+      }
+    }
+    return { val: bestVal, maxDot };
+  }, []);
 
   // === AUDIO SYSTEM ===
   const playCollisionSound = useCallback((strength: number) => {
     if (!audioCtxRef.current) return;
     const ctx = audioCtxRef.current;
-    if (ctx.state === "suspended") ctx.resume();
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -64,11 +94,11 @@ export default function BowlPhysicsDice() {
     osc.type = "sine";
     const freq = 120 + Math.random() * 80;
     osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(10, ctx.currentTime + 0.15);
+    osc.frequency.exponentialRampToValueAtTime(10, ctx.currentTime + 0.14);
 
-    const volume = Math.min(strength / 20, 0.4);
+    const volume = Math.min(strength / 22, 0.35);
     gain.gain.setValueAtTime(volume, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.14);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -87,7 +117,7 @@ export default function BowlPhysicsDice() {
         const playerData = await playerRes.json();
         if (playerData.success || playerData.tickets !== undefined) {
           setPlayer(playerData.player);
-          setTickets(playerData.tickets);
+          setTickets(playerData.tickets || 0);
           setBonusBalance(playerData.player?.bonusBalance || 0);
         }
 
@@ -119,8 +149,9 @@ export default function BowlPhysicsDice() {
       scene.background = null;
       sceneRef.current = scene;
 
-      const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
-      camera.position.set(0, 14, 2);
+      // Higher camera to frame the larger 7.5-radius bowl cleanly
+      const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
+      camera.position.set(0, 19.2, 2.2);
       camera.lookAt(0, 0, 0);
 
       const renderer = new THREE.WebGLRenderer({
@@ -136,31 +167,37 @@ export default function BowlPhysicsDice() {
       rendererRef.current = renderer;
 
       // Lights
-      scene.add(new THREE.AmbientLight(0xffffff, 0.4));
-      const spotLight = new THREE.SpotLight(0xffffff, 1.5);
-      spotLight.position.set(5, 15, 5);
-      spotLight.angle = Math.PI / 6;
-      spotLight.penumbra = 0.3;
+      scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+      const spotLight = new THREE.SpotLight(0xffffff, 1.6);
+      spotLight.position.set(6, 18, 6);
+      spotLight.angle = Math.PI / 5;
+      spotLight.penumbra = 0.35;
       spotLight.castShadow = true;
       spotLight.shadow.mapSize.width = 1024;
       spotLight.shadow.mapSize.height = 1024;
       scene.add(spotLight);
 
-      const fillLight = new THREE.PointLight(0xff9900, 0.5);
-      fillLight.position.set(-5, 5, -2);
+      const fillLight = new THREE.PointLight(0xff9900, 0.55);
+      fillLight.position.set(-6, 6, -3);
       scene.add(fillLight);
 
       // --- CANNON-ES SETUP ---
       const world = new CANNON.World();
-      world.gravity.set(0, -35, 0);
+      world.gravity.set(0, -38, 0);
       worldRef.current = world;
 
       const diceMaterial = new CANNON.Material("dice");
       const bowlMaterial = new CANNON.Material("bowl");
       world.addContactMaterial(
         new CANNON.ContactMaterial(bowlMaterial, diceMaterial, {
-          friction: 0.15,
-          restitution: 0.5,
+          friction: 0.18,
+          restitution: 0.45,
+        }),
+      );
+      world.addContactMaterial(
+        new CANNON.ContactMaterial(diceMaterial, diceMaterial, {
+          friction: 0.2,
+          restitution: 0.55,
         }),
       );
 
@@ -174,9 +211,9 @@ export default function BowlPhysicsDice() {
       world.addBody(floorBody);
 
       const floorMesh = new THREE.Mesh(
-        new THREE.CircleGeometry(6, 48),
+        new THREE.CircleGeometry(8.2, 64),
         new THREE.MeshStandardMaterial({
-          color: 0x111111,
+          color: 0x101010,
           roughness: 0.8,
           metalness: 0.1,
         }),
@@ -185,11 +222,11 @@ export default function BowlPhysicsDice() {
       floorMesh.receiveShadow = true;
       scene.add(floorMesh);
 
-      // Бортики тарелки
-      const wallCount = 12;
-      const wallRadius = 5.3;
-      const wallHeight = 10;
-      const wallThickness = 1;
+      // Expanded Bowl Walls (radius 7.3 instead of 5.3 -> ~90% more floor area)
+      const wallCount = 16;
+      const wallRadius = 7.3;
+      const wallHeight = 12;
+      const wallThickness = 1.2;
       const segmentWidth = (2 * Math.PI * wallRadius) / wallCount;
 
       for (let i = 0; i < wallCount; i++) {
@@ -201,7 +238,7 @@ export default function BowlPhysicsDice() {
           mass: 0,
           shape: new CANNON.Box(
             new CANNON.Vec3(
-              segmentWidth / 1.8,
+              segmentWidth / 1.75,
               wallHeight / 2,
               wallThickness / 2,
             ),
@@ -214,15 +251,16 @@ export default function BowlPhysicsDice() {
         world.addBody(wallBody);
       }
 
-      // Visual Bowl
+      // Visual Bowl Slope
       const points = [];
-      for (let i = 0; i < 10; i++)
-        points.push(new THREE.Vector2(4.5 + i * 0.1, i * 0.25));
+      for (let i = 0; i < 10; i++) {
+        points.push(new THREE.Vector2(6.4 + i * 0.13, i * 0.28));
+      }
       const bowlGeom = new THREE.LatheGeometry(points, 64);
       const bowlMat = new THREE.MeshStandardMaterial({
-        color: 0x333333,
+        color: 0x2c2c2c,
         metalness: 0.8,
-        roughness: 0.2,
+        roughness: 0.22,
         side: THREE.DoubleSide,
       });
       const bowlMesh = new THREE.Mesh(bowlGeom, bowlMat);
@@ -230,23 +268,23 @@ export default function BowlPhysicsDice() {
       bowlMesh.receiveShadow = true;
       scene.add(bowlMesh);
 
-      // Top Ring
-      const torusGeom = new THREE.TorusGeometry(5.4, 0.1, 16, 100);
+      // Top Golden Rim
+      const torusGeom = new THREE.TorusGeometry(7.55, 0.12, 16, 100);
       const torusMat = new THREE.MeshStandardMaterial({
         color: 0xffa500,
         emissive: 0xffa500,
-        emissiveIntensity: 0.2,
+        emissiveIntensity: 0.22,
         metalness: 0.9,
         roughness: 0.1,
       });
       const torusMesh = new THREE.Mesh(torusGeom, torusMat);
       torusMesh.rotation.x = Math.PI / 2;
-      torusMesh.position.y = 2.2;
+      torusMesh.position.y = 2.45;
       scene.add(torusMesh);
 
       // Dice Factory
       const createDice = (x: number) => {
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const geometry = new THREE.BoxGeometry(1.05, 1.05, 1.05);
         const createFaceCanvas = (dots: number) => {
           const canvas = document.createElement("canvas");
           canvas.width = 128;
@@ -338,15 +376,14 @@ export default function BowlPhysicsDice() {
 
         const body = new CANNON.Body({
           mass: 1.2,
-          shape: new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5)),
+          shape: new CANNON.Box(new CANNON.Vec3(0.525, 0.525, 0.525)),
           material: diceMaterial,
-          position: new CANNON.Vec3(x, 1, 0),
-          angularDamping: 0.3,
-          linearDamping: 0.1,
+          position: new CANNON.Vec3(x, 0.55, 0),
+          angularDamping: 0.25,
+          linearDamping: 0.08,
         });
 
         body.addEventListener("collide", (e: any) => {
-          if (isFastForwardingRef.current) return;
           const relVel = e.contact.bi.velocity.vsub(e.contact.bj.velocity);
           const strength = relVel.length();
           if (strength > 1.5) playCollisionSound(strength);
@@ -356,19 +393,80 @@ export default function BowlPhysicsDice() {
         return { mesh, body };
       };
 
-      diceRefs.current = [createDice(-1.2), createDice(1.2)];
+      diceRefs.current = [createDice(-1.6), createDice(1.6)];
 
       const animate = () => {
         world.fixedStep();
-        diceRefs.current.forEach(({ mesh, body }, i) => {
+
+        // Direct 1:1 sync between physics body and 3D mesh (no fake offsets!)
+        diceRefs.current.forEach(({ mesh, body }) => {
           mesh.position.copy(body.position as any);
-          if (meshOffsetsRef.current[i]) {
-            const bodyQuat = new THREE.Quaternion(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
-            mesh.quaternion.copy(bodyQuat.multiply(meshOffsetsRef.current[i]));
-          } else {
-            mesh.quaternion.copy(body.quaternion as any);
-          }
+          mesh.quaternion.copy(body.quaternion as any);
         });
+
+        // Monitor active throw until both dice physically settle flat
+        const tracker = activeRollRef.current;
+        if (tracker.active && diceRefs.current.length === 2) {
+          const b0 = diceRefs.current[0].body;
+          const b1 = diceRefs.current[1].body;
+          const elapsed = performance.now() - tracker.startTime;
+
+          const speed0 =
+            b0.velocity.length() + b0.angularVelocity.length() * 0.3;
+          const speed1 =
+            b1.velocity.length() + b1.angularVelocity.length() * 0.3;
+
+          if (elapsed > 350 && speed0 < 0.06 && speed1 < 0.06) {
+            const u0 = getUpsideValue(b0);
+            const u1 = getUpsideValue(b1);
+            const isCocked =
+              u0.maxDot < 0.94 ||
+              u1.maxDot < 0.94 ||
+              b0.position.y > 0.85 ||
+              b1.position.y > 0.85;
+
+            if (isCocked && tracker.nudges < 3) {
+              // Give cocked die a small natural nudge toward the center of the bowl so it settles flat
+              tracker.nudges += 1;
+              tracker.settledFrames = 0;
+              [b0, b1].forEach((b, idx) => {
+                const u = idx === 0 ? u0 : u1;
+                if (u.maxDot < 0.94 || b.position.y > 0.85) {
+                  b.wakeUp();
+                  b.velocity.set(
+                    -b.position.x * 1.2 + (Math.random() - 0.5) * 2,
+                    2.5,
+                    -b.position.z * 1.2 + (Math.random() - 0.5) * 2,
+                  );
+                  b.angularVelocity.set(
+                    (Math.random() - 0.5) * 10,
+                    (Math.random() - 0.5) * 10,
+                    (Math.random() - 0.5) * 10,
+                  );
+                }
+              });
+            } else {
+              tracker.settledFrames += 1;
+              if (tracker.settledFrames >= 10 || elapsed > 4000) {
+                tracker.active = false;
+                const cb = tracker.onSettled;
+                tracker.onSettled = null;
+                if (cb) cb(u0.val, u1.val);
+              }
+            }
+          } else if (elapsed > 4500) {
+            // Safety fallback if dice spin too long
+            const u0 = getUpsideValue(b0);
+            const u1 = getUpsideValue(b1);
+            tracker.active = false;
+            const cb = tracker.onSettled;
+            tracker.onSettled = null;
+            if (cb) cb(u0.val, u1.val);
+          } else {
+            tracker.settledFrames = 0;
+          }
+        }
+
         renderer.render(scene, camera);
         requestRef.current = requestAnimationFrame(animate);
       };
@@ -387,8 +485,7 @@ export default function BowlPhysicsDice() {
       resizeObserver.observe(containerRef.current);
     };
 
-    // Use a small timeout to ensure container is in DOM
-    const timer = setTimeout(initScene, 100);
+    const timer = setTimeout(initScene, 50);
 
     return () => {
       clearTimeout(timer);
@@ -399,186 +496,104 @@ export default function BowlPhysicsDice() {
         if (containerRef.current) containerRef.current.innerHTML = "";
       }
     };
-  }, [playCollisionSound]);
+  }, [playCollisionSound, getUpsideValue]);
 
-  const getLocalVectorForFace = (n: number) => {
-    switch (n) {
-      case 1: return new CANNON.Vec3(1, 0, 0);
-      case 6: return new CANNON.Vec3(-1, 0, 0);
-      case 3: return new CANNON.Vec3(0, 1, 0);
-      case 4: return new CANNON.Vec3(0, -1, 0);
-      case 2: return new CANNON.Vec3(0, 0, 1);
-      case 5: return new CANNON.Vec3(0, 0, -1);
-      default: return new CANNON.Vec3(0, 1, 0);
+  const ticketCost =
+    Number(player?.settings?.game_configs?.dice?.tickets_per_play) || 1;
+
+  const rollDice = () => {
+    if (isRolling || tickets < ticketCost || diceRefs.current.length !== 2)
+      return;
+
+    if (!audioCtxRef.current) {
+      const AudioContextClass =
+        window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextClass) audioCtxRef.current = new AudioContextClass();
     }
-  };
-
-  const getUpsideValue = (body: CANNON.Body) => {
-    const ups: Record<string, number> = {
-      "1,0,0": 1,
-      "-1,0,0": 6,
-      "0,1,0": 3,
-      "0,-1,0": 4,
-      "0,0,1": 2,
-      "0,0,-1": 5,
-    };
-    const invQuat = body.quaternion.inverse();
-    const upVector = invQuat.vmult(new CANNON.Vec3(0, 1, 0));
-    let closest = "";
-    let maxDot = -Infinity;
-    Object.keys(ups).forEach((vStr) => {
-      const p = vStr.split(",").map(Number);
-      const dot = upVector.dot(new CANNON.Vec3(p[0], p[1], p[2]));
-      if (dot > maxDot) {
-        maxDot = dot;
-        closest = vStr;
-      }
-    });
-
-    const val = ups[closest];
-    let localVec = new CANNON.Vec3(0, 1, 0);
-    const p = closest.split(",").map(Number);
-    if (p.length === 3) {
-      localVec.set(p[0], p[1], p[2]);
-    }
-    return { val, localVec };
-  };
-
-  const rollDice = async () => {
-    if (isRolling || tickets <= 0) return;
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
 
     setIsRolling(true);
     setResult(null);
     setGameMessage(null);
     setErrorMsg(null);
-    meshOffsetsRef.current = [new THREE.Quaternion(), new THREE.Quaternion()];
 
-    try {
-      const response = await fetch("/api/promo/play", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gameType: "dice" }),
-      });
+    // 1. Launch dice IMMEDIATELY with real random physics (0ms freeze!)
+    diceRefs.current.forEach(({ body }, i) => {
+      const angle =
+        (i === 0 ? Math.PI : 0) + (Math.random() - 0.5) * 0.9;
+      const spawnRadius = 2.6 + Math.random() * 1.4;
+      const sx = Math.cos(angle) * spawnRadius;
+      const sz = Math.sin(angle) * spawnRadius;
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Ошибка сервера");
+      body.position.set(sx, 7.5 + i * 0.8, sz);
+      // Throw inward across the bowl with random spin
+      body.velocity.set(
+        -sx * (2.2 + Math.random() * 1.4) + (Math.random() - 0.5) * 4,
+        -16 - Math.random() * 6,
+        -sz * (2.2 + Math.random() * 1.4) + (Math.random() - 0.5) * 4,
+      );
+      body.angularVelocity.set(
+        (Math.random() - 0.5) * 45,
+        (Math.random() - 0.5) * 45,
+        (Math.random() - 0.5) * 45,
+      );
+      body.quaternion.setFromEuler(
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+      );
+      body.force.set(0, 0, 0);
+      body.torque.set(0, 0, 0);
+      body.wakeUp();
+    });
 
-      setTickets((prev) => prev - 1);
+    // 2. When the dice physically stop, send the actual rolled faces (d1, d2) to the server
+    activeRollRef.current = {
+      active: true,
+      startTime: performance.now(),
+      settledFrames: 0,
+      nudges: 0,
+      onSettled: async (d1: number, d2: number) => {
+        const sum = d1 + d2;
+        setResult({ d1, d2, sum });
 
-      // Pre-simulate physics to determine the final resting orientation and sync visuals
-      if (data.diceResult) {
-        isFastForwardingRef.current = true;
+        try {
+          const response = await fetch("/api/promo/play", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              gameType: "dice",
+              diceRoll: { d1, d2 },
+            }),
+          });
 
-        // Apply starting initial forces from server
-        diceRefs.current.forEach(({ body }, i) => {
-          const force = data.diceResult?.initialForces?.[i];
-          if (force) {
-            body.position.set(force.pos.x, force.pos.y, force.pos.z);
-            body.velocity.set(force.vel.x, force.vel.y, force.vel.z);
-            body.angularVelocity.set(force.angVel.x, force.angVel.y, force.angVel.z);
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || "Ошибка сервера");
           }
-        });
 
-        // Fast-forward Cannon world to find resting positions
-        for (let step = 0; step < 250; step++) {
-          worldRef.current?.fixedStep();
-        }
+          const spent = data.ticketsSpent || ticketCost;
+          setTickets((prev) => Math.max(0, prev - spent));
 
-        // Calculate visual mesh offsets so visual faces display what the server rolled
-        const newOffsets = diceRefs.current.map(({ body }, i) => {
-          const targetFace = i === 0 ? data.diceResult?.d1 : data.diceResult?.d2;
-          if (!targetFace) return new THREE.Quaternion();
-
-          const { val: physicalUpFace, localVec: v_up_local } = getUpsideValue(body);
-          const v_desired_local = getLocalVectorForFace(targetFace);
-
-          const A = new THREE.Vector3(v_desired_local.x, v_desired_local.y, v_desired_local.z);
-          const B = new THREE.Vector3(v_up_local.x, v_up_local.y, v_up_local.z);
-          return new THREE.Quaternion().setFromUnitVectors(A, B);
-        });
-        meshOffsetsRef.current = newOffsets;
-
-        // Restore body states back to initial forces to start real-time visual simulation
-        diceRefs.current.forEach(({ body }, i) => {
-          const force = data.diceResult?.initialForces?.[i];
-          if (force) {
-            body.position.set(force.pos.x, force.pos.y, force.pos.z);
-            body.velocity.set(force.vel.x, force.vel.y, force.vel.z);
-            body.angularVelocity.set(force.angVel.x, force.angVel.y, force.angVel.z);
-          }
-        });
-
-        isFastForwardingRef.current = false;
-      } else {
-        // Fallback: Use the forces provided by the server for an "honest" physical toss
-        diceRefs.current.forEach(({ body }, i) => {
-          const force = data.diceResult?.initialForces?.[i];
-          if (force) {
-            body.position.set(force.pos.x, force.pos.y, force.pos.z);
-            body.velocity.set(force.vel.x, force.vel.y, force.vel.z);
-            body.angularVelocity.set(
-              force.angVel.x,
-              force.angVel.y,
-              force.angVel.z,
-            );
-          } else {
-            // Fallback if no forces provided
-            body.position.set(
-              i === 0 ? -1.5 : 1.5,
-              10,
-              (Math.random() - 0.5) * 3,
-            );
-            body.velocity.set(
-              (Math.random() - 0.5) * 6,
-              -20,
-              (Math.random() - 0.5) * 6,
-            );
-            body.angularVelocity.set(
-              Math.random() * 40,
-              Math.random() * 40,
-              Math.random() * 40,
-            );
-          }
-        });
-      }
-
-      let checkInterval = setInterval(() => {
-        const allStopped = diceRefs.current.every(
-          (d) =>
-            d.body.velocity.length() < 0.05 &&
-            d.body.angularVelocity.length() < 0.05,
-        );
-
-        if (allStopped) {
-          clearInterval(checkInterval);
-
-          // Get results naturally from physics simulation
-          const d1 = getUpsideValue(diceRefs.current[0].body).val;
-          const d2 = getUpsideValue(diceRefs.current[1].body).val;
-          const sum = d1 + d2;
-
-          setResult({ d1, d2, sum });
-          setIsRolling(false);
-
-          const isWin = data.won && data.prize;
-          const isEmptyPrize =
-            isWin &&
-            (data.prize.type === "none" ||
-              data.prize.name.toLowerCase() === "пусто" ||
-              data.prize.name.toLowerCase() === "попробуй еще" ||
-              parseFloat(data.prize.value) === 0);
-
-          if (isWin && !isEmptyPrize) {
+          const isWin = Boolean(data.won && data.prize);
+          if (isWin) {
             setGameMessage({
               text: "ВЫИГРЫШ!",
               sub: data.prize.name,
               color: "text-orange-500",
             });
-            if (data.prize.type === "virtual" || data.prize.type === "bonus_limitless")
-              setBonusBalance((prev) => prev + parseFloat(data.prize.value));
-            else if (data.prize.type === "attempt")
-              setTickets((prev) => prev + parseInt(data.prize.value));
+            if (
+              data.prize.type === "virtual" ||
+              data.prize.type === "bonus_limitless"
+            ) {
+              setBonusBalance(
+                (prev) => prev + (parseFloat(data.prize.value) || 0),
+              );
+            } else if (data.prize.type === "attempt") {
+              setTickets(
+                (prev) =>
+                  prev + (Math.floor(parseFloat(data.prize.value)) || 1),
+              );
+            }
           } else {
             setGameMessage({
               text: "ПУСТО",
@@ -587,32 +602,32 @@ export default function BowlPhysicsDice() {
             });
           }
 
-          // Handle Quest Rewards
-          if (data.questRewards && data.questRewards.length > 0) {
+          if (Array.isArray(data.questRewards)) {
             data.questRewards.forEach((q: any) => {
               if (q.rewardBonusBalance > 0) {
                 setBonusBalance(
-                  (prev) => prev + parseFloat(q.rewardBonusBalance),
+                  (prev) => prev + (parseFloat(q.rewardBonusBalance) || 0),
                 );
               }
               if (q.rewardTickets > 0) {
-                setTickets((prev) => prev + parseInt(q.rewardTickets));
+                setTickets((prev) => prev + (parseInt(q.rewardTickets) || 0));
               }
             });
           }
+        } catch (err: any) {
+          setErrorMsg(err.message || "Ошибка при игре");
+        } finally {
+          setIsRolling(false);
         }
-      }, 400);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Ошибка при игре");
-      setIsRolling(false);
-    }
+      },
+    };
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center overflow-hidden relative font-sans select-none">
+    <div className="h-dvh w-screen bg-[#050505] text-white flex flex-col justify-between items-center overflow-hidden relative font-sans select-none">
       <div className="absolute inset-0 bg-linear-to-b from-orange-500/10 via-transparent to-transparent pointer-events-none" />
 
-      {/* Top Bar - Compact & Intrusive-free */}
+      {/* Top Bar */}
       <GameHeader
         ticketsCount={tickets}
         bonusBalance={bonusBalance}
@@ -625,7 +640,6 @@ export default function BowlPhysicsDice() {
         isOpen={showPrizes}
         onClose={() => setShowPrizes(false)}
         prizes={prizes}
-        playerLevel={player?.level?.currentLevel}
       />
 
       <AnimatePresence>
@@ -641,122 +655,123 @@ export default function BowlPhysicsDice() {
         )}
       </AnimatePresence>
 
-      <main className="flex-1 w-full flex flex-col items-center justify-center p-4 pt-24 pb-36 min-h-0">
-        {" "}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-6 sm:mb-10"
-        >
-          <h1 className="text-3xl sm:text-5xl font-black text-orange-500 tracking-tighter uppercase italic leading-none">
-            Dice <span className="text-white">Bowl</span>
-          </h1>
-          <p className="text-gray-500 text-[10px] uppercase tracking-[0.4em] font-bold mt-2">
-            Твой шанс на успех
-          </p>
-        </motion.div>
-        {/* Bowl Container with Central Result Overlay */}
-        <div className="relative w-full flex flex-col items-center justify-center min-h-0 max-w-lg aspect-square">
+      {/* Main Arena — Result HUD Above Bowl, Larger Bowl Below, Fixed No-Scroll */}
+      <main className="flex-1 w-full flex flex-col items-center justify-center px-3 pt-16 pb-24 min-h-0 gap-3 sm:gap-4">
+        {/* Top Result / Status HUD Bar (Above the playing field) */}
+        <div className="w-full max-w-[min(92vw,420px)] h-14 sm:h-16 flex items-center justify-center shrink-0 z-30">
+          <AnimatePresence mode="wait">
+            {result && !isRolling ? (
+              <motion.div
+                key="result"
+                initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full bg-zinc-900/90 backdrop-blur-xl border border-white/15 px-4 py-2.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-2 shrink-0">
+                  {[result.d1, result.d2].map((val, i) => (
+                    <div
+                      key={i}
+                      className="w-8 h-8 sm:w-9 sm:h-9 bg-white rounded-xl flex items-center justify-center text-black font-black text-base sm:text-lg shadow-[0_3px_0_#ccc]"
+                    >
+                      {val}
+                    </div>
+                  ))}
+                  <div className="h-6 w-px bg-white/15 mx-1" />
+                  <div className="text-base sm:text-xl font-black italic tracking-tight text-white whitespace-nowrap">
+                    Сумма: <span className="text-orange-400">{result.sum}</span>
+                  </div>
+                </div>
+
+                {gameMessage && (
+                  <div className="text-right min-w-0">
+                    <div
+                      className={`font-black uppercase tracking-wider text-xs sm:text-sm leading-tight truncate ${gameMessage.color}`}
+                    >
+                      {gameMessage.text}
+                    </div>
+                    {gameMessage.sub && (
+                      <div className="text-[9px] sm:text-[10px] text-white/50 font-bold uppercase tracking-wider truncate">
+                        {gameMessage.sub}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            ) : isRolling ? (
+              <motion.div
+                key="rolling"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="bg-zinc-900/70 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-white/10 text-orange-400 font-black uppercase tracking-[0.25em] text-xs italic"
+              >
+                Кубики в движении...
+              </motion.div>
+            ) : (
+              <motion.div
+                key="idle"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="bg-zinc-900/50 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-white/5 text-white/40 font-black uppercase tracking-[0.2em] text-[11px] italic"
+              >
+                Бросай кубики и собирай комбинации
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* 3D Bowl Playing Field */}
+        <div className="relative flex items-center justify-center w-[min(90vw,460px)] sm:w-[min(60vh,520px)] aspect-square shrink-0">
           <div
             ref={containerRef}
-            className="w-full max-w-[min(90vw,380px)] aspect-square bg-[#0a0a0a] rounded-full border-8 sm:border-12 border-[#151515] shadow-[0_20px_60px_rgba(0,0,0,0.8),inset_0_0_100px_black] relative overflow-hidden"
+            className="w-full h-full bg-[#0a0a0a] rounded-full border-6 sm:border-10 border-[#151515] shadow-[0_20px_60px_rgba(0,0,0,0.85),inset_0_0_100px_black] relative overflow-hidden"
           >
             <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_60px_rgba(255,255,255,0.03)] z-20 rounded-full" />
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-32 bg-linear-to-b from-white/5 to-transparent blur-3xl rounded-full opacity-30" />
           </div>
-
-          {/* Central Result Overlay */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-30">
-            <AnimatePresence mode="wait">
-              {result && !isRolling ? (
-                <motion.div
-                  key="result"
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                  className="bg-black/70 backdrop-blur-xl border border-white/10 p-6 rounded-[2.5rem] shadow-2xl flex flex-col items-center min-w-40"
-                >
-                  <div className="flex items-center justify-center gap-3 mb-2">
-                    {[result.d1, result.d2].map((val, i) => (
-                      <motion.div
-                        key={i}
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: i * 0.1 }}
-                        className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-black font-black text-xl shadow-[0_4px_0_#ddd]"
-                      >
-                        {val}
-                      </motion.div>
-                    ))}
-                  </div>
-                  <div className="text-6xl font-black italic tracking-tighter bg-linear-to-b from-white to-gray-400 bg-clip-text text-transparent py-2 px-4 leading-none">
-                    {result.sum}
-                  </div>
-                  {gameMessage && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className={`font-black uppercase tracking-widest text-center mt-1 ${gameMessage.color}`}
-                    >
-                      <div className="text-sm">{gameMessage.text}</div>
-                      <div className="text-[8px] opacity-60 font-bold">
-                        {gameMessage.sub}
-                      </div>
-                    </motion.div>
-                  )}
-                </motion.div>
-              ) : isRolling ? (
-                <motion.div
-                  key="rolling"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 0.6 }}
-                  className="text-white/40 font-black uppercase tracking-[0.3em] text-xs italic"
-                >
-                  Удача в пути...
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="idle"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 0.2 }}
-                  className="text-white/20 font-black uppercase tracking-[0.3em] text-[10px] italic"
-                >
-                  Бросай кубики
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
         </div>
       </main>
 
-      {/* Sticky Bottom Action Button */}
-      <div className="w-full fixed bottom-0 left-0 right-0 p-6 bg-linear-to-t from-black via-black/80 to-transparent z-50 flex justify-center">
+      {/* Bottom Action Button */}
+      <div className="w-full fixed bottom-0 left-0 right-0 p-4 sm:p-5 bg-linear-to-t from-black via-black/80 to-transparent z-50 flex justify-center">
         <div className="w-full max-w-sm">
           <button
             onClick={rollDice}
-            disabled={isRolling || tickets <= 0}
-            className={`w-full py-5 sm:py-6 rounded-[2rem] font-black text-xl sm:text-2xl uppercase tracking-tighter transition-all active:scale-95 relative overflow-hidden ${isRolling || tickets <= 0 ? "bg-gray-800 text-gray-500 cursor-not-allowed opacity-50" : "bg-white text-black shadow-[0_20px_40px_rgba(255,255,255,0.1)] active:shadow-none"}`}
+            disabled={isRolling || tickets < ticketCost}
+            className={`w-full py-4 sm:py-5 rounded-[1.8rem] font-black text-lg sm:text-xl uppercase tracking-tighter transition-all active:scale-95 relative overflow-hidden cursor-pointer ${
+              isRolling || tickets < ticketCost
+                ? "bg-gray-800 text-gray-500 cursor-not-allowed opacity-50"
+                : "bg-white text-black shadow-[0_20px_40px_rgba(255,255,255,0.1)] active:shadow-none"
+            }`}
           >
             {isRolling ? (
-              <span className="flex items-center justify-center gap-4">
+              <span className="flex items-center justify-center gap-3">
                 <motion.span
                   animate={{ rotate: 360 }}
                   transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                  className="w-5 h-5 sm:w-6 sm:h-6 border-4 border-black border-t-transparent rounded-full"
+                  className="w-5 h-5 border-4 border-black border-t-transparent rounded-full"
                 />
                 КАТИМ...
               </span>
-            ) : tickets <= 0 ? (
+            ) : tickets < ticketCost ? (
               "НЕТ БИЛЕТОВ"
             ) : (
               <div className="flex flex-col items-center">
-                <span>ИГРАТЬ</span>
-                <span className="text-[10px] font-bold opacity-40 -mt-1 tracking-widest uppercase">
-                  1 Билет за игру
+                <span>БРОСИТЬ КУБИКИ</span>
+                <span className="text-[10px] font-bold opacity-40 -mt-0.5 tracking-widest uppercase">
+                  {ticketCost}{" "}
+                  {ticketCost === 1
+                    ? "Билет"
+                    : ticketCost < 5
+                      ? "Билета"
+                      : "Билетов"}{" "}
+                  за игру
                 </span>
               </div>
             )}
-            {!isRolling && tickets > 0 && (
+            {!isRolling && tickets >= ticketCost && (
               <motion.div
                 animate={{ x: ["-100%", "250%"] }}
                 transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
@@ -766,16 +781,6 @@ export default function BowlPhysicsDice() {
           </button>
         </div>
       </div>
-
-      <style jsx global>{`
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
     </div>
   );
 }

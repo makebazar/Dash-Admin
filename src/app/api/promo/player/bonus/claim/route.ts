@@ -64,17 +64,6 @@ export async function POST(request: Request) {
     const promoSettings = clubResult.rows[0]?.promo_settings || {};
 
     if (promoSettings.withdraw_limit_enabled === true) {
-      // Check if player has Premium Battle Pass
-      const bpCheck = await client.query(
-        `SELECT bp.has_premium
-         FROM promo_bp_player_progress bp
-         JOIN promo_bp_seasons s ON s.id = bp.season_id
-         WHERE bp.player_id = $1 AND s.club_id = $2 AND s.is_active = TRUE AND NOW() BETWEEN s.start_date AND s.end_date
-         LIMIT 1`,
-        [playerId, activeClubId],
-      );
-      const hasPremiumBp = bpCheck.rows[0]?.has_premium === true;
-
       const topupRes = await client.query(
         `SELECT COALESCE(SUM((result_data->>'amount')::float), 0) as total
          FROM promo_history
@@ -94,36 +83,38 @@ export async function POST(request: Request) {
       const monthlyBarReal = parseFloat(barRealRes.rows[0].total);
       const monthlyTopups = topups + monthlyBarReal;
 
-      // Calculate base limit percentage based on monthly topups
-      let t1 = 1000;
-      let t2 = 3000;
-      let t3 = 5000;
+      // Determine percentage based on withdraw_limit_steps or limit_groups/tiers
+      let finalPercent = parseFloat(promoSettings.withdraw_limit_percent) || 30;
 
-      if (limit_group_id && promoSettings.limit_groups && Array.isArray(promoSettings.limit_groups)) {
-        const group = promoSettings.limit_groups.find((g: any) => g.id === limit_group_id);
-        if (group) {
-          t1 = parseFloat(group.t1) || 0;
-          t2 = parseFloat(group.t2) || 0;
-          t3 = parseFloat(group.t3) || 0;
+      const steps = promoSettings.withdraw_limit_steps;
+      if (Array.isArray(steps) && steps.length > 0) {
+        const sortedSteps = [...steps].sort((a, b) => (b.threshold || 0) - (a.threshold || 0));
+        const matched = sortedSteps.find((s: any) => monthlyTopups >= (s.threshold || 0));
+        if (matched) {
+          finalPercent = parseFloat(matched.percent) || finalPercent;
+        }
+      } else {
+        let t1 = 1000;
+        let t2 = 3000;
+        let t3 = 5000;
+
+        if (limit_group_id && promoSettings.limit_groups && Array.isArray(promoSettings.limit_groups)) {
+          const group = promoSettings.limit_groups.find((g: any) => g.id === limit_group_id);
+          if (group) {
+            t1 = parseFloat(group.t1) || 0;
+            t2 = parseFloat(group.t2) || 0;
+            t3 = parseFloat(group.t3) || 0;
+          }
+        }
+
+        if (monthlyTopups > t3) {
+          finalPercent = 90;
+        } else if (monthlyTopups > t2) {
+          finalPercent = 70;
+        } else if (monthlyTopups > t1) {
+          finalPercent = 50;
         }
       }
-
-      let basePercent = 30;
-      if (monthlyTopups > t3) {
-        basePercent = 90;
-      } else if (monthlyTopups > t2) {
-        basePercent = 70;
-      } else if (monthlyTopups > t1) {
-        basePercent = 50;
-      }
-
-      // Premium Battle Pass boost
-      let bpBoost = 15;
-      if (promoSettings.withdraw_limit_percent_bp !== undefined && promoSettings.withdraw_limit_percent !== undefined) {
-        bpBoost = Math.max(0, parseFloat(promoSettings.withdraw_limit_percent_bp) - parseFloat(promoSettings.withdraw_limit_percent));
-      }
-      
-      const finalPercent = hasPremiumBp ? Math.min(100, basePercent + bpBoost) : basePercent;
 
       // Get extra limit from boosts
       const balanceCheck = await client.query(
@@ -142,18 +133,7 @@ export async function POST(request: Request) {
          WHERE player_id = $1 AND club_id = $2 AND status != 'canceled' AND created_at >= date_trunc('month', CURRENT_DATE)`,
         [playerId, activeClubId],
       );
-      const normalWithdraw = parseFloat(withdrawRes.rows[0].total);
-
-      const barBonusRes = await client.query(
-        `SELECT COALESCE(SUM((result_data->>'bonus_cost')::float), 0) as total
-         FROM promo_history
-         WHERE player_id = $1 AND club_id = $2
-           AND game_type = 'BAR_BONUS_PURCHASE'
-           AND created_at >= date_trunc('month', CURRENT_DATE)`,
-        [playerId, activeClubId],
-      );
-      const monthlyBarBonus = parseFloat(barBonusRes.rows[0].total);
-      const monthlyWithdrawn = normalWithdraw + monthlyBarBonus;
+      const monthlyWithdrawn = parseFloat(withdrawRes.rows[0].total);
 
       const allowedLimit = (monthlyTopups * (finalPercent / 100)) + extraLimit;
       const remainingLimit = Math.max(0, allowedLimit - monthlyWithdrawn);

@@ -1,62 +1,243 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Plus,
-  Trash2,
-  Save,
-  Loader2,
-  CheckCircle2,
-  Gift,
-  Coins,
-  Disc,
-  Lock,
-  Dice5,
-  Bomb,
-  Rocket as RocketIcon,
-  CreditCard as CardIcon,
-  Bird,
-  Trophy,
-  Sparkles,
-  Layers,
-  TrendingUp,
-} from "lucide-react";
 
 export type Prize = {
   id?: number;
   name: string;
-  type: "physical" | "virtual" | "bonus" | "attempt" | "withdraw_boost" | "bonus_limitless";
+  type: "virtual" | "attempt" | "withdraw_boost" | "bonus_limitless" | "physical" | "none";
   value: number;
   probability: number;
   daily_limit: number;
   is_active: boolean;
   image_url?: string;
   game_slug?: string;
-  min_level?: number;
-  max_level?: number;
-  target_level?: number;
   win_condition?: {
     dice_sums?: number[];
     dice_double?: number | "any";
   };
 };
 
-export const GAMES = [
-  { id: "wheel", label: "Колесо фортуны", icon: Disc },
-  { id: "safe", label: "Сейф", icon: Lock },
-  { id: "dice", label: "Кости", icon: Dice5 },
-  { id: "mines", label: "Мины", icon: Bomb },
-  { id: "rocket", label: "Ракета", icon: RocketIcon },
-  { id: "cards", label: "Карты", icon: CardIcon },
-  { id: "flappy", label: "Flappy", icon: Bird },
-  { id: "plinko", label: "Плинко", icon: Sparkles },
-  { id: "coinflip", label: "Монетка", icon: Coins },
-  { id: "tower", label: "Башня", icon: Layers },
-  { id: "hilo", label: "Hi-Lo", icon: TrendingUp },
+export interface GameDefinition {
+  id: string;
+  label: string;
+  description: string;
+  badge: string;
+  defaultTickets: number;
+  rulesHint: string;
+}
+
+export const GAMES: GameDefinition[] = [
+  {
+    id: "wheel",
+    label: "Колесо фортуны",
+    description: "Классическое колесо удачи с секторами призов разной ценности и шансами выпадения.",
+    badge: "Колесо",
+    defaultTickets: 1,
+    rulesHint: "Игрок крутит колесо. Выпадает приз в соответствии с настроенными вероятностями.",
+  },
+  {
+    id: "safe",
+    label: "Взлом сейфа",
+    description: "Игрок подбирает секретный цифровой код от хранилища для получения клубного приза.",
+    badge: "Сейф",
+    defaultTickets: 1,
+    rulesHint: "Сервер случайно генерирует выигрышный код среди доступных вариантов. При угадывании кода игрок выигрывает приз.",
+  },
+  {
+    id: "dice",
+    label: "Бросок костей",
+    description: "Бросок двух игральных костей с призами за выпадение определенных числовых комбинаций.",
+    badge: "Кости",
+    defaultTickets: 1,
+    rulesHint: "Игрок бросает 2 кубика (сумма от 2 до 12). Приз выпадает при совпадении с выбранными суммами в условии выпадения.",
+  },
+  {
+    id: "cards",
+    label: "Карты удачи",
+    description: "Карточная мини-игра с выбором закрытых карт и мгновенным раскрытием наград.",
+    badge: "Карты",
+    defaultTickets: 1,
+    rulesHint: "Игрок открывает случайную карту из колоды и получает соответствующую награду.",
+  },
+  {
+    id: "defuse",
+    label: "Сапёр C4 (Defuse)",
+    description: "Обезвреживание бомбы C4 в стиле CS2: за 5 секунд нужно перерезать 2 верных провода из 5 (первый верный провод даёт +3 сек).",
+    badge: "Defuse",
+    defaultTickets: 1,
+    rulesHint: "Игрок перерезает 2 провода из 5. За 1-й верный провод начисляется +3.00 сек. При успешном разминировании выпадает приз из пула по настроенным вероятностям.",
+  },
 ];
 
-const CONFIG_BASED_GAMES = ["mines", "rocket", "flappy", "plinko", "coinflip", "tower", "hilo"];
+export type PoolPresetKey = "economy" | "balanced" | "generous";
+
+export const PRESET_META: {
+  key: PoolPresetKey;
+  title: string;
+  subtitle: string;
+}[] = [
+  {
+    key: "economy",
+    title: "Экономный",
+    subtitle: "Низкий расход бонусов, больше билетов и бустов пополнения.",
+  },
+  {
+    key: "balanced",
+    title: "Стандартный",
+    subtitle: "Оптимальный баланс: частые небольшие выигрыши и редкий крупный приз.",
+  },
+  {
+    key: "generous",
+    title: "Щедрый",
+    subtitle: "Повышенные награды и высокий шанс победы для ивентов и выходных.",
+  },
+];
+
+export const POOL_PRESETS: Record<string, Record<PoolPresetKey, Omit<Prize, "id" | "game_slug">[]>> = {
+  wheel: {
+    economy: [
+      { name: "Повезёт в другой раз", type: "none", value: 0, probability: 30, daily_limit: 0, is_active: true },
+      { name: "10 Бонусов", type: "virtual", value: 10, probability: 25, daily_limit: 0, is_active: true },
+      { name: "1 Билет (Ре-спин)", type: "attempt", value: 1, probability: 18, daily_limit: 0, is_active: true },
+      { name: "Буст +10% к пополнению", type: "withdraw_boost", value: 10, probability: 12, daily_limit: 0, is_active: true },
+      { name: "20 Бонусов", type: "virtual", value: 20, probability: 9, daily_limit: 0, is_active: true },
+      { name: "35 Бонусов", type: "virtual", value: 35, probability: 4, daily_limit: 10, is_active: true },
+      { name: "50 Бонусов", type: "virtual", value: 50, probability: 1.5, daily_limit: 5, is_active: true },
+      { name: "100 ₽ Безлимит (Джекпот)", type: "bonus_limitless", value: 100, probability: 0.5, daily_limit: 1, is_active: true },
+    ],
+    balanced: [
+      { name: "Мимо сектора", type: "none", value: 0, probability: 22, daily_limit: 0, is_active: true },
+      { name: "15 Бонусов", type: "virtual", value: 15, probability: 26, daily_limit: 0, is_active: true },
+      { name: "1 Билет (Ещё крутка)", type: "attempt", value: 1, probability: 18, daily_limit: 0, is_active: true },
+      { name: "Буст +15% к пополнению", type: "withdraw_boost", value: 15, probability: 12, daily_limit: 0, is_active: true },
+      { name: "30 Бонусов", type: "virtual", value: 30, probability: 12, daily_limit: 0, is_active: true },
+      { name: "50 Бонусов", type: "virtual", value: 50, probability: 6, daily_limit: 10, is_active: true },
+      { name: "100 Бонусов", type: "virtual", value: 100, probability: 3, daily_limit: 3, is_active: true },
+      { name: "200 ₽ Безлимит (Джекпот)", type: "bonus_limitless", value: 200, probability: 1, daily_limit: 1, is_active: true },
+    ],
+    generous: [
+      { name: "Почти выпало", type: "none", value: 0, probability: 15, daily_limit: 0, is_active: true },
+      { name: "20 Бонусов", type: "virtual", value: 20, probability: 25, daily_limit: 0, is_active: true },
+      { name: "1 Билет (Фриспин)", type: "attempt", value: 1, probability: 18, daily_limit: 0, is_active: true },
+      { name: "Буст +20% к пополнению", type: "withdraw_boost", value: 20, probability: 12, daily_limit: 0, is_active: true },
+      { name: "40 Бонусов", type: "virtual", value: 40, probability: 15, daily_limit: 0, is_active: true },
+      { name: "75 Бонусов", type: "virtual", value: 75, probability: 9, daily_limit: 10, is_active: true },
+      { name: "150 Бонусов", type: "virtual", value: 150, probability: 4.5, daily_limit: 4, is_active: true },
+      { name: "300 ₽ Безлимит (Мега-куш)", type: "bonus_limitless", value: 300, probability: 1.5, daily_limit: 2, is_active: true },
+    ],
+  },
+  safe: {
+    economy: [
+      { name: "Неверный код (Блокировка)", type: "none", value: 0, probability: 68, daily_limit: 0, is_active: true },
+      { name: "Отмычка (+1 Билет)", type: "attempt", value: 1, probability: 12, daily_limit: 0, is_active: true },
+      { name: "25 Бонусов", type: "virtual", value: 25, probability: 10, daily_limit: 0, is_active: true },
+      { name: "Буст +15% к пополнению", type: "withdraw_boost", value: 15, probability: 5, daily_limit: 0, is_active: true },
+      { name: "50 Бонусов", type: "virtual", value: 50, probability: 3.5, daily_limit: 8, is_active: true },
+      { name: "150 Бонусов", type: "virtual", value: 150, probability: 1, daily_limit: 2, is_active: true },
+      { name: "250 ₽ Золотой слиток", type: "bonus_limitless", value: 250, probability: 0.5, daily_limit: 1, is_active: true },
+    ],
+    balanced: [
+      { name: "Неверный код (Блокировка)", type: "none", value: 0, probability: 62, daily_limit: 0, is_active: true },
+      { name: "Отмычка (+1 Билет)", type: "attempt", value: 1, probability: 12, daily_limit: 0, is_active: true },
+      { name: "35 Бонусов", type: "virtual", value: 35, probability: 12, daily_limit: 0, is_active: true },
+      { name: "Буст +15% к пополнению", type: "withdraw_boost", value: 15, probability: 6, daily_limit: 0, is_active: true },
+      { name: "75 Бонусов", type: "virtual", value: 75, probability: 5, daily_limit: 6, is_active: true },
+      { name: "150 Бонусов", type: "virtual", value: 150, probability: 2, daily_limit: 2, is_active: true },
+      { name: "300 ₽ Алмазный фонд", type: "bonus_limitless", value: 300, probability: 1, daily_limit: 1, is_active: true },
+    ],
+    generous: [
+      { name: "Неверный код (Блокировка)", type: "none", value: 0, probability: 55, daily_limit: 0, is_active: true },
+      { name: "Двойная отмычка (+2 Билета)", type: "attempt", value: 2, probability: 12, daily_limit: 0, is_active: true },
+      { name: "50 Бонусов", type: "virtual", value: 50, probability: 14, daily_limit: 0, is_active: true },
+      { name: "Буст +25% к пополнению", type: "withdraw_boost", value: 25, probability: 7, daily_limit: 0, is_active: true },
+      { name: "100 Бонусов", type: "virtual", value: 100, probability: 7.5, daily_limit: 8, is_active: true },
+      { name: "200 Бонусов", type: "virtual", value: 200, probability: 3, daily_limit: 3, is_active: true },
+      { name: "400 ₽ Полное хранилище", type: "bonus_limitless", value: 400, probability: 1.5, daily_limit: 1, is_active: true },
+    ],
+  },
+  dice: {
+    economy: [
+      { name: "Джекпот (Змеиные глаза 2 или 12)", type: "bonus_limitless", value: 120, probability: 5.56, daily_limit: 1, is_active: true, win_condition: { dice_sums: [2, 12] } },
+      { name: "Редкий бросок (Сумма 3 или 11)", type: "virtual", value: 35, probability: 11.11, daily_limit: 8, is_active: true, win_condition: { dice_sums: [3, 11] } },
+      { name: "Любой дубль (+1 Билет)", type: "attempt", value: 1, probability: 16.67, daily_limit: 0, is_active: true, win_condition: { dice_sums: [], dice_double: "any" } },
+      { name: "Счастливая десятка (Сумма 10)", type: "virtual", value: 15, probability: 8.33, daily_limit: 0, is_active: true, win_condition: { dice_sums: [10] } },
+    ],
+    balanced: [
+      { name: "Джекпот (Сумма 2 или 12)", type: "bonus_limitless", value: 180, probability: 5.56, daily_limit: 1, is_active: true, win_condition: { dice_sums: [2, 12] } },
+      { name: "Снайперский бросок (Сумма 3 или 11)", type: "virtual", value: 45, probability: 11.11, daily_limit: 8, is_active: true, win_condition: { dice_sums: [3, 11] } },
+      { name: "Любой дубль (Парные кости)", type: "virtual", value: 25, probability: 16.67, daily_limit: 0, is_active: true, win_condition: { dice_sums: [], dice_double: "any" } },
+      { name: "Точный расчёт (Сумма 4 или 10)", type: "attempt", value: 1, probability: 16.67, daily_limit: 0, is_active: true, win_condition: { dice_sums: [4, 10] } },
+    ],
+    generous: [
+      { name: "Мега-Джекпот (Сумма 2 или 12)", type: "bonus_limitless", value: 250, probability: 5.56, daily_limit: 2, is_active: true, win_condition: { dice_sums: [2, 12] } },
+      { name: "Элитный бросок (Сумма 3 или 11)", type: "virtual", value: 75, probability: 11.11, daily_limit: 10, is_active: true, win_condition: { dice_sums: [3, 11] } },
+      { name: "Любой дубль (Парные кости)", type: "virtual", value: 40, probability: 16.67, daily_limit: 0, is_active: true, win_condition: { dice_sums: [], dice_double: "any" } },
+      { name: "Крайние суммы (Сумма 4 или 10)", type: "virtual", value: 20, probability: 16.67, daily_limit: 0, is_active: true, win_condition: { dice_sums: [4, 10] } },
+    ],
+  },
+  cards: {
+    economy: [
+      { name: "Пустая карта", type: "none", value: 0, probability: 45, daily_limit: 0, is_active: true },
+      { name: "Обычная карта (15 Бонусов)", type: "virtual", value: 15, probability: 25, daily_limit: 0, is_active: true },
+      { name: "Карта повтора (+1 Билет)", type: "attempt", value: 1, probability: 15, daily_limit: 0, is_active: true },
+      { name: "Карта буста (+10% к пополнению)", type: "withdraw_boost", value: 10, probability: 8, daily_limit: 0, is_active: true },
+      { name: "Редкая карта (40 Бонусов)", type: "virtual", value: 40, probability: 5, daily_limit: 8, is_active: true },
+      { name: "Эпическая карта (80 Бонусов)", type: "virtual", value: 80, probability: 1.5, daily_limit: 3, is_active: true },
+      { name: "Легендарный Джокер (160 ₽)", type: "bonus_limitless", value: 160, probability: 0.5, daily_limit: 1, is_active: true },
+    ],
+    balanced: [
+      { name: "Пустая карта", type: "none", value: 0, probability: 35, daily_limit: 0, is_active: true },
+      { name: "Обычная карта (20 Бонусов)", type: "virtual", value: 20, probability: 26, daily_limit: 0, is_active: true },
+      { name: "Карта повтора (+1 Билет)", type: "attempt", value: 1, probability: 16, daily_limit: 0, is_active: true },
+      { name: "Карта буста (+15% к пополнению)", type: "withdraw_boost", value: 15, probability: 10, daily_limit: 0, is_active: true },
+      { name: "Редкая карта (50 Бонусов)", type: "virtual", value: 50, probability: 8.5, daily_limit: 8, is_active: true },
+      { name: "Эпическая карта (100 Бонусов)", type: "virtual", value: 100, probability: 3.5, daily_limit: 3, is_active: true },
+      { name: "Легендарный Туз (200 ₽)", type: "bonus_limitless", value: 200, probability: 1, daily_limit: 1, is_active: true },
+    ],
+    generous: [
+      { name: "Пустая карта", type: "none", value: 0, probability: 25, daily_limit: 0, is_active: true },
+      { name: "Обычная карта (25 Бонусов)", type: "virtual", value: 25, probability: 28, daily_limit: 0, is_active: true },
+      { name: "Карта повтора (+1 Билет)", type: "attempt", value: 1, probability: 16, daily_limit: 0, is_active: true },
+      { name: "Карта буста (+20% к пополнению)", type: "withdraw_boost", value: 20, probability: 10, daily_limit: 0, is_active: true },
+      { name: "Редкая карта (65 Бонусов)", type: "virtual", value: 65, probability: 13, daily_limit: 10, is_active: true },
+      { name: "Эпическая карта (130 Бонусов)", type: "virtual", value: 130, probability: 6, daily_limit: 4, is_active: true },
+      { name: "Легендарный Джокер (250 ₽)", type: "bonus_limitless", value: 250, probability: 2, daily_limit: 2, is_active: true },
+    ],
+  },
+  defuse: {
+    economy: [
+      { name: "Детонация C4 (Взрыв)", type: "none", value: 0, probability: 52, daily_limit: 0, is_active: true },
+      { name: "Сапёрный набор (+1 Билет)", type: "attempt", value: 1, probability: 16, daily_limit: 0, is_active: true },
+      { name: "20 Бонусов за разминирование", type: "virtual", value: 20, probability: 17, daily_limit: 0, is_active: true },
+      { name: "Буст +15% к пополнению", type: "withdraw_boost", value: 15, probability: 8, daily_limit: 0, is_active: true },
+      { name: "45 Бонусов (Чистый дефьюз)", type: "virtual", value: 45, probability: 5, daily_limit: 8, is_active: true },
+      { name: "90 Бонусов (Мастер-сапёр)", type: "virtual", value: 90, probability: 1.5, daily_limit: 2, is_active: true },
+      { name: "200 ₽ Легенда дефьюза", type: "bonus_limitless", value: 200, probability: 0.5, daily_limit: 1, is_active: true },
+    ],
+    balanced: [
+      { name: "Детонация C4 (Взрыв)", type: "none", value: 0, probability: 45, daily_limit: 0, is_active: true },
+      { name: "Сапёрный набор (+1 Билет)", type: "attempt", value: 1, probability: 15, daily_limit: 0, is_active: true },
+      { name: "25 Бонусов за разминирование", type: "virtual", value: 25, probability: 20, daily_limit: 0, is_active: true },
+      { name: "Буст +15% к пополнению", type: "withdraw_boost", value: 15, probability: 8, daily_limit: 0, is_active: true },
+      { name: "50 Бонусов (Чистый дефьюз)", type: "virtual", value: 50, probability: 7.5, daily_limit: 8, is_active: true },
+      { name: "120 Бонусов (Мастер-сапёр)", type: "virtual", value: 120, probability: 3.5, daily_limit: 3, is_active: true },
+      { name: "250 ₽ Легенда дефьюза", type: "bonus_limitless", value: 250, probability: 1, daily_limit: 1, is_active: true },
+    ],
+    generous: [
+      { name: "Детонация C4 (Взрыв)", type: "none", value: 0, probability: 35, daily_limit: 0, is_active: true },
+      { name: "Сапёрный набор (+1 Билет)", type: "attempt", value: 1, probability: 16, daily_limit: 0, is_active: true },
+      { name: "35 Бонусов за разминирование", type: "virtual", value: 35, probability: 22, daily_limit: 0, is_active: true },
+      { name: "Буст +20% к пополнению", type: "withdraw_boost", value: 20, probability: 9, daily_limit: 0, is_active: true },
+      { name: "75 Бонусов (Чистый дефьюз)", type: "virtual", value: 75, probability: 11, daily_limit: 10, is_active: true },
+      { name: "160 Бонусов (Мастер-сапёр)", type: "virtual", value: 160, probability: 5, daily_limit: 4, is_active: true },
+      { name: "350 ₽ MVP Раунда (Безлимит)", type: "bonus_limitless", value: 350, probability: 2, daily_limit: 2, is_active: true },
+    ],
+  },
+};
 
 interface GamesTabProps {
   clubId: string;
@@ -73,896 +254,779 @@ export function GamesTab({
   prizes,
   setPrizes,
 }: GamesTabProps) {
-  const [selectedGame, setSelectedGame] = useState<string>("wheel");
-  const [selectedLevel, setSelectedLevel] = useState<number>(1);
-  const [levels, setLevels] = useState<{ level_number: number }[]>([{ level_number: 1 }]);
+  const searchParams = useSearchParams();
+
+  // State: selected game (null = show all games catalog, string = full game page)
+  const [selectedGame, setSelectedGame] = useState<string | null>(() => {
+    const param = searchParams.get("game");
+    if (param && GAMES.some((g) => g.id === param)) {
+      return param;
+    }
+    return null;
+  });
+
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [activePresetKey, setActivePresetKey] = useState<PoolPresetKey | null>(null);
+  const [ticketCostState, setTicketCostState] = useState<number>(1);
 
-  // Local state for game configs to avoid constant parent re-renders while typing
-  const [localConfigs, setLocalConfigs] = useState<any>(
-    settings?.game_configs || {},
-  );
-
-  useEffect(() => {
-    setLocalConfigs(settings?.game_configs || {});
-  }, [settings?.game_configs]);
-
-  const activeGameObj = GAMES.find((g) => g.id === selectedGame);
-  const isGameEnabled = settings?.enabled_games?.includes(selectedGame);
-  const isConfigBased = CONFIG_BASED_GAMES.includes(selectedGame);
-
-  const updateConfig = (gameSlug: string, updates: any) => {
-    setLocalConfigs((prev: any) => ({
-      ...prev,
-      [gameSlug]: {
-        ...(prev[gameSlug] || {}),
-        ...updates,
-      },
-    }));
+  // Sync selectedGame with URL
+  const selectGame = (gameId: string | null) => {
+    setSelectedGame(gameId);
+    setActivePresetKey(null);
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (gameId) {
+        params.set("game", gameId);
+      } else {
+        params.delete("game");
+      }
+      const qs = params.toString();
+      const newUrl = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+      window.history.pushState(null, "", newUrl);
+    }
   };
 
-  const handleSaveConfigs = async () => {
+  useEffect(() => {
+    const handlePopState = () => {
+      const param = new URLSearchParams(window.location.search).get("game");
+      if (param && GAMES.some((g) => g.id === param)) {
+        setSelectedGame(param);
+      } else {
+        setSelectedGame(null);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const activeGameObj = GAMES.find((g) => g.id === selectedGame);
+
+  // Synchronize ticket cost when game changes
+  useEffect(() => {
+    if (selectedGame) {
+      const cfg = settings?.game_configs?.[selectedGame];
+      const defaultCost = activeGameObj?.defaultTickets ?? 1;
+      setTicketCostState(cfg?.tickets_per_play ?? defaultCost);
+    }
+  }, [selectedGame, settings, activeGameObj]);
+
+  const isGameEnabled = selectedGame
+    ? (settings?.enabled_games || []).includes(selectedGame)
+    : false;
+
+  const filteredPrizes = selectedGame
+    ? prizes.filter((p) => p.game_slug === selectedGame)
+    : [];
+
+  const totalProbability = filteredPrizes.reduce(
+    (sum, p) => sum + (Number(p.probability) || 0),
+    0
+  );
+
+  // Применить пресет для текущей выбранной игры
+  const handleApplyPreset = (presetKey: PoolPresetKey) => {
+    if (!selectedGame) return;
+    const template = POOL_PRESETS[selectedGame]?.[presetKey];
+    if (!template) return;
+
+    const generated: Prize[] = template.map((item) => ({
+      ...item,
+      game_slug: selectedGame,
+    }));
+
+    const otherGamesPrizes = prizes.filter((p) => p.game_slug !== selectedGame);
+    setPrizes([...otherGamesPrizes, ...generated]);
+    setActivePresetKey(presetKey);
+  };
+
+  // Handlers for prize manipulation
+  const handleAddPrize = () => {
+    if (!selectedGame) return;
+    const newPrize: Prize = {
+      name: "Новый приз",
+      type: "virtual",
+      value: 100,
+      probability: 1,
+      daily_limit: 0,
+      is_active: true,
+      game_slug: selectedGame,
+    };
+    setPrizes([...prizes, newPrize]);
+  };
+
+  const handleUpdatePrize = (filteredIndex: number, updates: Partial<Prize>) => {
+    const currentPrize = filteredPrizes[filteredIndex];
+    const globalIndex = prizes.indexOf(currentPrize);
+    if (globalIndex === -1) return;
+
+    const nextPrizes = [...prizes];
+    nextPrizes[globalIndex] = { ...nextPrizes[globalIndex], ...updates };
+    setPrizes(nextPrizes);
+  };
+
+  const handleDeletePrize = (filteredIndex: number) => {
+    const currentPrize = filteredPrizes[filteredIndex];
+    setPrizes(prizes.filter((p) => p !== currentPrize));
+  };
+
+  const handleToggleGameEnabled = async () => {
+    if (!selectedGame) return;
+    const currentList = settings?.enabled_games || [];
+    const nextList = currentList.includes(selectedGame)
+      ? currentList.filter((id: string) => id !== selectedGame)
+      : [...currentList, selectedGame];
+
+    await saveSettings({
+      ...settings,
+      enabled_games: nextList,
+    });
+  };
+
+  const handleSaveAll = async () => {
+    if (!selectedGame) return;
     setIsSaving(true);
+    setSaveSuccess(false);
+
     try {
-      await saveSettings({
+      // 1. Save game configs in promo_settings
+      const newSettings = {
         ...settings,
-        game_configs: localConfigs,
+        game_configs: {
+          ...(settings?.game_configs || {}),
+          [selectedGame]: {
+            ...(settings?.game_configs?.[selectedGame] || {}),
+            tickets_per_play: Number(ticketCostState) || 1,
+          },
+        },
+      };
+      await saveSettings(newSettings);
+
+      // 2. Save prizes to backend
+      const res = await fetch(`/api/promo/admin/prizes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clubId, prizes }),
       });
-      alert("Настройки игр сохранены");
-    } catch (e) {
-      console.error(e);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.prizes)) {
+          setPrizes(data.prizes);
+        }
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      } else {
+        alert("Ошибка при сохранении призового фонда");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка при сохранении");
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Filter by both game AND target_level
-  const filteredPrizes = prizes.filter(
-    (p) =>
-      p.game_slug === selectedGame &&
-      (p.target_level === selectedLevel ||
-        (!p.target_level && selectedLevel === 1)),
-  );
+  // ─────────────────────────────────────────────────────────────
+  // 1. ВИД: СПИСОК ВСЕХ МИНИ-ИГР (КАТАЛОГ)
+  // ─────────────────────────────────────────────────────────────
+  if (!selectedGame || !activeGameObj) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+            Мини-игры
+          </h2>
+          <p className="text-xs text-slate-500 font-normal mt-0.5">
+            Выберите мини-игру для настройки ее параметров, стоимости билетов и призового фонда
+          </p>
+        </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {GAMES.map((game) => {
+            const isEnabled = (settings?.enabled_games || []).includes(game.id);
+            const gamePrizes = prizes.filter((p) => p.game_slug === game.id);
+            const totalProb = gamePrizes.reduce(
+              (sum, p) => sum + (Number(p.probability) || 0),
+              0
+            );
+            const ticketCost =
+              settings?.game_configs?.[game.id]?.tickets_per_play ??
+              game.defaultTickets;
+
+            return (
+              <div
+                key={game.id}
+                onClick={() => selectGame(game.id)}
+                className="bg-white border border-slate-200 hover:border-slate-400 rounded-2xl p-5 shadow-xs transition-all cursor-pointer flex flex-col justify-between group"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-base text-slate-900 group-hover:text-slate-700 transition-colors">
+                        {game.label}
+                      </h3>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                        {game.badge}
+                      </span>
+                    </div>
+                    <span
+                      className={cn(
+                        "px-2.5 py-0.5 rounded-full text-xs font-semibold shrink-0 border",
+                        isEnabled
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-slate-100 text-slate-500 border-slate-200"
+                      )}
+                    >
+                      {isEnabled ? "Включена" : "Отключена"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    {game.description}
+                  </p>
+
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100">
+                    <div className="bg-slate-50 rounded-xl p-2.5">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                        Стоимость
+                      </div>
+                      <div className="text-xs font-bold text-slate-900 mt-0.5">
+                        {ticketCost} {ticketCost === 1 ? "билет" : ticketCost < 5 ? "билета" : "билетов"}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-2.5">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                        Призов
+                      </div>
+                      <div className="text-xs font-bold text-slate-900 mt-0.5">
+                        {gamePrizes.length} шт.
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-2.5">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                        Шансы
+                      </div>
+                      <div
+                        className={cn(
+                          "text-xs font-bold mt-0.5",
+                          Math.abs(totalProb - 100) < 0.01
+                            ? "text-emerald-600"
+                            : totalProb === 0
+                            ? "text-slate-400"
+                            : "text-amber-600"
+                        )}
+                      >
+                        {totalProb.toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 mt-3 flex items-center justify-between border-t border-slate-100 text-xs">
+                  <span className="text-slate-400 text-[11px]">
+                    {isEnabled ? "Доступна гостям" : "Скрыта от гостей"}
+                  </span>
+                  <span className="font-semibold text-slate-900 group-hover:underline">
+                    Настроить игру →
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2. ВИД: ПОЛНОЦЕННАЯ СТРАНИЦА НАСТРОЙКИ ВЫБРАННОЙ ИГРЫ
+  // ─────────────────────────────────────────────────────────────
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-      {/* Game Selection Sidebar */}
-      <div className="lg:col-span-1 space-y-4">
-        <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400 px-2">
-          Доступные игры
-        </h3>
-        <div className="grid grid-cols-1 gap-2">
-          {GAMES.map((game) => (
+    <div className="space-y-6">
+      {/* Навигация назад */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => selectGame(null)}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 shadow-xs cursor-pointer transition-all"
+        >
+          ← Все игры
+        </button>
+
+        <span className="text-xs text-slate-400">
+          Настройка игры: <strong className="text-slate-700">{activeGameObj.label}</strong>
+        </span>
+      </div>
+
+      {/* Верхний блок: статус, имя игры и параметры */}
+      <div className="bg-white border border-slate-200 p-5 sm:p-6 rounded-2xl shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+              {activeGameObj.label}
+            </h2>
+            <p className="text-xs text-slate-500 font-normal mt-0.5 leading-relaxed">
+              {activeGameObj.description}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="text-right">
+              <div className="font-semibold text-xs text-slate-900">
+                {isGameEnabled ? "Игра активна" : "Игра отключена"}
+              </div>
+              <div className="text-[11px] text-slate-400">
+                {isGameEnabled ? "Доступна в приложении гостя" : "Скрыта от гостей"}
+              </div>
+            </div>
             <button
-              key={game.id}
-              onClick={() => setSelectedGame(game.id)}
+              type="button"
+              onClick={handleToggleGameEnabled}
               className={cn(
-                "flex items-center justify-between p-4 rounded-2xl border transition-all duration-300 group",
-                selectedGame === game.id
-                  ? "bg-indigo-50 border-indigo-200 shadow-sm"
-                  : "bg-white border-slate-200 hover:border-indigo-100 hover:bg-slate-50",
+                "w-11 h-6 rounded-full relative transition-colors duration-200 cursor-pointer shrink-0",
+                isGameEnabled ? "bg-slate-900" : "bg-slate-300"
               )}
             >
-              <div className="flex items-center gap-3">
-                <div
-                  className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
-                    selectedGame === game.id
-                      ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
-                      : "bg-slate-100 text-slate-400 group-hover:bg-slate-200 group-hover:text-indigo-400",
-                  )}
-                >
-                  <game.icon className="w-5 h-5" />
-                </div>
-                <span
-                  className={cn(
-                    "font-black italic uppercase text-xs tracking-tight transition-colors",
-                    selectedGame === game.id
-                      ? "text-indigo-900"
-                      : "text-slate-600",
-                  )}
-                >
-                  {game.label}
-                </span>
-              </div>
               <div
                 className={cn(
-                  "w-2 h-2 rounded-full",
-                  settings?.enabled_games?.includes(game.id)
-                    ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-                    : "bg-slate-200",
+                  "absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 shadow-xs",
+                  isGameEnabled ? "left-6" : "left-1"
                 )}
               />
             </button>
-          ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">
+              Стоимость участия (билетов за запуск)
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={ticketCostState}
+              onChange={(e) => setTicketCostState(Math.max(1, parseInt(e.target.value) || 1))}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:border-slate-900 focus:bg-white transition-all"
+            />
+            <p className="text-[11px] text-slate-400">
+              Количество промо-билетов, списываемых со счёта игрока за один запуск игры.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-700">
+              Механика работы
+            </label>
+            <p className="text-xs text-slate-500 leading-relaxed pt-1">
+              {activeGameObj.rulesHint}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Game Specific Configuration */}
-      <div className="lg:col-span-3 space-y-6">
-        {/* Game Header & Toggle */}
-        <div className="bg-white border border-slate-200 p-6 rounded-[2rem] shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-indigo-500 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              {React.createElement(activeGameObj?.icon || Disc, {
-                className: "w-7 h-7 text-white",
-              })}
-            </div>
+      {/* Призовой фонд */}
+      <div className="space-y-4">
+        {/* Авто-генерация пула по 3 пресетам + Экономика пула */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h2 className="text-2xl font-black uppercase italic tracking-tight text-slate-900">
-                {activeGameObj?.label}
-              </h2>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                {isConfigBased
-                  ? "Настройка параметров и математики игры"
-                  : "Настройка призового фонда игры"}
+              <div className="text-xs sm:text-sm font-bold text-slate-900">
+                Шаблоны призового фонда
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Готовые варианты распределения вероятностей и призов для {activeGameObj.label}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="font-black italic uppercase text-xs tracking-tight">
-                Статус игры
-              </div>
-              <div
-                className={cn(
-                  "text-[10px] font-bold mt-0.5",
-                  isGameEnabled ? "text-emerald-500" : "text-slate-400",
-                )}
-              >
-                {isGameEnabled ? "Включена" : "Отключена"}
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                const newSettings = { ...settings };
-                if (!newSettings.enabled_games) newSettings.enabled_games = [];
-
-                if (newSettings.enabled_games.includes(selectedGame)) {
-                  newSettings.enabled_games = newSettings.enabled_games.filter(
-                    (id: string) => id !== selectedGame,
-                  );
-                } else {
-                  newSettings.enabled_games.push(selectedGame);
-                }
-                saveSettings(newSettings);
-              }}
-              className={cn(
-                "w-14 h-8 rounded-full relative transition-colors duration-300",
-                isGameEnabled ? "bg-emerald-500" : "bg-slate-300",
-              )}
-            >
-              <div
-                className={cn(
-                  "absolute top-1 w-6 h-6 bg-white rounded-full transition-all duration-300 shadow-sm",
-                  isGameEnabled ? "left-7" : "left-1",
-                )}
-              />
-            </button>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            {PRESET_META.map((preset) => {
+              const isSelected = activePresetKey === preset.key;
+              return (
+                <button
+                  key={preset.key}
+                  type="button"
+                  onClick={() => handleApplyPreset(preset.key)}
+                  className={cn(
+                    "text-left p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between group",
+                    isSelected
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                      : "bg-white hover:bg-slate-50 text-slate-900 border-slate-200 hover:border-slate-300"
+                  )}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={cn(
+                        "text-xs font-bold transition-colors",
+                        isSelected ? "text-white" : "text-slate-900"
+                      )}>
+                        {preset.title}
+                      </span>
+                    </div>
+                    <p
+                      className={cn(
+                        "text-[11px] leading-relaxed",
+                        isSelected ? "text-slate-300" : "text-slate-500"
+                      )}
+                    >
+                      {preset.subtitle}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {isConfigBased ? (
-          <div className="space-y-6">
-            <div className="bg-white border border-slate-200 p-8 rounded-[2.5rem] shadow-sm space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                    Базовый множитель (Global Boost)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={localConfigs[selectedGame]?.base_bonus || 1}
-                    onChange={(e) =>
-                      updateConfig(selectedGame, {
-                        base_bonus: parseFloat(e.target.value),
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                  />
-                  <p className="text-[9px] text-slate-400 italic ml-4">
-                    * Умножает финальный выигрыш. 1.0 — без изменений.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                    Максимальный итоговый множитель
-                  </label>
-                  <input
-                    type="number"
-                    value={localConfigs[selectedGame]?.max_multiplier || 100}
-                    onChange={(e) =>
-                      updateConfig(selectedGame, {
-                        max_multiplier: parseInt(e.target.value),
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                  />
-                </div>
-              </div>
-
-              {selectedGame === "rocket" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                      House Edge (Шанс выигрыша системы)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="1"
-                      value={localConfigs.rocket?.house_edge || 0.95}
-                      onChange={(e) =>
-                        updateConfig("rocket", {
-                          house_edge: parseFloat(e.target.value),
-                        })
-                      }
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                    />
-                    <p className="text-[9px] text-slate-400 italic ml-4">
-                      * 0.95 = 5% шанс моментального взрыва на 1.00x.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                      Скорость роста (Growth Rate)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={localConfigs.rocket?.growth_rate || 0.08}
-                      onChange={(e) =>
-                        updateConfig("rocket", {
-                          growth_rate: parseFloat(e.target.value),
-                        })
-                      }
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                    />
-                  </div>
-                </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-bold text-slate-900">
+              Призовой фонд ({filteredPrizes.length})
+            </h3>
+            <span
+              className={cn(
+                "text-xs font-semibold",
+                selectedGame === "dice" || Math.abs(totalProbability - 100) < 0.01
+                  ? "text-emerald-600"
+                  : "text-amber-600"
               )}
+            >
+              {selectedGame === "dice"
+                ? `Сумма шансов по граням: ${totalProbability.toFixed(1)}%`
+                : `Сумма шансов: ${totalProbability.toFixed(1)}%${
+                    Math.abs(totalProbability - 100) < 0.01
+                      ? " (баланс)"
+                      : " (рекомендуется 100%)"
+                  }`}
+            </span>
+          </div>
 
-              {selectedGame === "flappy" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                      Прирост за трубу (Step)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.05"
-                      value={localConfigs.flappy?.multiplier_step || 0.1}
-                      onChange={(e) =>
-                        updateConfig("flappy", {
-                          multiplier_step: parseFloat(e.target.value),
-                        })
-                      }
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                      Сложность
-                    </label>
-                    <select
-                      value={localConfigs.flappy?.difficulty || "medium"}
-                      onChange={(e) =>
-                        updateConfig("flappy", { difficulty: e.target.value })
-                      }
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                    >
-                      <option value="easy">
-                        Легко (Медленно, большие окна)
-                      </option>
-                      <option value="medium">Средне</option>
-                      <option value="hard">Сложно (Быстро, узкие окна)</option>
-                    </select>
-                  </div>
-                </div>
-              )}
+          <button
+            onClick={handleAddPrize}
+            className="h-9 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-medium transition-all shadow-xs cursor-pointer self-start sm:self-auto"
+          >
+            + Добавить приз
+          </button>
+        </div>
 
-              {selectedGame === "mines" && (
-                <div className="space-y-6 pt-4 border-t border-slate-100">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                      Минимум ячеек для вывода (Cashout)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={localConfigs.mines?.min_cashout_reveals || 2}
-                      onChange={(e) =>
-                        updateConfig("mines", {
-                          min_cashout_reveals: parseInt(e.target.value),
-                        })
-                      }
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between px-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                        Режимы игры (Кол-во мин)
-                      </label>
-                      <button
-                        onClick={() => {
-                          const currentModes = localConfigs.mines?.modes || [];
-                          updateConfig("mines", {
-                            modes: [
-                              ...currentModes,
-                              { mines: 3, multiplier_step: 0.2 },
-                            ],
-                          });
-                        }}
-                        className="text-[10px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-600"
-                      >
-                        + Добавить режим
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {(localConfigs.mines?.modes || []).map(
-                        (mode: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-4"
-                          >
-                            <div className="flex-1 space-y-1">
-                              <span className="text-[8px] font-black uppercase text-slate-400 ml-1">
-                                Мин
-                              </span>
-                              <input
-                                type="number"
-                                value={mode.mines}
-                                onChange={(e) => {
-                                  const newModes = [
-                                    ...localConfigs.mines.modes,
-                                  ];
-                                  newModes[idx].mines = parseInt(
-                                    e.target.value,
-                                  );
-                                  updateConfig("mines", { modes: newModes });
-                                }}
-                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 font-bold text-xs"
-                              />
-                            </div>
-                            <div className="flex-1 space-y-1">
-                              <span className="text-[8px] font-black uppercase text-slate-400 ml-1">
-                                Шаг x
-                              </span>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={mode.multiplier_step}
-                                onChange={(e) => {
-                                  const newModes = [
-                                    ...localConfigs.mines.modes,
-                                  ];
-                                  newModes[idx].multiplier_step = parseFloat(
-                                    e.target.value,
-                                  );
-                                  updateConfig("mines", { modes: newModes });
-                                }}
-                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 font-bold text-xs"
-                              />
-                            </div>
-                            <button
-                              onClick={() => {
-                                const newModes =
-                                  localConfigs.mines.modes.filter(
-                                    (_: any, i: number) => i !== idx,
-                                  );
-                                updateConfig("mines", { modes: newModes });
-                              }}
-                              className="text-slate-300 hover:text-red-500 transition-colors pt-4"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {selectedGame === "plinko" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                      Количество рядов колышков (Rows)
-                    </label>
-                    <select
-                      value={localConfigs.plinko?.rows || 8}
-                      onChange={(e) =>
-                        updateConfig("plinko", { rows: parseInt(e.target.value) })
-                      }
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                    >
-                      <option value={8}>8 рядов (9 корзин)</option>
-                      <option value={10}>10 рядов (11 корзин)</option>
-                      <option value={12}>12 рядов (13 корзин)</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                      Множитель по краям (High Risk)
-                    </label>
-                    <input
-                      type="number"
-                      step="5"
-                      value={localConfigs.plinko?.max_edge_mult || 80}
-                      onChange={(e) =>
-                        updateConfig("plinko", { max_edge_mult: parseInt(e.target.value) })
-                      }
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {selectedGame === "coinflip" && (
-                <div className="space-y-6 pt-4 border-t border-slate-100">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                        Множитель 1-го раунда (x)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={localConfigs.coinflip?.round1_multiplier || 1.95}
-                        onChange={(e) =>
-                          updateConfig("coinflip", { round1_multiplier: parseFloat(e.target.value) })
-                        }
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                        Множитель 2-го раунда (x)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={localConfigs.coinflip?.round2_multiplier || 3.8}
-                        onChange={(e) =>
-                          updateConfig("coinflip", { round2_multiplier: parseFloat(e.target.value) })
-                        }
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                        Множитель 3-го раунда (x)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.2"
-                        value={localConfigs.coinflip?.round3_multiplier || 7.6}
-                        onChange={(e) =>
-                          updateConfig("coinflip", { round3_multiplier: parseFloat(e.target.value) })
-                        }
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100/50">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                        Шанс выигрыша игрока (%)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="99"
-                        value={localConfigs.coinflip?.win_chance || 45}
-                        onChange={(e) =>
-                          updateConfig("coinflip", { win_chance: parseInt(e.target.value) })
-                        }
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                      />
-                      <p className="text-[9px] text-slate-400 italic ml-4">
-                        * 45% = 55% шанс проигрыша игрока на каждом броске. Повышает доходность клуба.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {selectedGame === "tower" && (
-                <div className="space-y-4 pt-4 border-t border-slate-100">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                        Количество плит на этаже
-                      </label>
-                      <input
-                        type="number"
-                        min="2"
-                        max="5"
-                        value={localConfigs.tower?.tiles_count || 4}
-                        onChange={(e) =>
-                          updateConfig("tower", { tiles_count: parseInt(e.target.value) })
-                        }
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                        Количество мин на этаже
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max={3}
-                        value={localConfigs.tower?.mines_count || 1}
-                        onChange={(e) =>
-                          updateConfig("tower", { mines_count: parseInt(e.target.value) })
-                        }
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                      Множители этажей (через запятую)
-                    </label>
-                    <input
-                      type="text"
-                      value={localConfigs.tower?.multipliers || "1.3, 1.7, 2.3, 3.1, 4.2, 5.7, 7.8, 10.5"}
-                      onChange={(e) =>
-                        updateConfig("tower", { multipliers: e.target.value })
-                      }
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                    />
-                    <p className="text-[9px] text-slate-400 italic ml-4">
-                      * Введите ровно 8 множителей для каждого этажа (например: 1.3, 1.7, 2.3...)
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {selectedGame === "hilo" && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">
-                      Процент отдачи / RTP (%)
-                    </label>
-                    <input
-                      type="number"
-                      min="50"
-                      max="99"
-                      value={localConfigs.hilo?.rtp || 92}
-                      onChange={(e) =>
-                        updateConfig("hilo", { rtp: parseInt(e.target.value) })
-                      }
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-6 text-sm font-bold focus:bg-white transition-all outline-none"
-                    />
-                    <p className="text-[9px] text-slate-400 italic ml-4">
-                      * 92 = 8% комиссия системы на расчет шансов.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end">
-                <button
-                  onClick={handleSaveConfigs}
-                  disabled={isSaving}
-                  className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-2xl font-black uppercase italic tracking-widest shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
-                >
-                  {isSaving ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Save className="w-5 h-5" />
-                      Сохранить математику
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+        {filteredPrizes.length === 0 ? (
+          <div className="bg-white border border-slate-200 border-dashed rounded-2xl py-12 flex flex-col items-center justify-center space-y-2 text-center px-4">
+            <p className="text-sm font-semibold text-slate-900">
+              В этой игре пока нет призов
+            </p>
+            <p className="text-xs text-slate-500">
+              Нажмите «+ Добавить приз», чтобы настроить награды для гостей
+            </p>
           </div>
         ) : (
-          <>
-            {/* Level Tabs */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2">
-              {levels.map((level) => (
-                <button
-                  key={level.level_number}
-                  onClick={() => setSelectedLevel(level.level_number)}
-                  className={cn(
-                    "flex items-center gap-2 px-5 py-2.5 rounded-xl font-black uppercase italic text-xs tracking-wider whitespace-nowrap transition-all",
-                    selectedLevel === level.level_number
-                      ? "bg-indigo-500 text-white shadow-md shadow-indigo-500/20"
-                      : "bg-white border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50",
-                  )}
-                >
-                  <Trophy className="w-4 h-4" />
-                  Уровень {level.level_number}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-between px-2">
-              <div className="flex items-center gap-4">
-                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">
-                  Призы ({filteredPrizes.length})
-                </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {filteredPrizes.map((prize, idx) => {
+              return (
                 <div
+                  key={prize.id ? `prize_${prize.id}` : `new_prize_${idx}`}
                   className={cn(
-                    "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
-                    filteredPrizes.reduce(
-                      (sum, p) => sum + (Number(p.probability) || 0),
-                      0,
-                    ) === 100
-                      ? "bg-emerald-100 text-emerald-600"
-                      : "bg-amber-100 text-amber-600",
+                    "bg-white border border-slate-200 p-5 rounded-2xl shadow-xs relative transition-all space-y-4",
+                    !prize.is_active && "opacity-60 bg-slate-50/50"
                   )}
                 >
-                  Сумма шансов:{" "}
-                  {filteredPrizes
-                    .reduce((sum, p) => sum + (Number(p.probability) || 0), 0)
-                    .toFixed(1)}
-                  %
-                </div>
-              </div>
-
-              <button
-                onClick={() => {
-                  const newPrize: Prize = {
-                    name: "Новый приз",
-                    type: "virtual",
-                    value: 100,
-                    probability: 1,
-                    daily_limit: 0,
-                    is_active: true,
-                    game_slug: selectedGame,
-                    target_level: selectedLevel,
-                  };
-                  setPrizes([...prizes, newPrize]);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase italic tracking-widest hover:bg-indigo-500 shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
-              >
-                <Plus className="w-3 h-3" />
-                Добавить приз
-              </button>
-            </div>
-
-            {filteredPrizes.length === 0 ? (
-              <div className="bg-white border border-slate-200 border-dashed rounded-[2rem] py-16 flex flex-col items-center justify-center space-y-4 opacity-50">
-                <Gift className="w-12 h-12 text-slate-300" />
-                <p className="text-xs font-black uppercase italic tracking-widest text-slate-400">
-                  В этой игре еще нет призов
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {prizes.map((prize, idx) => {
-                  const isRelevant =
-                    prize.game_slug === selectedGame &&
-                    (prize.target_level === selectedLevel ||
-                      (!prize.target_level && selectedLevel === 1));
-
-                  if (!isRelevant) return null;
-
-                  return (
-                    <div
-                      key={idx}
-                      className={cn(
-                        "bg-white border border-slate-200 p-6 rounded-[2rem] shadow-sm relative transition-all",
-                        !prize.is_active && "opacity-50 grayscale",
-                      )}
-                    >
-                      <div className="flex items-start justify-between mb-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center">
-                            {prize.type === "physical" ? (
-                              <Gift className="w-6 h-6 text-purple-500" />
-                            ) : (
-                              <Coins className="w-6 h-6 text-emerald-500" />
-                            )}
-                          </div>
-                          <input
-                            className="text-lg font-black uppercase italic tracking-tight outline-none focus:text-indigo-500 transition-colors bg-transparent w-full"
-                            value={prize.name}
-                            onChange={(e) => {
-                              const newPrizes = [...prizes];
-                              newPrizes[idx].name = e.target.value;
-                              setPrizes(newPrizes);
-                            }}
-                          />
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() => {
-                              const newPrizes = [...prizes];
-                              newPrizes[idx].is_active = !prize.is_active;
-                              setPrizes(newPrizes);
-                            }}
-                            className={cn(
-                              "p-2 rounded-lg transition-colors",
-                              prize.is_active
-                                ? "bg-emerald-50 text-emerald-500"
-                                : "bg-slate-100 text-slate-400",
-                            )}
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={async () => {
-                              if (prize.id) {
-                                await fetch(
-                                  `/api/promo/admin/prizes?clubId=${clubId}&id=${prize.id}`,
-                                  { method: "DELETE" },
-                                );
-                              }
-                              const newPrizes = prizes.filter(
-                                (_, i) => i !== idx,
-                              );
-                              setPrizes(newPrizes);
-                            }}
-                            className="p-2 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">
-                            Тип приза
-                          </label>
-                          <select
-                            className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold outline-none"
-                            value={prize.type}
-                            onChange={(e) => {
-                              const newPrizes = [...prizes];
-                              newPrizes[idx].type = e.target.value as any;
-                              setPrizes(newPrizes);
-                            }}
-                          >
-                            <option value="virtual">Баланс (₽)</option>
-                            <option value="bonus_limitless">Безлимитный вывод (₽)</option>
-                            <option value="physical">Товар (Queue)</option>
-                            <option value="attempt">Билеты (+шт)</option>
-                            <option value="bonus">Опыт (+XP)</option>
-                            <option value="withdraw_boost">Буст вывода (+% к след. пополнению)</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">
-                            Значение
-                          </label>
-                          <input
-                            type="number"
-                            className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold outline-none"
-                            value={prize.value}
-                            onChange={(e) => {
-                              const newPrizes = [...prizes];
-                              newPrizes[idx].value = parseFloat(e.target.value);
-                              setPrizes(newPrizes);
-                            }}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">
-                            Шанс (%)
-                          </label>
-                          <input
-                            type="number"
-                            className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold outline-none"
-                            value={prize.probability}
-                            onChange={(e) => {
-                              const newPrizes = [...prizes];
-                              newPrizes[idx].probability = parseFloat(
-                                e.target.value,
-                              );
-                              setPrizes(newPrizes);
-                            }}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">
-                            Лимит (день)
-                          </label>
-                          <input
-                            type="number"
-                            className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-xs font-bold outline-none"
-                            value={prize.daily_limit || 0}
-                            onChange={(e) => {
-                              const newPrizes = [...prizes];
-                              newPrizes[idx].daily_limit = parseInt(
-                                e.target.value,
-                              );
-                              setPrizes(newPrizes);
-                            }}
-                            placeholder="0 - без лимита"
-                          />
-                        </div>
-                      </div>
-
-                      {prize.game_slug === "dice" && (
-                        <div className="mt-4 p-4 bg-slate-50 rounded-2xl space-y-3">
-                          <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                            Условие костей
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((s) => (
-                              <button
-                                key={s}
-                                onClick={() => {
-                                  const newPrizes = [...prizes];
-                                  const cond =
-                                    newPrizes[idx].win_condition || {};
-                                  if (!cond.dice_sums) cond.dice_sums = [];
-                                  if (cond.dice_sums.includes(s)) {
-                                    cond.dice_sums = cond.dice_sums.filter(
-                                      (v) => v !== s,
-                                    );
-                                  } else {
-                                    cond.dice_sums.push(s);
-                                  }
-                                  newPrizes[idx].win_condition = cond;
-                                  setPrizes(newPrizes);
-                                }}
-                                className={cn(
-                                  "w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black transition-all",
-                                  prize.win_condition?.dice_sums?.includes(s)
-                                    ? "bg-indigo-500 text-white"
-                                    : "bg-white text-slate-400 border border-slate-200",
-                                )}
-                              >
-                                {s}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                  {/* Верхняя строка карточки приза */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <input
+                        className="text-sm sm:text-base font-bold text-slate-900 outline-none focus:border-b focus:border-slate-900 bg-transparent w-full"
+                        value={prize.name}
+                        placeholder="Название приза"
+                        onChange={(e) =>
+                          handleUpdatePrize(idx, { name: e.target.value })
+                        }
+                      />
                     </div>
-                  );
-                })}
-              </div>
-            )}
 
-            <div className="flex justify-end pt-4">
-              <button
-                onClick={async () => {
-                  setIsSaving(true);
-                  try {
-                    await fetch(`/api/promo/admin/prizes`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ clubId, prizes }),
-                    });
-                    alert("Призовой фонд сохранен");
-                  } catch (e) {
-                    console.error(e);
-                  } finally {
-                    setIsSaving(false);
-                  }
-                }}
-                disabled={isSaving}
-                className="flex items-center gap-2 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-2xl font-black uppercase italic tracking-widest shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98]"
-              >
-                {isSaving ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <Save className="w-5 h-5" />
-                    Сохранить изменения
-                  </>
-                )}
-              </button>
-            </div>
-          </>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleUpdatePrize(idx, { is_active: !prize.is_active })
+                        }
+                        className={cn(
+                          "flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer",
+                          prize.is_active
+                            ? "text-emerald-600 hover:text-emerald-700"
+                            : "text-slate-400 hover:text-slate-600"
+                        )}
+                        title={prize.is_active ? "Приз активен (кликните, чтобы отключить)" : "Приз выключен (кликните, чтобы включить)"}
+                      >
+                        <span
+                          className={cn(
+                            "w-2 h-2 rounded-full",
+                            prize.is_active ? "bg-emerald-500" : "bg-slate-300"
+                          )}
+                        />
+                        <span>{prize.is_active ? "Активен" : "Выключен"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePrize(idx)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Удалить приз"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Параметры приза */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-500">
+                        Тип приза
+                      </label>
+                      <select
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-900 outline-none focus:border-slate-900 focus:bg-white"
+                        value={prize.type === "physical" ? "virtual" : prize.type}
+                        onChange={(e) => {
+                          const nextType = e.target.value as any;
+                          handleUpdatePrize(idx, {
+                            type: nextType,
+                            ...(nextType === "none" ? { value: 0, name: prize.name === "Новый приз" ? "Пусто" : prize.name } : {}),
+                          });
+                        }}
+                      >
+                        <option value="virtual">Баланс (₽)</option>
+                        <option value="bonus_limitless">Безлимитный вывод (₽)</option>
+                        <option value="attempt">Билеты (+шт)</option>
+                        <option value="withdraw_boost">Буст вывода (% к пополнению)</option>
+                        <option value="none">Пусто (без выигрыша)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-500">
+                        Значение
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        disabled={(prize.type as string) === "none"}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-900 outline-none focus:border-slate-900 focus:bg-white disabled:opacity-50"
+                        value={Math.round(Number(prize.value) || 0)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          handleUpdatePrize(idx, {
+                            value: val === "" ? 0 : parseInt(val, 10) || 0,
+                          });
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-500">
+                        Шанс (%)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        max="100"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-900 outline-none focus:border-slate-900 focus:bg-white"
+                        value={prize.probability ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          handleUpdatePrize(idx, {
+                            probability: val === "" ? 0 : parseFloat(val) || 0,
+                          });
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-slate-500">
+                        Лимит (день)
+                      </label>
+                      <input
+                        type="number"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-900 outline-none focus:border-slate-900 focus:bg-white"
+                        value={prize.daily_limit || 0}
+                        placeholder="0 - без лимита"
+                        onChange={(e) =>
+                          handleUpdatePrize(idx, {
+                            daily_limit: parseInt(e.target.value) || 0,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {/* Дополнительное условие для костей */}
+                  {selectedGame === "dice" && (
+                    <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl space-y-3">
+                      {(() => {
+                        const calcDiceProb = (
+                          sums: number[],
+                          dbl?: number | "any",
+                        ) => {
+                          let favorable = 0;
+                          for (let d1 = 1; d1 <= 6; d1++) {
+                            for (let d2 = 1; d2 <= 6; d2++) {
+                              const hitSum = sums.includes(d1 + d2);
+                              const hitDbl =
+                                dbl &&
+                                d1 === d2 &&
+                                (dbl === "any" || Number(dbl) === d1);
+                              if (hitSum || hitDbl) favorable++;
+                            }
+                          }
+                          return Number(((favorable / 36) * 100).toFixed(2));
+                        };
+
+                        const currentSums = prize.win_condition?.dice_sums || [];
+                        const currentDouble = prize.win_condition?.dice_double;
+
+                        return (
+                          <>
+                            <div className="space-y-1.5">
+                              <div className="text-[11px] font-semibold text-slate-600">
+                                Условие выпадения: сумма двух кубиков
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(
+                                  (sum) => {
+                                    const isSelected =
+                                      currentSums.includes(sum);
+                                    return (
+                                      <button
+                                        key={sum}
+                                        type="button"
+                                        onClick={() => {
+                                          const nextSums = isSelected
+                                            ? currentSums.filter(
+                                                (s) => s !== sum,
+                                              )
+                                            : [...currentSums, sum];
+                                          const nextCond = {
+                                            ...(prize.win_condition || {}),
+                                            dice_sums: nextSums,
+                                          };
+                                          handleUpdatePrize(idx, {
+                                            win_condition: nextCond,
+                                            probability: calcDiceProb(
+                                              nextSums,
+                                              currentDouble,
+                                            ),
+                                          });
+                                        }}
+                                        className={cn(
+                                          "w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold transition-all cursor-pointer",
+                                          isSelected
+                                            ? "bg-slate-900 text-white"
+                                            : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100",
+                                        )}
+                                      >
+                                        {sum}
+                                      </button>
+                                    );
+                                  },
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5 pt-2 border-t border-slate-200/60">
+                              <div className="text-[11px] font-semibold text-slate-600">
+                                Или выпадение дубля (одинаковые грани)
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {[
+                                  { label: "Любой дубль", val: "any" as const },
+                                  { label: "1-1", val: 1 },
+                                  { label: "2-2", val: 2 },
+                                  { label: "3-3", val: 3 },
+                                  { label: "4-4", val: 4 },
+                                  { label: "5-5", val: 5 },
+                                  { label: "6-6", val: 6 },
+                                ].map((opt) => {
+                                  const isSelected =
+                                    String(currentDouble) === String(opt.val);
+                                  return (
+                                    <button
+                                      key={String(opt.val)}
+                                      type="button"
+                                      onClick={() => {
+                                        const nextDbl = isSelected
+                                          ? undefined
+                                          : opt.val;
+                                        const nextCond = {
+                                          ...(prize.win_condition || {}),
+                                          dice_double: nextDbl,
+                                        };
+                                        handleUpdatePrize(idx, {
+                                          win_condition: nextCond,
+                                          probability: calcDiceProb(
+                                            currentSums,
+                                            nextDbl,
+                                          ),
+                                        });
+                                      }}
+                                      className={cn(
+                                        "px-2.5 h-7 rounded-md flex items-center justify-center text-xs font-bold transition-all cursor-pointer",
+                                        isSelected
+                                          ? "bg-slate-900 text-white"
+                                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100",
+                                      )}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
+
+        {/* Sticky Bottom Save Bar */}
+        <div className="sticky bottom-4 z-30 bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-lg flex items-center justify-between gap-4 mt-6">
+          <div className="flex items-center gap-3">
+            {saveSuccess ? (
+              <span className="text-xs font-semibold text-emerald-600">
+                Изменения успешно сохранены
+              </span>
+            ) : (
+              <span className="text-xs text-slate-500">
+                Призов в игре: <strong className="text-slate-700">{filteredPrizes.length}</strong>{" "}
+                (сумма шансов:{" "}
+                <strong
+                  className={
+                    Math.abs(totalProbability - 100) < 0.01
+                      ? "text-emerald-600"
+                      : "text-amber-600"
+                  }
+                >
+                  {totalProbability.toFixed(1)}%
+                </strong>
+                )
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            disabled={isSaving}
+            className="h-10 px-6 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl font-medium text-xs sm:text-sm transition-all shadow-xs cursor-pointer active:scale-98 shrink-0"
+          >
+            {isSaving ? "Сохранение..." : "Сохранить изменения"}
+          </button>
+        </div>
       </div>
     </div>
   );

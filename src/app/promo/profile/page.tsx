@@ -18,11 +18,6 @@ import {
   ArrowRight,
   Wallet,
   ShoppingCart,
-  Share2,
-  Copy,
-  Check,
-  Users,
-  Award,
   Clock,
   Smartphone,
   Download,
@@ -47,71 +42,16 @@ export default function PromoProfile() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [activatingId, setActivatingId] = useState<string | null>(null);
 
-  // Referral states
-  const [referralData, setReferralData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<"invite" | "friends" | "history">(
-    "invite",
-  );
-  const [copied, setCopied] = useState(false);
-
   // PWA states
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSGuide, setShowIOSGuide] = useState(false);
 
-  const fallbackCopyText = (text: string) => {
-    try {
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      textArea.style.top = "0";
-      textArea.style.left = "0";
-      textArea.style.position = "fixed";
-      textArea.style.opacity = "0";
-      document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      const successful = document.execCommand("copy");
-      document.body.removeChild(textArea);
-      if (successful) {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } else {
-        alert(`Не удалось скопировать автоматически. Ссылка: ${text}`);
-      }
-    } catch (err) {
-      console.error("Fallback copy failed", err);
-      alert(`Не удалось скопировать автоматически. Ссылка: ${text}`);
-    }
-  };
-
-  const handleCopyLink = () => {
-    if (!referralData?.referralCode) return;
-    const link = `${window.location.origin}/promo/login?ref=${referralData.referralCode}`;
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard
-        .writeText(link)
-        .then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        })
-        .catch((err) => {
-          console.error("Failed to copy using clipboard API", err);
-          fallbackCopyText(link);
-        });
-    } else {
-      fallbackCopyText(link);
-    }
-  };
-
   const fetchData = async () => {
     try {
-      const [playerRes, clubsRes, referralsRes, inventoryRes] = await Promise.all([
+      const [playerRes, clubsRes, inventoryRes] = await Promise.all([
         fetch("/api/promo/player"),
         fetch("/api/promo/player/clubs"),
-        fetch("/api/promo/player/referrals").then((res) =>
-          res.ok ? res.json() : null,
-        ),
         fetch("/api/promo/inventory").then((res) =>
           res.ok ? res.json() : null,
         ),
@@ -127,9 +67,6 @@ export default function PromoProfile() {
 
       setPlayer({ ...playerData.player, activeTickets: playerData.tickets });
       setClubs(clubsData.clubs || []);
-      if (referralsRes) {
-        setReferralData(referralsRes);
-      }
       if (inventoryRes) {
         setInventory(inventoryRes.inventory || []);
       }
@@ -321,11 +258,8 @@ export default function PromoProfile() {
                 <Trophy className="w-24 h-24 text-amber-400" />
               </div>
               <div className="relative z-10">
-                <h2 className="text-2xl sm:text-3xl font-black mb-1 uppercase italic tracking-tight text-white flex items-center gap-3">
+                <h2 className="text-2xl sm:text-3xl font-black mb-1 uppercase italic tracking-tight text-white">
                   {player?.fullName || "Игрок"}
-                  <span className="text-xs bg-white/10 border border-white/15 px-2.5 py-0.5 rounded-full text-white/90 tracking-widest not-italic font-bold">
-                    LVL {player?.level?.currentLevel || 1}
-                  </span>
                 </h2>
                 <div className="flex items-center justify-between gap-2 mb-4">
                   <p className="text-gray-400 text-xs font-bold uppercase tracking-wider">
@@ -583,311 +517,6 @@ export default function PromoProfile() {
                 </div>
               )}
             </div>
-
-            {/* Referral Program */}
-            {referralData && (
-              <div className="bg-white/5 border border-white/10 rounded-3xl sm:rounded-[2.5rem] p-6 shadow-xl">
-                {/* Title */}
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-lg font-black uppercase italic tracking-tight text-white">
-                      Пригласи друга
-                    </h3>
-                    <p className="text-xs text-gray-400 font-medium mt-0.5">
-                      Получай бонусы и билеты от активности друзей
-                    </p>
-                  </div>
-                </div>
-
-                {/* Tabs */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-6 no-scrollbar border-b border-white/5">
-                  {(["invite", "friends", "history"] as const).map((tab) => {
-                    const label =
-                      tab === "invite"
-                        ? "Инфо"
-                        : tab === "friends"
-                          ? "Друзья"
-                          : "История";
-                    const isSelected = activeTab === tab;
-                    return (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={cn(
-                          "flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 cursor-pointer border",
-                          isSelected
-                            ? "bg-white/10 text-white border-white/20 shadow-sm"
-                            : "bg-transparent text-gray-500 border-transparent hover:text-gray-300 hover:bg-white/5"
-                        )}
-                      >
-                        <span>{label}</span>
-                        {tab === "friends" && referralData.stats.friendsCount > 0 && (
-                          <span
-                            className={cn(
-                              "text-[10px] font-black tracking-tight",
-                              isSelected ? "text-amber-400" : "text-gray-500"
-                            )}
-                          >
-                            {referralData.stats.friendsCount}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Tab content */}
-                <AnimatePresence mode="wait">
-                  {activeTab === "invite" && (
-                    <motion.div
-                      key="invite"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="space-y-6"
-                    >
-                      {referralData?.invitedBy && (
-                        <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 flex items-center gap-3.5">
-                          <div className="w-9 h-9 bg-amber-500/10 rounded-xl flex items-center justify-center shrink-0">
-                            <Award className="w-5 h-5 text-amber-400" />
-                          </div>
-                          <div>
-                            <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
-                              Вас пригласил(а)
-                            </div>
-                            <div className="text-sm font-bold text-white mt-0.5">
-                              {referralData.invitedBy.fullName}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Share Link Card */}
-                      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 sm:p-5 space-y-3">
-                        <div className="text-xs font-bold uppercase tracking-wider text-gray-400 px-0.5">
-                          Ваша ссылка для приглашения
-                        </div>
-                        <div className="flex items-center gap-2 bg-black/40 rounded-xl p-2 sm:p-2.5 border border-white/5 overflow-hidden">
-                          <input
-                            type="text"
-                            readOnly
-                            value={
-                              typeof window !== "undefined"
-                                ? `${window.location.origin}/promo/login?ref=${referralData.referralCode}`
-                                : `.../promo/login?ref=${referralData.referralCode}`
-                            }
-                            className="bg-transparent flex-1 min-w-0 outline-none text-xs font-mono text-gray-300 truncate px-2"
-                          />
-                          <button
-                            onClick={handleCopyLink}
-                            className={`px-3.5 py-2 rounded-lg font-bold text-xs uppercase transition-all active:scale-95 shrink-0 cursor-pointer ${
-                              copied
-                                ? "bg-emerald-500 text-white"
-                                : "bg-white/10 hover:bg-white/20 border border-white/15 text-white"
-                            }`}
-                          >
-                            {copied ? (
-                              <div className="flex items-center gap-1">
-                                <Check className="w-3.5 h-3.5" /> Скопировано
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <Copy className="w-3.5 h-3.5" /> Копировать
-                              </div>
-                            )}
-                          </button>
-                        </div>
-                        <div className="text-center text-[11px] text-gray-400 font-medium">
-                          Код приглашения:{" "}
-                          <span className="text-amber-400 font-mono font-bold">
-                            {referralData.referralCode}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Program Rules */}
-                      <div className="space-y-3 pt-2">
-                        <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                          Условия программы
-                        </div>
-                        <div className="space-y-3.5">
-                          <div>
-                            <div className="text-sm font-black uppercase italic tracking-tight text-amber-400">
-                              {referralData.settings.recurring_percent || 10}% от пополнений
-                            </div>
-                            <p className="text-xs text-gray-300 font-medium mt-0.5 leading-relaxed">
-                              Получай кэшбек на бонусный баланс от каждого пополнения счета приглашенным другом.
-                            </p>
-                          </div>
-
-                          <div className="pt-3 border-t border-white/5">
-                            <div className="text-sm font-black uppercase italic tracking-tight text-amber-400">
-                              +{referralData.settings.fixed_reward_tickets || 5} билетов разово
-                            </div>
-                            <p className="text-xs text-gray-300 font-medium mt-0.5 leading-relaxed">
-                              Начисляется, когда суммарные пополнения друга достигают{" "}
-                              {referralData.settings.threshold || 1000} ₽.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {activeTab === "friends" && (
-                    <motion.div
-                      key="friends"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="space-y-4"
-                    >
-                      <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                        Приглашенные друзья ({referralData.referredFriends.length})
-                      </div>
-                      {referralData.referredFriends.length === 0 ? (
-                        <div className="bg-white/2 border border-white/5 rounded-2xl p-6 text-center text-gray-400 text-xs font-medium">
-                          У вас пока нет приглашенных друзей. Отправьте ссылку другу, чтобы получать бонусы!
-                        </div>
-                      ) : (
-                        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
-                          {referralData.referredFriends.map((friend: any) => {
-                            const threshold = parseFloat(
-                              referralData.settings.threshold || "1000",
-                            );
-                            const progressPercent = Math.min(
-                              100,
-                              (friend.totalReferredDeposits / threshold) * 100,
-                            );
-                            const isReached =
-                              friend.status === "threshold_reached" ||
-                              friend.totalReferredDeposits >= threshold;
-
-                            return (
-                              <div
-                                key={friend.id}
-                                className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center text-xs font-bold text-gray-300">
-                                      {friend.fullName[0]?.toUpperCase() || "?"}
-                                    </div>
-                                    <div className="text-xs font-bold text-white">
-                                      {friend.fullName}
-                                    </div>
-                                  </div>
-                                  <span
-                                    className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
-                                      isReached
-                                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                        : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                    }`}
-                                  >
-                                    {isReached ? "Условия выполнены" : "В процессе"}
-                                  </span>
-                                </div>
-
-                                {/* Progress bar */}
-                                <div className="space-y-1.5">
-                                  <div className="flex justify-between text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                                    <span>Пополнения друга</span>
-                                    <span
-                                      className={
-                                        isReached
-                                          ? "text-emerald-400 font-black"
-                                          : "text-white font-black"
-                                      }
-                                    >
-                                      {Math.floor(friend.totalReferredDeposits)} / {threshold} ₽
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-full transition-all ${
-                                        isReached
-                                          ? "bg-emerald-500"
-                                          : "bg-gradient-to-r from-amber-500 to-orange-500"
-                                      }`}
-                                      style={{ width: `${progressPercent}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-
-                  {activeTab === "history" && (
-                    <motion.div
-                      key="history"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="space-y-4"
-                    >
-                      <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                        История начислений
-                      </div>
-                      {referralData.history.length === 0 ? (
-                        <div className="bg-white/2 border border-white/5 rounded-2xl p-6 text-center text-gray-400 text-xs font-medium">
-                          История начислений пока пуста
-                        </div>
-                      ) : (
-                        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
-                          {referralData.history.map((item: any) => {
-                            const isFixed = item.type === "REFERRAL_FIXED_AWARD";
-                            return (
-                              <div
-                                key={item.id}
-                                className="bg-white/5 border border-white/10 rounded-2xl p-4 flex justify-between items-center"
-                              >
-                                <div className="space-y-1">
-                                  <div className="text-xs font-bold text-white">
-                                    {isFixed
-                                      ? "Разовый бонус"
-                                      : `Комиссия ${item.percent}%`}
-                                  </div>
-                                  <div className="text-[11px] text-gray-400 font-medium">
-                                    от: {item.friendName}
-                                  </div>
-                                  <div className="text-[10px] text-gray-500">
-                                    {new Date(item.createdAt).toLocaleDateString(
-                                      "ru-RU",
-                                      {
-                                        day: "numeric",
-                                        month: "short",
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      },
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  {item.amount > 0 && (
-                                    <div className="text-emerald-400 text-sm font-black">
-                                      +{Math.floor(item.amount)} ₽
-                                    </div>
-                                  )}
-                                  {item.tickets > 0 && (
-                                    <div className="text-amber-400 text-sm font-black flex items-center justify-end gap-1">
-                                      +{item.tickets} бил.
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
           </div>
         </div>
       </div>

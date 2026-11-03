@@ -42,6 +42,7 @@ interface TournamentDetailHeaderProps {
   onOpenRebuildModal: () => void;
   onPublish?: () => void;
   onRevertToDraft?: () => void;
+  onFinishTournament?: () => void;
   dashmatchAgent?: DashMatchAgentInfo | null;
 }
 
@@ -59,6 +60,7 @@ export function TournamentDetailHeader({
   onOpenRebuildModal,
   onPublish,
   onRevertToDraft,
+  onFinishTournament,
   dashmatchAgent,
 }: TournamentDetailHeaderProps) {
   const router = useRouter();
@@ -266,6 +268,16 @@ export function TournamentDetailHeader({
                 title="Вернуть в статус черновика"
               >
                 <RotateCcw className="w-4 h-4" />
+              </Button>
+            )}
+
+            {tournament.status === "ACTIVE" && onFinishTournament && (
+              <Button
+                variant="outline"
+                onClick={onFinishTournament}
+                className="h-10 rounded-xl px-4 border-slate-200 text-slate-700 hover:bg-slate-50 font-medium text-xs sm:text-sm transition-all shrink-0 cursor-pointer"
+              >
+                <span>Завершить турнир</span>
               </Button>
             )}
 

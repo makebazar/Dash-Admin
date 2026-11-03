@@ -12,7 +12,6 @@ dotenv.config({ path: envPath, quiet: true });
 dotenv.config({ path: envLocalPath, quiet: true });
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   serverExternalPackages: ["ffmpeg-static"],
   // Disable linting and type checking during build (deploy first, fix later)
   eslint: {

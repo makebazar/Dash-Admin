@@ -238,7 +238,8 @@ export function ClubSidebarContent({
       icon: (
         <Swords className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
       ),
-      visible: false, // Временно скрыто
+      visible:
+        !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
     },
     {
       href: `/clubs/${clubId}/tournaments`,

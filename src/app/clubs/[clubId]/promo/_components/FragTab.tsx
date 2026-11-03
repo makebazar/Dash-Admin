@@ -481,41 +481,41 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
       exit={{ opacity: 0, y: -10 }}
       className="space-y-6"
     >
-      {/* Sub Tab Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-4">
-        <button
-          onClick={() => handleSubTabChange("stats")}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all duration-300 font-black uppercase italic text-xs tracking-wider cursor-pointer",
-            subTab === "stats"
-              ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 scale-105"
-              : "bg-white text-slate-400 hover:text-slate-600 border border-slate-200"
-          )}
-        >
-          Лидерборд и Игроки
-        </button>
-        <button
-          onClick={() => handleSubTabChange("tournaments")}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all duration-300 font-black uppercase italic text-xs tracking-wider cursor-pointer",
-            subTab === "tournaments"
-              ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 scale-105"
-              : "bg-white text-slate-400 hover:text-slate-600 border border-slate-200"
-          )}
-        >
-          Рейтинговые Турниры
-        </button>
-        <button
-          onClick={() => handleSubTabChange("settings")}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all duration-300 font-black uppercase italic text-xs tracking-wider cursor-pointer",
-            subTab === "settings"
-              ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 scale-105"
-              : "bg-white text-slate-400 hover:text-slate-600 border border-slate-200"
-          )}
-        >
-          Настройки тарифов
-        </button>
+      {/* Sub Tab Navigation (matches /promo root tabs design code) */}
+      <div className="flex items-center bg-white p-1 sm:p-1.5 rounded-xl border border-slate-200 shadow-xs gap-1 overflow-x-auto scrollbar-hide">
+        {[
+          { id: "stats" as const, label: "Лидерборд и игроки" },
+          { id: "tournaments" as const, label: "Рейтинговые сезоны", count: tournaments.length },
+          { id: "settings" as const, label: "Настройки и тарифы" },
+        ].map((tab) => {
+          const isActive = subTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleSubTabChange(tab.id)}
+              className={cn(
+                "px-3.5 py-2 rounded-lg text-xs font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5 whitespace-nowrap",
+                isActive
+                  ? "bg-slate-900 text-white shadow-xs font-semibold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              )}
+            >
+              <span>{tab.label}</span>
+              {typeof tab.count === "number" && tab.count > 0 && (
+                <span
+                  className={cn(
+                    "text-[10px] font-mono px-1.5 py-0.2 rounded-md font-bold",
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-100 text-slate-600"
+                  )}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <AnimatePresence mode="wait">
@@ -754,17 +754,17 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                 </div>
 
                 {/* Security Limits Card */}
-                <div className="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-amber-500/10 border border-amber-500/20 p-6 rounded-3xl space-y-5">
+                <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-xs space-y-5">
                   <div>
-                    <h4 className="text-base font-bold text-amber-900 uppercase flex items-center gap-2">
-                      🛡️ Лимиты и Безопасность
+                    <h4 className="text-base font-bold text-slate-900 uppercase">
+                      Лимиты и безопасность
                     </h4>
-                    <p className="text-xs text-amber-700 font-medium mt-0.5">Защита от фарма и гиперинфляции бонусов</p>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">Ограничение начисления бонусов за один матч</p>
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-4">
-                      <label className="text-xs font-semibold text-amber-950">
+                      <label className="text-xs font-medium text-slate-700">
                         Макс. бонус за 1 матч
                       </label>
                       <div className="relative w-28 shrink-0">
@@ -774,9 +774,9 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                           min="0"
                           value={tariffs["max_bonus_per_match"] ?? 100}
                           onChange={(e) => handleTariffChange("max_bonus_per_match", e.target.value)}
-                          className="w-full bg-white border border-amber-300 rounded-xl px-3 py-1.5 text-xs font-bold text-amber-950 outline-none focus:border-amber-500 text-right pr-6"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 outline-none focus:border-slate-400 focus:bg-white text-right pr-6"
                         />
-                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-bold text-amber-500 text-xs pointer-events-none">
+                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-xs pointer-events-none">
                           ₽
                         </span>
                       </div>
@@ -875,9 +875,9 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                       <div className="space-y-3">
                         <div className="inline-flex items-center gap-2 bg-slate-800 text-slate-200 border border-slate-700 px-3 py-1 rounded-xl text-xs font-bold uppercase tracking-wider">
                           {isQualified ? (
-                            <><span className="text-amber-400">👑</span> MVP КЛУБА ПО СКИЛЛУ (K/D)</>
+                            <>MVP клуба по скиллу (K/D)</>
                           ) : (
-                            <><span className="text-slate-400">⏳</span> В ПРОЦЕССЕ КВАЛИФИКАЦИИ ({mvpCandidate.matches_count}/{MIN_QUALIFIED_MATCHES} КАДОК)</>
+                            <>В процессе квалификации ({mvpCandidate.matches_count}/{MIN_QUALIFIED_MATCHES} каток)</>
                           )}
                         </div>
                         <div>
@@ -1090,8 +1090,8 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                                         {p.full_name || "Не указано"}
                                       </Link>
                                       {idx === 0 && statsSortBy === "kd" && p.isQualified && (
-                                        <span className="bg-amber-100 text-amber-800 font-bold text-[9px] px-2 py-0.5 rounded uppercase">
-                                          👑 MVP
+                                        <span className="bg-slate-900 text-white font-bold text-[9px] px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                          MVP
                                         </span>
                                       )}
                                       {!p.isQualified && statsSortBy === "kd" && (

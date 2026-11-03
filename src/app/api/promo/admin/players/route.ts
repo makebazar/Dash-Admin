@@ -11,10 +11,35 @@ export async function GET(request: Request) {
     const playerId = searchParams.get("playerId");
     const limitParam = searchParams.get("limit");
     const offsetParam = searchParams.get("offset");
+    const month = searchParams.get("month"); // 'current', '2026-10', 'all', etc.
     const userId = (await cookies()).get("session_user_id")?.value;
 
     if (!userId || !clubId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    let topupDateFilter = `created_at >= date_trunc('month', CURRENT_DATE)`;
+    let receiptDateFilter = `committed_at >= date_trunc('month', CURRENT_DATE)`;
+    let withdrawDateFilter = `created_at >= date_trunc('month', CURRENT_DATE)`;
+    let ticketsDateFilter = `t.created_at >= date_trunc('month', CURRENT_DATE)`;
+
+    if (month) {
+      if (month === "all") {
+        topupDateFilter = "1=1";
+        receiptDateFilter = "1=1";
+        withdrawDateFilter = "1=1";
+        ticketsDateFilter = "1=1";
+      } else if (month !== "current") {
+        const [y, m] = month.split("-").map(Number);
+        if (y && m) {
+          const startDate = new Date(Date.UTC(y, m - 1, 1)).toISOString();
+          const endDate = new Date(Date.UTC(y, m, 1)).toISOString();
+          topupDateFilter = `created_at >= '${startDate}'::timestamptz AND created_at < '${endDate}'::timestamptz`;
+          receiptDateFilter = `committed_at >= '${startDate}'::timestamptz AND committed_at < '${endDate}'::timestamptz`;
+          withdrawDateFilter = `created_at >= '${startDate}'::timestamptz AND created_at < '${endDate}'::timestamptz`;
+          ticketsDateFilter = `t.created_at >= '${startDate}'::timestamptz AND t.created_at < '${endDate}'::timestamptz`;
+        }
+      }
     }
 
     // Fetch club settings to get targets & limits configuration
@@ -72,20 +97,20 @@ export async function GET(request: Request) {
         COALESCE((
           SELECT SUM((result_data->>'amount')::numeric)
           FROM promo_history
-          WHERE player_id = p.id AND club_id = $1 AND (game_type ILIKE '%topup%' OR game_type = 'pos_sale') AND created_at >= date_trunc('month', CURRENT_DATE)
+          WHERE player_id = p.id AND club_id = $1 AND (game_type ILIKE '%topup%' OR game_type = 'pos_sale') AND ${topupDateFilter}
         ), 0) + COALESCE((
           SELECT SUM(total_amount)
           FROM shift_receipts
-          WHERE promo_player_id = p.id AND club_id = $1 AND payment_type IN ('cash', 'card', 'mixed') AND committed_at >= date_trunc('month', CURRENT_DATE)
+          WHERE promo_player_id = p.id AND club_id = $1 AND payment_type IN ('cash', 'card', 'mixed') AND ${receiptDateFilter}
         ), 0) as monthly_topups,
         COALESCE((
           SELECT SUM(withdraw_amount)
           FROM promo_prize_queue
-          WHERE player_id = p.id AND club_id = $1 AND status != 'canceled' AND created_at >= date_trunc('month', CURRENT_DATE)
+          WHERE player_id = p.id AND club_id = $1 AND status != 'canceled' AND ${withdrawDateFilter}
         ), 0) + COALESCE((
           SELECT SUM((result_data->>'bonus_cost')::numeric)
           FROM promo_history
-          WHERE player_id = p.id AND club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE' AND created_at >= date_trunc('month', CURRENT_DATE)
+          WHERE player_id = p.id AND club_id = $1 AND game_type = 'BAR_BONUS_PURCHASE' AND ${withdrawDateFilter}
         ), 0) as monthly_withdrawn,
         (SELECT COUNT(*)::int FROM promo_tickets t WHERE t.player_id = p.id AND t.club_id = $1 AND t.status = 'available' AND (t.expires_at IS NULL OR t.expires_at > NOW())) as tickets_count,
         COALESCE((
@@ -93,6 +118,11 @@ export async function GET(request: Request) {
           FROM promo_tickets t
           WHERE t.player_id = p.id AND t.club_id = $1
         ), 0) as total_tickets_received,
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM promo_tickets t
+          WHERE t.player_id = p.id AND t.club_id = $1 AND ${ticketsDateFilter}
+        ), 0) as monthly_tickets_received,
         COALESCE((
           SELECT MAX(l.level_number)
           FROM promo_levels l

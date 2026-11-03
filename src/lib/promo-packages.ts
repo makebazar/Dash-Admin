@@ -99,12 +99,12 @@ export async function issueRewards(
     const tariffId = (rewards as any).free_package_tariff_id || null;
     const zoneId = (rewards as any).free_package_zone_id || null;
 
-    // Create item in player inventory for auto-starting on PC host
+    // Create item in player inventory (status: 'acquired' so it appears in inventory and can be used on PC or activated)
     for (let q = 0; q < freeQty; q++) {
       await client.query(
         `INSERT INTO promo_player_inventory (
           player_id, club_id, reward_type, reward_name, status, service_id, metadata
-        ) VALUES ($1::uuid, $2::int, 'club_time', $3, 'available', $4, $5)`,
+        ) VALUES ($1::uuid, $2::int, 'club_time', $3, 'acquired', $4, $5)`,
         [
           playerId,
           Number(clubId),
@@ -120,20 +120,6 @@ export async function issueRewards(
         ]
       );
     }
-
-    await client.query(
-      `INSERT INTO promo_prize_queue (
-        club_id, player_id, 
-        custom_reward_name, prize_type, loyalty_type, status, reward_value
-      ) VALUES ($1, $2::uuid, $3, 'free_package', $4, 'pending', $5)`,
-      [
-        clubId,
-        playerId,
-        `${packageTitle}${freeQtySuffix}`,
-        program.id,
-        freeQty,
-      ]
-    );
   }
 
   if (rewards.bar_reward_type && rewards.bar_reward_type !== "none") {
@@ -170,21 +156,25 @@ export async function issueRewards(
     }
 
     if (barPrizeName) {
-      await client.query(
-        `INSERT INTO promo_prize_queue (
-          club_id, player_id, 
-          custom_reward_name, prize_type, bar_product_id, deduct_inventory, loyalty_type, status, reward_value
-        ) VALUES ($1, $2::uuid, $3, 'bar_item', $4, $5, $6, 'pending', $7)`,
-        [
-          clubId,
-          playerId,
-          barPrizeName,
-          barProductId,
-          barProductId !== null, // deduct only if we know the product
-          program.id,
-          barQty,
-        ]
-      );
+      for (let b = 0; b < barQty; b++) {
+        const invRes = await client.query(
+          `INSERT INTO promo_player_inventory (
+            player_id, club_id, reward_type, reward_name, status, bar_product_id, metadata
+          ) VALUES ($1::uuid, $2::int, 'bar_item', $3, 'acquired', $4, $5)
+          RETURNING id`,
+          [
+            playerId,
+            Number(clubId),
+            barPrizeName,
+            barProductId,
+            JSON.stringify({
+              source: "loyalty_reward",
+              program_id: program.id,
+              bar_product_id: barProductId,
+            }),
+          ]
+        );
+      }
     }
   }
 }
@@ -353,15 +343,18 @@ export async function processPlayerVisit(
   const timezone = clubRes.rows[0]?.timezone || "Europe/Moscow";
   const programs = getActivePrograms(settings);
 
-  // Only process programs that have no specific package or service filters (pure visits)
+  // Only process programs that have no specific package or service filters (pure visits or visit streaks)
   const visitPrograms = programs.filter(
-    (p) => p.type === "visit_accumulation" &&
+    (p) => (p.type === "visit_accumulation" || p.type === "visit_streak") &&
            (!p.trigger_product_ids || p.trigger_product_ids.length === 0) &&
            (!p.trigger_service_ids || p.trigger_service_ids.length === 0)
   );
   if (visitPrograms.length === 0) return;
 
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: timezone });
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toLocaleDateString("en-CA", { timeZone: timezone });
 
   for (const program of visitPrograms) {
     if (program.target_zone_id && zoneId && String(program.target_zone_id) !== String(zoneId)) {
@@ -377,7 +370,17 @@ export async function processPlayerVisit(
     // Prevent double-counting same day
     if (lastDateStr === todayStr) continue;
 
-    const newCount = progress.current_count + 1;
+    let newCount = progress.current_count;
+    if (program.type === "visit_streak") {
+      if (lastDateStr === yesterdayStr) {
+        newCount += 1;
+      } else {
+        newCount = 1; // streak reset and restart today
+      }
+    } else {
+      newCount += 1;
+    }
+
     const target = program.target || 10;
     const finalCount = Math.min(newCount, target);
 

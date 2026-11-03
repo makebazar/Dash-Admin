@@ -81,18 +81,10 @@ export async function POST(
       }
     }
 
-    // 3. Issue tickets
-    await client.query(
-      `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at)
-          SELECT $1, $2, 'available', 'service_award', NULL
-          FROM generate_series(1, $3)`,
-      [playerId, clubId, rule.tickets],
-    );
-
-    // 4. Log in promo_history
-    await client.query(
+    // 3. Log in promo_history
+    const historyRes = await client.query(
       `INSERT INTO promo_history (player_id, club_id, game_type, result_data)
-         VALUES ($1, $2, 'SERVICE_AWARD', $3)`,
+         VALUES ($1, $2, 'SERVICE_AWARD', $3) RETURNING id`,
       [
         playerId,
         clubId,
@@ -103,6 +95,15 @@ export async function POST(
           processed_by: userId,
         }),
       ],
+    );
+    const historyId = historyRes.rows[0]?.id;
+
+    // 4. Issue tickets
+    await client.query(
+      `INSERT INTO promo_tickets (player_id, club_id, status, source, expires_at, history_id)
+          SELECT $1, $2, 'available', 'service_award', NULL, $3
+          FROM generate_series(1, $4)`,
+      [playerId, clubId, historyId, rule.tickets],
     );
 
     // 5. Process Quests
