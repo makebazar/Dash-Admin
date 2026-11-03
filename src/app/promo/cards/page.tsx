@@ -127,6 +127,68 @@ export default function LuckyCardsGame() {
 
   // Stores the result from the server
   const [serverResult, setServerResult] = useState<any>(null);
+  const [isSm, setIsSm] = useState(false);
+
+  useEffect(() => {
+    const update = () => setIsSm(typeof window !== "undefined" && window.innerWidth >= 640);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  const getCardLayout = useCallback(
+    (index: number, count: number, isSmScreen: boolean) => {
+      if (count === 5) {
+        const cardW = isSmScreen ? 136 : 92;
+        const cardH = isSmScreen ? 196 : 134;
+        const gapX = isSmScreen ? 28 : 14;
+        const rowY = isSmScreen ? 115 : 85;
+
+        if (index < 3) {
+          // Top row (3 cards)
+          const totalW = 3 * cardW + 2 * gapX;
+          const startX = -totalW / 2 + cardW / 2;
+          const xPos = startX + index * (cardW + gapX);
+          const yPos = -rowY;
+          return { cardW, cardH, xPos, yPos };
+        } else {
+          // Bottom row (2 cards)
+          const bottomGap = isSmScreen ? 44 : 26;
+          const totalW = 2 * cardW + bottomGap;
+          const startX = -totalW / 2 + cardW / 2;
+          const xPos = startX + (index - 3) * (cardW + bottomGap);
+          const yPos = rowY;
+          return { cardW, cardH, xPos, yPos };
+        }
+      }
+
+      if (count === 4) {
+        const cardW = isSmScreen ? 144 : 110;
+        const cardH = isSmScreen ? 206 : 158;
+        const gapX = isSmScreen ? 36 : 18;
+        const rowY = isSmScreen ? 115 : 90;
+
+        const row = Math.floor(index / 2);
+        const col = index % 2;
+        const totalW = 2 * cardW + gapX;
+        const startX = -totalW / 2 + cardW / 2;
+        const xPos = startX + col * (cardW + gapX);
+        const yPos = row === 0 ? -rowY : rowY;
+        return { cardW, cardH, xPos, yPos };
+      }
+
+      // Default 3 cards in a single row
+      const cardW = isSmScreen ? 160 : 98;
+      const cardH = isSmScreen ? 230 : 142;
+      const gapX = isSmScreen ? 32 : 14;
+      const totalW = count * cardW + (count - 1) * gapX;
+      const startX = -totalW / 2 + cardW / 2;
+      const xPos = startX + index * (cardW + gapX);
+      const yPos = 0;
+      return { cardW, cardH, xPos, yPos };
+    },
+    [],
+  );
 
   // Helper to map DB prize to visual Card
   const mapPrizeToCard = useCallback((prize: any, index: number): Card => {
@@ -532,7 +594,7 @@ export default function LuckyCardsGame() {
 
         {/* Cards Container */}
         <div
-          className="relative w-full max-w-4xl h-87.5 sm:h-100 flex justify-center items-center"
+          className="relative w-full max-w-4xl h-[360px] sm:h-[480px] flex justify-center items-center my-1 sm:my-3"
           style={{ perspective: "1200px" }}
         >
           <AnimatePresence>
@@ -544,64 +606,20 @@ export default function LuckyCardsGame() {
                 isSelected ||
                 gameState === "result";
 
-              const cardWidth =
-                cardCount === 5 ? 80 : cardCount === 4 ? 96 : 112;
-              const gap = 16;
-
-              let xPos = 0;
-              let yPos = 0;
-              let zIndex = index;
+              const layout = getCardLayout(index, cardCount, isSm);
+              let xPos = layout.xPos;
+              let yPos = layout.yPos + (isSelected ? -16 : 0);
+              let zIndex = isSelected ? 40 : index;
 
               if (
-                gameState === "idle" ||
-                gameState === "revealing" ||
-                gameState === "playing" ||
-                gameState === "result"
-              ) {
-                // Layout logic based on cardCount
-                if (cardCount === 5) {
-                  // 3 on top, 2 on bottom
-                  if (index < 3) {
-                    // Top row (3 cards)
-                    const totalWidthTop = 3 * cardWidth + 2 * gap;
-                    const startXTop = -totalWidthTop / 2 + cardWidth / 2;
-                    xPos = startXTop + index * (cardWidth + gap);
-                    yPos = -60 + (isSelected ? -20 : 0);
-                  } else {
-                    // Bottom row (2 cards)
-                    const totalWidthBottom = 2 * cardWidth + 1 * gap;
-                    const startXBottom = -totalWidthBottom / 2 + cardWidth / 2;
-                    xPos = startXBottom + (index - 3) * (cardWidth + gap);
-                    yPos = 80 + (isSelected ? -20 : 0);
-                  }
-                } else if (cardCount === 4) {
-                  // 2 on top, 2 on bottom
-                  const row = Math.floor(index / 2);
-                  const col = index % 2;
-                  const totalWidthRow = 2 * cardWidth + 1 * gap;
-                  const startXRow = -totalWidthRow / 2 + cardWidth / 2;
-                  xPos = startXRow + col * (cardWidth + gap);
-                  yPos =
-                    row === 0
-                      ? -60 + (isSelected ? -20 : 0)
-                      : 80 + (isSelected ? -20 : 0);
-                } else {
-                  // Default 3 cards in a single row
-                  const totalWidth =
-                    cardCount * cardWidth + (cardCount - 1) * gap;
-                  const startX = -totalWidth / 2 + cardWidth / 2;
-                  xPos = startX + index * (cardWidth + gap);
-                  yPos = isSelected ? -20 : 0;
-                }
-              } else if (
                 gameState === "gathering" ||
                 gameState === "shuffling"
               ) {
                 xPos = 0;
                 yPos = 0;
                 if (gameState === "shuffling") {
-                  xPos += Math.random() * 6 - 3;
-                  yPos += Math.random() * 6 - 3;
+                  xPos += (Math.random() - 0.5) * 8;
+                  yPos += (Math.random() - 0.5) * 8;
                 }
               }
 
@@ -615,7 +633,7 @@ export default function LuckyCardsGame() {
                   initial={{ opacity: 0, scale: 0.5, y: 50, x: xPos }}
                   animate={{
                     opacity: 1,
-                    scale: 1,
+                    scale: isSelected ? 1.05 : 1,
                     x: xPos,
                     y: yPos,
                     rotateY: showFront ? 180 : 0,
@@ -628,16 +646,18 @@ export default function LuckyCardsGame() {
                     damping: gameState === "shuffling" ? 10 : 20,
                     delay:
                       gameState === "playing" || gameState === "revealing"
-                        ? index * 0.1
+                        ? index * 0.08
                         : 0,
                   }}
                   style={{
                     position: "absolute",
+                    width: `${layout.cardW}px`,
+                    height: `${layout.cardH}px`,
                     zIndex: zIndex,
                     transformStyle: "preserve-3d",
                   }}
                   onClick={() => handleCardClick(card.id)}
-                  className={`${cardCount === 5 ? "w-20 sm:w-28" : cardCount === 4 ? "w-24 sm:w-32" : "w-28 sm:w-40"} aspect-2/3 cursor-pointer group`}
+                  className="cursor-pointer group select-none"
                 >
                   {/* Card Back Face */}
                   <div
@@ -686,24 +706,28 @@ export default function LuckyCardsGame() {
 
                   {/* Front Face */}
                   <div
-                    className={`absolute inset-0 rounded-2xl border-4 border-white/10 bg-linear-to-br ${card.color} shadow-2xl flex flex-col items-center justify-center ${!isSelected && gameState === "result" ? "opacity-60 grayscale-30" : ""}`}
+                    className={`absolute inset-0 rounded-2xl border-2 sm:border-3 bg-linear-to-br ${card.color} shadow-2xl flex flex-col items-center justify-center p-2 ${
+                      isSelected
+                        ? "border-amber-400 ring-2 ring-amber-400/50 shadow-[0_0_25px_rgba(251,191,36,0.5)]"
+                        : "border-white/15"
+                    } ${!isSelected && gameState === "result" ? "opacity-75 grayscale-20" : ""}`}
                     style={{
                       backfaceVisibility: "hidden",
                       WebkitBackfaceVisibility: "hidden",
                       transform: "rotateY(180deg) translateZ(1px)",
                     }}
                   >
-                    <div className="text-4xl sm:text-6xl mb-2 drop-shadow-lg flex items-center justify-center h-16 w-16">
+                    <div className="text-3xl sm:text-5xl mb-1.5 drop-shadow-lg flex items-center justify-center h-12 w-12 sm:h-16 sm:w-16">
                       {card.value}
                     </div>
-                    <div className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-white/90 drop-shadow-md text-center px-1 leading-tight">
+                    <div className="text-[9px] sm:text-xs font-black uppercase tracking-wider text-white drop-shadow-md text-center px-1 leading-tight">
                       {card.label}
                     </div>
 
                     {!isSelected &&
                       gameState === "result" &&
                       card.type === "win" && (
-                        <div className="absolute inset-0 border-4 border-orange-400/50 rounded-xl animate-pulse pointer-events-none" />
+                        <div className="absolute inset-0 border-2 sm:border-3 border-orange-400/60 rounded-2xl animate-pulse pointer-events-none" />
                       )}
                   </div>
                 </motion.div>

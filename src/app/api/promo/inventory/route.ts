@@ -62,7 +62,7 @@ export async function POST(request: Request) {
        FROM promo_player_inventory i
        LEFT JOIN promo_case_items ci ON i.item_id = ci.id
        WHERE i.id = $1 AND i.player_id = $2 AND i.club_id = $3
-       FOR UPDATE`,
+       FOR UPDATE OF i`,
       [inventoryId, playerId, parseInt(clubId)]
     );
 
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
       // Both keys update active_boost_percent in database
       await client.query(
         `UPDATE promo_player_balances
-         SET active_boost_percent = active_boost_percent + $1,
+         SET active_boost_percent = COALESCE(active_boost_percent, 0) + $1,
              updated_at = NOW()
          WHERE player_id = $2 AND club_id = $3`,
         [Math.floor(rewardValue), playerId, parseInt(clubId)]

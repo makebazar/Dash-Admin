@@ -1,11 +1,64 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 import * as THREE from "three";
 import * as CANNON from "cannon-es";
 import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles, Coins, Zap, Ticket, Gift, X, ArrowRight, Trophy } from "lucide-react";
 import { GameHeader } from "../components/GameHeader";
 import { PrizesSidebar } from "../components/PrizesSidebar";
+
+const formatPrizeWin = (prize: any) => {
+  if (!prize) return null;
+  const val = parseFloat(prize.value) || 0;
+  const num = Math.round(val);
+
+  switch (prize.type) {
+    case "virtual":
+      return {
+        amountStr: `+${num} 🪙`,
+        title: `${num} Бонусов`,
+        badge: "Бонусный баланс",
+        desc: "Зачислено на ваш баланс бонусов",
+        iconType: "coins",
+      };
+    case "bonus_limitless":
+      return {
+        amountStr: `+${num} 🪙`,
+        title: `${num} Безлимитных бонусов`,
+        badge: "Безлимит",
+        desc: "Зачислено на баланс и добавлено к лимиту вывода",
+        iconType: "coins",
+      };
+    case "withdraw_boost":
+      return {
+        amountStr: `+${num}%`,
+        title: `Буст вывода +${num}%`,
+        badge: "Буст к пополнению",
+        desc: "Добавлено в инвентарь. Активируйте в профиле/инвентаре перед пополнением",
+        iconType: "zap",
+      };
+    case "attempt":
+      const count = Math.max(1, Math.floor(val));
+      return {
+        amountStr: `+${count} 🎟️`,
+        title: `${count} ${count === 1 ? "попытка" : count < 5 ? "попытки" : "попыток"}`,
+        badge: "Билеты",
+        desc: "Добавлено к вашим попыткам для игр",
+        iconType: "ticket",
+      };
+    case "physical":
+    default:
+      return {
+        amountStr: "🎁",
+        title: prize.name || "Приз",
+        badge: "Приз",
+        desc: "Добавлено в инвентарь. Покажите администратору на кассе",
+        iconType: "gift",
+      };
+  }
+};
 
 /**
  * КУБИКИ В ТАРЕЛКЕ — ЧИСТАЯ РЕАЛЬНАЯ ФИЗИКА (БЕЗ ПРЕДСКАЗАНИЯ)
@@ -34,6 +87,11 @@ export default function BowlPhysicsDice() {
     color: string;
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [wonPrizeData, setWonPrizeData] = useState<{
+    prize: any;
+    info: any;
+    roll: { d1: number; d2: number; sum: number };
+  } | null>(null);
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const worldRef = useRef<CANNON.World | null>(null);
@@ -104,6 +162,26 @@ export default function BowlPhysicsDice() {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.15);
+  }, []);
+
+  const playWinSound = useCallback(() => {
+    if (!audioCtxRef.current) return;
+    const ctx = audioCtxRef.current;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const now = ctx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, now + i * 0.09);
+      gain.gain.setValueAtTime(0.001, now + i * 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + i * 0.09 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.09);
+      osc.stop(now + i * 0.09 + 0.32);
+    });
   }, []);
 
   useEffect(() => {
@@ -515,6 +593,7 @@ export default function BowlPhysicsDice() {
     setResult(null);
     setGameMessage(null);
     setErrorMsg(null);
+    setWonPrizeData(null);
 
     // 1. Launch dice IMMEDIATELY with real random physics (0ms freeze!)
     diceRefs.current.forEach(({ body }, i) => {
@@ -576,11 +655,19 @@ export default function BowlPhysicsDice() {
 
           const isWin = Boolean(data.won && data.prize);
           if (isWin) {
+            const prizeInfo = formatPrizeWin(data.prize);
             setGameMessage({
-              text: "ВЫИГРЫШ!",
+              text: `ВЫИГРЫШ: ${prizeInfo?.amountStr || ""}`,
               sub: data.prize.name,
-              color: "text-orange-500",
+              color: "text-amber-400",
             });
+            setWonPrizeData({
+              prize: data.prize,
+              info: prizeInfo,
+              roll: { d1, d2, sum },
+            });
+            playWinSound();
+
             if (
               data.prize.type === "virtual" ||
               data.prize.type === "bonus_limitless"
@@ -642,6 +729,108 @@ export default function BowlPhysicsDice() {
         prizes={prizes}
       />
 
+      {/* WIN CELEBRATION MODAL */}
+      <AnimatePresence>
+        {wonPrizeData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+            onClick={() => setWonPrizeData(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.85, opacity: 0, y: 20 }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm bg-gradient-to-b from-[#1c1917] via-[#121214] to-[#0a0a0a] border-2 border-amber-500/40 rounded-3xl p-6 shadow-[0_0_60px_rgba(245,158,11,0.25)] relative overflow-hidden text-center"
+            >
+              {/* Radial Glow */}
+              <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
+
+              <button
+                onClick={() => setWonPrizeData(null)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors cursor-pointer z-10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Header Badge */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-widest mb-3">
+                <Sparkles className="w-3 h-3" />
+                <span>Победный бросок!</span>
+              </div>
+
+              {/* Combination info */}
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-black font-black text-sm shadow">
+                  {wonPrizeData.roll.d1}
+                </div>
+                <span className="text-gray-400 font-bold">+</span>
+                <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-black font-black text-sm shadow">
+                  {wonPrizeData.roll.d2}
+                </div>
+                <span className="text-gray-400 font-bold">=</span>
+                <span className="text-amber-400 font-black text-base">
+                  {wonPrizeData.roll.sum}
+                </span>
+              </div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-4 truncate px-2">
+                {wonPrizeData.prize.name}
+              </p>
+
+              {/* Big Reward Display */}
+              <div className="my-4 py-5 px-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 relative overflow-hidden">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mb-3 shadow-[0_0_25px_rgba(245,158,11,0.3)]">
+                  {wonPrizeData.info?.iconType === "zap" ? (
+                    <Zap className="w-7 h-7 text-amber-400 fill-amber-400" />
+                  ) : wonPrizeData.info?.iconType === "ticket" ? (
+                    <Ticket className="w-7 h-7 text-orange-400" />
+                  ) : wonPrizeData.info?.iconType === "coins" ? (
+                    <Coins className="w-7 h-7 text-amber-300" />
+                  ) : (
+                    <Gift className="w-7 h-7 text-purple-400" />
+                  )}
+                </div>
+
+                <div className="text-3xl sm:text-4xl font-black text-white tracking-tight drop-shadow">
+                  {wonPrizeData.info?.amountStr}
+                </div>
+                <div className="text-xs font-black uppercase text-amber-400 tracking-wider mt-1">
+                  {wonPrizeData.info?.title}
+                </div>
+                <div className="text-[11px] text-gray-300 mt-2 leading-tight">
+                  {wonPrizeData.info?.desc}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2.5 mt-5">
+                <button
+                  onClick={() => setWonPrizeData(null)}
+                  className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-xs tracking-wider transition-all cursor-pointer shadow-lg shadow-amber-500/20"
+                >
+                  Отлично
+                </button>
+
+                {(wonPrizeData.prize.type === "withdraw_boost" || wonPrizeData.prize.type === "physical") && (
+                  <Link
+                    href="/promo/inventory"
+                    onClick={() => setWonPrizeData(null)}
+                    className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white font-black uppercase text-xs tracking-wider transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <span>В инвентарь</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {errorMsg && (
           <motion.div
@@ -684,14 +873,14 @@ export default function BowlPhysicsDice() {
                 </div>
 
                 {gameMessage && (
-                  <div className="text-right min-w-0">
+                  <div className="text-right min-w-0 max-w-[55%]">
                     <div
                       className={`font-black uppercase tracking-wider text-xs sm:text-sm leading-tight truncate ${gameMessage.color}`}
                     >
                       {gameMessage.text}
                     </div>
                     {gameMessage.sub && (
-                      <div className="text-[9px] sm:text-[10px] text-white/50 font-bold uppercase tracking-wider truncate">
+                      <div className="text-[9px] sm:text-[10px] text-white/70 font-bold uppercase tracking-wider truncate">
                         {gameMessage.sub}
                       </div>
                     )}
