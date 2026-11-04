@@ -2,40 +2,59 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/db";
 import { cookies } from "next/headers";
 import { isSuperAdmin } from "@/lib/admin";
+import { verifySessionValue } from "@/lib/session";
 import { uploadFileToS3 } from "@/lib/s3";
+import { ensureReleasesTable } from "@/lib/releases";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
 // Ensure current user is Super Admin
 async function ensureSuperAdmin() {
-  const userId = (await cookies()).get("session_user_id")?.value;
-  if (!userId) {
+  try {
+    const rawCookie = (await cookies()).get("session_user_id")?.value;
+    if (!rawCookie) {
+      return {
+        ok: false as const,
+        response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      };
+    }
+
+    const userId = verifySessionValue(rawCookie) || rawCookie;
+    if (!userId) {
+      return {
+        ok: false as const,
+        response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      };
+    }
+
+    const adminCheck = await query(
+      `SELECT is_super_admin, phone_number FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    const user = adminCheck.rows[0];
+    const canAccess = isSuperAdmin(
+      user?.is_super_admin,
+      userId,
+      user?.phone_number
+    );
+
+    if (!canAccess) {
+      return {
+        ok: false as const,
+        response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+      };
+    }
+
+    return { ok: true as const, userId };
+  } catch (err: any) {
+    console.error("SuperAdmin check failed:", err);
     return {
       ok: false as const,
-      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      response: NextResponse.json({ error: "Auth verification failed" }, { status: 401 }),
     };
   }
-
-  const adminCheck = await query(
-    `SELECT is_super_admin, phone_number FROM users WHERE id = $1`,
-    [userId]
-  );
-
-  const canAccess = isSuperAdmin(
-    adminCheck.rows[0]?.is_super_admin,
-    userId,
-    adminCheck.rows[0]?.phone_number
-  );
-
-  if (!canAccess) {
-    return {
-      ok: false as const,
-      response: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-    };
-  }
-
-  return { ok: true as const, userId };
 }
 
 // GET: list releases
@@ -43,6 +62,8 @@ export async function GET() {
   try {
     const auth = await ensureSuperAdmin();
     if (!auth.ok) return auth.response;
+
+    await ensureReleasesTable();
 
     const res = await query(
       `SELECT id, app_name, version, download_url, file_size_bytes, original_filename,
@@ -77,6 +98,8 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await ensureSuperAdmin();
     if (!auth.ok) return auth.response;
+
+    await ensureReleasesTable();
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;

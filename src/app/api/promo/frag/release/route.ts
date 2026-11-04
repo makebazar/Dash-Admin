@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { query } from "@/db";
+import { ensureReleasesTable } from "@/lib/releases";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
+    await ensureReleasesTable();
+
     const res = await query(
       `SELECT id, app_name, version, download_url, file_size_bytes, original_filename, changelog, created_at
        FROM app_releases
