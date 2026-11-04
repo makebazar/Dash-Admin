@@ -1093,31 +1093,19 @@ export default function FragPage() {
       <div className="max-w-xl lg:max-w-5xl mx-auto pt-4 space-y-5">
 
         {/* Main tabs: underline nav, no flex squishing, smooth swipe on mobile */}
-        <div className="flex items-center justify-between border-b border-white/10 gap-2">
-          <div className="flex overflow-x-auto no-scrollbar -mx-1">
-            {([["play", "Играть"], ["earn", "Заработок"], ["history", "История"], ["tours", "Турниры"], ["leaders", "Лидеры"], ["rules", "Правила"]] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => switchMainTab(key)}
-                className={cn(
-                  "px-3.5 py-3 text-xs sm:text-sm font-black uppercase tracking-wide whitespace-nowrap shrink-0 cursor-pointer border-b-[3px] -mb-px transition-colors",
-                  mainTab === key ? "text-amber-400 border-amber-400" : "text-gray-500 border-transparent hover:text-gray-300"
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <a
-            href="/api/promo/frag/download"
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-xs font-bold text-amber-400 transition shrink-0"
-            title="Скачать установщик DashFrag"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Скачать DashFrag</span>
-            {releaseInfo?.version && <span className="text-[10px] text-gray-400 font-normal">v{releaseInfo.version}</span>}
-          </a>
+        <div className="flex border-b border-white/10 overflow-x-auto no-scrollbar -mx-1">
+          {([["play", "Играть"], ["earn", "Заработок"], ["history", "История"], ["tours", "Турниры"], ["leaders", "Лидеры"], ["rules", "Правила"]] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => switchMainTab(key)}
+              className={cn(
+                "px-3.5 py-3 text-xs sm:text-sm font-black uppercase tracking-wide whitespace-nowrap shrink-0 cursor-pointer border-b-[3px] -mb-px transition-colors",
+                mainTab === key ? "text-amber-400 border-amber-400" : "text-gray-500 border-transparent hover:text-gray-300"
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* ============ PLAY ============ */}
