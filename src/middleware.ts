@@ -86,7 +86,8 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
-// Ensure middleware only runs on relevant paths
+// Ensure middleware only runs on relevant paths (exclude api to allow large file uploads)
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };
+

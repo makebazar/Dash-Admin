@@ -45,6 +45,7 @@ export default function DashFragAdminPage() {
   const [version, setVersion] = useState("");
   const [changelog, setChangelog] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
@@ -102,34 +103,59 @@ export default function DashFragAdminPage() {
 
     try {
       setUploading(true);
+      setUploadProgress(null);
       setFormError(null);
       setFormSuccess(null);
 
-      let res: Response;
-
       if (uploadMode === "file" && selectedFile) {
-        // Stream raw binary - completely bypasses undici FormData parser!
+        setUploadProgress(0);
         const params = new URLSearchParams({
           version: version.trim(),
           filename: selectedFile.name,
           changelog: changelog.trim(),
           isActive: isActive ? "true" : "false",
+          expectedSize: selectedFile.size.toString(),
         });
 
-        res = await fetch(`/api/dashadmin-x/releases?${params.toString()}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/octet-stream",
-            "x-version": encodeURIComponent(version.trim()),
-            "x-filename": encodeURIComponent(selectedFile.name),
-            "x-changelog": encodeURIComponent(changelog.trim()),
-            "x-is-active": isActive ? "true" : "false",
-          },
-          body: selectedFile,
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", `/api/dashadmin-x/releases?${params.toString()}`);
+          xhr.setRequestHeader("Content-Type", "application/octet-stream");
+          xhr.setRequestHeader("x-version", encodeURIComponent(version.trim()));
+          xhr.setRequestHeader("x-filename", encodeURIComponent(selectedFile.name));
+          xhr.setRequestHeader("x-changelog", encodeURIComponent(changelog.trim()));
+          xhr.setRequestHeader("x-is-active", isActive ? "true" : "false");
+          xhr.setRequestHeader("x-expected-size", selectedFile.size.toString());
+
+          xhr.upload.onprogress = (evt) => {
+            if (evt.lengthComputable) {
+              const pct = Math.round((evt.loaded / evt.total) * 100);
+              setUploadProgress(pct);
+            }
+          };
+
+          xhr.onload = () => {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve();
+              } else {
+                reject(new Error(data.error || `Ошибка загрузки: ${xhr.status}`));
+              }
+            } catch {
+              reject(new Error(`Ответ сервера (${xhr.status}): ${xhr.responseText.slice(0, 100)}`));
+            }
+          };
+
+          xhr.onerror = () => reject(new Error("Сетевая ошибка при передаче файла"));
+          xhr.ontimeout = () => reject(new Error("Превышено время ожидания"));
+          xhr.timeout = 600000; // 10 min
+
+          xhr.send(selectedFile);
         });
       } else {
         // Direct URL creation
-        res = await fetch("/api/dashadmin-x/releases", {
+        const res = await fetch("/api/dashadmin-x/releases", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -142,11 +168,11 @@ export default function DashFragAdminPage() {
             filename: `DashFrag-${version.trim()}.exe`,
           }),
         });
-      }
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Ошибка загрузки");
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Ошибка сохранения ссылки");
+        }
       }
 
       setFormSuccess(`Релиз DashFrag v${version} успешно сохранён и опубликован!`);
@@ -161,6 +187,7 @@ export default function DashFragAdminPage() {
       setFormError(err.message || "Не удалось сохранить бинарник");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -426,13 +453,13 @@ export default function DashFragAdminPage() {
 
             <button
               type="submit"
-              disabled={uploading || !selectedFile}
+              disabled={uploading || (uploadMode === "file" && !selectedFile) || (uploadMode === "url" && !directUrl.trim())}
               className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold rounded-lg text-sm transition flex items-center justify-center gap-2"
             >
               {uploading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Загрузка в S3...
+                  {uploadProgress !== null ? `Загрузка: ${uploadProgress}%` : "Сохранение..."}
                 </>
               ) : (
                 <>

@@ -177,6 +177,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Получен пустой файл" }, { status: 400 });
       }
 
+      const expectedSize = req.headers.get("x-expected-size") || searchParams.get("expectedSize");
+      if (expectedSize && Number(expectedSize) > 0 && Number(expectedSize) !== fileSizeBytes) {
+        return NextResponse.json(
+          {
+            error: `Файл повреждён при передаче: исходный размер ${expectedSize} байт, а сервер получил только ${fileSizeBytes} байт. Загрузка отменена.`,
+          },
+          { status: 400 }
+        );
+      }
+
       const checksumSha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 
       const downloadUrl = await uploadFileToS3(
