@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { cookies } from "next/headers";
+import { isPromoSessionValid } from "@/lib/promo-session";
 
 export async function GET(request: Request) {
   const client = await getClient();
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
     const playerId = cookieStore.get("promo_player_id")?.value;
     const activeClubId = cookieStore.get("promo_active_club_id")?.value;
 
-    if (!playerId || !activeClubId) {
+    if (!playerId || !activeClubId || !isPromoSessionValid(cookieStore, playerId)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

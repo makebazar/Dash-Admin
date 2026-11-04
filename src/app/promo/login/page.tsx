@@ -20,6 +20,19 @@ export default function PromoLogin() {
   const clubId = searchParams.get("clubId");
   const pin = pinValues.join("");
 
+  useEffect(() => {
+    fetch("/api/promo/auth/cookies")
+      .then((res) => {
+        if (res.status === 401) {
+          fetch("http://localhost:3033/promo/logout", {
+            method: "POST",
+            mode: "no-cors",
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const formatPhoneInput = (value: string): string => {
     // Strip all non-digits
     let cleaned = value.replace(/\D/g, "");
@@ -119,6 +132,22 @@ export default function PromoLogin() {
       const data = await res.json();
 
       if (data.success) {
+        try {
+          const cookiesRes = await fetch("/api/promo/auth/cookies");
+          if (cookiesRes.ok) {
+            const cookiesData = await cookiesRes.json();
+            if (cookiesData.cookies) {
+              await fetch("http://localhost:3033/promo/set-cookies", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ cookies: cookiesData.cookies }),
+              });
+            }
+          }
+        } catch {
+          // Ignore if local agent is not running
+        }
+
         const action = searchParams.get("action");
         if (action) {
           router.push(

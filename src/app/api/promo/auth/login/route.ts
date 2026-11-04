@@ -275,6 +275,9 @@ export async function POST(request: Request) {
 
     // Set cookies
     const cookieStore = await cookies();
+    const { issuePromoSessionToken } = await import("@/lib/promo-session");
+    const sessionToken = issuePromoSessionToken(String(playerId));
+
     cookieStore.set("promo_player_id", String(playerId), {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -284,6 +287,13 @@ export async function POST(request: Request) {
 
     // Also store active club context
     cookieStore.set("promo_active_club_id", String(numericClubId), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    cookieStore.set("promo_player_token", sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

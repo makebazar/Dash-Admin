@@ -39,7 +39,20 @@ export async function GET() {
       [playerId, activeClubId]
     );
 
-    return NextResponse.json({ matches: result.rows });
+    // Totals over ALL matches (the list above is capped at 30)
+    const totalsRes = await client.query(
+      `SELECT CASE WHEN game = 'Dota 2' THEN 'Dota2' ELSE game END AS game,
+              COUNT(*)::int AS matches, COALESCE(SUM(earned), 0)::float AS earned
+       FROM promo_frag_matches
+       WHERE player_id = $1 AND club_id = $2 AND (game != 'CS2' OR map ~* '^(de_mirage|de_dust2|de_inferno|de_nuke|de_anubis|de_ancient|de_vertigo|de_overpass|de_train|de_cache|cs_office|cs_italy)$')
+       GROUP BY 1`,
+      [playerId, activeClubId]
+    );
+    const totals: Record<string, { matches: number; earned: number }> = {};
+    for (const r of totalsRes.rows) totals[r.game] = { matches: r.matches, earned: r.earned };
+
+    return NextResponse.json({ matches: result.rows, totals });
+
   } catch (error) {
     console.error("Frag History Error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { TOURNAMENT_RULES_TEMPLATES } from "@/lib/promo-frag-utils";
 
 interface Prize {
   place: number;
@@ -173,16 +174,42 @@ export default function CreateTournamentPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase text-slate-500 block ml-1">
-                  Описание и правила (необязательно)
-                </label>
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="text-xs font-bold uppercase text-slate-500 block ml-1">
+                    Описание и регламент турнира
+                  </label>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] text-slate-400 font-medium">Вставить формулу:</span>
+                    <button
+                      type="button"
+                      onClick={() => setDescription(TOURNAMENT_RULES_TEMPLATES.CS2)}
+                      className="text-[11px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Формула CS2
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDescription(TOURNAMENT_RULES_TEMPLATES.Dota2)}
+                      className="text-[11px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Формула Dota 2
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDescription(TOURNAMENT_RULES_TEMPLATES.ALL)}
+                      className="text-[11px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Формула CS2 + Dota 2
+                    </button>
+                  </div>
+                </div>
                 <textarea
-                  rows={3}
-                  placeholder="Укажите правила турнира, особые условия или спонсорскую информацию..."
+                  rows={8}
+                  placeholder="Укажите правила турнира, особые условия или выберите готовый шаблон формулы выше..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-xs text-slate-900 outline-none focus:border-slate-400 focus:bg-white transition-all resize-none"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-medium text-xs text-slate-900 outline-none focus:border-slate-400 focus:bg-white transition-all font-mono leading-relaxed"
                 />
               </div>
             </div>

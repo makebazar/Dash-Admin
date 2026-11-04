@@ -42,8 +42,11 @@ export async function GET(request: Request) {
 
       const matchesRes = await query(
         `SELECT 
+          m.id,
           m.player_id,
           p.full_name,
+          p.nickname,
+          p.avatar_url,
           m.game,
           m.map,
           m.score,
@@ -59,17 +62,57 @@ export async function GET(request: Request) {
          WHERE m.club_id = $1 
            AND m.played_at BETWEEN $2 AND $3
            AND (m.game != 'CS2' OR m.map ~* '^(de_mirage|de_dust2|de_inferno|de_nuke|de_anubis|de_ancient|de_vertigo|de_overpass|de_train|de_cache|cs_office|cs_italy)$')
-           ${gameFilter}`,
+           ${gameFilter}
+         ORDER BY m.played_at ASC`,
         queryParams
       );
 
-      const playerMatchesMap = new Map<number, any[]>();
-      matchesRes.rows.forEach((m: any) => {
-        if (!playerMatchesMap.has(m.player_id)) {
-          playerMatchesMap.set(m.player_id, []);
+      const allTournamentMatches = matchesRes.rows;
+
+      const playerMatchesMap = new Map<any, any[]>();
+      allTournamentMatches.forEach((m: any) => {
+        const key = String(m.player_id);
+        if (!playerMatchesMap.has(key)) {
+          playerMatchesMap.set(key, []);
         }
-        playerMatchesMap.get(m.player_id)!.push(m);
+        playerMatchesMap.get(key)!.push(m);
       });
+
+      // Compute baseline rank (24 hours ago, or before the latest match) to show rank delta (▲ / ▼)
+      const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
+      const matchesOlderThan24h = allTournamentMatches.filter(
+        (m: any) => new Date(m.played_at).getTime() < cutoff24h
+      );
+
+      let baselineMatches = matchesOlderThan24h;
+      if (baselineMatches.length === 0 && allTournamentMatches.length > 1) {
+        baselineMatches = allTournamentMatches.slice(0, allTournamentMatches.length - 1);
+      }
+
+      const prevRankMap = new Map<string, number>();
+      if (baselineMatches.length > 0) {
+        const prevPlayerMatchesMap = new Map<string, any[]>();
+        baselineMatches.forEach((m: any) => {
+          const key = String(m.player_id);
+          if (!prevPlayerMatchesMap.has(key)) {
+            prevPlayerMatchesMap.set(key, []);
+          }
+          prevPlayerMatchesMap.get(key)!.push(m);
+        });
+
+        const prevLeaderboard: any[] = [];
+        prevPlayerMatchesMap.forEach((pMatches, pId) => {
+          const stats = calculateTournamentPoints(pMatches);
+          const qualified = stats.matchesCount >= t.min_matches;
+          if (qualified) {
+            prevLeaderboard.push({ player_id: pId, points: stats.points });
+          }
+        });
+        prevLeaderboard.sort((a, b) => b.points - a.points);
+        prevLeaderboard.forEach((item, idx) => {
+          prevRankMap.set(String(item.player_id), idx + 1);
+        });
+      }
 
       const leaderboard: any[] = [];
       playerMatchesMap.forEach((pMatches, pId) => {
@@ -80,6 +123,8 @@ export async function GET(request: Request) {
         leaderboard.push({
           player_id: pId,
           full_name: playerInfo.full_name,
+          nickname: playerInfo.nickname,
+          avatar_url: playerInfo.avatar_url,
           points: stats.points,
           wins: stats.wins,
           losses: stats.losses,
@@ -91,16 +136,61 @@ export async function GET(request: Request) {
       // Sort by points descending
       leaderboard.sort((a, b) => b.points - a.points);
 
-      // Map ranks (only qualified players receive prizes/rank positions, non-qualified are listed below)
-      const rankedQualified = leaderboard.filter(p => p.qualified).map((p, i) => ({ ...p, rank: i + 1 }));
-      const unranked = leaderboard.filter(p => !p.qualified).map(p => ({ ...p, rank: null }));
+      // Map ranks and rank changes
+      const rankedQualified = leaderboard
+        .filter((p) => p.qualified)
+        .map((p, i) => {
+          const rank = i + 1;
+          const prevRank = prevRankMap.get(String(p.player_id));
+          const rankChange = prevRank !== undefined ? prevRank - rank : null;
+          return {
+            ...p,
+            rank,
+            prev_rank: prevRank ?? null,
+            rank_change: rankChange,
+          };
+        });
+
+      const unranked = leaderboard
+        .filter((p) => !p.qualified)
+        .map((p) => ({
+          ...p,
+          rank: null,
+          prev_rank: null,
+          rank_change: null,
+        }));
+
       const fullBoard = [...rankedQualified, ...unranked];
 
-      // Find current player in the fullBoard
-      const myStats = fullBoard.find(p => p.player_id === playerId) || null;
+      // Current player details & tournament matches breakdown
+      const myMatchesRaw = playerMatchesMap.get(String(playerId)) || [];
+      const myTournamentStats = calculateTournamentPoints(myMatchesRaw, 15);
 
-      // Extract top 10 for display
-      const top10 = fullBoard.slice(0, 10);
+      const myTournamentMatches = (myTournamentStats.allMatches || [])
+        .map((item: any) => ({
+          id: item.match.id,
+          game: item.match.game,
+          map: item.match.map,
+          score: item.match.score,
+          kills: item.match.kills || 0,
+          deaths: item.match.deaths || 0,
+          assists: item.match.assists || 0,
+          headshots: item.match.headshots || 0,
+          last_hits: item.match.last_hits || 0,
+          played_at: item.match.played_at,
+          events: item.match.events,
+          points: item.points,
+          isCounted: item.isCounted,
+          isWin: item.isWin,
+          breakdown: item.breakdown,
+        }))
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.played_at).getTime() - new Date(a.played_at).getTime()
+        );
+
+      const myStats =
+        fullBoard.find((p) => String(p.player_id) === String(playerId)) || null;
 
       enrichedTournaments.push({
         id: t.id,
@@ -112,22 +202,29 @@ export async function GET(request: Request) {
         prizes: typeof t.prizes === "string" ? JSON.parse(t.prizes) : t.prizes,
         status: t.status,
         description: t.description,
-        myStats: myStats ? {
-          rank: myStats.rank,
-          points: myStats.points,
-          matches_count: myStats.matches_count,
-          wins: myStats.wins,
-          losses: myStats.losses,
-          qualified: myStats.qualified,
-        } : {
-          rank: null,
-          points: 0,
-          matches_count: 0,
-          wins: 0,
-          losses: 0,
-          qualified: false,
-        },
-        leaderboard: top10,
+        myStats: myStats
+          ? {
+              rank: myStats.rank,
+              prev_rank: myStats.prev_rank,
+              rank_change: myStats.rank_change,
+              points: myStats.points,
+              matches_count: myStats.matches_count,
+              wins: myStats.wins,
+              losses: myStats.losses,
+              qualified: myStats.qualified,
+            }
+          : {
+              rank: null,
+              prev_rank: null,
+              rank_change: null,
+              points: 0,
+              matches_count: 0,
+              wins: 0,
+              losses: 0,
+              qualified: false,
+            },
+        myMatches: myTournamentMatches,
+        leaderboard: fullBoard, // All participants who played!
         fullLeaderboardCount: fullBoard.length,
       });
     }

@@ -28,6 +28,13 @@ export function PromoHeader({
     async function fetchPlayer() {
       try {
         const res = await fetch("/api/promo/player");
+        if (res.status === 401) {
+          fetch("http://localhost:3033/promo/logout", {
+            method: "POST",
+            mode: "no-cors",
+          }).catch(() => {});
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           setPlayer(data.player);

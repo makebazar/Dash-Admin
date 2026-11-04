@@ -31,6 +31,7 @@ import {
   Globe
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TOURNAMENT_RULES_TEMPLATES } from "@/lib/promo-frag-utils";
 
 interface FragTabProps {
   settings: any;
@@ -1469,10 +1470,48 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                     const nextPlace = editPrizes.length + 1;
                     setEditPrizes([...editPrizes, { place: nextPlace, reward: 1000, text_prize: "", description: "" }]);
                   }}
-                  className="text-indigo-500 hover:text-indigo-600 text-[10px] font-black uppercase flex items-center gap-1 ml-2"
+                  className="text-indigo-500 hover:text-indigo-600 text-[10px] font-black uppercase flex items-center gap-1 ml-2 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" /> Добавить призовое место
                 </button>
+              </div>
+
+              {/* Description & Rules Editor */}
+              <div className="space-y-2 pt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 block ml-2">Описание и регламент турнира</label>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-slate-400">Формула:</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditDescription(TOURNAMENT_RULES_TEMPLATES.CS2)}
+                      className="text-[10px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      CS2
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditDescription(TOURNAMENT_RULES_TEMPLATES.Dota2)}
+                      className="text-[10px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      Dota 2
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditDescription(TOURNAMENT_RULES_TEMPLATES.ALL)}
+                      className="text-[10px] font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      CS2 + Dota 2
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  rows={6}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Регламент турнира и правила начисления очков..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 font-medium text-xs outline-none focus:border-indigo-500 focus:bg-white transition-all font-mono leading-relaxed"
+                />
               </div>
 
               <div className="flex gap-4 pt-2">

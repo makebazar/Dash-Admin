@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { revokePromoSession } from "@/lib/promo-session";
 
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
+    const playerId = cookieStore.get("promo_player_id")?.value;
+    const token = cookieStore.get("promo_player_token")?.value;
+
+    revokePromoSession(playerId, token);
 
     // Clear cookies explicitly
     cookieStore.delete({ name: "promo_player_id", path: "/" });

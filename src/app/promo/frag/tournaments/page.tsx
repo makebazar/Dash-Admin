@@ -2,14 +2,6 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Trophy,
-  Clock,
-  Award,
-  BookOpen,
-  Loader2,
-  AlertCircle
-} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { PromoHeader } from "../../components/PromoHeader";
@@ -45,6 +37,7 @@ export default function PlayerTournamentsPage() {
   const [selectedTournamentId, setSelectedTournamentId] = useState<number | null>(null);
   const [player, setPlayer] = useState<any>(null);
   const [showRules, setShowRules] = useState(false);
+  const [tab, setTab] = useState<"active" | "history">("active");
 
   const loadData = useCallback(async () => {
     try {
@@ -105,7 +98,7 @@ export default function PlayerTournamentsPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center font-sans">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <span className="text-xs text-gray-500">Загрузка...</span>
       </div>
     );
   }
@@ -122,7 +115,6 @@ export default function PlayerTournamentsPage() {
       <div className="max-w-xl lg:max-w-6xl mx-auto px-4 pt-6 space-y-6">
         {tournaments.length === 0 ? (
           <div className="text-center py-20 bg-white/[0.02] border border-white/5 rounded-3xl p-6">
-            <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-4" />
             <h3 className="font-black uppercase italic text-sm text-gray-400">Сезоны не найдены</h3>
             <p className="text-xs text-gray-500 mt-1">Администрация еще не запускала рейтинговых кубков.</p>
           </div>
@@ -130,32 +122,47 @@ export default function PlayerTournamentsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* Left Column */}
             <div className="lg:col-span-7 space-y-6">
-              {/* TOURNAMENT SELECTOR DROPDOWN (if multiple exist) */}
-              {tournaments.length > 1 && (
-                <div className="space-y-1.5">
-                  <label className="text-[9px] font-black uppercase tracking-widest text-gray-600 ml-1">Выберите сезон</label>
-                  <select
-                    value={selectedTournamentId || ""}
-                    onChange={(e) => handleSelectTournament(parseInt(e.target.value))}
-                    className="w-full bg-white/[0.02] border border-white/10 rounded-2xl px-5 py-3.5 font-bold text-xs text-white outline-none focus:border-indigo-500 transition-all cursor-pointer"
-                  >
-                    {activeSeasons.length > 0 && (
-                      <optgroup label="Активные сезоны" className="bg-[#121214]">
-                        {activeSeasons.map((t) => (
-                          <option key={t.id} value={t.id}>{t.title} (Активен)</option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {pastSeasons.length > 0 && (
-                      <optgroup label="Завершенные сезоны" className="bg-[#121214]">
-                        {pastSeasons.map((t) => (
-                          <option key={t.id} value={t.id}>{t.title} (Архив)</option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
+              {/* TABS: active / history */}
+              <div className="space-y-2">
+                <div className="flex gap-1.5">
+                  {([["active", "Активные", activeSeasons], ["history", "История", pastSeasons]] as const).map(([key, label, list]) => (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        setTab(key);
+                        if (list[0]) handleSelectTournament(list[0].id);
+                      }}
+                      className={cn(
+                        "flex-1 py-2 rounded-2xl text-xs font-bold uppercase tracking-wider border transition-all",
+                        tab === key ? "bg-white/10 text-white border-white/20" : "text-gray-500 border-transparent hover:text-gray-300 hover:bg-white/5"
+                      )}
+                    >
+                      {label} ({list.length})
+                    </button>
+                  ))}
                 </div>
-              )}
+                {(tab === "active" ? activeSeasons : pastSeasons).length === 0 ? (
+                  <div className="text-center py-6 text-xs text-gray-500 bg-white/[0.02] border border-white/5 rounded-2xl">
+                    {tab === "active" ? "Сейчас активных турниров нет" : "Завершённых турниров пока нет"}
+                  </div>
+                ) : (
+                  <div className="flex overflow-x-auto gap-2 pb-1 snap-x snap-mandatory no-scrollbar [&::-webkit-scrollbar]:hidden">
+                    {(tab === "active" ? activeSeasons : pastSeasons).map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => handleSelectTournament(t.id)}
+                        className={cn(
+                          "snap-start shrink-0 max-w-[220px] text-left rounded-2xl border px-4 py-2.5 transition-all",
+                          selectedTournamentId === t.id ? "bg-indigo-500/10 border-indigo-500/40" : "bg-white/5 border-white/10"
+                        )}
+                      >
+                        <div className="text-xs font-black uppercase truncate">{t.title}</div>
+                        <div className="text-[10px] text-gray-400 mt-0.5">{formatDate(t.start_date)} — {formatDate(t.end_date)}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* DETAILED ACTIVE VIEW */}
               {activeTournament && (
@@ -179,7 +186,6 @@ export default function PlayerTournamentsPage() {
                           </p>
                         )}
                         <div className="text-[10px] text-gray-500 flex items-center gap-1.5 font-bold">
-                          <Clock className="w-3.5 h-3.5 text-gray-600" />
                           <span>{formatDate(activeTournament.start_date)} — {formatDate(activeTournament.end_date)}</span>
                         </div>
                       </div>
@@ -222,14 +228,12 @@ export default function PlayerTournamentsPage() {
 
                     <div className="flex items-center justify-between gap-4 text-xs text-gray-400 pt-2 border-t border-white/5 relative z-10">
                       <span className="flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 text-gray-500" />
                         <span>Участвуют все игроки автоматически</span>
                       </span>
                       <button
                         onClick={() => setShowRules(!showRules)}
                         className="text-[10px] font-black uppercase italic tracking-wider text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
                       >
-                        <BookOpen className="w-3.5 h-3.5" />
                         {showRules ? "Скрыть формулу" : "Как копить PTS"}
                       </button>
                     </div>
@@ -245,7 +249,7 @@ export default function PlayerTournamentsPage() {
                         className="overflow-hidden bg-[#121214] border border-white/5 p-5 rounded-3xl space-y-4 text-xs text-gray-400"
                       >
                         <h4 className="font-black uppercase italic text-white flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-indigo-500" /> Как рассчитываются PTS рейтинга?
+                          Как рассчитываются PTS рейтинга?
                         </h4>
                         <p className="leading-relaxed">
                           PTS (очки турнира) начисляются за каждый сыгранный матч во время сезона. Формула учитывает результат матча и личные показатели:
@@ -312,10 +316,6 @@ export default function PlayerTournamentsPage() {
                               p.place === 1 ? "border-amber-500/30" : p.place === 2 ? "border-slate-400/20" : "border-amber-700/20"
                             )}
                           >
-                            <Award className={cn(
-                              "w-6 h-6 mx-auto",
-                              p.place === 1 ? "text-amber-500" : p.place === 2 ? "text-slate-400" : "text-amber-700"
-                            )} />
                             <div>
                               <div className="text-[8px] text-gray-500 font-bold uppercase">{p.place} место</div>
                               <div className="text-xs font-black text-white leading-tight mt-0.5">

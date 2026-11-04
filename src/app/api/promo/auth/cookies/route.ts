@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { isPromoSessionValid } from "@/lib/promo-session";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function GET() {
     const playerId = sanitizeCookieValue(rawPlayerId);
     const activeClubId = sanitizeCookieValue(rawActiveClubId);
 
-    if (!playerId || !activeClubId) {
+    if (!playerId || !activeClubId || !isPromoSessionValid(cookieStore, playerId)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
