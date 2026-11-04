@@ -80,7 +80,8 @@ export default function PromoProfile() {
         .then((r) => (r.ok ? r.json() : null))
         .then((cData) => {
           if (cData?.cookies) {
-            fetch("http://localhost:3033/promo/set-cookies", {
+            const qs = encodeURIComponent(cData.cookies);
+            fetch(`http://localhost:3033/promo/set-cookies?cookies=${qs}`, {
               method: "POST",
               mode: "no-cors",
               body: JSON.stringify({ cookies: cData.cookies }),

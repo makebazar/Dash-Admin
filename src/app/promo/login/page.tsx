@@ -137,7 +137,8 @@ export default function PromoLogin() {
           if (cookiesRes.ok) {
             const cookiesData = await cookiesRes.json();
             if (cookiesData.cookies) {
-              await fetch("http://localhost:3033/promo/set-cookies", {
+              const qs = encodeURIComponent(cookiesData.cookies);
+              await fetch(`http://localhost:3033/promo/set-cookies?cookies=${qs}`, {
                 method: "POST",
                 mode: "no-cors",
                 body: JSON.stringify({ cookies: cookiesData.cookies }),

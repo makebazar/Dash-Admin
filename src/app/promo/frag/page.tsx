@@ -328,7 +328,8 @@ export default function FragPage() {
               data?.PromoPlayerId &&
               String(cookiesData.playerId) !== String(data.PromoPlayerId);
             if (cookiesData.cookies && (!data?.PromoLoggedIn || playerMismatch)) {
-              await fetch(`${AGENT_URL}/promo/set-cookies`, {
+              const qs = encodeURIComponent(cookiesData.cookies);
+              await fetch(`${AGENT_URL}/promo/set-cookies?cookies=${qs}`, {
                 method: "POST",
                 mode: "no-cors",
                 body: JSON.stringify({ cookies: cookiesData.cookies }),

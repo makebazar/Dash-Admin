@@ -32,11 +32,10 @@ export async function GET(request: Request) {
     const clientIp = extractClientIp(request);
 
     if (fromAgent) {
-      const savedCookies = getAgentSessionByIp(clientIp);
-      if (!savedCookies) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-      return NextResponse.json({ cookies: savedCookies });
+      // Agents running on PCs in a club network should NEVER automatically inherit
+      // sessions based on public WAN IP, because all PCs share the exact same WAN IP.
+      // Sessions are strictly pushed to each PC's agent locally via localhost:3033/promo/set-cookies.
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const cookieStore = await cookies();

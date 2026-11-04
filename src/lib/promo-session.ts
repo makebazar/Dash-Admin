@@ -47,18 +47,13 @@ export function issuePromoSessionToken(playerId: string): string {
   return token;
 }
 
-export function registerBrowserSession(playerId: string, clientIp: string, cookieString: string) {
+export function registerBrowserSession(playerId: string, _clientIp?: string, _cookieString?: string) {
   const state = getSessionState();
   state.loggedOutPlayers.delete(String(playerId));
-  if (clientIp && cookieString) {
-    state.ipSessions.set(clientIp, cookieString);
-  }
 }
 
-export function getAgentSessionByIp(clientIp: string): string | null {
-  if (!clientIp) return null;
-  const state = getSessionState();
-  return state.ipSessions.get(clientIp) || null;
+export function getAgentSessionByIp(_clientIp: string): string | null {
+  return null;
 }
 
 export function revokePromoSession(playerId?: string, token?: string, clientIp?: string) {
