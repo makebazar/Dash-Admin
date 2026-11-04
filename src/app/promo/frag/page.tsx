@@ -6,8 +6,19 @@ import { PromoHeader } from "../components/PromoHeader";
 import { BottomNav } from "../components/BottomNav";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
+import { Download, Monitor } from "lucide-react";
 
 const AGENT_URL = "http://localhost:3033";
+
+interface FragReleaseInfo {
+  id: string;
+  appName: string;
+  version: string;
+  downloadUrl: string;
+  fileSizeBytes: number | null;
+  originalFilename?: string;
+  changelog?: string | null;
+}
 
 interface AgentState {
   ActiveGame: string;
@@ -224,6 +235,23 @@ export default function FragPage() {
   const [activeTab, setActiveTab] = useState<"CS2" | "Dota2" | "PUBG">("CS2");
   const [mounted, setMounted] = useState(false);
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
+  const [releaseInfo, setReleaseInfo] = useState<FragReleaseInfo | null>(null);
+
+  useEffect(() => {
+    fetch("/api/promo/frag/release")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.release) setReleaseInfo(data.release);
+      })
+      .catch((err) => console.error("Failed to load frag release:", err));
+  }, []);
+
+  const formatReleaseSize = (bytes: number | null | undefined) => {
+    if (!bytes) return null;
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1) return `${(bytes / 1024).toFixed(0)} КБ`;
+    return `${mb.toFixed(1)} МБ`;
+  };
 
   // Tournament states
   const [tournaments, setTournaments] = useState<any[]>([]);
@@ -1065,40 +1093,117 @@ export default function FragPage() {
       <div className="max-w-xl lg:max-w-5xl mx-auto pt-4 space-y-5">
 
         {/* Main tabs: underline nav, no flex squishing, smooth swipe on mobile */}
-        <div className="flex border-b border-white/10 overflow-x-auto no-scrollbar -mx-1">
-          {([["play", "Играть"], ["earn", "Заработок"], ["history", "История"], ["tours", "Турниры"], ["leaders", "Лидеры"], ["rules", "Правила"]] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => switchMainTab(key)}
-              className={cn(
-                "px-3.5 py-3 text-xs sm:text-sm font-black uppercase tracking-wide whitespace-nowrap shrink-0 cursor-pointer border-b-[3px] -mb-px transition-colors",
-                mainTab === key ? "text-amber-400 border-amber-400" : "text-gray-500 border-transparent hover:text-gray-300"
-              )}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex items-center justify-between border-b border-white/10 gap-2">
+          <div className="flex overflow-x-auto no-scrollbar -mx-1">
+            {([["play", "Играть"], ["earn", "Заработок"], ["history", "История"], ["tours", "Турниры"], ["leaders", "Лидеры"], ["rules", "Правила"]] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => switchMainTab(key)}
+                className={cn(
+                  "px-3.5 py-3 text-xs sm:text-sm font-black uppercase tracking-wide whitespace-nowrap shrink-0 cursor-pointer border-b-[3px] -mb-px transition-colors",
+                  mainTab === key ? "text-amber-400 border-amber-400" : "text-gray-500 border-transparent hover:text-gray-300"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <a
+            href="/api/promo/frag/download"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-xs font-bold text-amber-400 transition shrink-0"
+            title="Скачать установщик DashFrag"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Скачать DashFrag</span>
+            {releaseInfo?.version && <span className="text-[10px] text-gray-400 font-normal">v{releaseInfo.version}</span>}
+          </a>
         </div>
+
         {/* ============ PLAY ============ */}
         {mainTab === "play" && (
           <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
             <div className="space-y-4">
-            <div className={cn(boxCls, "flex items-center justify-between text-xs font-bold")}>
-              <div className="flex items-center gap-2.5">
-                <span className={cn("w-2 h-2 rounded-full animate-pulse", agentOnline ? "bg-emerald-400" : "bg-amber-400")} />
-                <span className="text-gray-300">
-                  {agentOnline ? (isPlaying ? `В игре: ${agentState?.ActiveGame}` : "Агент активен, ждём игру") : "Агент на ПК выключен"}
-                </span>
-              </div>
+              {/* Prominent Download Banner if agent is not running */}
               {!agentOnline && (
-                <a href="dashfrag://launch" className="text-amber-400 hover:text-amber-300 uppercase tracking-wider">Запустить</a>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-orange-500/5 to-transparent border border-amber-500/30 p-4 sm:p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          <Monitor className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-black text-sm sm:text-base text-white">
+                              Клиент DashFrag
+                            </h3>
+                            {releaseInfo?.version && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                v{releaseInfo.version}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-amber-400/90 font-medium">
+                            Не запущен на этом ПК
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-400 leading-relaxed pt-1">
+                        Скачайте и запустите клиент на игровом месте, чтобы ваши фраги и победы в CS2, Dota 2 и PUBG приносили реальные бонусы.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
+                    <a
+                      href="/api/promo/frag/download"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black rounded-xl text-xs sm:text-sm tracking-wide transition shadow-lg shadow-orange-500/20 active:scale-[0.98]"
+                    >
+                      <Download className="w-4 h-4 stroke-[2.5]" />
+                      <span>Скачать DashFrag</span>
+                      {releaseInfo?.fileSizeBytes && (
+                        <span className="text-[11px] opacity-75 font-semibold">
+                          ({formatReleaseSize(releaseInfo.fileSizeBytes)})
+                        </span>
+                      )}
+                    </a>
+
+                    <a
+                      href="dashfrag://launch"
+                      className="flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white font-bold rounded-xl text-xs transition border border-white/10"
+                      title="Если DashFrag уже скачан и установлен на этом ПК"
+                    >
+                      <span>Уже установлен? Запустить</span>
+                    </a>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-white/5">
+                    <span>Windows 10 / 11 (x64)</span>
+                    <span>CS2 • Dota 2 • PUBG</span>
+                  </div>
+                </div>
               )}
-            </div>
-            {!fragEnabled && (
-              <div className="text-center text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 py-2 rounded-xl">
-                Модуль FRAG сейчас отключен в клубе
+
+              <div className={cn(boxCls, "flex items-center justify-between text-xs font-bold")}>
+                <div className="flex items-center gap-2.5">
+                  <span className={cn("w-2 h-2 rounded-full animate-pulse", agentOnline ? "bg-emerald-400" : "bg-amber-400")} />
+                  <span className="text-gray-300">
+                    {agentOnline ? (isPlaying ? `В игре: ${agentState?.ActiveGame}` : "Агент активен, ждём игру") : "Агент на ПК выключен"}
+                  </span>
+                </div>
+                {!agentOnline ? (
+                  <a href="/api/promo/frag/download" className="text-amber-400 hover:text-amber-300 uppercase tracking-wider flex items-center gap-1 text-[11px]">
+                    <Download className="w-3.5 h-3.5" />
+                    Скачать .exe
+                  </a>
+                ) : null}
               </div>
-            )}
+              {!fragEnabled && (
+                <div className="text-center text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 py-2 rounded-xl">
+                  Модуль FRAG сейчас отключен в клубе
+                </div>
+              )}
             </div>
 
             {liveGame && agentState ? (

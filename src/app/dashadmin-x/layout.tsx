@@ -14,6 +14,7 @@ import {
   Shield,
   PhoneCall,
   Headphones,
+  Crosshair,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { label: "Пользователи", href: "/dashadmin-x/users", icon: Users, superAdminOnly: true },
   { label: "Клубы", href: "/dashadmin-x/clubs", icon: Store },
   { label: "Роли", href: "/dashadmin-x/roles", icon: Shield, superAdminOnly: true },
+  { label: "DashFrag", href: "/dashadmin-x/frag", icon: Crosshair, superAdminOnly: true },
   { label: "Поддержка", href: "/dashadmin-x/support", icon: Headphones },
 ];
 

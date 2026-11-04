@@ -26,7 +26,8 @@ export async function uploadFileToS3(
   fileBuffer: Buffer | Uint8Array,
   fileName: string,
   mimeType: string,
-  folder: string = 'uploads'
+  folder: string = 'uploads',
+  options?: { contentDisposition?: string }
 ): Promise<string> {
   const fileExtension = fileName.split('.').pop() || 'bin';
   const uniqueFileName = `${uuidv4()}.${fileExtension}`;
@@ -39,6 +40,7 @@ export async function uploadFileToS3(
       Body: fileBuffer,
       ContentType: mimeType,
       ACL: 'public-read', 
+      ContentDisposition: options?.contentDisposition,
     };
 
     const command = new PutObjectCommand(params);
@@ -59,3 +61,4 @@ export async function uploadFileToS3(
     throw new Error(`S3 Upload failed: ${error.message}`);
   }
 }
+
