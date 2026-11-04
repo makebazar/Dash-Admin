@@ -93,9 +93,36 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
 
   const [isActive, setIsActive] = useState<boolean>(fragConfig.is_active);
   const [tariffs, setTariffs] = useState<any>({ ...defaultTariffs, ...fragConfig.tariffs });
-  const [clubIp, setClubIp] = useState<string>(settings.club_ip || fragConfig.club_ip || "");
+  const [clubIps, setClubIps] = useState<string[]>(() => {
+    const rawList: string[] = [];
+    if (Array.isArray(settings.club_ips)) rawList.push(...settings.club_ips);
+    else if (Array.isArray(fragConfig.club_ips)) rawList.push(...fragConfig.club_ips);
+    else {
+      const legacy = settings.club_ip || fragConfig.club_ip || "";
+      if (typeof legacy === "string" && legacy.trim()) {
+        rawList.push(...legacy.split(/[,;\s]+/));
+      }
+    }
+    const cleaned = Array.from(new Set(rawList.map((ip) => String(ip).trim()).filter(Boolean)));
+    return cleaned.length > 0 ? cleaned : [""];
+  });
   const [isDetectingIp, setIsDetectingIp] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  const handleIpChange = (index: number, value: string) => {
+    setClubIps((prev) => prev.map((ip, i) => (i === index ? value : ip)));
+  };
+
+  const handleAddIp = () => {
+    setClubIps((prev) => [...prev, ""]);
+  };
+
+  const handleRemoveIp = (index: number) => {
+    setClubIps((prev) => {
+      if (prev.length <= 1) return [""];
+      return prev.filter((_, i) => i !== index);
+    });
+  };
 
   const handleDetectIp = async () => {
     setIsDetectingIp(true);
@@ -103,7 +130,15 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
       const res = await fetch("https://api.ipify.org?format=json");
       const data = await res.json();
       if (data.ip) {
-        setClubIp(data.ip);
+        const detected = String(data.ip).trim();
+        setClubIps((prev) => {
+          if (prev.some((ip) => ip.trim() === detected)) return prev;
+          const emptyIdx = prev.findIndex((ip) => !ip.trim());
+          if (emptyIdx !== -1) {
+            return prev.map((ip, i) => (i === emptyIdx ? detected : ip));
+          }
+          return [...prev, detected];
+        });
       }
     } catch {
       alert("Не удалось автоматически определить IP. Пожалуйста, укажите вручную.");
@@ -283,16 +318,28 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
     setIsSaving(true);
     setSaveStatus("saving");
     try {
+      const cleanedIps = Array.from(
+        new Set(
+          clubIps
+            .flatMap((ip) => ip.split(/[,;\s]+/))
+            .map((ip) => ip.trim())
+            .filter(Boolean)
+        )
+      );
+      const joinedClubIp = cleanedIps.join(", ");
       const updatedSettings = {
         ...settings,
-        club_ip: clubIp,
+        club_ips: cleanedIps,
+        club_ip: joinedClubIp,
         frag: {
           is_active: isActive,
           tariffs: tariffs,
-          club_ip: clubIp,
+          club_ips: cleanedIps,
+          club_ip: joinedClubIp,
         },
       };
       await saveSettings(updatedSettings);
+      setClubIps(cleanedIps.length > 0 ? cleanedIps : [""]);
       setSaveStatus("success");
       setTimeout(() => setSaveStatus("idle"), 4000);
     } catch (e) {
@@ -578,36 +625,65 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
 
             {/* Club IP & DashFrag Agent Settings Card */}
             <div className="bg-white border border-slate-200 p-6 md:p-8 rounded-3xl shadow-xs space-y-5">
-              <div>
-                <h4 className="text-lg font-bold text-slate-900">Внешний IP-адрес клуба (DashFrag Agent)</h4>
-                <p className="text-xs text-slate-400 font-medium">Для проверки присутствия игрока в сети клуба и безопасности зачисления бонусов</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-lg font-bold text-slate-900">Внешние IP-адреса клуба (DashFrag Agent)</h4>
+                  <p className="text-xs text-slate-400 font-medium">Для проверки присутствия игрока в сети клуба (можно указать несколько провайдеров / резервных каналов)</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleDetectIp}
+                    disabled={isDetectingIp}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-all cursor-pointer shrink-0 shadow-xs"
+                  >
+                    {isDetectingIp && <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />}
+                    Определить текущий IP
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddIp}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all cursor-pointer shrink-0 shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Добавить IP
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Публичный IP-адрес провайдера (WAN IP)
+                <div className="space-y-2.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                    Публичные IP-адреса провайдеров (WAN IP)
                   </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={clubIp}
-                      onChange={(e) => setClubIp(e.target.value)}
-                      placeholder="Например: 185.220.101.45"
-                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-slate-900 outline-none focus:border-slate-400 focus:bg-white transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleDetectIp}
-                      disabled={isDetectingIp}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-all cursor-pointer shrink-0 shadow-xs"
-                    >
-                      {isDetectingIp && <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />}
-                      Определить мой текущий IP
-                    </button>
+                  <div className="space-y-2">
+                    {clubIps.map((ip, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="w-7 text-center text-xs font-bold text-slate-400 font-mono shrink-0">
+                          #{index + 1}
+                        </div>
+                        <input
+                          type="text"
+                          value={ip}
+                          onChange={(e) => handleIpChange(index, e.target.value)}
+                          placeholder={index === 0 ? "Основной IP, например: 185.220.101.45" : "Дополнительный / резервный IP"}
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-slate-900 outline-none focus:border-slate-400 focus:bg-white transition-all"
+                        />
+                        {(clubIps.length > 1 || ip.trim() !== "") && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveIp(index)}
+                            title="Удалить IP"
+                            className="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-400 hover:text-rose-600 transition-all cursor-pointer shrink-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                   <p className="text-xs text-slate-400 font-medium">
-                    Все компьютеры клуба выходят в интернет через один общий внешний IP роутера.
+                    Все компьютеры клуба выходят в интернет через внешние IP роутеров. Если у клуба основной и резервный интернет-канал, добавьте оба адреса.
                   </p>
                 </div>
 
@@ -619,8 +695,8 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                     <li>Откройте любой ПК в клубе или ПК администратора.</li>
                     <li>Перейдите на сайт <a href="https://2ip.ru" target="_blank" rel="noreferrer" className="text-emerald-600 font-semibold underline">2ip.ru</a> или <a href="https://ipify.org" target="_blank" rel="noreferrer" className="text-emerald-600 font-semibold underline">ipify.org</a>.</li>
                     <li>Скопируйте ваш внешне отображаемый IP-адрес (например, <code className="bg-slate-200 px-1.5 py-0.5 rounded text-slate-800 font-mono">185.220.101.45</code>).</li>
-                    <li>Вставьте скопированный IP в поле выше и нажмите <strong>«Сохранить настройки»</strong>.</li>
-                    <li>Вы также можете просто нажать кнопку <strong>«Определить мой текущий IP»</strong> выше, если открыли админку прямо из клуба.</li>
+                    <li>Вставьте скопированный IP в поле выше (при наличии нескольких линий нажмите <strong>«Добавить IP»</strong>) и нажмите <strong>«Сохранить настройки»</strong>.</li>
+                    <li>Вы также можете просто нажать кнопку <strong>«Определить текущий IP»</strong> выше, если открыли админку прямо из клуба.</li>
                   </ol>
                 </div>
               </div>

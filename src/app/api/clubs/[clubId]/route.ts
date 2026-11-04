@@ -12,7 +12,7 @@ export async function GET(
 
     // Получить клуб
     const result = await query(
-      `SELECT id, name, address, owner_id, promo_settings, inventory_settings, created_at FROM clubs WHERE id = $1`,
+      `SELECT id, name, address, owner_id, ip_address, promo_settings, inventory_settings, created_at FROM clubs WHERE id = $1`,
       [clubId],
     );
 
@@ -21,6 +21,10 @@ export async function GET(
     }
 
     const club = result.rows[0];
+    const promoSettings = club.promo_settings || {};
+    if (!promoSettings.club_ips && !promoSettings.club_ip && club.ip_address) {
+      promoSettings.club_ip = club.ip_address;
+    }
     const invSettings = club.inventory_settings || {};
     const hasAuth = Boolean(
       (invSettings.smartshell_login && invSettings.smartshell_password && invSettings.smartshell_company_id) ||
@@ -31,6 +35,7 @@ export async function GET(
     return NextResponse.json({
       club: {
         ...club,
+        promo_settings: promoSettings,
         is_smartshell_enabled: isSmartShellEnabled,
       },
     });

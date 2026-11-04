@@ -12,7 +12,13 @@ export async function POST(
 
     const { settings } = await request.json();
 
-    const clubIp = settings?.club_ip !== undefined ? (settings.club_ip || null) : (settings?.frag?.club_ip !== undefined ? (settings.frag.club_ip || null) : null);
+    const rawIps: string[] = Array.isArray(settings?.club_ips)
+      ? settings.club_ips
+      : Array.isArray(settings?.frag?.club_ips)
+        ? settings.frag.club_ips
+        : String(settings?.club_ip ?? settings?.frag?.club_ip ?? "").split(/[,;\s]+/);
+    const cleanedIps = rawIps.map((ip) => String(ip).trim()).filter(Boolean);
+    const primaryClubIp = cleanedIps[0] ? cleanedIps[0].slice(0, 45) : null;
 
     await query(
       `UPDATE clubs SET
@@ -24,7 +30,7 @@ export async function POST(
                     'xp_per_ruble', COALESCE(($1::jsonb->>'bp_xp_per_rub')::numeric::integer, 1)
                 )
              WHERE id = $2`,
-      [JSON.stringify(settings), clubId, clubIp],
+      [JSON.stringify(settings), clubId, primaryClubIp],
     );
 
     return NextResponse.json({ success: true });
