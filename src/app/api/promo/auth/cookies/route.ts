@@ -1,47 +1,67 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { isPromoSessionValid } from "@/lib/promo-session";
+import {
+  extractClientIp,
+  getAgentSessionByIp,
+  isPromoSessionValid,
+  registerBrowserSession,
+} from "@/lib/promo-session";
 
 export const dynamic = "force-dynamic";
 
 function sanitizeCookieValue(val?: string): string | null {
   if (!val) return null;
-  let clean = decodeURIComponent(val).trim().replace(/^s:/, '').replace(/^"|"$/g, '');
-  if (clean.includes('.')) {
-    clean = clean.split('.')[0];
+  let decoded = val;
+  try {
+    decoded = decodeURIComponent(val);
+  } catch {
+    decoded = val;
+  }
+  let clean = decoded.trim().replace(/^s:/, "").replace(/^"|"$/g, "");
+  if (clean.includes(".")) {
+    clean = clean.split(".")[0];
   }
   return clean || null;
 }
 
 // GET /api/promo/auth/cookies — Get current session cookies to sync with local agent
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const fromAgent = searchParams.get("fromAgent") === "1" || request.headers.get("x-dashfrag-agent") === "1";
+    const clientIp = extractClientIp(request);
+
+    if (fromAgent) {
+      const savedCookies = getAgentSessionByIp(clientIp);
+      if (!savedCookies) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      return NextResponse.json({ cookies: savedCookies });
+    }
+
     const cookieStore = await cookies();
     const rawPlayerId = cookieStore.get("promo_player_id")?.value;
     const rawActiveClubId = cookieStore.get("promo_active_club_id")?.value;
+    const rawToken = cookieStore.get("promo_player_token")?.value;
 
     const playerId = sanitizeCookieValue(rawPlayerId);
     const activeClubId = sanitizeCookieValue(rawActiveClubId);
+    const token = sanitizeCookieValue(rawToken);
 
-    if (!playerId || !activeClubId || !isPromoSessionValid(cookieStore, playerId)) {
+    if (!playerId || !activeClubId || !isPromoSessionValid(cookieStore, playerId, false)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const allCookies = cookieStore.getAll();
-    const sanitizedCookieArray = allCookies.map(c => {
-      const cleanVal = sanitizeCookieValue(c.value) || c.value;
-      return `${c.name}=${cleanVal}`;
-    });
-
-    // Ensure promo_player_id and promo_active_club_id are clean
-    if (!sanitizedCookieArray.some(c => c.startsWith("promo_player_id="))) {
-      sanitizedCookieArray.push(`promo_player_id=${playerId}`);
-    }
-    if (!sanitizedCookieArray.some(c => c.startsWith("promo_active_club_id="))) {
-      sanitizedCookieArray.push(`promo_active_club_id=${activeClubId}`);
+    const parts = [
+      `promo_player_id=${playerId}`,
+      `promo_active_club_id=${activeClubId}`,
+    ];
+    if (token) {
+      parts.push(`promo_player_token=${token}`);
     }
 
-    const cookieString = sanitizedCookieArray.join("; ");
+    const cookieString = parts.join("; ");
+    registerBrowserSession(playerId, clientIp, cookieString);
 
     return NextResponse.json({ cookies: cookieString, playerId, activeClubId });
   } catch (error) {

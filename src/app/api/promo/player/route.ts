@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getClient } from "@/db";
 import { cookies } from "next/headers";
-import { isPromoSessionValid } from "@/lib/promo-session";
+import { extractClientIp, isPromoSessionValid, registerBrowserSession } from "@/lib/promo-session";
 
 export async function GET(request: Request) {
   const client = await getClient();
@@ -9,9 +9,21 @@ export async function GET(request: Request) {
     const cookieStore = await cookies();
     const playerId = cookieStore.get("promo_player_id")?.value;
     const activeClubId = cookieStore.get("promo_active_club_id")?.value;
+    const isFromAgent = request.headers.get("x-dashfrag-agent") === "1";
 
-    if (!playerId || !activeClubId || !isPromoSessionValid(cookieStore, playerId)) {
+    if (!playerId || !activeClubId || !isPromoSessionValid(cookieStore, playerId, isFromAgent)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!isFromAgent) {
+      const clientIp = extractClientIp(request);
+      const token = cookieStore.get("promo_player_token")?.value;
+      const cookieParts = [
+        `promo_player_id=${playerId}`,
+        `promo_active_club_id=${activeClubId}`,
+      ];
+      if (token) cookieParts.push(`promo_player_token=${token}`);
+      registerBrowserSession(playerId, clientIp, cookieParts.join("; "));
     }
 
     // Get player global data + club-specific balance

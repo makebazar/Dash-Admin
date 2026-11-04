@@ -5,6 +5,7 @@ interface PromoSessionState {
   revokedTokens: Set<string>;
   activePlayerTokens: Map<string, string>;
   loggedOutPlayers: Set<string>;
+  ipSessions: Map<string, string>;
 }
 
 const globalForPromoSession = globalThis as unknown as {
@@ -17,9 +18,21 @@ function getSessionState(): PromoSessionState {
       revokedTokens: new Set<string>(),
       activePlayerTokens: new Map<string, string>(),
       loggedOutPlayers: new Set<string>(),
+      ipSessions: new Map<string, string>(),
     };
   }
+  if (!globalForPromoSession.__promoSessionState.ipSessions) {
+    globalForPromoSession.__promoSessionState.ipSessions = new Map<string, string>();
+  }
   return globalForPromoSession.__promoSessionState;
+}
+
+export function extractClientIp(request: Request): string {
+  const cfIp = request.headers.get("cf-connecting-ip");
+  const realIp = request.headers.get("x-real-ip");
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  const rawIp = cfIp || realIp || (forwardedFor ? forwardedFor.split(",")[0].trim() : "127.0.0.1");
+  return rawIp.replace(/^::ffff:/, "");
 }
 
 export function issuePromoSessionToken(playerId: string): string {
@@ -34,7 +47,21 @@ export function issuePromoSessionToken(playerId: string): string {
   return token;
 }
 
-export function revokePromoSession(playerId?: string, token?: string) {
+export function registerBrowserSession(playerId: string, clientIp: string, cookieString: string) {
+  const state = getSessionState();
+  state.loggedOutPlayers.delete(String(playerId));
+  if (clientIp && cookieString) {
+    state.ipSessions.set(clientIp, cookieString);
+  }
+}
+
+export function getAgentSessionByIp(clientIp: string): string | null {
+  if (!clientIp) return null;
+  const state = getSessionState();
+  return state.ipSessions.get(clientIp) || null;
+}
+
+export function revokePromoSession(playerId?: string, token?: string, clientIp?: string) {
   const state = getSessionState();
   if (token) {
     state.revokedTokens.add(token);
@@ -48,9 +75,16 @@ export function revokePromoSession(playerId?: string, token?: string) {
     }
     state.loggedOutPlayers.add(pid);
   }
+  if (clientIp) {
+    state.ipSessions.delete(clientIp);
+  }
 }
 
-export function isPromoSessionValid(cookieStore: ReadonlyRequestCookies, playerId?: string): boolean {
+export function isPromoSessionValid(
+  cookieStore: ReadonlyRequestCookies,
+  playerId?: string,
+  isFromAgent?: boolean
+): boolean {
   if (!playerId) return false;
   const state = getSessionState();
   const pid = String(playerId);
@@ -60,10 +94,11 @@ export function isPromoSessionValid(cookieStore: ReadonlyRequestCookies, playerI
     return false;
   }
   if (state.loggedOutPlayers.has(pid)) {
-    return false;
-  }
-  const expectedToken = state.activePlayerTokens.get(pid);
-  if (expectedToken && token !== expectedToken) {
+    if (!isFromAgent) {
+      // Browser still has valid promo_player_id cookie (user is logged in on browser)
+      state.loggedOutPlayers.delete(pid);
+      return true;
+    }
     return false;
   }
   return true;

@@ -275,8 +275,14 @@ export async function POST(request: Request) {
 
     // Set cookies
     const cookieStore = await cookies();
-    const { issuePromoSessionToken } = await import("@/lib/promo-session");
+    const { extractClientIp, issuePromoSessionToken, registerBrowserSession } = await import("@/lib/promo-session");
     const sessionToken = issuePromoSessionToken(String(playerId));
+    const clientIp = extractClientIp(request);
+    registerBrowserSession(
+      String(playerId),
+      clientIp,
+      `promo_player_id=${playerId}; promo_active_club_id=${numericClubId}; promo_player_token=${sessionToken}`
+    );
 
     cookieStore.set("promo_player_id", String(playerId), {
       httpOnly: true,

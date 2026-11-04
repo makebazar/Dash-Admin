@@ -58,6 +58,10 @@ export default function PromoProfile() {
       ]);
 
       if (playerRes.status === 401) {
+        fetch("http://localhost:3033/promo/logout", {
+          method: "POST",
+          mode: "no-cors",
+        }).catch(() => {});
         router.push("/promo/login");
         return;
       }
@@ -70,6 +74,20 @@ export default function PromoProfile() {
       if (inventoryRes) {
         setInventory(inventoryRes.inventory || []);
       }
+
+      // Sync active session to local DashFrag Agent if running
+      fetch("/api/promo/auth/cookies")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((cData) => {
+          if (cData?.cookies) {
+            fetch("http://localhost:3033/promo/set-cookies", {
+              method: "POST",
+              mode: "no-cors",
+              body: JSON.stringify({ cookies: cData.cookies }),
+            }).catch(() => {});
+          }
+        })
+        .catch(() => {});
     } catch (err) {
       console.error("Failed to fetch profile data", err);
     } finally {

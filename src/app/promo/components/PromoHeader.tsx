@@ -39,6 +39,32 @@ export function PromoHeader({
           const data = await res.json();
           setPlayer(data.player);
           setTickets(data.tickets);
+
+          // Keep local agent logged in across all /promo pages
+          fetch("http://localhost:3033/status", { signal: AbortSignal.timeout(1000) })
+            .then((r) => (r.ok ? r.json() : null))
+            .then(async (agentData) => {
+              if (
+                agentData &&
+                (!agentData.PromoLoggedIn ||
+                  (data.player?.id &&
+                    agentData.PromoPlayerId &&
+                    String(data.player.id) !== String(agentData.PromoPlayerId)))
+              ) {
+                const cRes = await fetch("/api/promo/auth/cookies");
+                if (cRes.ok) {
+                  const cData = await cRes.json();
+                  if (cData.cookies) {
+                    await fetch("http://localhost:3033/promo/set-cookies", {
+                      method: "POST",
+                      mode: "no-cors",
+                      body: JSON.stringify({ cookies: cData.cookies }),
+                    });
+                  }
+                }
+              }
+            })
+            .catch(() => {});
         }
       } catch (err) {
         console.error(err);

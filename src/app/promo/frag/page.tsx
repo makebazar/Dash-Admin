@@ -292,7 +292,7 @@ export default function FragPage() {
         try {
           const cookiesRes = await fetch("/api/promo/auth/cookies");
           if (cookiesRes.status === 401 && data?.PromoLoggedIn) {
-            await fetch(`${AGENT_URL}/promo/logout`, { method: "POST" });
+            await fetch(`${AGENT_URL}/promo/logout`, { method: "POST", mode: "no-cors" });
           } else if (cookiesRes.ok) {
             const cookiesData = await cookiesRes.json();
             const playerMismatch =
@@ -302,7 +302,7 @@ export default function FragPage() {
             if (cookiesData.cookies && (!data?.PromoLoggedIn || playerMismatch)) {
               await fetch(`${AGENT_URL}/promo/set-cookies`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                mode: "no-cors",
                 body: JSON.stringify({ cookies: cookiesData.cookies }),
               });
             }

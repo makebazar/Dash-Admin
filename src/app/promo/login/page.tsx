@@ -139,7 +139,7 @@ export default function PromoLogin() {
             if (cookiesData.cookies) {
               await fetch("http://localhost:3033/promo/set-cookies", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                mode: "no-cors",
                 body: JSON.stringify({ cookies: cookiesData.cookies }),
               });
             }
