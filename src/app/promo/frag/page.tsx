@@ -1124,80 +1124,35 @@ export default function FragPage() {
         {mainTab === "play" && (
           <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
             <div className="space-y-4">
-              {/* Prominent Download Banner if agent is not running */}
-              {!agentOnline && (
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500/15 via-orange-500/5 to-transparent border border-amber-500/30 p-4 sm:p-5 space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                          <Monitor className="w-4 h-4" />
-                        </span>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-black text-sm sm:text-base text-white">
-                              Клиент DashFrag
-                            </h3>
-                            {releaseInfo?.version && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                                v{releaseInfo.version}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-amber-400/90 font-medium">
-                            Не запущен на этом ПК
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-400 leading-relaxed pt-1">
-                        Скачайте и запустите клиент на игровом месте, чтобы ваши фраги и победы в CS2, Dota 2 и PUBG приносили реальные бонусы.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
-                    <a
-                      href="/api/promo/frag/download"
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black rounded-xl text-xs sm:text-sm tracking-wide transition shadow-lg shadow-orange-500/20 active:scale-[0.98]"
-                    >
-                      <Download className="w-4 h-4 stroke-[2.5]" />
-                      <span>Скачать DashFrag</span>
-                      {releaseInfo?.fileSizeBytes && (
-                        <span className="text-[11px] opacity-75 font-semibold">
-                          ({formatReleaseSize(releaseInfo.fileSizeBytes)})
-                        </span>
-                      )}
-                    </a>
-
-                    <a
-                      href="dashfrag://launch"
-                      className="flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white font-bold rounded-xl text-xs transition border border-white/10"
-                      title="Если DashFrag уже скачан и установлен на этом ПК"
-                    >
-                      <span>Уже установлен? Запустить</span>
-                    </a>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-gray-400 pt-2 border-t border-white/5">
-                    <span>Windows 10 / 11 (x64)</span>
-                    <span>CS2 • Dota 2 • PUBG</span>
-                  </div>
-                </div>
-              )}
-
-              <div className={cn(boxCls, "flex items-center justify-between text-xs font-bold")}>
-                <div className="flex items-center gap-2.5">
-                  <span className={cn("w-2 h-2 rounded-full animate-pulse", agentOnline ? "bg-emerald-400" : "bg-amber-400")} />
-                  <span className="text-gray-300">
+              {/* Single neat agent status & download bar */}
+              <div className={cn(boxCls, "flex items-center justify-between text-xs font-bold gap-3")}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className={cn("w-2 h-2 rounded-full shrink-0 animate-pulse", agentOnline ? "bg-emerald-400" : "bg-amber-400")} />
+                  <span className="text-gray-300 truncate">
                     {agentOnline ? (isPlaying ? `В игре: ${agentState?.ActiveGame}` : "Агент активен, ждём игру") : "Агент на ПК выключен"}
                   </span>
                 </div>
-                {!agentOnline ? (
-                  <a href="/api/promo/frag/download" className="text-amber-400 hover:text-amber-300 uppercase tracking-wider flex items-center gap-1 text-[11px]">
-                    <Download className="w-3.5 h-3.5" />
-                    Скачать .exe
-                  </a>
-                ) : null}
+                {!agentOnline && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href="/api/promo/frag/download"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs uppercase tracking-wide transition shadow-sm active:scale-95"
+                    >
+                      <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Скачать DashFrag</span>
+                      {releaseInfo?.version && (
+                        <span className="text-[10px] font-bold opacity-80">v{releaseInfo.version}</span>
+                      )}
+                    </a>
+                    <a
+                      href="dashfrag://launch"
+                      className="text-gray-400 hover:text-white uppercase tracking-wider text-[10px] px-2 py-1 hover:bg-white/5 rounded transition hidden sm:inline-block"
+                      title="Если DashFrag уже скачан"
+                    >
+                      Запустить
+                    </a>
+                  </div>
+                )}
               </div>
               {!fragEnabled && (
                 <div className="text-center text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 py-2 rounded-xl">

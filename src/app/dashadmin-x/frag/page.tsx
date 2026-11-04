@@ -39,6 +39,8 @@ export default function DashFragAdminPage() {
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Form state
+  const [uploadMode, setUploadMode] = useState<"file" | "url">("file");
+  const [directUrl, setDirectUrl] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [version, setVersion] = useState("");
   const [changelog, setChangelog] = useState("");
@@ -85,8 +87,12 @@ export default function DashFragAdminPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedFile) {
+    if (uploadMode === "file" && !selectedFile) {
       setFormError("Выберите бинарный файл (.exe или .zip)");
+      return;
+    }
+    if (uploadMode === "url" && !directUrl.trim()) {
+      setFormError("Укажите прямую ссылку на скачивание бинарника");
       return;
     }
     if (!version.trim()) {
@@ -99,31 +105,60 @@ export default function DashFragAdminPage() {
       setFormError(null);
       setFormSuccess(null);
 
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      formData.append("version", version.trim());
-      formData.append("changelog", changelog.trim());
-      formData.append("isActive", isActive ? "true" : "false");
+      let res: Response;
 
-      const res = await fetch("/api/dashadmin-x/releases", {
-        method: "POST",
-        body: formData,
-      });
+      if (uploadMode === "file" && selectedFile) {
+        // Stream raw binary - completely bypasses undici FormData parser!
+        const params = new URLSearchParams({
+          version: version.trim(),
+          filename: selectedFile.name,
+          changelog: changelog.trim(),
+          isActive: isActive ? "true" : "false",
+        });
+
+        res = await fetch(`/api/dashadmin-x/releases?${params.toString()}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "x-version": encodeURIComponent(version.trim()),
+            "x-filename": encodeURIComponent(selectedFile.name),
+            "x-changelog": encodeURIComponent(changelog.trim()),
+            "x-is-active": isActive ? "true" : "false",
+          },
+          body: selectedFile,
+        });
+      } else {
+        // Direct URL creation
+        res = await fetch("/api/dashadmin-x/releases", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            downloadUrl: directUrl.trim(),
+            version: version.trim(),
+            changelog: changelog.trim(),
+            isActive,
+            filename: `DashFrag-${version.trim()}.exe`,
+          }),
+        });
+      }
 
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Ошибка загрузки");
       }
 
-      setFormSuccess(`Релиз DashFrag v${version} успешно загружен и опубликован!`);
+      setFormSuccess(`Релиз DashFrag v${version} успешно сохранён и опубликован!`);
       setSelectedFile(null);
+      setDirectUrl("");
       setVersion("");
       setChangelog("");
       if (fileInputRef.current) fileInputRef.current.value = "";
 
       await fetchReleases();
     } catch (err: any) {
-      setFormError(err.message || "Не удалось загрузить бинарник");
+      setFormError(err.message || "Не удалось сохранить бинарник");
     } finally {
       setUploading(false);
     }
@@ -271,6 +306,29 @@ export default function DashFragAdminPage() {
             Загрузить новый бинарник
           </h2>
 
+          <div className="flex rounded-lg bg-slate-800 p-1 mb-4 border border-slate-700">
+            <button
+              type="button"
+              onClick={() => { setUploadMode("file"); setFormError(null); }}
+              className={cn(
+                "flex-1 py-1.5 text-xs font-semibold rounded-md transition",
+                uploadMode === "file" ? "bg-red-600 text-white shadow" : "text-slate-400 hover:text-white"
+              )}
+            >
+              Загрузить файл
+            </button>
+            <button
+              type="button"
+              onClick={() => { setUploadMode("url"); setFormError(null); }}
+              className={cn(
+                "flex-1 py-1.5 text-xs font-semibold rounded-md transition",
+                uploadMode === "url" ? "bg-red-600 text-white shadow" : "text-slate-400 hover:text-white"
+              )}
+            >
+              Указать URL
+            </button>
+          </div>
+
           <form onSubmit={handleUpload} className="space-y-4">
             {formError && (
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400 flex items-start gap-2">
@@ -286,24 +344,43 @@ export default function DashFragAdminPage() {
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Файл бинарника (.exe, .zip, .msi) *
-              </label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".exe,.zip,.msi,.tar.gz"
-                onChange={handleFileChange}
-                disabled={uploading}
-                className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
-              />
-              {selectedFile && (
+            {uploadMode === "file" ? (
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Файл бинарника (.exe, .zip, .msi) *
+                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".exe,.zip,.msi,.tar.gz"
+                  onChange={handleFileChange}
+                  disabled={uploading}
+                  className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+                />
+                {selectedFile && (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Выбран: {selectedFile.name} ({formatBytes(selectedFile.size)})
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Прямая ссылка на скачивание (URL) *
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://.../DashFrag-Setup.exe"
+                  value={directUrl}
+                  onChange={(e) => setDirectUrl(e.target.value)}
+                  disabled={uploading}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500"
+                />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Выбран: {selectedFile.name} ({formatBytes(selectedFile.size)})
+                  Прямая ссылка на файл в S3, GitHub Releases, Cloudflare R2 или любом CDN
                 </p>
-              )}
-            </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
