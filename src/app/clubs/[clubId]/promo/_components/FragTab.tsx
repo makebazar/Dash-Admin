@@ -80,7 +80,12 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
 
     pubg_kill: 2.00,
     pubg_win: 15.00,
+    pubg_top3: 10.00,
     pubg_top10: 6.00,
+    pubg_headshot: 0.50,
+    pubg_damage_100: 0.20,
+    pubg_distance_1000: 0.50,
+    pubg_sniper_kill: 3.00,
 
     max_bonus_per_match: 100.00,
   };
@@ -805,8 +810,13 @@ export function FragTab({ settings, saveSettings, clubId }: FragTabProps) {
                   <div className="space-y-4 divide-y divide-slate-100">
                     {[
                       { key: "pubg_kill", label: "Убийство (Kill)", suffix: "₽" },
-                      { key: "pubg_win", label: "Победа (Top 1 Win)", suffix: "₽" },
+                      { key: "pubg_win", label: "Победа (Топ-1 Win)", suffix: "₽" },
+                      { key: "pubg_top3", label: "Попадание в Топ-3", suffix: "₽" },
                       { key: "pubg_top10", label: "Попадание в Топ-10", suffix: "₽" },
+                      { key: "pubg_headshot", label: "Хедшот (Headshot)", suffix: "₽" },
+                      { key: "pubg_damage_100", label: "Урон (за каждые 100 HP)", suffix: "₽" },
+                      { key: "pubg_distance_1000", label: "Дистанция (за каждый 1 км)", suffix: "₽" },
+                      { key: "pubg_sniper_kill", label: "Снайперский килл (>150м)", suffix: "₽" },
                     ].map((item) => (
                       <div key={item.key} className="pt-3 first:pt-0 flex items-center justify-between gap-4">
                         <label className="text-xs font-medium text-slate-700">

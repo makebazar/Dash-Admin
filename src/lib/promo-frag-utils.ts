@@ -77,15 +77,21 @@ export function calculateMatchPoints(m: any) {
   } else if (m.game === "PUBG") {
     killsPoints = (m.kills || 0) * 2.0;
     let isTop10 = false;
+    let isTop3 = false;
     events.forEach(evt => {
       if (!evt) return;
       const lower = evt.toLowerCase();
       if (lower.includes("победа") || lower.includes("топ-1") || lower.includes("🏆")) isWin = true;
+      if (lower.includes("топ-3") || lower.includes("🥉")) isTop3 = true;
       if (lower.includes("топ-10") || lower.includes("🎖️")) isTop10 = true;
+      if (lower.includes("хедшот") || lower.includes("🎯")) specialsPoints += 0.5;
+      if (lower.includes("урон") || lower.includes("💥")) specialsPoints += 0.5;
+      if (lower.includes("дистанция") || lower.includes("пройдено") || lower.includes("🏃")) specialsPoints += 0.5;
+      if (lower.includes("снайпер") || lower.includes("🏹")) specialsPoints += 2.0;
     });
 
-    winPoints = isWin ? 20.0 : isTop10 ? 10.0 : -10.0;
-    matchPoints = killsPoints + winPoints;
+    winPoints = isWin ? 20.0 : isTop3 ? 15.0 : isTop10 ? 10.0 : -10.0;
+    matchPoints = killsPoints + specialsPoints + winPoints;
   } else {
     // Dota 2
     killsPoints = (m.kills || 0) * 1.5;

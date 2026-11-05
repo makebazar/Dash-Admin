@@ -653,7 +653,7 @@ export default function FragPage() {
     cs2_bomb_plant: 1, cs2_bomb_defuse: 2, cs2_clutch_kill: 0.5, cs2_flash_kill: 0.5,
     dota_kill: 0.8, dota_assist: 0.4, dota_lasthit_10: 0.1, dota_denies_5: 0.1, dota_networth_1000: 0.1, dota_win: 10,
     dota_streak_3: 1.5, dota_streak_5: 3, dota_streak_10: 10, dota_wards_5: 1, dota_ward_destroy: 0.5,
-    pubg_kill: 2, pubg_win: 15, pubg_top10: 6,
+    pubg_kill: 2, pubg_win: 15, pubg_top3: 10, pubg_top10: 6, pubg_headshot: 0.5, pubg_damage_100: 0.2, pubg_distance_1000: 0.5, pubg_sniper_kill: 3,
   };
   const tv = (k: string, _d?: number) => Number(st?.[k] ?? ADMIN_DEFAULTS[k] ?? 0);
   const list = (rows: { label: string; value: number }[]) => rows.filter((r) => r.value > 0);
@@ -693,7 +693,12 @@ export default function FragPage() {
   const pubgTariffs = list([
     { label: "Убийство", value: tv("pubg_kill", 2) },
     { label: "Победа (Топ-1)", value: tv("pubg_win", 15) },
+    { label: "Топ-3 в матче", value: tv("pubg_top3", 10) },
     { label: "Попадание в Топ-10", value: tv("pubg_top10", 6) },
+    { label: "Хедшот", value: tv("pubg_headshot", 0.5) },
+    { label: "Урон (за 100 HP)", value: tv("pubg_damage_100", 0.2) },
+    { label: "Дистанция (за 1 км)", value: tv("pubg_distance_1000", 0.5) },
+    { label: "Снайпер (>150м)", value: tv("pubg_sniper_kill", 3) },
   ]);
   const filteredHistory = history.filter(match => {
     if (activeTab === "CS2") return match.game === "CS2";
