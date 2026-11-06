@@ -2,6 +2,7 @@ import { normalizeInventorySettings, getShiftZoneLabel } from "@/lib/inventory-s
 import { notifyInventoryClub } from "@/lib/inventory-events";
 import { query, getClient } from "@/db";
 import { revalidatePath } from "next/cache";
+import bcrypt from "bcrypt";
 import type { ShiftReceipt, ShiftReceiptItem, ShiftReceiptPaymentType } from "./types";
 import { applyWarehouseStockDelta, assertWarehouseBelongsToClub, getSalarySaleCandidatesInternal, logStockMovement } from "./stock";
 import { assertProductBelongsToClub } from "./products";
@@ -373,6 +374,7 @@ export async function createShiftReceipt(
     notes?: string;
     warehouse_id?: number;
     salary_target_user_id?: string;
+    salary_target_password?: string;
     promo_player_id?: string;
   },
 ) {
@@ -444,6 +446,34 @@ export async function createShiftReceipt(
         : null;
       if (!salaryTargetUserId) {
         throw new Error("Для продажи в счет ЗП нужно выбрать сотрудника");
+      }
+
+      const salaryPassword = String(data.salary_target_password || "").trim();
+      if (!salaryPassword) {
+        throw new Error(
+          "Введите пароль сотрудника для подтверждения списания из ЗП",
+        );
+      }
+
+      const targetUserRes = await client.query(
+        `SELECT id, password_hash, full_name FROM users WHERE id = $1`,
+        [salaryTargetUserId],
+      );
+      if (targetUserRes.rowCount === 0) {
+        throw new Error("Сотрудник не найден");
+      }
+      const targetUser = targetUserRes.rows[0];
+      if (!targetUser.password_hash) {
+        throw new Error(
+          "У выбранного сотрудника не установлен пароль учетной записи. Сотруднику необходимо задать пароль в профиле.",
+        );
+      }
+      const isPasswordValid = await bcrypt.compare(
+        salaryPassword,
+        targetUser.password_hash,
+      );
+      if (!isPasswordValid) {
+        throw new Error("Неверный пароль сотрудника");
       }
     }
 
@@ -965,6 +995,7 @@ export async function createShiftReceiptSafe(
     notes?: string;
     warehouse_id?: number;
     salary_target_user_id?: string;
+    salary_target_password?: string;
     promo_player_id?: string;
   },
 ) {

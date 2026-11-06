@@ -20,6 +20,10 @@ export default function EmployeePosPage() {
 
 
   useEffect(() => {
+    document.title = "Касса";
+  }, []);
+
+  useEffect(() => {
     const load = async () => {
       try {
         const meRes = await fetch("/api/auth/me");

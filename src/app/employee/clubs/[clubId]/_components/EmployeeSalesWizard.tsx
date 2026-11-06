@@ -68,6 +68,7 @@ import type {
   ShiftReceiptPaymentType,
 } from "@/app/clubs/[clubId]/inventory/types";
 import { normalizePhone } from "@/lib/phone-utils";
+import { getSearchVariants, matchSearchQuery } from "@/lib/search-layout";
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
@@ -139,6 +140,7 @@ export function EmployeeSalesWizard({
   const [cashReceived, setCashReceived] = useState<string>("");
   const [receiptNotes, setReceiptNotes] = useState<string>("");
   const [salaryTargetUserId, setSalaryTargetUserId] = useState<string>("");
+  const [salaryTargetPassword, setSalaryTargetPassword] = useState<string>("");
   const salaryPricing = useMemo(() => {
     const candidate = salarySaleCandidates.find(
       (item) => item.id === salaryTargetUserId,
@@ -157,6 +159,7 @@ export function EmployeeSalesWizard({
   const [returnItemId, setReturnItemId] = useState<number | null>(null);
   const [returnQuantity, setReturnQuantity] = useState("1");
   const [returnReason, setReturnReason] = useState("");
+  const [isShiftSummaryOpen, setIsShiftSummaryOpen] = useState(false);
 
   // Topup State
   const [isTopupDialogOpen, setIsTopupDialogOpen] = useState(false);
@@ -197,7 +200,8 @@ export function EmployeeSalesWizard({
       if (
         activeElement !== hiddenInput &&
         !isReturnDialogOpen &&
-        !isTopupDialogOpen
+        !isTopupDialogOpen &&
+        !isShiftSummaryOpen
       ) {
         hiddenInput.focus();
       }
@@ -385,6 +389,97 @@ export function EmployeeSalesWizard({
       );
   }, [receipts]);
 
+  const shiftActiveReceipts = useMemo(() => {
+    return receipts.filter((r) => !r.voided_at);
+  }, [receipts]);
+
+  const shiftFinancialSummary = useMemo(() => {
+    let cash = 0;
+    let card = 0;
+    let salary = 0;
+    let refunds = 0;
+
+    shiftActiveReceipts.forEach((r) => {
+      const refund = Number(r.total_refund_amount || 0);
+      refunds += refund;
+
+      if (r.counts_in_revenue !== false) {
+        if (r.payment_type === "cash") {
+          cash += Math.max(
+            0,
+            Number(r.cash_amount || r.total_amount || 0) - refund,
+          );
+        } else if (r.payment_type === "card") {
+          card += Math.max(
+            0,
+            Number(r.card_amount || r.total_amount || 0) - refund,
+          );
+        } else if (r.payment_type === "mixed") {
+          const tot = Number(r.total_amount || 0);
+          const rawCash = Number(r.cash_amount || 0);
+          const rawCard = Number(r.card_amount || 0);
+          const ratioCash = tot > 0 ? rawCash / tot : 0.5;
+          const ratioCard = tot > 0 ? rawCard / tot : 0.5;
+          cash += Math.max(0, rawCash - refund * ratioCash);
+          card += Math.max(0, rawCard - refund * ratioCard);
+        }
+      } else if (r.payment_type === "salary") {
+        salary += Math.max(0, Number(r.total_amount || 0) - refund);
+      }
+    });
+
+    return { cash, card, salary, refunds };
+  }, [shiftActiveReceipts]);
+
+  const shiftProductSummary = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        productId: number;
+        name: string;
+        netQuantity: number;
+        totalAmount: number;
+      }
+    >();
+
+    shiftActiveReceipts.forEach((r) => {
+      (r.items || []).forEach((it: any) => {
+        const key = String(it.product_id || it.product_name);
+        const name = it.product_name || "Товар";
+        const netQty = Math.max(
+          0,
+          Number(
+            it.available_qty ??
+              Number(it.quantity || 0) - Number(it.returned_qty || 0),
+          ),
+        );
+        const price = Number(it.selling_price_snapshot || 0);
+        const netAmount = netQty * price;
+
+        const existing = map.get(key);
+        if (existing) {
+          existing.netQuantity += netQty;
+          existing.totalAmount += netAmount;
+        } else if (netQty > 0) {
+          map.set(key, {
+            productId: Number(it.product_id),
+            name,
+            netQuantity: netQty,
+            totalAmount: netAmount,
+          });
+        }
+      });
+    });
+
+    return Array.from(map.values())
+      .filter((p) => p.netQuantity > 0)
+      .sort((a, b) => b.netQuantity - a.netQuantity);
+  }, [shiftActiveReceipts]);
+
+  const shiftTotalItemsSold = useMemo(() => {
+    return shiftProductSummary.reduce((acc, p) => acc + p.netQuantity, 0);
+  }, [shiftProductSummary]);
+
   const addToCart = useCallback(
     (product: any, quantityToAdd: number) => {
       const sellingPrice = Number(product.selling_price || 0);
@@ -496,7 +591,8 @@ export function EmployeeSalesWizard({
     // Глобальный обработчик клавиатуры для USB сканера
     // Работает даже когда фокус не на input
     const handleGlobalKeydown = async (e: KeyboardEvent) => {
-      // Игнорируем если фокус в textarea
+      // Игнорируем если фокус в textarea или открыта модалка сводки
+      if (isShiftSummaryOpen) return;
       const target = e.target as HTMLElement;
       if (target.tagName === "TEXTAREA") return;
 
@@ -599,6 +695,7 @@ export function EmployeeSalesWizard({
     clubId,
     isReturnDialogOpen,
     isTopupDialogOpen,
+    isShiftSummaryOpen,
     addToCart,
     showMessage,
     isInStock,
@@ -613,50 +710,14 @@ export function EmployeeSalesWizard({
     const qRaw = inputValue.trim().toLowerCase();
     if (!qRaw) return [] as Product[];
 
-    const en = "`qwertyuiop[]asdfghjkl;'zxcvbnm,./";
-    const ru = "ёйцукенгшщзхъфывапролджэячсмитьбю.";
-
-    const swapLayout = (s: string) => {
-      let out = "";
-      for (const ch of s) {
-        const lower = ch.toLowerCase();
-        const enIdx = en.indexOf(lower);
-        if (enIdx !== -1) {
-          out += ru[enIdx];
-          continue;
-        }
-        const ruIdx = ru.indexOf(lower);
-        if (ruIdx !== -1) {
-          out += en[ruIdx];
-          continue;
-        }
-        out += lower;
-      }
-      return out;
-    };
-
-    const qSwapped = swapLayout(qRaw);
-    const variants = qSwapped !== qRaw ? [qRaw, qSwapped] : [qRaw];
+    const variants = getSearchVariants(qRaw);
 
     const hits: { p: Product; score: number }[] = [];
     for (const p of inStockProducts) {
-      const name = p.name.toLowerCase();
-      let bestIdx = Number.POSITIVE_INFINITY;
-      let bestVariantLen = 0;
-
-      for (const v of variants) {
-        const idx = name.indexOf(v);
-        if (idx === -1) continue;
-        if (idx < bestIdx) {
-          bestIdx = idx;
-          bestVariantLen = v.length;
-        }
+      const match = matchSearchQuery(p.name, variants);
+      if (match.isMatch) {
+        hits.push({ p, score: match.score });
       }
-
-      if (!Number.isFinite(bestIdx)) continue;
-      const score =
-        (bestIdx === 0 ? 1000 : 0) + (bestVariantLen >= 3 ? 50 : 0) - bestIdx;
-      hits.push({ p, score });
     }
     hits.sort((a, b) => b.score - a.score);
     return hits.slice(0, 8).map((x) => x.p);
@@ -762,15 +823,16 @@ export function EmployeeSalesWizard({
     setCheckedInPlayers((prev) => prev.filter((p) => p.id !== id));
   };
 
-  const searchPlayersByPhone = async (phone: string) => {
-    if (phone.length < 4) {
+  const searchPlayersByPhone = async (queryText: string) => {
+    const q = queryText.trim();
+    if (q.length < 3) {
       setPromoSearchResults([]);
       return;
     }
     setIsSearchingPromo(true);
     try {
       const res = await fetch(
-        `/api/promo/admin/players?clubId=${clubId}&phone=${phone}`,
+        `/api/promo/admin/players?clubId=${clubId}&search=${encodeURIComponent(q)}`,
       );
       const data = await res.json();
       setPromoSearchResults(data.players || []);
@@ -812,6 +874,14 @@ export function EmployeeSalesWizard({
         });
         return;
       }
+      if (!salaryTargetPassword.trim()) {
+        showMessage({
+          title: "Пароль сотрудника",
+          description:
+            "Введите пароль учетной записи сотрудника для подтверждения списания из ЗП",
+        });
+        return;
+      }
     } else if (paymentType === "mixed") {
       const hasCash = cashAmount.trim() !== "";
       const hasCard = cardAmount.trim() !== "";
@@ -848,6 +918,8 @@ export function EmployeeSalesWizard({
         notes: receiptNotes || undefined,
         salary_target_user_id:
           paymentType === "salary" ? salaryTargetUserId : undefined,
+        salary_target_password:
+          paymentType === "salary" ? salaryTargetPassword : undefined,
         promo_player_id: selectedPromoPlayer?.id,
       });
       if (!result.ok) {
@@ -865,6 +937,7 @@ export function EmployeeSalesWizard({
         setCardAmount("");
         setCashReceived("");
         setSalaryTargetUserId("");
+        setSalaryTargetPassword("");
 
         // Remove the player from checkedInPlayers list after successful checkout
         if (selectedPromoPlayer) {
@@ -967,12 +1040,14 @@ export function EmployeeSalesWizard({
     setCashAmount("");
     setCardAmount("");
     setCashReceived("");
+    setSalaryTargetUserId("");
+    setSalaryTargetPassword("");
     if (onExit) onExit();
     else window.history.back();
   };
 
   useEffect(() => {
-    document.title = "Касса - DashAdmin";
+    document.title = "Касса";
 
     const onKeyDown = (e: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement | null;
@@ -1383,13 +1458,13 @@ export function EmployeeSalesWizard({
                           }
                         }}
                       >
-                        <SelectTrigger className="h-14 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base font-medium text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-placeholder:text-zinc-500">
+                        <SelectTrigger className="h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 text-sm font-medium text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-placeholder:text-zinc-500">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="rounded-2xl border-zinc-800 bg-zinc-950/98 p-2 text-zinc-100 shadow-2xl shadow-black/60 backdrop-blur-xl">
+                        <SelectContent className="rounded-xl border-zinc-800 bg-zinc-950/98 p-1.5 text-zinc-100 shadow-2xl shadow-black/60 backdrop-blur-xl space-y-1">
                           <SelectItem
                             value="cash"
-                            className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
+                            className="rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
                           >
                             <div className="flex items-center gap-3">
                               <Banknote className="h-4 w-4 text-zinc-400" />
@@ -1398,7 +1473,7 @@ export function EmployeeSalesWizard({
                           </SelectItem>
                           <SelectItem
                             value="card"
-                            className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
+                            className="rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
                           >
                             <div className="flex items-center gap-3">
                               <CreditCard className="h-4 w-4 text-zinc-400" />
@@ -1407,7 +1482,7 @@ export function EmployeeSalesWizard({
                           </SelectItem>
                           <SelectItem
                             value="mixed"
-                            className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
+                            className="rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
                           >
                             <div className="flex items-center gap-3">
                               <Wallet className="h-4 w-4 text-zinc-400" />
@@ -1416,7 +1491,7 @@ export function EmployeeSalesWizard({
                           </SelectItem>
                           <SelectItem
                             value="salary"
-                            className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
+                            className="rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
                           >
                             <div className="flex items-center gap-3">
                               <Wallet className="h-4 w-4 text-zinc-400" />
@@ -1426,7 +1501,7 @@ export function EmployeeSalesWizard({
                           {selectedPromoPlayer && (
                             <SelectItem
                               value="bonus"
-                              className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-orange-500 focus:border-orange-700/50 focus:bg-orange-500/10 focus:text-orange-400 data-[state=checked]:border-orange-500/50 data-[state=checked]:bg-orange-500/10 data-[state=checked]:text-orange-400"
+                              className="rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-orange-500 focus:border-orange-700/50 focus:bg-orange-500/10 focus:text-orange-400 data-[state=checked]:border-orange-500/50 data-[state=checked]:bg-orange-500/10 data-[state=checked]:text-orange-400"
                             >
                               <div className="flex items-center gap-3">
                                 <Gift className="h-4 w-4 text-orange-500" />
@@ -1434,15 +1509,6 @@ export function EmployeeSalesWizard({
                               </div>
                             </SelectItem>
                           )}
-                          <SelectItem
-                            value="other"
-                            className="rounded-xl border border-transparent px-3 py-3 text-[15px] font-medium text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
-                          >
-                            <div className="flex items-center gap-3">
-                              <Wallet className="h-4 w-4 text-zinc-400" />
-                              <span>Другое</span>
-                            </div>
-                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1455,23 +1521,26 @@ export function EmployeeSalesWizard({
                           </Label>
                           <Select
                             value={salaryTargetUserId}
-                            onValueChange={setSalaryTargetUserId}
+                            onValueChange={(val) => {
+                              setSalaryTargetUserId(val);
+                              setSalaryTargetPassword("");
+                            }}
                           >
-                            <SelectTrigger className="h-14 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 text-base text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-placeholder:text-zinc-500">
+                            <SelectTrigger className="h-12 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 text-left text-sm text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] data-placeholder:text-zinc-500 [&>span]:text-left [&>span]:w-full [&>span]:line-clamp-none">
                               <SelectValue placeholder="Выберите сотрудника..." />
                             </SelectTrigger>
-                            <SelectContent className="rounded-2xl border-zinc-800 bg-zinc-950/98 p-2 text-zinc-100 shadow-2xl shadow-black/60 backdrop-blur-xl">
+                            <SelectContent className="rounded-xl border-zinc-800 bg-zinc-950/98 p-1.5 text-zinc-100 shadow-2xl shadow-black/60 backdrop-blur-xl space-y-1">
                               {salarySaleCandidates.map((candidate) => (
                                 <SelectItem
                                   key={candidate.id}
                                   value={candidate.id}
-                                  className="rounded-xl border border-transparent px-3 py-3 text-left text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
+                                  className="rounded-lg border border-transparent px-3 py-2 text-left text-zinc-100 focus:border-zinc-700 focus:bg-zinc-900 focus:text-white data-[state=checked]:border-zinc-700 data-[state=checked]:bg-zinc-900 data-[state=checked]:text-white"
                                 >
-                                  <div className="flex min-w-0 flex-col gap-1 pr-4">
-                                    <span className="truncate text-[15px] font-semibold leading-none">
+                                  <div className="flex min-w-0 w-full flex-col items-start text-left gap-0.5 pr-4">
+                                    <span className="truncate text-left text-sm font-medium leading-none">
                                       {candidate.full_name}
                                     </span>
-                                    <span className="text-xs text-zinc-400">
+                                    <span className="text-left text-xs text-zinc-400">
                                       {candidate.role} · доступно{" "}
                                       {candidate.available_amount.toLocaleString()}{" "}
                                       ₽
@@ -1482,6 +1551,32 @@ export function EmployeeSalesWizard({
                             </SelectContent>
                           </Select>
                         </div>
+
+                        {salaryTargetUserId && (
+                          <div className="space-y-2 animate-in fade-in duration-200">
+                            <Label className="text-xs font-medium text-muted-foreground">
+                              Пароль учетной записи
+                            </Label>
+                            <Input
+                              type="password"
+                              value={salaryTargetPassword}
+                              onChange={(e) =>
+                                setSalaryTargetPassword(e.target.value)
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  finalizeReceipt();
+                                }
+                              }}
+                              placeholder="Введите пароль сотрудника..."
+                              className="h-11 bg-zinc-950/80 border-zinc-800 focus:border-orange-500/50 rounded-xl text-sm"
+                            />
+                            <p className="text-[11px] text-zinc-500">
+                              Требуется пароль учетной записи выбранного сотрудника для списания
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1836,27 +1931,29 @@ export function EmployeeSalesWizard({
                       )}
 
                       {/* Search by Phone */}
-                      <div className="relative group/search">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 group-focus-within/search:text-orange-500 transition-colors" />
-                        <Input
-                          value={promoSearchQuery}
-                          onChange={(e) => {
-                            setPromoSearchQuery(e.target.value);
-                            searchPlayersByPhone(e.target.value);
-                          }}
-                          placeholder="Поиск по телефону или имени..."
-                          className="h-12 pl-11 pr-11 bg-zinc-950/50 border-zinc-800/50 focus:border-orange-500/50 focus:ring-orange-500/20 rounded-2xl text-sm transition-all shadow-inner"
-                        />
+                      <div className="flex flex-col">
+                        <div className="relative group/search">
+                          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 group-focus-within/search:text-orange-500 transition-colors pointer-events-none" />
+                          <Input
+                            value={promoSearchQuery}
+                            onChange={(e) => {
+                              setPromoSearchQuery(e.target.value);
+                              searchPlayersByPhone(e.target.value);
+                            }}
+                            placeholder="Поиск по телефону или имени..."
+                            className="h-12 pl-11 pr-11 bg-zinc-950/50 border-zinc-800/50 focus:border-orange-500/50 focus:ring-orange-500/20 rounded-2xl text-sm transition-all shadow-inner"
+                          />
 
-                        {isSearchingPromo && (
-                          <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
-                            <Loader2 className="h-4 w-4 animate-spin text-orange-500/50" />
-                          </div>
-                        )}
+                          {isSearchingPromo && (
+                            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                              <Loader2 className="h-4 w-4 animate-spin text-orange-500/50" />
+                            </div>
+                          )}
+                        </div>
 
                         {promoSearchResults.length > 0 &&
-                          promoSearchQuery.length >= 4 && (
-                            <div className="absolute z-30 w-full mt-2 bg-zinc-900 border border-zinc-800 rounded-[1.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-top-2 duration-300">
+                          promoSearchQuery.trim().length >= 3 && (
+                            <div className="w-full mt-2 bg-zinc-900 border border-zinc-800 rounded-[1.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-top-2 duration-300">
                               <div className="max-h-60 overflow-y-auto p-1.5 custom-scrollbar">
                                 {promoSearchResults.map((p) => (
                                   <button
@@ -1876,9 +1973,6 @@ export function EmployeeSalesWizard({
                                         {p.phone_number}
                                       </span>
                                     </div>
-                                    <div className="w-8 h-8 rounded-lg bg-zinc-950 flex items-center justify-center opacity-0 group-hover/item:opacity-100 transition-all">
-                                      <User className="h-3.5 w-3.5 text-orange-500" />
-                                    </div>
                                   </button>
                                 ))}
                               </div>
@@ -1896,16 +1990,27 @@ export function EmployeeSalesWizard({
                       История смены
                     </h2>
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold font-mono bg-muted/50 px-2.5 py-1 rounded-md">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          refresh();
+                          setIsShiftSummaryOpen(true);
+                        }}
+                        className="text-sm font-semibold font-mono bg-muted/50 hover:bg-muted/80 transition-colors px-2.5 py-1 rounded-md cursor-pointer"
+                        title="Открыть сводку смены"
+                      >
                         {receiptTotalForShift.toLocaleString()} ₽
-                      </span>
+                      </button>
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-8 w-8 p-0 rounded-full text-muted-foreground hover:text-foreground"
-                        onClick={() => refresh()}
+                        onClick={() => {
+                          refresh();
+                          setIsShiftSummaryOpen(true);
+                        }}
                         disabled={isPending}
-                        title="Обновить историю"
+                        title="Сводка смены"
                       >
                         <History className="h-4 w-4" />
                       </Button>
@@ -1929,19 +2034,8 @@ export function EmployeeSalesWizard({
                               <div className="flex items-start justify-between gap-4">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-sm font-semibold">
+                                    <span className="text-sm font-semibold text-white">
                                       Чек #{r.id}
-                                    </span>
-                                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-muted-foreground uppercase">
-                                      {r.payment_type === "salary"
-                                        ? "В СЧЕТ ЗП"
-                                        : r.payment_type === "cash"
-                                          ? "НАЛИЧНЫЕ"
-                                          : r.payment_type === "card"
-                                            ? "КАРТА"
-                                            : r.payment_type === "mixed"
-                                              ? "СМЕШАННАЯ"
-                                              : r.payment_type}
                                     </span>
                                   </div>
                                   <div className="text-xs text-muted-foreground font-mono flex items-center gap-1.5 flex-wrap">
@@ -1954,12 +2048,24 @@ export function EmployeeSalesWizard({
                                       })}
                                     </span>
                                     <span>·</span>
-                                    <span className="text-foreground font-medium text-sm">
+                                    <span className="text-white font-medium text-sm">
                                       {r.total_amount.toLocaleString()} ₽
                                     </span>
+                                    <span>·</span>
+                                    <span className="text-white font-medium uppercase text-[11px] tracking-wide">
+                                      {r.payment_type === "salary"
+                                        ? "В СЧЕТ ЗП"
+                                        : r.payment_type === "cash"
+                                          ? "НАЛИЧНЫЕ"
+                                          : r.payment_type === "card"
+                                            ? "КАРТА"
+                                            : r.payment_type === "mixed"
+                                              ? "СМЕШАННАЯ"
+                                              : r.payment_type}
+                                    </span>
                                     {(r.total_refund_amount || 0) > 0 && (
-                                      <span className="text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px]">
-                                        возврат:{" "}
+                                      <span className="text-amber-500 text-[10px]">
+                                        · возврат:{" "}
                                         {(
                                           r.total_refund_amount || 0
                                         ).toLocaleString()}{" "}
@@ -1970,7 +2076,7 @@ export function EmployeeSalesWizard({
                                 </div>
                                 <div className="flex items-center shrink-0">
                                   {r.committed_at ? (
-                                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                    <span className="text-[11px] font-bold text-emerald-500 uppercase tracking-wider">
                                       ПРОВЕДЕН
                                     </span>
                                   ) : (
@@ -2159,6 +2265,116 @@ export function EmployeeSalesWizard({
               Подтвердить возврат
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shift Summary Dialog */}
+      <Dialog open={isShiftSummaryOpen} onOpenChange={setIsShiftSummaryOpen}>
+        <DialogContent className="dark bg-zinc-950 border border-zinc-800 text-zinc-100 sm:max-w-3xl md:max-w-4xl rounded-3xl p-6 sm:p-8 max-h-[85vh] flex flex-col shadow-2xl">
+          <DialogHeader className="space-y-1 text-left">
+            <DialogTitle className="text-xl font-semibold tracking-tight text-white">
+              Сводка смены
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-400">
+              Итоги продаж по кассе за текущую смену
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Totals Section */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 py-5 border-y border-zinc-800 mt-4">
+            <div>
+              <div className="text-[11px] font-medium text-zinc-400 uppercase tracking-widest">
+                В общем
+              </div>
+              <div className="text-2xl sm:text-3xl font-mono font-bold text-white mt-1">
+                {receiptTotalForShift.toLocaleString()} ₽
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] font-medium text-zinc-400 uppercase tracking-widest">
+                Наличные
+              </div>
+              <div className="text-2xl sm:text-3xl font-mono font-bold text-white mt-1">
+                {shiftFinancialSummary.cash.toLocaleString()} ₽
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] font-medium text-zinc-400 uppercase tracking-widest">
+                Безналичные
+              </div>
+              <div className="text-2xl sm:text-3xl font-mono font-bold text-white mt-1">
+                {shiftFinancialSummary.card.toLocaleString()} ₽
+              </div>
+            </div>
+            {shiftFinancialSummary.salary > 0 && (
+              <div>
+                <div className="text-[11px] font-medium text-zinc-400 uppercase tracking-widest">
+                  В счет ЗП
+                </div>
+                <div className="text-2xl sm:text-3xl font-mono font-bold text-white mt-1">
+                  {shiftFinancialSummary.salary.toLocaleString()} ₽
+                </div>
+              </div>
+            )}
+            {shiftFinancialSummary.refunds > 0 && (
+              <div>
+                <div className="text-[11px] font-medium text-zinc-400 uppercase tracking-widest">
+                  Возвраты
+                </div>
+                <div className="text-2xl sm:text-3xl font-mono font-bold text-white mt-1">
+                  -{shiftFinancialSummary.refunds.toLocaleString()} ₽
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Products Breakdown Section */}
+          <div className="flex-1 flex flex-col min-h-0 pt-4">
+            <div className="flex items-center justify-between text-[11px] font-medium text-zinc-400 uppercase tracking-widest pb-3 border-b border-zinc-800">
+              <span>Товар</span>
+              <div className="flex items-center gap-8 sm:gap-12 font-mono">
+                <span className="w-20 text-right">Кол-во</span>
+                <span className="w-24 sm:w-28 text-right">Сумма</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-zinc-800/60 pr-1 custom-scrollbar">
+              {shiftProductSummary.length === 0 ? (
+                <div className="py-12 text-center text-sm text-zinc-500">
+                  За смену еще нет проданных товаров
+                </div>
+              ) : (
+                shiftProductSummary.map((item) => (
+                  <div
+                    key={item.productId || item.name}
+                    className="flex items-baseline justify-between py-2.5 text-sm"
+                  >
+                    <span className="text-zinc-200 font-medium truncate pr-4">
+                      {item.name}
+                    </span>
+                    <div className="flex items-center gap-8 sm:gap-12 font-mono shrink-0">
+                      <span className="w-20 text-right text-zinc-400">
+                        {item.netQuantity} шт.
+                      </span>
+                      <span className="w-24 sm:w-28 text-right text-white font-medium">
+                        {item.totalAmount.toLocaleString()} ₽
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer Summary */}
+            <div className="flex items-center justify-between pt-4 border-t border-zinc-800 text-xs text-zinc-400 font-mono">
+              <span>
+                Чеков: {shiftActiveReceipts.length} · Позиций: {shiftProductSummary.length}
+              </span>
+              <span>
+                Всего товаров: {shiftTotalItemsSold} шт.
+              </span>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

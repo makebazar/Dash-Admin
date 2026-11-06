@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, queryClient } from "@/db";
 import { cookies } from "next/headers";
+import { switchKeyboardLayout } from "@/lib/search-layout";
 
 export async function GET(request: Request) {
   try {
@@ -55,15 +56,19 @@ export async function GET(request: Request) {
     if (playerId) {
       whereClause = "AND p.id = $2";
       params.push(playerId);
-    } else if (phone) {
-      if (phone.length < 4) {
+    } else if (phone || search) {
+      const q = (search || phone || "").trim();
+      if (q.length < 3) {
         return NextResponse.json({ players: [], total: 0 });
       }
-      whereClause = "AND p.phone_number LIKE $2";
-      params.push(`%${phone}%`);
-    } else if (search) {
-      whereClause = "AND (p.phone_number LIKE $2 OR p.full_name ILIKE $2)";
-      params.push(`%${search}%`);
+      const swapped = switchKeyboardLayout(q).trim();
+      if (swapped && swapped.toLowerCase() !== q.toLowerCase()) {
+        whereClause = "AND (p.phone_number LIKE $2 OR p.full_name ILIKE $2 OR p.full_name ILIKE $3)";
+        params.push(`%${q}%`, `%${swapped}%`);
+      } else {
+        whereClause = "AND (p.phone_number LIKE $2 OR p.full_name ILIKE $2)";
+        params.push(`%${q}%`);
+      }
     }
 
     // Calculate total count first
