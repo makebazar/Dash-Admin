@@ -20,6 +20,7 @@ import {
   Headphones,
   Gamepad2,
   Briefcase,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -276,6 +277,11 @@ export default function EmployeeLayout({
                         href: `/employee/clubs/${club.id}`,
                         icon: LayoutDashboard,
                         label: "Дашборд",
+                      },
+                      {
+                        href: `/employee/clubs/${club.id}/salary`,
+                        icon: Wallet,
+                        label: "Зарплата",
                       },
                       {
                         href: `/employee/clubs/${club.id}/schedule`,

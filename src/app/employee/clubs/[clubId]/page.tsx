@@ -1753,6 +1753,7 @@ export default function EmployeeClubPage({
               <SalarySummaryWidget
                 stats={stats as any}
                 formatCurrency={formatCurrency}
+                clubId={clubId}
               />
             )}
 

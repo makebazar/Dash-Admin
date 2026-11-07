@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { Wallet, Info } from "lucide-react";
+import { Wallet, Info, ChevronRight } from "lucide-react";
 
 export interface SalarySummaryStats {
   month_earnings: number;
@@ -34,12 +35,14 @@ export interface SalarySummaryStats {
 export interface SalarySummaryWidgetProps {
   stats: SalarySummaryStats;
   formatCurrency: (amount: number) => string;
+  clubId?: string | number;
   className?: string;
 }
 
 export function SalarySummaryWidget({
   stats,
   formatCurrency,
+  clubId,
   className,
 }: SalarySummaryWidgetProps) {
   const bd = stats.breakdown;
@@ -131,6 +134,19 @@ export function SalarySummaryWidget({
               </div>
             </div>
           ) : null}
+
+          {/* Link to full salary report page */}
+          {clubId && (
+            <div className="pt-4 mt-2 border-t border-white/5">
+              <Link
+                href={`/employee/clubs/${clubId}/salary`}
+                className="flex items-center justify-between text-xs font-semibold text-zinc-400 hover:text-white transition-colors group"
+              >
+                <span>Полный отчет по зарплате</span>
+                <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

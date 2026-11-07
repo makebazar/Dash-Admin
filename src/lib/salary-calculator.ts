@@ -160,6 +160,9 @@ export async function calculateSalary(
       const sourceKey = bonus.source || "total";
       let metricValue = 0;
       let metThresholdLabel: string | null = null;
+      let appliedRate: number | null = null;
+      let appliedRateType: "PERCENT" | "FIXED" = "PERCENT";
+      let matchedThresholdFrom: number | null = null;
       if (sourceKey === "total")
         metricValue = reportMetrics["total_revenue"] || 0;
       else if (sourceKey === "cash")
@@ -170,6 +173,8 @@ export async function calculateSalary(
 
       if (bonus.type === "fixed") {
         bonusAmount = Number(bonus.amount) || 0;
+        appliedRate = bonusAmount;
+        appliedRateType = "FIXED";
       } else if (bonus.type === "per_unit") {
         if (Array.isArray(bonus.rules) && bonus.rules.length > 0) {
           bonusAmount = bonus.rules.reduce((sum: number, rule: any) => {
@@ -185,7 +190,9 @@ export async function calculateSalary(
             (Number(bonus.amount_per_unit) || Number(bonus.amount) || 0);
         }
       } else if (bonus.type === "percent_revenue") {
-        bonusAmount = metricValue * ((Number(bonus.percent) || 0) / 100);
+        appliedRate = Number(bonus.percent) || 0;
+        appliedRateType = "PERCENT";
+        bonusAmount = metricValue * (appliedRate / 100);
       } else if (bonus.type === "progressive_percent") {
         if (bonus.mode === "MONTH") {
           // Handle as period bonus contribution (if reward value is provided)
@@ -193,7 +200,12 @@ export async function calculateSalary(
           const rewardType = bonus.current_reward_type ?? "PERCENT";
 
           if (rewardType === "PERCENT") {
+            appliedRate = rewardValue;
+            appliedRateType = "PERCENT";
             bonusAmount = metricValue * (rewardValue / 100);
+          } else {
+            appliedRate = rewardValue;
+            appliedRateType = "FIXED";
           }
           // For FIXED monthly bonuses, we don't add per-shift contribution usually
         } else if (bonus.thresholds) {
@@ -208,10 +220,15 @@ export async function calculateSalary(
             if (metricValue >= (Number(t.from) || 0)) {
               const idx = sortedAsc.indexOf(t);
               metThresholdLabel = t.label || `Ступень ${idx + 1}`;
+              matchedThresholdFrom = Number(t.from) || 0;
               if (bonus.reward_type === "FIXED") {
                 bonusAmount = Number(t.amount) || 0;
+                appliedRate = bonusAmount;
+                appliedRateType = "FIXED";
               } else {
-                bonusAmount = metricValue * ((Number(t.percent) || 0) / 100);
+                appliedRate = Number(t.percent) || 0;
+                appliedRateType = "PERCENT";
+                bonusAmount = metricValue * (appliedRate / 100);
               }
               break;
             }
@@ -492,6 +509,9 @@ export async function calculateSalary(
           payout_type: payoutType,
           mode: bonus.mode,
           met_threshold_label: metThresholdLabel,
+          applied_rate: appliedRate,
+          rate_type: appliedRateType,
+          threshold_from: matchedThresholdFrom,
         });
 
         // Разделяем по типу выплаты
