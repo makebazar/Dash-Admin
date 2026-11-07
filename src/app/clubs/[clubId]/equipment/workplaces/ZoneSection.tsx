@@ -19,6 +19,8 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { getMaintenanceProgress } from "@/lib/maintenance-progress";
+import { MaintenanceSegmentedBar } from "@/components/equipment/MaintenanceSegmentedBar";
 import type { ZoneSectionProps } from "./types";
 
 const WORKSTATION_CARD_PLACEHOLDER_HEIGHT = 320;
@@ -268,6 +270,31 @@ export default memo(function ZoneSection({
           const mainDeviceCount =
             sortedEquipment.length - componentItems.length;
 
+          const progressByItemId = new Map(
+            sortedEquipment.map((item) => [
+              item.id,
+              getMaintenanceProgress(item),
+            ]),
+          );
+
+          const wsPenaltyCount = sortedEquipment.filter(
+            (item) => progressByItemId.get(item.id)?.stage === "penalty",
+          ).length;
+          const wsGraceCount = sortedEquipment.filter(
+            (item) => progressByItemId.get(item.id)?.stage === "grace",
+          ).length;
+          const wsNormalCount = sortedEquipment.filter(
+            (item) => progressByItemId.get(item.id)?.stage === "normal",
+          ).length;
+          const wsMaxPenaltyDays = sortedEquipment.reduce(
+            (max, item) =>
+              Math.max(
+                max,
+                progressByItemId.get(item.id)?.penaltyDays ?? 0,
+              ),
+            0,
+          );
+
           return (
             <DeferredViewportItem key={ws.id}>
               <Card
@@ -281,89 +308,69 @@ export default memo(function ZoneSection({
                 }}
                 onClick={() => onOpenDetails(ws.id)}
               >
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/50 bg-muted p-3 pb-2 sm:p-4 sm:pb-2">
-                  <div className="flex items-center gap-3">
+                <CardHeader className="border-b border-border/50 bg-muted p-3.5 pb-2.5 sm:p-4 sm:pb-3 flex flex-col gap-1">
+                  {/* Строка 1: Имя ПК слева <----> Статус ТО справа */}
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="flex items-center gap-2 font-bold text-sm leading-tight text-foreground truncate">
+                      {ws.name}
+                      {wsIssueCount > 0 && (
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full bg-orange-500"
+                          title={`Проблем: ${wsIssueCount}`}
+                        />
+                      )}
+                    </h4>
+                    {wsPenaltyCount > 0 ? (
+                      <span className="shrink-0 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                        Штраф: {wsPenaltyCount} устр.
+                      </span>
+                    ) : wsGraceCount > 0 ? (
+                      <span className="shrink-0 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                        ТО: {wsGraceCount} устр.
+                      </span>
+                    ) : wsNormalCount > 0 ? (
+                      <span className="shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                        В норме
+                      </span>
+                    ) : wsDisabledMaintenanceCount > 0 ? (
+                      <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                        Без ТО: {wsDisabledMaintenanceCount}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Строка 2: Девайсы слева <----> Ответственный справа */}
+                  <div className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="text-muted-foreground font-medium uppercase tracking-wider">
+                      {mainDeviceCount}{" "}
+                      {mainDeviceCount === 1
+                        ? "устройство"
+                        : mainDeviceCount > 1 && mainDeviceCount < 5
+                          ? "устройства"
+                          : "устройств"}
+                    </span>
                     <div
-                      className={cn(
-                        "relative flex h-10 w-10 items-center justify-center rounded-xl border bg-card font-bold text-muted-foreground/70",
-                        wsIssueCount > 0 && "border-orange-200 text-orange-500",
-                      )}
+                      className="flex items-center gap-1.5 shrink-0"
+                      title={ws.assigned_user_name || "Не назначено"}
                     >
-                      {ws.name.replace(/[^0-9]/g, "") || (
-                        <Monitor className="h-5 w-5" />
-                      )}
-                      {wsIssueCount > 0 ? (
-                        <div className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-orange-500" />
-                      ) : null}
-                    </div>
-                    <div>
-                      <h4 className="flex items-center gap-2 font-bold leading-tight text-foreground">
-                        {ws.name}
-                      </h4>
-                      <div className="mt-0.5 flex flex-col gap-0.5">
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                          {mainDeviceCount}{" "}
-                          {mainDeviceCount === 1
-                            ? "устройство"
-                            : mainDeviceCount > 1 && mainDeviceCount < 5
-                              ? "устройства"
-                              : "устройств"}
-                        </p>
-                        <div
-                          className="flex items-center gap-1.5"
-                          title={ws.assigned_user_name || "Не назначено"}
-                        >
-                          <User
-                            className={cn(
-                              "h-3 w-3",
-                              ws.assigned_user_name
-                                ? "text-primary"
-                                : "text-muted-foreground/70",
-                            )}
-                          />
-                          <span
-                            className={cn(
-                              "max-w-[100px] truncate text-[10px] font-medium",
-                              ws.assigned_user_name
-                                ? "text-primary"
-                                : "text-muted-foreground/70",
-                            )}
-                          >
-                            {ws.assigned_user_name || "Не назначено"}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {wsOverdueMaintenanceCount > 0 ? (
-                            <span
-                              className={cn(
-                                "text-[10px] font-medium",
-                                wsMaxOverdueRatio <= 0.15 && "text-amber-700",
-                                wsMaxOverdueRatio > 0.15 &&
-                                  wsMaxOverdueRatio <= 0.50 &&
-                                  "text-orange-700",
-                                wsMaxOverdueRatio > 0.50 &&
-                                  wsMaxOverdueRatio <= 1.00 &&
-                                  "text-rose-700",
-                                wsMaxOverdueRatio > 1.00 &&
-                                  "text-purple-700 font-semibold animate-pulse",
-                              )}
-                            >
-                              Просрочено ТО: {wsOverdueMaintenanceCount}
-                            </span>
-                          ) : null}
-                          {wsOverdueMaintenanceCount === 0 &&
-                          wsServicedMaintenanceCount > 0 ? (
-                            <span className="text-[10px] font-medium text-emerald-700">
-                              Обслужено: {wsServicedMaintenanceCount}
-                            </span>
-                          ) : null}
-                          {wsDisabledMaintenanceCount > 0 ? (
-                            <span className="text-[10px] font-medium text-muted-foreground">
-                              Без ТО: {wsDisabledMaintenanceCount}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
+                      <User
+                        className={cn(
+                          "h-3 w-3",
+                          ws.assigned_user_name
+                            ? "text-primary"
+                            : "text-muted-foreground/70",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "max-w-[110px] truncate font-medium",
+                          ws.assigned_user_name
+                            ? "text-primary"
+                            : "text-muted-foreground/70",
+                        )}
+                      >
+                        {ws.assigned_user_name || "Не назначено"}
+                      </span>
                     </div>
                   </div>
                 </CardHeader>
@@ -397,45 +404,11 @@ export default memo(function ZoneSection({
                         ) => {
                           const itemIssueCount =
                             activeIssueCountByEquipmentId.get(item.id) ?? 0;
-                          const maintenanceStatus =
-                            maintenanceStatusByEquipmentId.get(item.id) ??
-                            "unknown";
-                          const overdueDays =
-                            overdueDaysByEquipmentId.get(item.id) ?? 0;
+                          const itemProgress =
+                            progressByItemId.get(item.id) ??
+                            getMaintenanceProgress(item);
                           const isExpandable = componentCount > 0;
                           const isExpanded = expandedPcIds.includes(item.id);
-
-                          let overdueSeverityClass = "";
-                          let overdueTextClass = "";
-                          let overdueSeverityLabel = "";
-
-                          if (maintenanceStatus === "overdue" && item.maintenance_enabled !== false) {
-                            const intervalDays = Math.max(
-                              1,
-                              Number(
-                                item.cleaning_interval_override_days ?? item.cleaning_interval_days,
-                              ) || 30,
-                            );
-                            const ratio = overdueDays / intervalDays;
-
-                            if (ratio <= 0.15) {
-                              overdueSeverityClass = "border-l-[3px] border-l-amber-500 border-amber-200 bg-amber-50/20 pl-2.5";
-                              overdueTextClass = "text-amber-700 group-hover/item:text-amber-850 dark:text-amber-500";
-                              overdueSeverityLabel = " (низкая)";
-                            } else if (ratio <= 0.50) {
-                              overdueSeverityClass = "border-l-[3px] border-l-orange-500 border-orange-200 bg-orange-50/20 pl-2.5";
-                              overdueTextClass = "text-orange-700 group-hover/item:text-orange-800 dark:text-orange-500";
-                              overdueSeverityLabel = " (средняя)";
-                            } else if (ratio <= 1.00) {
-                              overdueSeverityClass = "border-l-[3px] border-l-rose-500 border-rose-200 bg-rose-50/20 pl-2.5";
-                              overdueTextClass = "text-rose-700 group-hover/item:text-rose-800 dark:text-rose-500";
-                              overdueSeverityLabel = " (высокая)";
-                            } else {
-                              overdueSeverityClass = "border-l-[3px] border-l-purple-600 border-purple-200 bg-purple-50/20 pl-2.5";
-                              overdueTextClass = "text-purple-700 group-hover/item:text-purple-800 dark:text-purple-500";
-                              overdueSeverityLabel = " (критическая)";
-                            }
-                          }
 
                           return (
                             <div
@@ -451,13 +424,16 @@ export default memo(function ZoneSection({
                                 itemIssueCount > 0 &&
                                   "border-l-[3px] border-l-orange-500 border-orange-200 bg-orange-50/20 pl-2.5",
                                 itemIssueCount === 0 &&
-                                  maintenanceStatus === "overdue" &&
-                                  overdueSeverityClass,
+                                  itemProgress.stage === "penalty" &&
+                                  "border-l-[3px] border-l-rose-500 border-rose-200 bg-rose-50/20 pl-2.5",
                                 itemIssueCount === 0 &&
-                                  maintenanceStatus === "serviced" &&
+                                  itemProgress.stage === "grace" &&
+                                  "border-l-[3px] border-l-amber-500 border-amber-200 bg-amber-50/20 pl-2.5",
+                                itemIssueCount === 0 &&
+                                  itemProgress.stage === "normal" &&
                                   "border-l-[3px] border-l-emerald-500 border-emerald-200 bg-emerald-50/20 pl-2.5",
                                 itemIssueCount === 0 &&
-                                  maintenanceStatus === "disabled" &&
+                                  itemProgress.stage === "disabled" &&
                                   "border-l-[3px] border-l-slate-400 border-border bg-accent/70 pl-2.5",
                                 isSubItem && "ml-4 bg-slate-50/50",
                               )}
@@ -468,19 +444,19 @@ export default memo(function ZoneSection({
                                     "truncate text-xs font-semibold text-foreground group-hover/item:text-primary",
                                     itemIssueCount > 0 && "text-orange-700",
                                     itemIssueCount === 0 &&
-                                      maintenanceStatus === "overdue" &&
-                                      overdueTextClass,
+                                      itemProgress.stage === "penalty" &&
+                                      "text-rose-600 dark:text-rose-400",
                                     itemIssueCount === 0 &&
-                                      maintenanceStatus === "serviced" &&
-                                      "text-emerald-700",
+                                      itemProgress.stage === "grace" &&
+                                      "text-amber-600 dark:text-amber-400",
                                     itemIssueCount === 0 &&
-                                      maintenanceStatus === "disabled" &&
+                                      itemProgress.stage === "disabled" &&
                                       "text-muted-foreground",
                                   )}
                                 >
                                   {item.name}
                                 </p>
-                                <div className="mt-0.5 space-y-1.5">
+                                <div className="mt-0.5 space-y-1">
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     <span className="text-[10px] text-muted-foreground">
                                       {item.type_name || item.type}
@@ -497,32 +473,11 @@ export default memo(function ZoneSection({
                                     ) : null}
                                   </div>
 
-                                  {(maintenanceStatus === "overdue" ||
-                                    maintenanceStatus === "serviced" ||
-                                    maintenanceStatus === "disabled") &&
-                                    itemIssueCount === 0 && (
-                                      <div className="flex flex-wrap items-center gap-1.5">
-                                        {maintenanceStatus === "overdue" ? (
-                                          <span className={cn("text-[10px] font-medium", overdueTextClass)}>
-                                            • ТО просрочено
-                                            {overdueDays > 0
-                                              ? ` на ${overdueDays} дн.`
-                                              : ""}
-                                            {overdueSeverityLabel}
-                                          </span>
-                                        ) : null}
-                                        {maintenanceStatus === "serviced" ? (
-                                          <span className="text-[10px] font-medium text-emerald-700">
-                                            • Обслужено
-                                          </span>
-                                        ) : null}
-                                        {maintenanceStatus === "disabled" ? (
-                                          <span className="text-[10px] font-medium text-muted-foreground">
-                                            • Без ТО
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                    )}
+                                  {itemIssueCount === 0 && (
+                                    <MaintenanceSegmentedBar
+                                      progress={itemProgress}
+                                    />
+                                  )}
                                 </div>
                               </div>
                               <div className="flex shrink-0 items-center gap-1 ml-2">

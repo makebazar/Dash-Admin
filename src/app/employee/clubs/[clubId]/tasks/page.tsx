@@ -45,6 +45,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { MaintenanceSegmentedBar } from "@/components/equipment/MaintenanceSegmentedBar";
+import { getMaintenanceProgress } from "@/lib/maintenance-progress";
 
 interface MaintenanceTask {
   id: string;
@@ -67,6 +69,9 @@ interface MaintenanceTask {
     rejected_by_name?: string;
   };
   cleaning_time_minutes?: number | null;
+  cleaning_interval_days?: number | null;
+  overdue_tolerance_days?: number | null;
+  maintenance_enabled?: boolean;
   parent_equipment_id?: string | null;
 }
 
@@ -92,6 +97,9 @@ const normalizeTask = (task: any): MaintenanceTask => ({
   session_id: task?.session_id,
   verified_by_name: task?.verified_by_name,
   cleaning_time_minutes: task?.cleaning_time_minutes !== undefined && task?.cleaning_time_minutes !== null ? Number(task.cleaning_time_minutes) : null,
+  cleaning_interval_days: task?.cleaning_interval_days !== undefined && task?.cleaning_interval_days !== null ? Number(task.cleaning_interval_days) : null,
+  overdue_tolerance_days: task?.overdue_tolerance_days !== undefined && task?.overdue_tolerance_days !== null ? Number(task.overdue_tolerance_days) : null,
+  maintenance_enabled: task?.maintenance_enabled !== undefined ? Boolean(task.maintenance_enabled) : true,
 });
 
 function EmployeeTasksContent() {
@@ -121,6 +129,7 @@ function EmployeeTasksContent() {
     adjusted_efficiency: number;
   } | null>(null);
   const [filterMode, setFilterMode] = useState<"current" | "all">("current");
+  const [statusFilter, setStatusFilter] = useState<"all" | "overdue" | "today" | "in_progress" | "completed">("all");
   const [activeCategory, setActiveCategory] = useState<"equipment" | "components">("equipment");
 
   // Mobile Terminal State
@@ -776,13 +785,27 @@ function EmployeeTasksContent() {
       if (activeCategory === "equipment" && task.parent_equipment_id) return;
       if (activeCategory === "components" && !task.parent_equipment_id) return;
 
-      if (filterMode === "current") {
-        const isOverdue = task.status === "PENDING" && task.due_date < todayStr;
-        const isTodayTask =
-          task.status === "PENDING" && task.due_date === todayStr;
-        const isInProgress = task.status === "IN_PROGRESS";
-        const isRework = task.status === "REWORK";
-        if (!isOverdue && !isTodayTask && !isInProgress && !isRework) return;
+      const tolerance = task.overdue_tolerance_days ?? 3;
+      const taskDueStr = formatDateKeyInTimezone(new Date(task.due_date), clubTimezone);
+      const diffMs = new Date(todayStr).getTime() - new Date(taskDueStr).getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+      const isPastTolerance = task.status === "PENDING" && diffDays > tolerance;
+      const isDueTodayOrGrace = task.status === "PENDING" && diffDays >= 0 && diffDays <= tolerance;
+      const isInProgress = task.status === "IN_PROGRESS";
+      const isRework = task.status === "REWORK";
+      const isCompleted = task.status === "COMPLETED";
+
+      if (statusFilter === "overdue") {
+        if (!isPastTolerance) return;
+      } else if (statusFilter === "today") {
+        if (!isDueTodayOrGrace) return;
+      } else if (statusFilter === "in_progress") {
+        if (!isInProgress && !isRework) return;
+      } else if (statusFilter === "completed") {
+        if (!isCompleted) return;
+      } else if (filterMode === "current") {
+        if (!isPastTolerance && !isDueTodayOrGrace && !isInProgress && !isRework) return;
       }
 
       const location = task.workstation_name || "Склад";
@@ -795,14 +818,36 @@ function EmployeeTasksContent() {
       if (b === "Склад") return 1;
       return a.localeCompare(b);
     });
-  }, [tasks, filterMode, clubTimezone, activeCategory]);
+  }, [tasks, filterMode, clubTimezone, activeCategory, statusFilter]);
 
   const groupedFreeTasks = useMemo(() => {
     const groups: Record<string, MaintenanceTask[]> = {};
+    const todayStr = formatDateKeyInTimezone(new Date(), clubTimezone);
 
     freeTasks.forEach((task) => {
       if (activeCategory === "equipment" && task.parent_equipment_id) return;
       if (activeCategory === "components" && !task.parent_equipment_id) return;
+
+      const tolerance = task.overdue_tolerance_days ?? 3;
+      const taskDueStr = formatDateKeyInTimezone(new Date(task.due_date), clubTimezone);
+      const diffMs = new Date(todayStr).getTime() - new Date(taskDueStr).getTime();
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+      const isPastTolerance = task.status === "PENDING" && diffDays > tolerance;
+      const isDueTodayOrGrace = task.status === "PENDING" && diffDays >= 0 && diffDays <= tolerance;
+      const isInProgress = task.status === "IN_PROGRESS";
+      const isRework = task.status === "REWORK";
+      const isCompleted = task.status === "COMPLETED";
+
+      if (statusFilter === "overdue") {
+        if (!isPastTolerance) return;
+      } else if (statusFilter === "today") {
+        if (!isDueTodayOrGrace) return;
+      } else if (statusFilter === "in_progress") {
+        if (!isInProgress && !isRework) return;
+      } else if (statusFilter === "completed") {
+        if (!isCompleted) return;
+      }
 
       const location = task.workstation_name || "Склад";
       if (!groups[location]) groups[location] = [];
@@ -814,7 +859,7 @@ function EmployeeTasksContent() {
       if (b === "Склад") return 1;
       return a.localeCompare(b);
     });
-  }, [freeTasks, activeCategory]);
+  }, [freeTasks, activeCategory, statusFilter, clubTimezone]);
 
   const renderTaskCard = (
     task: MaintenanceTask,
@@ -834,6 +879,14 @@ function EmployeeTasksContent() {
       sessionId &&
       task.session_id &&
       String(task.session_id) === String(sessionId);
+
+    const taskProgress = getMaintenanceProgress({
+      maintenance_enabled: task.maintenance_enabled,
+      cleaning_interval_days: task.cleaning_interval_days,
+      last_cleaned_at: task.last_cleaned_at,
+      due_date: task.due_date,
+      overdue_tolerance_days: task.overdue_tolerance_days,
+    });
 
     return (
       <Card
@@ -860,142 +913,155 @@ function EmployeeTasksContent() {
           }
         }}
       >
-        <CardContent className="p-0">
-          <div className="flex items-stretch min-h-[72px]">
-            {/* Status Indicator Bar */}
-            <div
-              className={cn(
-                "w-1.5 transition-all shrink-0",
-                isSelected
-                  ? isMobile
-                    ? "bg-white w-2"
-                    : "bg-primary w-2"
-                  : isRejected
-                    ? "bg-rose-500"
-                    : isCompleted
-                      ? "bg-emerald-500"
-                      : isFuture
-                        ? "bg-blue-400"
-                        : isFree
-                          ? "bg-muted-foreground/30"
-                          : isOverdue
-                            ? "bg-rose-500"
-                            : isInProgress
-                              ? "bg-primary"
-                              : "bg-muted-foreground/20",
-              )}
-            />
-
-            <div className="flex-1 p-4 flex flex-col gap-3 min-w-0">
-              <div className="flex items-start justify-between gap-3 min-w-0">
-                <div className="flex items-start gap-4 min-w-0 flex-1">
-                  {/* Selection Checkbox */}
-                  {!showAsCompleted && !isInCurrentSession && (
-                    <div
-                      className="shrink-0 pt-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleTaskSelection(task.id);
-                      }}
-                    >
-                      <div
-                        className={cn(
-                          "h-6 w-6 rounded-md border transition-all flex items-center justify-center cursor-pointer",
-                          isSelected
-                            ? "bg-primary border-primary text-primary-foreground shadow-sm scale-110"
-                            : "border-muted-foreground/30 bg-background hover:border-muted-foreground/60",
-                        )}
-                      >
-                        {isSelected && (
-                          <Check className="h-3.5 w-3.5 stroke-3" />
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Text Content */}
-                  <div className="min-w-0 flex-1 flex flex-col gap-1 mt-0.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4
-                        className={cn(
-                          "font-black text-[15px] leading-tight tracking-tight",
-                          showAsCompleted
-                            ? "text-muted-foreground"
-                            : "text-foreground",
-                        )}
-                      >
-                        {task.equipment_name}
-                      </h4>
-                      {isRejected && (
-                        <Badge
-                          variant="destructive"
-                          className="h-5 px-2 text-[9px] font-black bg-rose-500 hover:bg-rose-600 uppercase tracking-tighter"
-                        >
-                          На доработку
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-                      <span className="bg-accent/50 text-foreground/70 px-1.5 py-0.5 rounded leading-none">
-                        {task.equipment_type_name}
-                      </span>
-                      {!hideLocation && (
-                        <span className="opacity-70">
-                          {task.workstation_name || "Склад"}
-                        </span>
-                      )}
-                      {task.cleaning_time_minutes && (
-                        <span className="text-emerald-500 flex items-center gap-1 normal-case font-bold">
-                          <Clock className="h-3 w-3" />
-                          {task.cleaning_time_minutes} мин.
-                        </span>
-                      )}
-                      {task.last_cleaned_at && (
-                        <span className="text-emerald-500 flex items-center gap-1">
-                          <Check className="h-3 w-3" />
-                          {format(new Date(task.last_cleaned_at), "dd.MM")}
-                        </span>
-                      )}
-                    </div>
+        <CardContent className="p-3.5 sm:p-4">
+          <div className="flex items-start justify-between gap-3 min-w-0">
+            {/* Left side: Checkbox + (Name & Progress) */}
+            <div className="flex items-start gap-3 min-w-0 flex-1">
+              {/* Selection Checkbox */}
+              {!showAsCompleted && !isInCurrentSession && (
+                <div
+                  className="shrink-0 pt-0.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleTaskSelection(task.id);
+                  }}
+                >
+                  <div
+                    className={cn(
+                      "h-5 w-5 rounded-md border transition-all flex items-center justify-center cursor-pointer",
+                      isSelected
+                        ? "bg-primary border-primary text-primary-foreground shadow-sm scale-105"
+                        : "border-muted-foreground/30 bg-background hover:border-muted-foreground/60",
+                    )}
+                  >
+                    {isSelected && (
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    )}
                   </div>
                 </div>
+              )}
 
-                {/* Individual Action Button - Hidden only when bulk selection (2+) on mobile */}
-                {!(isMobile && selectedTaskIds.length >= 2 && isSelected) && (
-                  <div className="shrink-0 self-start pt-1">
-                    {isFree ? (
+              {/* Title & Progress Bar */}
+              <div className="min-w-0 flex-1 flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <h4
+                    className={cn(
+                      "font-bold text-sm sm:text-[15px] leading-tight tracking-tight truncate",
+                      showAsCompleted
+                        ? "text-muted-foreground"
+                        : "text-foreground",
+                    )}
+                  >
+                    {task.equipment_name}
+                  </h4>
+                  {isRejected && (
+                    <Badge
+                      variant="destructive"
+                      className="h-5 px-2 text-[9px] font-bold bg-rose-500 hover:bg-rose-600 uppercase tracking-tighter"
+                    >
+                      На доработку
+                    </Badge>
+                  )}
+                </div>
+
+                {!showAsCompleted && (
+                  <MaintenanceSegmentedBar
+                    progress={taskProgress}
+                    className="mt-0.5"
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Right side: Type (top) + Time & Action (bottom) */}
+            <div className="flex flex-col items-end justify-between self-stretch shrink-0 gap-2 min-h-[52px]">
+              {/* Device Type on top right (no container) */}
+              <div className="flex items-center gap-1.5 text-right">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/75">
+                  {task.equipment_type_name}
+                </span>
+                {!hideLocation && task.workstation_name && (
+                  <span className="text-[10px] sm:text-[11px] text-muted-foreground/50">
+                    • {task.workstation_name}
+                  </span>
+                )}
+              </div>
+
+              {/* Time & Action Button on bottom right */}
+              {!(isMobile && selectedTaskIds.length >= 2 && isSelected) && (
+                <div className="flex items-center gap-2.5">
+                  {task.cleaning_time_minutes && !showAsCompleted && (
+                    <span className="text-xs font-medium text-muted-foreground flex items-center gap-1 shrink-0">
+                      <Clock className="h-3.5 w-3.5 text-muted-foreground/70" />
+                      {task.cleaning_time_minutes} мин.
+                    </span>
+                  )}
+
+                  {isFree ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-8 px-3 rounded-lg text-xs font-semibold bg-accent hover:bg-accent/80 text-foreground transition-all shadow-sm active:scale-95"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleClaim(task.id);
+                      }}
+                      disabled={isUpdating === task.id}
+                    >
+                      {isUpdating === task.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        "Взять"
+                      )}
+                    </Button>
+                  ) : showAsCompleted ? (
+                    <div className="flex flex-col items-end justify-center">
+                      <span className="text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-wider">
+                        След.
+                      </span>
+                      <span className="text-xs font-bold text-muted-foreground/80">
+                        {format(new Date(task.due_date), "dd.MM")}
+                      </span>
+                    </div>
+                  ) : isInCurrentSession && !isModalMode ? (
+                    <div className="flex items-center gap-1.5">
                       <Button
                         size="sm"
-                        variant="secondary"
-                        className="h-9 px-4 rounded-xl font-black bg-accent hover:bg-accent/80 text-foreground text-[11px] transition-all uppercase tracking-tighter"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground active:scale-95 transition-all"
+                        title="Вернуть из работы"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleClaim(task.id);
+                          handleReturnFromWork(task.id);
                         }}
                         disabled={isUpdating === task.id}
                       >
                         {isUpdating === task.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
                         ) : (
-                          "Взять"
+                          <Undo2 className="h-3.5 w-3.5" />
                         )}
                       </Button>
-                    ) : showAsCompleted ? (
-                      <div className="flex flex-col items-end justify-center px-2">
-                        <span className="text-[9px] font-black text-muted-foreground/50 uppercase tracking-widest">
-                          След.
-                        </span>
-                        <span className="text-sm font-black text-muted-foreground/80">
-                          {format(new Date(task.due_date), "dd.MM")}
-                        </span>
-                      </div>
-                    ) : isInCurrentSession && !isModalMode ? (
-                      <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        className="h-8 px-3 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isMobile) {
+                            window.open(terminalUrl, "_self");
+                          }
+                        }}
+                      >
+                        В работе
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      {(isInProgress || isRework) && (
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="h-10 w-10 p-0 rounded-xl border-zinc-800 hover:bg-zinc-900 text-zinc-400 active:scale-95 transition-all shadow-sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground active:scale-95 transition-all"
                           title="Вернуть из работы"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1004,125 +1070,87 @@ function EmployeeTasksContent() {
                           disabled={isUpdating === task.id}
                         >
                           {isUpdating === task.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
                           ) : (
-                            <Undo2 className="h-4 w-4" />
+                            <Undo2 className="h-3.5 w-3.5" />
                           )}
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="h-10 px-4 rounded-xl font-black text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white uppercase tracking-tighter shadow-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isMobile) {
-                              window.open(terminalUrl, "_self");
-                            }
-                          }}
-                        >
-                          В работе
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        {(isInProgress || isRework) && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-10 w-10 p-0 rounded-xl border-zinc-800 hover:bg-zinc-900 text-zinc-400 active:scale-95 transition-all shadow-sm"
-                            title="Вернуть из работы"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleReturnFromWork(task.id);
-                            }}
-                            disabled={isUpdating === task.id}
-                          >
-                            {isUpdating === task.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin text-zinc-500" />
-                            ) : (
-                              <Undo2 className="h-4 w-4" />
-                            )}
-                          </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        className={cn(
+                          "h-8 px-3.5 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 active:scale-95",
+                          isInProgress || isRework
+                            ? isRejected
+                              ? "bg-rose-500 hover:bg-rose-600 text-white"
+                              : "bg-primary text-primary-foreground hover:bg-primary/90"
+                            : "bg-primary text-primary-foreground hover:bg-primary/90",
                         )}
-                        <Button
-                          size="sm"
-                          variant={
-                            isInProgress || isRework ? "default" : "outline"
-                          }
-                          className={cn(
-                            "h-10 px-4 rounded-xl font-black text-[11px] transition-all flex items-center gap-2 uppercase tracking-tighter shadow-sm",
-                            isInProgress || isRework
-                              ? isRejected
-                                ? "bg-rose-500 hover:bg-rose-600 text-white border-none"
-                                : "bg-primary text-primary-foreground border-none"
-                              : "border-primary/20 text-primary hover:bg-primary/5",
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (isModalMode) {
-                              setSelectedTaskForModal(task.id);
-                            } else if (isInProgress || isRework) {
-                              if (isMobile && sessionId) {
-                                window.open(terminalUrl, "_self");
-                              } else {
-                                createSession([task.id]);
-                              }
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isModalMode) {
+                            setSelectedTaskForModal(task.id);
+                          } else if (isInProgress || isRework) {
+                            if (isMobile && sessionId) {
+                              window.open(terminalUrl, "_self");
                             } else {
-                              if (sessionId) {
-                                createSession([task.id]);
-                              } else {
-                                handleAction(task.id, "START");
-                              }
+                              createSession([task.id]);
                             }
-                          }}
-                          disabled={isUpdating === task.id || isCreatingSession}
-                        >
-                          {isUpdating === task.id ||
-                          (isCreatingSession &&
-                            selectedTaskIds.includes(task.id)) ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <>
-                              {isModalMode
-                                ? isRework
-                                  ? "Исправить"
-                                  : isInProgress
-                                    ? "Продолжить"
-                                    : "Обслужить"
-                                : sessionId
-                                  ? "Добавить"
-                                  : isInProgress || isRework
-                                    ? isMobile
-                                      ? "Открыть"
-                                      : "QR-код"
-                                    : "Начать"}
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Rework Comment Box */}
-              {isRejected &&
-                (task.rejection_reason || task.latest_rejection?.note) && (
-                  <div className="bg-rose-500/[0.03] border border-rose-500/10 rounded-2xl p-3 animate-in fade-in slide-in-from-top-1 duration-300">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[9px] font-black text-rose-500/60 uppercase tracking-widest">
-                        {task.latest_rejection?.rejected_by_name ||
-                          task.verified_by_name ||
-                          "Управляющий"}
-                      </span>
-                      <p className="text-[12px] text-rose-500/90 font-bold leading-tight italic">
-                        "{task.latest_rejection?.note || task.rejection_reason}"
-                      </p>
+                          } else {
+                            if (sessionId) {
+                              createSession([task.id]);
+                            } else {
+                              handleAction(task.id, "START");
+                            }
+                          }
+                        }}
+                        disabled={isUpdating === task.id || isCreatingSession}
+                      >
+                        {isUpdating === task.id ||
+                        (isCreatingSession &&
+                          selectedTaskIds.includes(task.id)) ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <>
+                            {isModalMode
+                              ? isRework
+                                ? "Исправить"
+                                : isInProgress
+                                  ? "Продолжить"
+                                  : "Обслужить"
+                              : sessionId
+                                ? "Добавить"
+                                : isInProgress || isRework
+                                  ? isMobile
+                                    ? "Открыть"
+                                    : "QR-код"
+                                  : "Начать"}
+                          </>
+                        )}
+                      </Button>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Rework Comment Box */}
+          {isRejected &&
+            (task.rejection_reason || task.latest_rejection?.note) && (
+              <div className="mt-3 bg-rose-500/[0.03] border border-rose-500/10 rounded-lg p-3 animate-in fade-in slide-in-from-top-1 duration-300">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[9px] font-black text-rose-500/60 uppercase tracking-widest">
+                    {task.latest_rejection?.rejected_by_name ||
+                      task.verified_by_name ||
+                      "Управляющий"}
+                  </span>
+                  <p className="text-[12px] text-rose-500/90 font-bold leading-tight italic">
+                    "{task.latest_rejection?.note || task.rejection_reason}"
+                  </p>
+                </div>
+              </div>
+            )}
         </CardContent>
       </Card>
     );
@@ -1159,27 +1187,33 @@ function EmployeeTasksContent() {
           <div className="flex items-center gap-1 bg-accent p-1 rounded-lg border border-border">
             <Button
               size="sm"
-              variant={filterMode === "current" ? "default" : "ghost"}
+              variant={filterMode === "current" && statusFilter === "all" ? "default" : "ghost"}
               className={cn(
                 "h-7 px-4 text-xs font-medium rounded-md",
-                filterMode === "current"
+                filterMode === "current" && statusFilter === "all"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground",
               )}
-              onClick={() => setFilterMode("current")}
+              onClick={() => {
+                setFilterMode("current");
+                setStatusFilter("all");
+              }}
             >
               Актуальные
             </Button>
             <Button
               size="sm"
-              variant={filterMode === "all" ? "default" : "ghost"}
+              variant={filterMode === "all" && statusFilter === "all" ? "default" : "ghost"}
               className={cn(
                 "h-7 px-4 text-xs font-medium rounded-md",
-                filterMode === "all"
+                filterMode === "all" && statusFilter === "all"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground",
               )}
-              onClick={() => setFilterMode("all")}
+              onClick={() => {
+                setFilterMode("all");
+                setStatusFilter("all");
+              }}
             >
               План месяца
             </Button>
@@ -1219,191 +1253,240 @@ function EmployeeTasksContent() {
       )}
 
       {apiStats && (
-        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-          <div className="p-4 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 bg-accent/10">
-            <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-                План на месяц
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Выполнено по плану текущего месяца
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <span className="text-2xl font-bold text-emerald-500">
-                  {apiStats.month_completed_count}
-                </span>
-                <span className="text-sm font-medium text-muted-foreground ml-1">
-                  / {apiStats.month_plan_count}
-                </span>
+        <div className="space-y-3">
+          <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+            <div className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/50 bg-accent/10">
+              <div>
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+                  План на месяц
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Выполнено по плану текущего месяца
+                </p>
               </div>
-              <div className="h-8 w-px bg-border mx-1" />
-              <div className="text-right">
-                <Badge
-                  variant="secondary"
-                  className="bg-emerald-500/10 text-emerald-500 font-bold mb-1"
-                >
-                  {Math.round(apiStats.raw_efficiency || 0)}%
-                </Badge>
+              <div className="flex flex-col items-start md:items-end gap-1.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-emerald-500">
+                    {apiStats.month_completed_count}
+                  </span>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    / {apiStats.month_plan_count}
+                  </span>
+                  <span className="text-sm font-bold text-emerald-500 ml-1.5">
+                    {Math.round(apiStats.raw_efficiency || 0)}%
+                  </span>
+                </div>
+                <Progress
+                  value={apiStats.raw_efficiency || 0}
+                  className="h-1.5 w-36 bg-muted rounded-full overflow-hidden"
+                />
               </div>
             </div>
-          </div>
-          <Progress
-            value={apiStats.raw_efficiency || 0}
-            className="h-1 rounded-none bg-accent"
-          />
 
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border">
-            <div
-              className={cn(
-                "p-4 md:p-5 transition-colors",
-                (apiStats?.overdue_count || 0) > 0
-                  ? "bg-rose-500/5"
-                  : "bg-transparent",
-              )}
-            >
-              <div className="flex items-center justify-between mb-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border">
+              <div
+                className={cn(
+                  "p-4 md:p-5 transition-all cursor-pointer select-none",
+                  statusFilter === "overdue"
+                    ? "bg-rose-500/15 ring-2 ring-inset ring-rose-500"
+                    : (apiStats?.overdue_count || 0) > 0
+                      ? "bg-rose-500/5 hover:bg-rose-500/10"
+                      : "bg-transparent hover:bg-accent/20",
+                )}
+                onClick={() => setStatusFilter((prev) => (prev === "overdue" ? "all" : "overdue"))}
+                title="Нажмите, чтобы отфильтровать просроченные задачи"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p
+                    className={cn(
+                      "text-[10px] font-semibold uppercase tracking-widest",
+                      (apiStats?.overdue_count || 0) > 0 || statusFilter === "overdue"
+                        ? "text-rose-500"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    Просрочено
+                  </p>
+                  <AlertCircle
+                    className={cn(
+                      "h-4 w-4",
+                      (apiStats?.overdue_count || 0) > 0 || statusFilter === "overdue"
+                        ? "text-rose-500 opacity-70"
+                        : "text-muted-foreground opacity-30",
+                    )}
+                  />
+                </div>
                 <p
                   className={cn(
-                    "text-[10px] font-semibold uppercase tracking-widest",
-                    (apiStats?.overdue_count || 0) > 0
+                    "text-2xl font-bold",
+                    (apiStats?.overdue_count || 0) > 0 || statusFilter === "overdue"
                       ? "text-rose-500"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  Просрочено
-                </p>
-                <AlertCircle
-                  className={cn(
-                    "h-4 w-4",
-                    (apiStats?.overdue_count || 0) > 0
-                      ? "text-rose-500 opacity-70"
-                      : "text-muted-foreground opacity-30",
-                  )}
-                />
-              </div>
-              <p
-                className={cn(
-                  "text-2xl font-bold",
-                  (apiStats?.overdue_count || 0) > 0
-                    ? "text-rose-500"
-                    : "text-foreground",
-                )}
-              >
-                {apiStats?.overdue_count || 0}
-              </p>
-            </div>
-
-            <div
-              className={cn(
-                "p-4 md:p-5 transition-colors",
-                (apiStats?.due_today_count || 0) > 0
-                  ? "bg-blue-500/5"
-                  : "bg-transparent",
-              )}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p
-                  className={cn(
-                    "text-[10px] font-semibold uppercase tracking-widest",
-                    (apiStats?.due_today_count || 0) > 0
-                      ? "text-blue-500"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  На сегодня
-                </p>
-                <Clock
-                  className={cn(
-                    "h-4 w-4",
-                    (apiStats?.due_today_count || 0) > 0
-                      ? "text-blue-500 opacity-70"
-                      : "text-muted-foreground opacity-30",
-                  )}
-                />
-              </div>
-              <p
-                className={cn(
-                  "text-2xl font-bold",
-                  (apiStats?.due_today_count || 0) > 0
-                    ? "text-blue-500"
-                    : "text-foreground",
-                )}
-              >
-                {apiStats?.due_today_count || 0}
-              </p>
-            </div>
-
-            <div
-              className={cn(
-                "p-4 md:p-5 transition-colors",
-                (apiStats?.in_progress_count || 0) > 0
-                  ? "bg-primary/5"
-                  : "bg-transparent",
-              )}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p
-                  className={cn(
-                    "text-[10px] font-semibold uppercase tracking-widest",
-                    (apiStats?.in_progress_count || 0) > 0
-                      ? "text-primary"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  В работе
-                </p>
-                <Play
-                  className={cn(
-                    "h-4 w-4 ml-0.5",
-                    (apiStats?.in_progress_count || 0) > 0
-                      ? "text-primary opacity-70"
-                      : "text-muted-foreground opacity-30",
-                  )}
-                />
-              </div>
-              <div className="flex flex-col gap-1 items-start">
-                <p
-                  className={cn(
-                    "text-2xl font-bold leading-none",
-                    (apiStats?.in_progress_count || 0) > 0
-                      ? "text-primary"
                       : "text-foreground",
                   )}
                 >
-                  {apiStats?.in_progress_count || 0}
+                  {apiStats?.overdue_count || 0}
                 </p>
-                {(apiStats?.rework_count || 0) > 0 && (
-                  <span className="text-[10px] font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">
-                    Доработка: {apiStats?.rework_count}
-                  </span>
-                )}
               </div>
-            </div>
 
-            <div className="p-4 md:p-5 bg-emerald-500/5">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-500">
-                  Закрыто
-                </p>
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 opacity-70" />
-              </div>
-              <div className="flex flex-col gap-1 items-start">
-                <p className="text-2xl font-bold text-emerald-500 leading-none">
-                  {apiStats?.month_completed_count || 0}
-                </p>
-                {(apiStats?.old_debt_closed_count || 0) > 0 && (
-                  <span
-                    className="text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded"
-                    title="Закрыт старый долг"
-                  >
-                    +{apiStats?.old_debt_closed_count} долг
-                  </span>
+              <div
+                className={cn(
+                  "p-4 md:p-5 transition-all cursor-pointer select-none",
+                  statusFilter === "today"
+                    ? "bg-blue-500/15 ring-2 ring-inset ring-blue-500"
+                    : (apiStats?.due_today_count || 0) > 0
+                      ? "bg-blue-500/5 hover:bg-blue-500/10"
+                      : "bg-transparent hover:bg-accent/20",
                 )}
+                onClick={() => setStatusFilter((prev) => (prev === "today" ? "all" : "today"))}
+                title="Нажмите, чтобы отфильтровать задачи на сегодня"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p
+                    className={cn(
+                      "text-[10px] font-semibold uppercase tracking-widest",
+                      (apiStats?.due_today_count || 0) > 0 || statusFilter === "today"
+                        ? "text-blue-500"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    На сегодня
+                  </p>
+                  <Clock
+                    className={cn(
+                      "h-4 w-4",
+                      (apiStats?.due_today_count || 0) > 0 || statusFilter === "today"
+                        ? "text-blue-500 opacity-70"
+                        : "text-muted-foreground opacity-30",
+                    )}
+                  />
+                </div>
+                <p
+                  className={cn(
+                    "text-2xl font-bold",
+                    (apiStats?.due_today_count || 0) > 0 || statusFilter === "today"
+                      ? "text-blue-500"
+                      : "text-foreground",
+                  )}
+                >
+                  {apiStats?.due_today_count || 0}
+                </p>
+              </div>
+
+              <div
+                className={cn(
+                  "p-4 md:p-5 transition-all cursor-pointer select-none",
+                  statusFilter === "in_progress"
+                    ? "bg-primary/15 ring-2 ring-inset ring-primary"
+                    : (apiStats?.in_progress_count || 0) > 0
+                      ? "bg-primary/5 hover:bg-primary/10"
+                      : "bg-transparent hover:bg-accent/20",
+                )}
+                onClick={() => setStatusFilter((prev) => (prev === "in_progress" ? "all" : "in_progress"))}
+                title="Нажмите, чтобы отфильтровать задачи в работе"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p
+                    className={cn(
+                      "text-[10px] font-semibold uppercase tracking-widest",
+                      (apiStats?.in_progress_count || 0) > 0 || statusFilter === "in_progress"
+                        ? "text-primary"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    В работе
+                  </p>
+                  <Play
+                    className={cn(
+                      "h-4 w-4 ml-0.5",
+                      (apiStats?.in_progress_count || 0) > 0 || statusFilter === "in_progress"
+                        ? "text-primary opacity-70"
+                        : "text-muted-foreground opacity-30",
+                    )}
+                  />
+                </div>
+                <div className="flex flex-col gap-1 items-start">
+                  <p
+                    className={cn(
+                      "text-2xl font-bold leading-none",
+                      (apiStats?.in_progress_count || 0) > 0 || statusFilter === "in_progress"
+                        ? "text-primary"
+                        : "text-foreground",
+                    )}
+                  >
+                    {apiStats?.in_progress_count || 0}
+                  </p>
+                  {(apiStats?.rework_count || 0) > 0 && (
+                    <span className="text-[11px] font-semibold text-rose-500">
+                      Доработка: {apiStats?.rework_count}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "p-4 md:p-5 transition-all cursor-pointer select-none",
+                  statusFilter === "completed"
+                    ? "bg-emerald-500/15 ring-2 ring-inset ring-emerald-500"
+                    : "bg-emerald-500/5 hover:bg-emerald-500/10",
+                )}
+                onClick={() => setStatusFilter((prev) => (prev === "completed" ? "all" : "completed"))}
+                title="Нажмите, чтобы отфильтровать выполненные задачи"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-500">
+                    Закрыто
+                  </p>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 opacity-70" />
+                </div>
+                <div className="flex flex-col gap-1 items-start">
+                  <p className="text-2xl font-bold text-emerald-500 leading-none">
+                    {apiStats?.month_completed_count || 0}
+                  </p>
+                  {(apiStats?.old_debt_closed_count || 0) > 0 && (
+                    <span
+                      className="text-[11px] font-semibold text-emerald-600"
+                      title="Закрыт старый долг"
+                    >
+                      +{apiStats?.old_debt_closed_count} долг
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
+
+          {statusFilter !== "all" && (
+            <div className="flex items-center justify-between h-9 px-3.5 rounded-lg bg-accent/40 border border-border/70 text-xs">
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full shrink-0",
+                    statusFilter === "overdue" && "bg-rose-500",
+                    statusFilter === "today" && "bg-blue-500",
+                    statusFilter === "in_progress" && "bg-primary",
+                    statusFilter === "completed" && "bg-emerald-500",
+                  )}
+                />
+                <span className="text-muted-foreground">Фильтр:</span>
+                <span className="font-semibold text-foreground">
+                  {statusFilter === "overdue" && "Просрочено"}
+                  {statusFilter === "today" && "На сегодня"}
+                  {statusFilter === "in_progress" && "В работе"}
+                  {statusFilter === "completed" && "Закрыто"}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-background/80 rounded flex items-center gap-1.5"
+                onClick={() => setStatusFilter("all")}
+              >
+                <span>Сбросить</span>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1418,31 +1501,50 @@ function EmployeeTasksContent() {
         )}>
           <div className="space-y-10">
             {groupedTasks.length === 0 ? (
-              <div className="text-center py-20 bg-card rounded-2xl border border-border">
-                <div className="h-20 w-20 bg-accent rounded-3xl flex items-center justify-center mx-auto mb-4 text-emerald-500">
+              <div className="text-center py-20 bg-card rounded-xl border border-border">
+                <div className="h-20 w-20 bg-accent rounded-xl flex items-center justify-center mx-auto mb-4 text-emerald-500">
                   <CheckCircle2 className="h-10 w-10" />
                 </div>
                 <h3 className="text-lg font-bold">
-                  {filterMode === "current"
-                    ? "Нет актуальных задач"
-                    : "Нет задач на месяц"}
+                  {statusFilter === "today"
+                    ? "Нет задач на сегодня"
+                    : statusFilter === "overdue"
+                      ? "Нет просроченных задач"
+                      : statusFilter === "in_progress"
+                        ? "Нет задач в работе"
+                        : statusFilter === "completed"
+                          ? "Нет выполненных задач"
+                          : filterMode === "current"
+                            ? "Нет актуальных задач"
+                            : "Нет задач на месяц"}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  {filterMode === "current"
-                    ? "Все текущие задачи выполнены. Можно отдохнуть или взять свободную задачу."
-                    : "На данный момент у вас нет назначенных задач."}
+                  {statusFilter !== "all"
+                    ? "По выбранному фильтру задачи не найдены. Вы можете сбросить фильтр."
+                    : filterMode === "current"
+                      ? "Все текущие задачи выполнены. Можно отдохнуть или взять свободную задачу."
+                      : "На данный момент у вас нет назначенных задач."}
                 </p>
+                {statusFilter !== "all" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 text-xs font-medium"
+                    onClick={() => setStatusFilter("all")}
+                  >
+                    Показать все актуальные
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="grid gap-10">
                 {groupedTasks.map(([location, groupTasks]) => (
                   <div key={location} className="space-y-4">
-                    <div className="flex items-center gap-3 border-b border-border pb-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+                    <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
                         {location}
                       </h3>
-                      <span className="text-xs font-bold text-muted-foreground bg-accent px-2 py-0.5 rounded-full">
+                      <span className="text-sm font-bold text-muted-foreground/80">
                         {groupTasks.length}
                       </span>
                     </div>
@@ -1475,12 +1577,11 @@ function EmployeeTasksContent() {
                       key={`free-${location}`}
                       className="space-y-4 opacity-80 hover:opacity-100 transition-opacity"
                     >
-                      <div className="flex items-center gap-3 border-b border-border pb-2">
-                        <MapPin className="h-4 w-4 text-muted-foreground" />
-                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                      <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                           {location}
                         </h3>
-                        <span className="text-xs font-bold text-muted-foreground bg-accent px-2 py-0.5 rounded-full">
+                        <span className="text-sm font-bold text-muted-foreground/70">
                           {groupTasks.length}
                         </span>
                       </div>
@@ -1499,7 +1600,7 @@ function EmployeeTasksContent() {
           {/* Terminal Sidebar */}
           {!isModalMode && (
             <div className="hidden lg:block sticky top-24 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-              <Card className="bg-zinc-950 border-zinc-800 shadow-2xl overflow-hidden rounded-[2rem]">
+              <Card className="bg-zinc-950 border-zinc-800 shadow-2xl overflow-hidden rounded-xl">
                 <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
                   <div className="flex items-center gap-4">
                     <div>
@@ -1536,7 +1637,7 @@ function EmployeeTasksContent() {
 
                     {sessionId ? (
                       <div className="space-y-8 py-2 animate-in zoom-in-95 duration-500">
-                        <div className="bg-white p-5 rounded-[2rem] flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.1)] border-4 border-zinc-900">
+                        <div className="bg-white p-5 rounded-xl flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.1)] border-4 border-zinc-900">
                           <QRCode value={terminalUrl} size={180} />
                         </div>
                         <div className="text-center space-y-3">
@@ -1551,7 +1652,7 @@ function EmployeeTasksContent() {
 
                         {selectedTaskIds.length > 0 && (
                           <Button
-                            className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-black uppercase italic tracking-tighter shadow-lg transition-all active:scale-[0.98]"
+                            className="w-full h-12 rounded-lg bg-primary text-primary-foreground font-black uppercase italic tracking-tighter shadow-lg transition-all active:scale-[0.98]"
                             onClick={() => createSession(selectedTaskIds)}
                             disabled={isCreatingSession}
                           >
@@ -1567,7 +1668,7 @@ function EmployeeTasksContent() {
                         )}
 
                         <Button
-                          className="w-full h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase italic tracking-tighter shadow-lg transition-all active:scale-[0.98]"
+                          className="w-full h-12 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase italic tracking-tighter shadow-lg transition-all active:scale-[0.98]"
                           onClick={() => window.open(terminalUrl, "_blank")}
                         >
                           Открыть в браузере
@@ -1576,7 +1677,7 @@ function EmployeeTasksContent() {
                       </div>
                     ) : (
                       <div className="py-4 text-center space-y-8">
-                        <div className="h-20 w-20 bg-zinc-900 border border-zinc-800 rounded-3xl flex items-center justify-center mx-auto text-zinc-600 shadow-inner">
+                        <div className="h-20 w-20 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center mx-auto text-zinc-600 shadow-inner">
                           <QrIcon className="h-10 w-10" />
                         </div>
                         <div className="space-y-3 px-2">
@@ -1586,7 +1687,7 @@ function EmployeeTasksContent() {
                           </p>
                         </div>
                         <Button
-                          className="w-full h-16 rounded-[2rem] bg-zinc-100 text-zinc-950 hover:bg-white font-black uppercase italic tracking-tighter shadow-2xl transition-all active:scale-[0.98]"
+                          className="w-full h-12 rounded-lg bg-zinc-100 text-zinc-950 hover:bg-white font-black uppercase italic tracking-tighter shadow-2xl transition-all active:scale-[0.98]"
                           onClick={handleCreateTerminalSession}
                           disabled={
                             (selectedTaskIds.length === 0 &&
@@ -1611,10 +1712,7 @@ function EmployeeTasksContent() {
                 </CardContent>
               </Card>
 
-              <div className="p-6 rounded-[2rem] bg-zinc-900/50 border border-zinc-800 flex gap-4 items-start shadow-sm">
-                <div className="h-8 w-8 rounded-2xl bg-zinc-950 border border-zinc-800 text-zinc-400 flex items-center justify-center shrink-0">
-                  <Info className="h-4 w-4" />
-                </div>
+              <div className="p-4 sm:p-5 rounded-xl bg-zinc-900/50 border border-zinc-800 shadow-sm">
                 <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
                   Мобильный терминал позволяет загружать фотографии и отчеты
                   <span className="text-zinc-300 font-bold ml-1">
@@ -1630,32 +1728,34 @@ function EmployeeTasksContent() {
 
       {/* Floating Bulk Action Bar */}
       {selectedTaskIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 animate-in slide-in-from-bottom-5 duration-300">
-          <div className="bg-zinc-950/90 backdrop-blur-xl border border-zinc-800 rounded-3xl p-4 flex flex-col sm:flex-row items-center gap-4 justify-between shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-            <div className="flex flex-col pl-2 text-center sm:text-left">
-              <span className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 animate-in slide-in-from-bottom-5 duration-300">
+          <div className="bg-zinc-950/95 backdrop-blur-xl border border-zinc-800 rounded-xl p-3.5 sm:px-5 flex flex-col sm:flex-row items-center gap-4 justify-between shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+            <div className="flex flex-col text-center sm:text-left shrink-0">
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
                 Массовые действия
               </span>
-              <span className="text-sm font-black text-white">
-                Выбрано задач: {selectedTaskIds.length}
-              </span>
-              {selectedTotalTime > 0 && (
-                <span className="text-xs text-zinc-400 font-bold mt-0.5">
-                  Общее время: {selectedTotalTime} мин.
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-sm font-bold text-white">
+                  Выбрано задач: {selectedTaskIds.length}
                 </span>
-              )}
+                {selectedTotalTime > 0 && (
+                  <span className="text-xs text-zinc-400 font-medium">
+                    • {selectedTotalTime} мин.
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center justify-center sm:justify-end gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap shrink-0">
               <Button
                 variant="outline"
-                className="h-10 px-4 rounded-xl border-zinc-800 text-zinc-400 hover:text-white text-[11px] font-black uppercase tracking-tighter transition-all"
+                className="h-9 px-3.5 rounded-lg border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-900 text-xs font-semibold transition-all"
                 onClick={() => setSelectedTaskIds([])}
               >
                 Отмена
               </Button>
               
               <Button
-                className="h-10 px-5 rounded-xl bg-primary hover:bg-primary/95 text-primary-foreground text-[11px] font-black uppercase tracking-tighter transition-all flex items-center gap-2 shadow-md active:scale-[0.98]"
+                className="h-9 px-4 rounded-lg bg-primary hover:bg-primary/95 text-primary-foreground text-xs font-semibold transition-all flex items-center gap-1.5 shadow-md active:scale-[0.98]"
                 onClick={handleBulkStart}
                 disabled={isBulkUpdating}
               >
@@ -1671,7 +1771,7 @@ function EmployeeTasksContent() {
               
               {!isModalMode && (
                 <Button
-                  className="h-10 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-black uppercase tracking-tighter transition-all flex items-center gap-2 shadow-md active:scale-[0.98]"
+                  className="h-9 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all flex items-center gap-1.5 shadow-md active:scale-[0.98]"
                   onClick={() => createSession(selectedTaskIds)}
                   disabled={isCreatingSession}
                 >
@@ -1693,7 +1793,7 @@ function EmployeeTasksContent() {
       {!isModalMode && isMobile && selectedTaskIds.length === 0 && sessionId && (
         <div className="fixed bottom-6 left-4 right-4 z-50 animate-in slide-in-from-bottom-10 duration-500">
           <Button
-            className="w-full h-16 rounded-[2rem] bg-primary text-primary-foreground font-black uppercase italic tracking-tighter shadow-[0_20px_50px_rgba(0,0,0,0.5)] active:scale-[0.98] transition-all border border-white/10"
+            className="w-full h-12 rounded-lg bg-primary text-primary-foreground font-black uppercase italic tracking-tighter shadow-[0_20px_50px_rgba(0,0,0,0.5)] active:scale-[0.98] transition-all border border-white/10"
             onClick={() => {
               if (sessionId) {
                 window.open(terminalUrl, "_self");
@@ -1714,7 +1814,7 @@ function EmployeeTasksContent() {
           if (!open && !isSubmittingTask) setSelectedTaskForModal(null);
         }}
       >
-        <DialogContent className="max-w-4xl bg-zinc-950 border-zinc-900 text-zinc-100 p-0 overflow-hidden rounded-[2rem] shadow-2xl">
+        <DialogContent className="max-w-4xl bg-zinc-950 border-zinc-900 text-zinc-100 p-0 overflow-hidden rounded-xl shadow-2xl">
           <DialogTitle className="sr-only">
             Выполнение задачи {modalTaskDetails?.equipment?.name || ""}
           </DialogTitle>
@@ -1756,7 +1856,7 @@ function EmployeeTasksContent() {
                   <div className="space-y-3">
                     <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Информация об устройстве</h4>
                     <div className={cn(
-                      "grid gap-3 bg-zinc-900/20 border border-zinc-900 rounded-2xl p-4",
+                      "grid gap-3 bg-zinc-900/20 border border-zinc-900 rounded-xl p-4",
                       modalTaskDetails.equipment.cleaning_time_minutes ? "grid-cols-3" : "grid-cols-2"
                     )}>
                       <div>
@@ -1785,7 +1885,7 @@ function EmployeeTasksContent() {
 
                   {/* Rejection comment if status is REWORK */}
                   {modalTaskDetails.task.status === "REWORK" && (
-                    <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 space-y-2">
+                    <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 space-y-2">
                       <div className="flex items-center gap-2 text-rose-400">
                         <AlertTriangle className="h-4 w-4" />
                         <h5 className="text-[10px] font-black uppercase tracking-widest">Причина возврата</h5>
@@ -1802,7 +1902,7 @@ function EmployeeTasksContent() {
                       <Info className="h-3.5 w-3.5" />
                       Инструкция по обслуживанию
                     </h4>
-                    <div className="bg-zinc-900/20 border border-zinc-900 rounded-2xl p-5 space-y-4">
+                    <div className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-5 space-y-4">
                       {(() => {
                         const instData = modalTaskDetails.instructions?.instructions !== undefined 
                           ? modalTaskDetails.instructions.instructions 
@@ -1860,7 +1960,7 @@ function EmployeeTasksContent() {
                   {modalTaskDetails.task.status === "PENDING" ? (
                     /* Initial Pending Screen: Start Button */
                     <div className="h-full flex flex-col items-center justify-center text-center space-y-6 py-12">
-                      <div className="h-16 w-16 bg-primary/10 border border-primary/20 rounded-3xl flex items-center justify-center text-primary shadow-[0_0_30px_rgba(235,94,40,0.05)]">
+                      <div className="h-16 w-16 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center text-primary shadow-[0_0_30px_rgba(235,94,40,0.05)]">
                         <Wrench className="h-8 w-8 animate-pulse" />
                       </div>
                       <div className="space-y-2 max-w-sm">
@@ -1870,7 +1970,7 @@ function EmployeeTasksContent() {
                         </p>
                       </div>
                       <Button
-                        className="w-full max-w-xs h-14 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-tight shadow-lg transition-all active:scale-[0.98] text-xs flex items-center justify-center gap-2"
+                        className="w-full max-w-xs h-12 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-tight shadow-lg transition-all active:scale-[0.98] text-xs flex items-center justify-center gap-2"
                         onClick={handleStartTask}
                       >
                         <Play className="h-4 w-4 fill-current" />
@@ -2032,7 +2132,7 @@ function EmployeeTasksContent() {
 
                       {/* Incident / Laundry Details */}
                       {(completionStatus === "ISSUE" || completionStatus === "LAUNDRY") && (
-                        <div className="space-y-3 p-4 bg-zinc-900/30 border border-zinc-900 rounded-2xl animate-in slide-in-from-top-2 duration-300">
+                        <div className="space-y-3 p-4 bg-zinc-900/30 border border-zinc-900 rounded-xl animate-in slide-in-from-top-2 duration-300">
                           <div className="space-y-2">
                             <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block">
                               Тема {completionStatus === "LAUNDRY" ? "стирки" : "инцидента"} <span className="text-rose-500">*</span>
@@ -2042,7 +2142,7 @@ function EmployeeTasksContent() {
                               value={issueTitle}
                               onChange={(e) => setIssueTitle(e.target.value)}
                               placeholder={completionStatus === "LAUNDRY" ? "Грязный / С пятнами" : "Залипает левый Shift"}
-                              className="w-full h-11 px-4 bg-zinc-900/80 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-600 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all font-semibold outline-none"
+                              className="w-full h-11 px-4 bg-zinc-900/80 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-600 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all font-semibold outline-none"
                             />
                           </div>
                           
@@ -2053,7 +2153,7 @@ function EmployeeTasksContent() {
                               onChange={(e) => setIssueDescription(e.target.value)}
                               placeholder="Опишите детали неисправности..."
                               rows={2}
-                              className="w-full p-4 bg-zinc-900/80 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-600 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all font-medium outline-none resize-none"
+                              className="w-full p-4 bg-zinc-900/80 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-600 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all font-medium outline-none resize-none"
                             />
                           </div>
                         </div>
@@ -2069,13 +2169,13 @@ function EmployeeTasksContent() {
                           onChange={(e) => setCompletionNotes(e.target.value)}
                           placeholder="Что было сделано или замечено при чистке..."
                           rows={3}
-                          className="w-full p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl text-xs text-white placeholder-zinc-600 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all font-medium outline-none resize-none"
+                          className="w-full p-4 bg-zinc-900/50 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-600 focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all font-medium outline-none resize-none"
                         />
                       </div>
 
                       {/* Complete Submit Button */}
                       <Button
-                        className="w-full h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-wider shadow-lg shadow-emerald-950/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 border-none mt-2"
+                        className="w-full h-12 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-wider shadow-lg shadow-emerald-950/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 border-none mt-2"
                         onClick={handleCompleteTask}
                         disabled={isSubmittingTask}
                       >
@@ -2102,7 +2202,7 @@ function EmployeeTasksContent() {
 
       {/* Toast Notification */}
       {successToast.show && (
-        <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-[100] animate-in fade-in slide-in-from-bottom-5 duration-300 flex items-center gap-3 w-80 md:w-96 p-4 rounded-2xl bg-zinc-950/90 backdrop-blur-xl border border-emerald-500/20 shadow-2xl shadow-emerald-950/10">
+        <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-[100] animate-in fade-in slide-in-from-bottom-5 duration-300 flex items-center gap-3 w-80 md:w-96 p-4 rounded-xl bg-zinc-950/90 backdrop-blur-xl border border-emerald-500/20 shadow-2xl shadow-emerald-950/10">
           <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30">
             <CheckCircle2 className="h-5 w-5 text-emerald-400 animate-bounce" />
           </div>

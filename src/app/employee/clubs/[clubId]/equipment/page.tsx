@@ -12,7 +12,6 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
-  CheckCircle2,
   User,
   ChevronRight,
 } from "lucide-react";
@@ -46,6 +45,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUiDialogs } from "@/app/clubs/[clubId]/inventory/_components/useUiDialogs";
 import { cn } from "@/lib/utils";
 import { renderEquipmentIcon } from "@/lib/equipment-icons";
+import { getMaintenanceProgress } from "@/lib/maintenance-progress";
+import { MaintenanceSegmentedBar } from "@/components/equipment/MaintenanceSegmentedBar";
 
 // --- Types ---
 
@@ -461,30 +462,13 @@ export default function EmployeeEquipmentPage() {
               className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500"
             >
               {(() => {
-                const zoneMeta = zoneMetaByName.get(zone);
                 const zoneWorkstations = workstations.filter(
                   (w) => w.zone === zone,
-                );
-                const zoneEquipment = zoneWorkstations.flatMap(
-                  (ws) => equipmentByWorkstationId.get(ws.id) ?? [],
-                );
-                const zoneOverdueCount = zoneEquipment.filter(
-                  (item) =>
-                    maintenanceStatusByEquipmentId.get(item.id) === "overdue",
-                ).length;
-                const zoneServicedCount = zoneEquipment.filter(
-                  (item) =>
-                    maintenanceStatusByEquipmentId.get(item.id) === "serviced",
-                ).length;
-                const zoneMaxOverdueDays = zoneEquipment.reduce(
-                  (max, item) =>
-                    Math.max(max, overdueDaysByEquipmentId.get(item.id) ?? 0),
-                  0,
                 );
 
                 return (
                   <div className="group flex items-center px-2 sticky top-0 z-10 bg-background/95 backdrop-blur py-2 border-b">
-                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       <h2 className="text-lg font-black uppercase tracking-widest text-muted-foreground flex items-center gap-3">
                         <Layers className="h-5 w-5 text-primary" />
                         {zone}
@@ -495,43 +479,6 @@ export default function EmployeeEquipmentPage() {
                           {zoneWorkstations.length}
                         </Badge>
                       </h2>
-                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
-                        {zoneMeta?.assigned_user_name ? (
-                          <Badge
-                            variant="outline"
-                            className="border-border bg-card text-muted-foreground"
-                          >
-                            Ответственный: {zoneMeta.assigned_user_name}
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="border-amber-200 bg-amber-50 text-amber-700"
-                          >
-                            Без ответственного
-                          </Badge>
-                        )}
-                        {zoneOverdueCount > 0 ? (
-                          <Badge
-                            variant="outline"
-                            className="border-rose-200 bg-rose-50 text-rose-700"
-                          >
-                            Просрочено {zoneOverdueCount}
-                            {zoneMaxOverdueDays > 0
-                              ? ` · до ${zoneMaxOverdueDays} дн.`
-                              : ""}
-                          </Badge>
-                        ) : null}
-                        {zoneOverdueCount === 0 && zoneServicedCount > 0 ? (
-                          <Badge
-                            variant="outline"
-                            className="flex items-center gap-1 border-emerald-200 bg-emerald-50 text-emerald-700"
-                          >
-                            <CheckCircle2 className="h-3 w-3" />
-                            Обслужено {zoneServicedCount}
-                          </Badge>
-                        ) : null}
-                      </div>
                     </div>
                   </div>
                 );
@@ -543,21 +490,30 @@ export default function EmployeeEquipmentPage() {
                   .map((ws) => {
                     const wsEquipment =
                       equipmentByWorkstationId.get(ws.id) ?? [];
-                    const wsOverdueCount = wsEquipment.filter(
+                    const progressByItemId = new Map(
+                      wsEquipment.map((item) => [
+                        item.id,
+                        getMaintenanceProgress(item),
+                      ]),
+                    );
+
+                    const wsPenaltyCount = wsEquipment.filter(
                       (item) =>
-                        maintenanceStatusByEquipmentId.get(item.id) ===
-                        "overdue",
+                        progressByItemId.get(item.id)?.stage === "penalty",
                     ).length;
-                    const wsServicedCount = wsEquipment.filter(
+                    const wsGraceCount = wsEquipment.filter(
                       (item) =>
-                        maintenanceStatusByEquipmentId.get(item.id) ===
-                        "serviced",
+                        progressByItemId.get(item.id)?.stage === "grace",
                     ).length;
-                    const wsMaxOverdueDays = wsEquipment.reduce(
+                    const wsNormalCount = wsEquipment.filter(
+                      (item) =>
+                        progressByItemId.get(item.id)?.stage === "normal",
+                    ).length;
+                    const wsMaxPenaltyDays = wsEquipment.reduce(
                       (max, item) =>
                         Math.max(
                           max,
-                          overdueDaysByEquipmentId.get(item.id) ?? 0,
+                          progressByItemId.get(item.id)?.penaltyDays ?? 0,
                         ),
                       0,
                     );
@@ -593,68 +549,62 @@ export default function EmployeeEquipmentPage() {
                         className="group hover:border-primary/50 transition-all border-border shadow-sm overflow-hidden flex flex-col h-full cursor-pointer bg-card"
                         onClick={() => handleOpenDetails(ws.id)}
                       >
-                        <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 bg-background/50 border-b border-border/50">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 bg-background rounded-xl border flex items-center justify-center text-muted-foreground/70 font-bold shadow-sm">
-                              {ws.name.replace(/[^0-9]/g, "") || (
-                                <Monitor className="h-5 w-5" />
-                              )}
-                            </div>
-                            <div>
-                              <h4 className="font-bold text-foreground leading-tight">
-                                {ws.name}
-                              </h4>
-                              <div className="flex flex-col gap-0.5 mt-0.5">
-                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                                  {mainDeviceCount}{" "}
-                                  {mainDeviceCount === 1
-                                    ? "устройство"
-                                    : mainDeviceCount > 1 && mainDeviceCount < 5
-                                      ? "устройства"
-                                      : "устройств"}
-                                </p>
-                                <div
-                                  className="flex items-center gap-1.5"
-                                  title={
-                                    ws.assigned_user_name || "Не назначено"
-                                  }
-                                >
-                                  <User
-                                    className={cn(
-                                      "h-3 w-3",
-                                      ws.assigned_user_name
-                                        ? "text-primary"
-                                        : "text-muted-foreground/70",
-                                    )}
-                                  />
-                                  <span
-                                    className={cn(
-                                      "max-w-[120px] truncate text-[10px] font-medium",
-                                      ws.assigned_user_name
-                                        ? "text-primary"
-                                        : "text-muted-foreground/70",
-                                    )}
-                                  >
-                                    {ws.assigned_user_name || "Не назначено"}
-                                  </span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  {wsOverdueCount > 0 ? (
-                                    <span className="text-[10px] font-medium text-rose-700">
-                                      Просрочено: {wsOverdueCount}
-                                      {wsMaxOverdueDays > 0
-                                        ? ` · ${wsMaxOverdueDays} дн.`
-                                        : ""}
-                                    </span>
-                                  ) : null}
-                                  {wsOverdueCount === 0 &&
-                                  wsServicedCount > 0 ? (
-                                    <span className="text-[10px] font-medium text-emerald-700">
-                                      Обслужено: {wsServicedCount}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
+                        <CardHeader className="p-3.5 pb-2.5 bg-background/50 border-b border-border/50 flex flex-col gap-1">
+                          {/* Строка 1: Имя ПК слева <----> Статус справа */}
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="font-bold text-sm text-foreground leading-tight truncate">
+                              {ws.name}
+                            </h4>
+                            {wsPenaltyCount > 0 ? (
+                              <span className="shrink-0 text-xs font-semibold text-rose-500 dark:text-rose-400">
+                                Штраф: {wsPenaltyCount} устр.
+                              </span>
+                            ) : wsGraceCount > 0 ? (
+                              <span className="shrink-0 text-xs font-semibold text-amber-500 dark:text-amber-400">
+                                ТО: {wsGraceCount} устр.
+                              </span>
+                            ) : wsNormalCount > 0 ? (
+                              <span className="shrink-0 text-xs font-medium text-emerald-500 dark:text-emerald-400">
+                                В норме
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {/* Строка 2: Количество устройств слева <----> Ответственный справа */}
+                          <div className="flex items-center justify-between gap-2 text-[10px]">
+                            <span className="text-muted-foreground font-medium uppercase tracking-wider">
+                              {mainDeviceCount}{" "}
+                              {mainDeviceCount === 1
+                                ? "устройство"
+                                : mainDeviceCount > 1 && mainDeviceCount < 5
+                                  ? "устройства"
+                                  : "устройств"}
+                            </span>
+
+                            <div
+                              className="flex items-center gap-1.5 shrink-0"
+                              title={
+                                ws.assigned_user_name || "Не назначено"
+                              }
+                            >
+                              <User
+                                className={cn(
+                                  "h-3 w-3",
+                                  ws.assigned_user_name
+                                    ? "text-primary"
+                                    : "text-muted-foreground/70",
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "max-w-[110px] truncate font-medium",
+                                  ws.assigned_user_name
+                                    ? "text-primary"
+                                    : "text-muted-foreground/70",
+                                )}
+                              >
+                                {ws.assigned_user_name || "Не назначено"}
+                              </span>
                             </div>
                           </div>
                         </CardHeader>
@@ -694,51 +644,23 @@ export default function EmployeeEquipmentPage() {
                                         isSubItem && "ml-4 bg-background/50",
                                       )}
                                     >
-                                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="h-6 w-6 rounded bg-background border flex items-center justify-center text-muted-foreground shrink-0">
-                                          {getEquipmentIcon(
-                                            item.type,
-                                            item.type_icon,
-                                          )}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-center justify-between gap-2">
                                           <p className="text-xs font-semibold truncate text-foreground group-hover/item:text-primary">
                                             {item.name}
                                           </p>
-                                          <div className="mt-0.5 space-y-1">
-                                            <div className="flex flex-wrap items-center gap-1.5">
-                                              {isExpandable && (
-                                                <span className="text-[10px] text-muted-foreground">
-                                                  Комплектующие:{" "}
-                                                  {componentCount}
-                                                </span>
-                                              )}
-                                              {maintenanceStatusByEquipmentId.get(
-                                                item.id,
-                                              ) === "overdue" ? (
-                                                <span className="text-[10px] font-medium text-rose-700">
-                                                  Просрочено
-                                                  {(overdueDaysByEquipmentId.get(
-                                                    item.id,
-                                                  ) ?? 0) > 0
-                                                    ? ` на ${overdueDaysByEquipmentId.get(item.id)} дн.`
-                                                    : ""}
-                                                </span>
-                                              ) : maintenanceStatusByEquipmentId.get(
-                                                  item.id,
-                                                ) === "serviced" ? (
-                                                <span className="text-[10px] font-medium text-emerald-700">
-                                                  Обслужено
-                                                </span>
-                                              ) : item.maintenance_enabled ===
-                                                false ? (
-                                                <span className="text-[10px] font-medium text-muted-foreground">
-                                                  Без ТО
-                                                </span>
-                                              ) : null}
-                                            </div>
-                                          </div>
+                                          {isExpandable && (
+                                            <span className="text-[10px] text-muted-foreground shrink-0">
+                                              Комплектующие: {componentCount}
+                                            </span>
+                                          )}
                                         </div>
+                                        <MaintenanceSegmentedBar
+                                          progress={
+                                            progressByItemId.get(item.id) ??
+                                            getMaintenanceProgress(item)
+                                          }
+                                        />
                                       </div>
 
                                       {isExpandable && (
@@ -783,16 +705,6 @@ export default function EmployeeEquipmentPage() {
                             </div>
                           )}
                         </CardContent>
-
-                        <CardFooter className="p-3 bg-background/50 border-t border-border/50">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full text-xs h-8 hover:bg-background hover:shadow-sm transition-all"
-                          >
-                            Управление
-                          </Button>
-                        </CardFooter>
                       </Card>
                     );
                   })}
@@ -907,37 +819,11 @@ export default function EmployeeEquipmentPage() {
                           </div>
                           <div className="flex flex-wrap items-center gap-2 mt-1">
                             {!isSubItem && (
-                              <>
-                                {maintenanceStatusByEquipmentId.get(item.id) ===
-                                "overdue" ? (
-                                  <Badge
-                                    variant="outline"
-                                    className="border-rose-200 bg-rose-50 text-rose-700"
-                                  >
-                                    Просрочено
-                                    {(overdueDaysByEquipmentId.get(item.id) ??
-                                      0) > 0
-                                      ? ` на ${overdueDaysByEquipmentId.get(item.id)} дн.`
-                                      : ""}
-                                  </Badge>
-                                ) : maintenanceStatusByEquipmentId.get(
-                                    item.id,
-                                  ) === "serviced" ? (
-                                  <Badge
-                                    variant="outline"
-                                    className="border-emerald-200 bg-emerald-50 text-emerald-700"
-                                  >
-                                    Обслужено
-                                  </Badge>
-                                ) : item.maintenance_enabled === false ? (
-                                  <Badge
-                                    variant="outline"
-                                    className="border-border bg-accent text-muted-foreground"
-                                  >
-                                    Без ТО
-                                  </Badge>
-                                ) : null}
-                              </>
+                              <div className="w-full max-w-xs mt-1">
+                                <MaintenanceSegmentedBar
+                                  progress={getMaintenanceProgress(item)}
+                                />
+                              </div>
                             )}
                             {(activeIssueCountByEquipmentId.get(item.id) ?? 0) >
                             0 ? (

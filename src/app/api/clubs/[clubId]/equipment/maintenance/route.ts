@@ -91,7 +91,9 @@ export async function GET(
                 e.name as equipment_name,
                 e.type as equipment_type,
                 e.parent_equipment_id as parent_equipment_id,
-                               e.last_cleaned_at as last_cleaned_at,
+                e.last_cleaned_at as last_cleaned_at,
+                COALESCE(e.cleaning_interval_override_days, e.cleaning_interval_days, 30) as cleaning_interval_days,
+                COALESCE(e.maintenance_enabled, true) as maintenance_enabled,
                 et.name_ru as equipment_type_name,
                 et.icon as equipment_icon,
                 COALESCE(inst.cleaning_time_minutes, et.cleaning_time_minutes) as cleaning_time_minutes,
@@ -116,7 +118,8 @@ export async function GET(
                   WHERE ev.task_id = mt.id AND ev.event_type = 'REJECTED'
                   ORDER BY ev.created_at DESC
                   LIMIT 1
-                ) as latest_rejection
+                ) as latest_rejection,
+                COALESCE(mkc.overdue_tolerance_days, 3) as overdue_tolerance_days
             FROM equipment_maintenance_tasks mt
             JOIN equipment e ON mt.equipment_id = e.id
             LEFT JOIN equipment_types et ON e.type = et.code
@@ -129,6 +132,7 @@ export async function GET(
             LEFT JOIN users cu_v ON mt.verified_by = cu_v.id
             LEFT JOIN club_employees ce_task ON ce_task.user_id = mt.assigned_user_id AND ce_task.club_id = e.club_id
             LEFT JOIN club_employees ce_equip ON ce_equip.user_id = e.assigned_user_id AND ce_equip.club_id = e.club_id
+            LEFT JOIN maintenance_kpi_config mkc ON mkc.club_id = e.club_id
             WHERE e.club_id = $1
               AND (e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)
         `;
@@ -233,7 +237,10 @@ export async function GET(
 
     // Get stats
     const todayStr = formatDateKeyInTimezone(new Date(), clubTimezone);
-    const statsConditions = [`e.club_id = $1`];
+    const statsConditions = [
+      `e.club_id = $1`,
+      `(e.maintenance_enabled IS NULL OR e.maintenance_enabled = TRUE)`,
+    ];
     const statsParams: any[] = [
       clubId,
       todayStr,
@@ -282,9 +289,19 @@ export async function GET(
 
     const statsResult = await query(
       `SELECT
-                COUNT(*) FILTER (WHERE ${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date < $2) as overdue_count,
-                COUNT(*) FILTER (WHERE ${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date = $2) as due_today_count,
-                COUNT(*) FILTER (WHERE ${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK') AND mt.due_date > $2) as upcoming_count,
+                COUNT(*) FILTER (
+                    WHERE ${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK')
+                      AND ($2::date - mt.due_date) > COALESCE(mkc.overdue_tolerance_days, 3)
+                ) as overdue_count,
+                COUNT(*) FILTER (
+                    WHERE ${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK')
+                      AND mt.due_date <= $2::date
+                      AND ($2::date - mt.due_date) <= COALESCE(mkc.overdue_tolerance_days, 3)
+                ) as due_today_count,
+                COUNT(*) FILTER (
+                    WHERE ${effectiveStatusSql} IN ('PENDING', 'IN_PROGRESS', 'REWORK')
+                      AND mt.due_date > $2::date
+                ) as upcoming_count,
                 COUNT(*) FILTER (WHERE ${effectiveStatusSql} IN ('IN_PROGRESS', 'REWORK')) as in_progress_count,
                 COUNT(*) FILTER (WHERE ${effectiveStatusSql} = 'REWORK' OR (${effectiveStatusSql} = 'IN_PROGRESS' AND mt.verification_status = 'REJECTED')) as rework_count,
                 COUNT(*) FILTER (
@@ -318,6 +335,7 @@ export async function GET(
             LEFT JOIN club_workstations w ON e.workstation_id = w.id
             LEFT JOIN club_employees ce_task ON ce_task.user_id = mt.assigned_user_id AND ce_task.club_id = e.club_id
             LEFT JOIN club_employees ce_equip ON ce_equip.user_id = e.assigned_user_id AND ce_equip.club_id = e.club_id
+            LEFT JOIN maintenance_kpi_config mkc ON mkc.club_id = e.club_id
             WHERE ${statsConditions.join(" AND ")}`,
       statsParams,
     );
