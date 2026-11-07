@@ -68,6 +68,9 @@ export function normalizeMetricValue(value: unknown): number {
 }
 
 export function formatDateKeyInTimezone(value: Date | string, timeZone: string) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
   const date = value instanceof Date ? value : new Date(value);
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,

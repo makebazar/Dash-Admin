@@ -30,6 +30,7 @@ interface RevenueTrendChartProps {
     days: number
     clubId: string
     metricMeta: Record<string, { category: string; label: string }>
+    todayKey?: string
 }
 
 const chartWidth = 920
@@ -66,6 +67,26 @@ function formatSignedPercent(value: number) {
     return `${sign}${safeValue.toFixed(1)}%`
 }
 
+function parseDateParts(dateStr?: string) {
+    if (!dateStr || !dateStr.includes("-")) {
+        const d = new Date()
+        return {
+            year: d.getFullYear(),
+            month: d.getMonth() + 1,
+            day: d.getDate(),
+            dayOfWeek: d.getDay(),
+        }
+    }
+    const [year, month, day] = dateStr.split("-").map(Number)
+    const d = new Date(year, (month || 1) - 1, day || 1, 12, 0, 0)
+    return {
+        year: year || 2026,
+        month: month || 1,
+        day: day || 1,
+        dayOfWeek: d.getDay(),
+    }
+}
+
 function formatDate(value: string | Date) {
     if (!value) return ""
     if (value instanceof Date) {
@@ -77,7 +98,7 @@ function formatDate(value: string | Date) {
 
     if (typeof value === "string" && value.includes("-")) {
         const [year, month, day] = value.split("-").map(Number)
-        return new Date(year, (month || 1) - 1, day || 1).toLocaleDateString("ru-RU", {
+        return new Date(year, (month || 1) - 1, day || 1, 12, 0).toLocaleDateString("ru-RU", {
             day: "2-digit",
             month: "short",
         })
@@ -89,8 +110,26 @@ function formatDate(value: string | Date) {
     })
 }
 
+function formatDateWithWeekday(value: string | Date) {
+    if (!value) return ""
+    let d: Date
+    if (value instanceof Date) {
+        d = value
+    } else if (typeof value === "string" && value.includes("-")) {
+        const [year, month, day] = value.split("-").map(Number)
+        d = new Date(year, (month || 1) - 1, day || 1, 12, 0)
+    } else {
+        d = new Date(value)
+    }
+    const dayStr = d.toLocaleDateString("ru-RU", { weekday: "short", day: "2-digit", month: "short" })
+    return dayStr.charAt(0).toUpperCase() + dayStr.slice(1)
+}
+
 function buildSmoothLinePath(points: ChartPoint[], baselineY?: number) {
     if (points.length === 0) return ""
+
+    const maxY = chartPaddingTop + chartPlotHeight
+    const minY = chartPaddingTop
 
     if (points.length === 1) {
         if (typeof baselineY === "number") {
@@ -114,9 +153,12 @@ function buildSmoothLinePath(points: ChartPoint[], baselineY?: number) {
         const nextNext = points[index + 2] || next
 
         const controlPoint1X = current.x + (next.x - previous.x) / 6
-        const controlPoint1Y = current.y + (next.y - previous.y) / 6
+        const rawCp1Y = current.y + (next.y - previous.y) / 6
+        const controlPoint1Y = Math.min(maxY, Math.max(minY, rawCp1Y))
+
         const controlPoint2X = next.x - (nextNext.x - current.x) / 6
-        const controlPoint2Y = next.y - (nextNext.y - current.y) / 6
+        const rawCp2Y = next.y - (nextNext.y - current.y) / 6
+        const controlPoint2Y = Math.min(maxY, Math.max(minY, rawCp2Y))
 
         lineCommands.push(
             `C ${controlPoint1X} ${controlPoint1Y} ${controlPoint2X} ${controlPoint2Y} ${next.x} ${next.y}`
@@ -137,11 +179,12 @@ function buildSmoothLinePath(points: ChartPoint[], baselineY?: number) {
 }
 
 function buildChartPoints(points: RevenuePoint[], maxRevenue: number, xAxisLength: number): ChartPoint[] {
-    return points.map((point, index) => {
-        const x = xAxisLength > 1
-            ? chartPaddingLeft + (index / (xAxisLength - 1)) * chartPlotWidth
+    const totalSlots = Math.max(1, xAxisLength)
+    return points.slice(0, totalSlots).map((point, index) => {
+        const x = totalSlots > 1
+            ? chartPaddingLeft + (index / (totalSlots - 1)) * chartPlotWidth
             : chartPaddingLeft
-        const y = chartPaddingTop + chartPlotHeight - (point.revenue / maxRevenue) * chartPlotHeight
+        const y = chartPaddingTop + chartPlotHeight - (maxRevenue > 0 ? (point.revenue / maxRevenue) * chartPlotHeight : 0)
 
         return {
             ...point,
@@ -157,6 +200,7 @@ export default function RevenueTrendChart({
     days,
     clubId,
     metricMeta,
+    todayKey,
 }: RevenueTrendChartProps) {
     const router = useRouter()
     const pathname = usePathname()
@@ -303,15 +347,13 @@ export default function RevenueTrendChart({
     // 2. Days in month and X-axis scale length
     const totalDaysInCurrentMonth = useMemo(() => {
         if (currentData.length === 0) return 30
-        const firstPointDate = new Date(currentData[0].date)
-        const year = firstPointDate.getFullYear()
-        const month = firstPointDate.getMonth()
-        return new Date(year, month + 1, 0).getDate()
+        const firstPointParts = parseDateParts(currentData[0].date)
+        return new Date(firstPointParts.year, firstPointParts.month, 0).getDate()
     }, [currentData])
 
     const xAxisLength = days === 7 ? currentData.length : totalDaysInCurrentMonth
 
-    // 3. Weekday-weighted forecast logic
+    // 3. Blended Weekday + Trend Pacing forecast logic
     const forecastStats = useMemo(() => {
         if (days === 7 || currentData.length === 0) {
             return {
@@ -324,72 +366,130 @@ export default function RevenueTrendChart({
             }
         }
 
-        // Group MTD by weekday
+        const firstPointParts = parseDateParts(currentData[0]?.date)
+        const year = firstPointParts.year
+        const month = firstPointParts.month
+
+        // Group completed historical days in current month by weekday
         const weekdayRevenues: Record<number, number[]> = {}
         const weekdayReceipts: Record<number, number[]> = {}
         for (let i = 0; i < 7; i++) {
             weekdayRevenues[i] = []
             weekdayReceipts[i] = []
         }
+
+        let mtdCompletedRev = 0
+        let mtdCompletedRec = 0
+
         currentData.forEach(item => {
-            const date = new Date(item.date)
-            const w = date.getDay()
-            weekdayRevenues[w].push(getActiveRevenue(item))
-            weekdayReceipts[w].push(item.receiptsCount)
+            const isToday = todayKey ? item.date === todayKey : false
+            const rev = getActiveRevenue(item)
+            // Exclude today and days with 0 revenue from baseline average calculation
+            if (!isToday && rev > 0) {
+                const parts = parseDateParts(item.date)
+                weekdayRevenues[parts.dayOfWeek].push(rev)
+                weekdayReceipts[parts.dayOfWeek].push(item.receiptsCount)
+                mtdCompletedRev += rev
+                mtdCompletedRec += item.receiptsCount
+            }
         })
 
-        // Group previous full month by weekday for fallbacks
+        // Group previous full month by weekday
         const prevWeekdayRevenues: Record<number, number[]> = {}
         const prevWeekdayReceipts: Record<number, number[]> = {}
         for (let i = 0; i < 7; i++) {
             prevWeekdayRevenues[i] = []
             prevWeekdayReceipts[i] = []
         }
-        previousData.forEach(item => {
-            const date = new Date(item.date)
-            const w = date.getDay()
-            prevWeekdayRevenues[w].push(getActiveRevenue(item))
-            prevWeekdayReceipts[w].push(item.receiptsCount)
+
+        let prevMTDRev = 0
+        const completedDaysCount = currentData.filter(item => (!todayKey || item.date !== todayKey)).length
+        const prevDataMTD = previousData.slice(0, completedDaysCount)
+        prevDataMTD.forEach(item => {
+            prevMTDRev += getActiveRevenue(item)
         })
 
-        // Compute averages per weekday
-        const avgRevenues: Record<number, number> = {}
-        const avgReceipts: Record<number, number> = {}
-        for (let i = 0; i < 7; i++) {
-            if (weekdayRevenues[i].length > 0) {
-                avgRevenues[i] = weekdayRevenues[i].reduce((sum, v) => sum + v, 0) / weekdayRevenues[i].length
-            } else if (prevWeekdayRevenues[i].length > 0) {
-                avgRevenues[i] = prevWeekdayRevenues[i].reduce((sum, v) => sum + v, 0) / prevWeekdayRevenues[i].length
-            } else {
-                avgRevenues[i] = 0
+        previousData.forEach(item => {
+            const rev = getActiveRevenue(item)
+            if (rev > 0) {
+                const parts = parseDateParts(item.date)
+                prevWeekdayRevenues[parts.dayOfWeek].push(rev)
+                prevWeekdayReceipts[parts.dayOfWeek].push(item.receiptsCount)
             }
+        })
 
-            if (weekdayReceipts[i].length > 0) {
-                avgReceipts[i] = weekdayReceipts[i].reduce((sum, v) => sum + v, 0) / weekdayReceipts[i].length
-            } else if (prevWeekdayReceipts[i].length > 0) {
-                avgReceipts[i] = prevWeekdayReceipts[i].reduce((sum, v) => sum + v, 0) / prevWeekdayReceipts[i].length
-            } else {
-                avgReceipts[i] = 0
-            }
+        // Current month pacing factor relative to previous month
+        let pacingFactor = 1
+        if (prevMTDRev > 0 && mtdCompletedRev > 0) {
+            pacingFactor = mtdCompletedRev / prevMTDRev
+            // Clamp pacing within [0.65, 1.55] to prevent runaway projections from anomalies
+            pacingFactor = Math.min(1.55, Math.max(0.65, pacingFactor))
         }
 
-        // Project remaining days
-        const lastPointDate = new Date(currentData[currentData.length - 1].date)
-        const year = lastPointDate.getFullYear()
-        const month = lastPointDate.getMonth()
+        const prevTotalRev = previousData.reduce((s, it) => s + getActiveRevenue(it), 0)
+        const prevTotalRec = previousData.reduce((s, it) => s + it.receiptsCount, 0)
+        const prevDaysWithData = previousData.filter(it => getActiveRevenue(it) > 0).length || previousData.length || 1
+        const fallbackDailyRev = (prevTotalRev / prevDaysWithData) * pacingFactor
+        const fallbackDailyRec = (prevTotalRec / prevDaysWithData) * pacingFactor
 
-        let forecastedRevenueSum = currentRevenueTotal
-        let forecastedReceiptsSum = currentReceiptsTotal
+        // Compute blended expected values per weekday
+        const expectedRevByWeekday: Record<number, number> = {}
+        const expectedRecByWeekday: Record<number, number> = {}
+
+        for (let w = 0; w < 7; w++) {
+            const curRevArr = weekdayRevenues[w]
+            const curRecArr = weekdayReceipts[w]
+            const prevRevArr = prevWeekdayRevenues[w]
+            const prevRecArr = prevWeekdayReceipts[w]
+
+            const curAvgRev = curRevArr.length > 0 ? curRevArr.reduce((s, v) => s + v, 0) / curRevArr.length : 0
+            const curAvgRec = curRecArr.length > 0 ? curRecArr.reduce((s, v) => s + v, 0) / curRecArr.length : 0
+
+            const prevAvgRev = prevRevArr.length > 0 ? (prevRevArr.reduce((s, v) => s + v, 0) / prevRevArr.length) * pacingFactor : fallbackDailyRev
+            const prevAvgRec = prevRecArr.length > 0 ? (prevRecArr.reduce((s, v) => s + v, 0) / prevRecArr.length) * pacingFactor : fallbackDailyRec
+
+            // Weight increases with more current month samples: 0->0, 1->0.4, 2->0.7, 3+->0.9
+            const weight = curRevArr.length === 0 ? 0 : curRevArr.length === 1 ? 0.4 : curRevArr.length === 2 ? 0.7 : 0.9
+
+            expectedRevByWeekday[w] = weight * curAvgRev + (1 - weight) * prevAvgRev
+            expectedRecByWeekday[w] = weight * curAvgRec + (1 - weight) * prevAvgRec
+        }
+
+        // Project forward
+        let forecastedRevenueSum = 0
+        let forecastedReceiptsSum = 0
+
+        currentData.forEach(item => {
+            const isToday = todayKey ? item.date === todayKey : false
+            const rev = getActiveRevenue(item)
+            const rec = item.receiptsCount
+
+            if (isToday) {
+                // If today is in progress, ensure projected day total is at least expected end-of-day
+                const parts = parseDateParts(item.date)
+                const expRev = expectedRevByWeekday[parts.dayOfWeek] || fallbackDailyRev
+                const expRec = expectedRecByWeekday[parts.dayOfWeek] || fallbackDailyRec
+                forecastedRevenueSum += Math.max(rev, expRev)
+                forecastedReceiptsSum += Math.max(rec, expRec)
+            } else {
+                forecastedRevenueSum += rev
+                forecastedReceiptsSum += rec
+            }
+        })
 
         const forecastRevDaily: number[] = []
-        const forecastCheckDaily: number[] = []
         const forecastRecDaily: number[] = []
+        const forecastCheckDaily: number[] = []
 
         for (let index = currentData.length; index < totalDaysInCurrentMonth; index++) {
-            const date = new Date(year, month, index + 1)
-            const w = date.getDay()
-            const rev = avgRevenues[w]
-            const rec = avgReceipts[w]
+            const dayNum = index + 1
+            const monthStr = String(month).padStart(2, '0')
+            const dayStr = String(dayNum).padStart(2, '0')
+            const dateStr = `${year}-${monthStr}-${dayStr}`
+            const parts = parseDateParts(dateStr)
+
+            const rev = expectedRevByWeekday[parts.dayOfWeek] || fallbackDailyRev
+            const rec = expectedRecByWeekday[parts.dayOfWeek] || fallbackDailyRec
 
             forecastedRevenueSum += rev
             forecastedReceiptsSum += rec
@@ -409,12 +509,16 @@ export default function RevenueTrendChart({
             forecastRecDaily,
             forecastCheckDaily
         }
-    }, [days, currentData, previousData, currentRevenueTotal, currentReceiptsTotal, activeMetric, activeRevenueSubMetric])
+    }, [days, currentData, previousData, activeMetric, activeRevenueSubMetric, totalDaysInCurrentMonth, todayKey])
 
     // 4. Calculate active current trend data (daily or cumulative)
     const activeCurrentData = useMemo(() => {
         let accumulatedRevenue = 0
         let accumulatedReceipts = 0
+
+        const firstPointParts = parseDateParts(currentData[0]?.date)
+        const year = firstPointParts.year
+        const month = firstPointParts.month
 
         return Array.from({ length: xAxisLength }, (_, index) => {
             let dailyRev = 0
@@ -435,9 +539,10 @@ export default function RevenueTrendChart({
                 dailyRev = forecastStats.forecastRevDaily[fIndex] || 0
                 dailyRec = forecastStats.forecastRecDaily[fIndex] || 0
 
-                const lastPointDate = new Date(currentData[currentData.length - 1].date)
-                const date = new Date(lastPointDate.getFullYear(), lastPointDate.getMonth(), index + 1)
-                dateString = date.toISOString().split('T')[0]
+                const dayNum = index + 1
+                const monthStr = String(month).padStart(2, '0')
+                const dayStr = String(dayNum).padStart(2, '0')
+                dateString = `${year}-${monthStr}-${dayStr}`
             }
 
             accumulatedRevenue += dailyRev
@@ -530,6 +635,12 @@ export default function RevenueTrendChart({
         () => buildSmoothLinePath(actualPoints, chartPaddingTop + chartPlotHeight),
         [actualPoints]
     )
+    const forecastAreaPath = useMemo(
+        () => (days === 30 && forecastPoints.length > 1)
+            ? buildSmoothLinePath(forecastPoints, chartPaddingTop + chartPlotHeight)
+            : "",
+        [forecastPoints, days]
+    )
 
     const activeIndex = hoveredIndex ?? pinnedIndex
     const activeCurrentPoint = activeIndex !== null ? currentRevenueChartPoints[activeIndex] : null
@@ -539,8 +650,8 @@ export default function RevenueTrendChart({
     const tooltip = useMemo(() => {
         if (!activeCurrentPoint) return null
 
-        const tooltipWidth = 180
-        const tooltipHeight = 58
+        const tooltipWidth = 195
+        const tooltipHeight = 62
         const anchorY = Math.min(activeCurrentPoint.y, activePreviousPoint?.y ?? activeCurrentPoint.y)
         const x = Math.min(
             Math.max(activeCurrentPoint.x - tooltipWidth / 2, chartPaddingLeft + 4),
@@ -860,8 +971,8 @@ export default function RevenueTrendChart({
                             {/* Weekend Highlights */}
                             {currentRevenueChartPoints.map((point, index) => {
                                 if (!point.date) return null
-                                const date = new Date(point.date)
-                                const isWeekend = date.getDay() === 0 || date.getDay() === 6
+                                const dayOfWeek = parseDateParts(point.date).dayOfWeek
+                                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
                                 if (!isWeekend) return null
 
                                 const dayWidth = xAxisLength > 1 ? chartPlotWidth / (xAxisLength - 1) : chartPlotWidth
@@ -941,6 +1052,14 @@ export default function RevenueTrendChart({
                                 />
                             ) : null}
 
+                            {forecastAreaPath ? (
+                                <path
+                                    d={forecastAreaPath}
+                                    fill="url(#forecastAreaGradient)"
+                                    opacity="0.85"
+                                />
+                            ) : null}
+
                             {revenueLinePath ? (
                                 <path
                                     d={revenueLinePath}
@@ -961,7 +1080,7 @@ export default function RevenueTrendChart({
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
                                     strokeDasharray="4 4"
-                                    opacity="0.65"
+                                    opacity="0.75"
                                 />
                             ) : null}
 
@@ -978,7 +1097,7 @@ export default function RevenueTrendChart({
                             ))}
 
                             {currentRevenueChartPoints.map((point, index) => {
-                                const showLabel = index === currentRevenueChartPoints.length - 1 || index % 5 === 0
+                                const showLabel = days === 7 || index === currentRevenueChartPoints.length - 1 || (index % 5 === 0 && index < currentRevenueChartPoints.length - 3)
                                 const isForecast = point.isForecast
 
                                 return (
@@ -990,8 +1109,7 @@ export default function RevenueTrendChart({
                                             className={cn(
                                                 isForecast 
                                                     ? "fill-white stroke-blue-500" 
-                                                    : point.revenue === 0 ? "fill-slate-400" : "fill-blue-600",
-                                                "stroke-white"
+                                                    : point.revenue === 0 ? "fill-slate-400 stroke-white" : "fill-blue-600 stroke-white"
                                             )}
                                             strokeWidth="2"
                                         />
@@ -1018,7 +1136,7 @@ export default function RevenueTrendChart({
                                         width={tooltip.width}
                                         height={tooltip.height}
                                         rx="10"
-                                        className="fill-white stroke-slate-200/80 shadow-xs"
+                                        className="fill-white stroke-slate-200/90 shadow-md"
                                         strokeWidth="1"
                                     />
                                     <text
@@ -1028,7 +1146,7 @@ export default function RevenueTrendChart({
                                         fontWeight="600"
                                         className="fill-slate-400"
                                     >
-                                        {formatDate(activeCurrentPoint.date)} {isForecastPoint && "(Прогноз)"}
+                                        {formatDateWithWeekday(activeCurrentPoint.date)} {isForecastPoint && "(Прогноз)"}
                                     </text>
                                     <text
                                         x={tooltip.x + 12}
@@ -1071,6 +1189,10 @@ export default function RevenueTrendChart({
                                 <linearGradient id="revenueAreaGradient" x1="0" x2="0" y1="0" y2="1">
                                     <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.25" />
                                     <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.01" />
+                                </linearGradient>
+                                <linearGradient id="forecastAreaGradient" x1="0" x2="0" y1="0" y2="1">
+                                    <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.10" />
+                                    <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.00" />
                                 </linearGradient>
                             </defs>
                         </svg>

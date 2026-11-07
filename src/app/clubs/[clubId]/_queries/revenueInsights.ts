@@ -26,6 +26,7 @@ export async function getRevenueInsights(
 ): Promise<RevenueInsightsSnapshot> {
   const clubTimezone = await getClubTimezone(clubId);
   const metricMeta = await getReportMetricMeta(clubId);
+  const todayKey = formatDateKeyInTimezone(new Date(), clubTimezone);
   const startDate = new Date();
   startDate.setHours(0, 0, 0, 0);
   startDate.setDate(startDate.getDate() - lookbackDays);
@@ -71,6 +72,7 @@ export async function getRevenueInsights(
   });
 
   const dailyEntries = Array.from(dailyTotals.entries())
+    .filter(([date, revenue]) => date < todayKey && revenue > 0)
     .map(([date, revenue]) => ({
       date,
       revenue,
@@ -148,6 +150,7 @@ export async function getRevenueInsights(
     barWeekdayTotals.set(w, { total: 0, count: 0 }),
   );
   dailyBarTotals.forEach((barRev, dateKey) => {
+    if (dateKey >= todayKey) return;
     const wday = getDateObject(dateKey).getDay();
     const curr = barWeekdayTotals.get(wday)!;
     curr.total += barRev;
@@ -168,6 +171,7 @@ export async function getRevenueInsights(
     (acc, [key, value]) => {
       const [, shiftType] = key.split(":");
       const date = key.slice(0, 10);
+      if (date >= todayKey) return acc;
       const weekday = getDateObject(date).getDay();
       const comboKey = `${shiftType}:${weekday}`;
       const current = acc.get(comboKey) || {
@@ -210,8 +214,23 @@ export async function getRevenueInsights(
   // 1. High Priority: Yesterday Anomaly
   if (latestEntry && Math.abs(latestVsTypical) >= 10) {
     const dayLabel = formatWeekdayFull(latestEntry.weekday);
+    const todayDate = getDateObject(todayKey);
+    const yesterdayDate = new Date(
+      todayDate.getFullYear(),
+      todayDate.getMonth(),
+      todayDate.getDate() - 1,
+    );
+    const yesterdayKey = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, "0")}-${String(yesterdayDate.getDate()).padStart(2, "0")}`;
+    const isActuallyYesterday = latestEntry.date === yesterdayKey;
+    const shortDate = getDateObject(latestEntry.date).toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "short",
+    });
+
     insights.push({
-      title: `Вчера (${dayLabel})`,
+      title: isActuallyYesterday
+        ? `Вчера (${dayLabel})`
+        : `${shortDate} (${dayLabel})`,
       value: formatSignedPercent(latestVsTypical),
       description:
         latestVsTypical >= 0
@@ -240,12 +259,13 @@ export async function getRevenueInsights(
   // 3. Bar Sales Share
   if (lookbackTotalRevenue > 0 && lookbackTotalBarSales > 0) {
     const barPercent = (lookbackTotalBarSales / lookbackTotalRevenue) * 100;
+    const activeDaysCount = Math.max(1, dailyTotals.size);
     const bestBarDayLabel =
       bestBarWeekday !== -1 ? formatWeekdayFull(bestBarWeekday) : "";
     insights.push({
       title: "Доля продаж бара",
       value: `${barPercent.toFixed(1)}% выручки`,
-      description: `В среднем ${formatCurrency(Math.round(lookbackTotalBarSales / lookbackDays))}/день. Лучший день: ${bestBarDayLabel}`,
+      description: `В среднем ${formatCurrency(Math.round(lookbackTotalBarSales / activeDaysCount))}/день. Лучший день: ${bestBarDayLabel}`,
       tone: barPercent >= 15 ? "success" : "default",
     });
   }

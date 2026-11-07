@@ -293,38 +293,40 @@ export function ShiftClosingWizard({
 
   return createPortal(
     <div className="fixed inset-0 h-dvh bg-black text-zinc-100 flex flex-col z-9999 overflow-hidden font-sans">
-      <header className="px-6 py-5 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="h-10 w-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500">
-            <DollarSign className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-black text-white uppercase italic tracking-tight leading-none">
-              {step === 1 ? "Финансовый отчет" : "Завершение смены"}
-            </h2>
-            <div className="flex items-center gap-2 mt-1.5">
-              <Badge
-                variant="outline"
-                className="border-zinc-700 text-zinc-500 text-[9px] font-mono px-1.5 py-0 h-4 bg-zinc-900/50"
-              >
-                ШАГ {step} ИЗ 2
-              </Badge>
-              {step === 1 && stepOneMissingFields.length > 0 && (
-                <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider animate-pulse">
-                  Нужно заполнить: {stepOneMissingFields.length}
-                </span>
-              )}
+      <header className="px-6 py-5 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-xl sticky top-0 z-50 shrink-0">
+        <div className={cn("mx-auto w-full flex items-center justify-between", step === 2 ? "max-w-4xl" : "max-w-6xl")}>
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500">
+              <DollarSign className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-black text-white uppercase italic tracking-tight leading-none">
+                {step === 1 ? "Финансовый отчет" : "Завершение смены"}
+              </h2>
+              <div className="flex items-center gap-2 mt-1.5">
+                <Badge
+                  variant="outline"
+                  className="border-zinc-700 text-zinc-500 text-[9px] font-mono px-1.5 py-0 h-4 bg-zinc-900/50"
+                >
+                  ШАГ {step} ИЗ 2
+                </Badge>
+                {step === 1 && stepOneMissingFields.length > 0 && (
+                  <span className="text-[10px] text-amber-500 font-bold uppercase tracking-wider animate-pulse">
+                    Нужно заполнить: {stepOneMissingFields.length}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onClose}
+            className="bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white h-12 w-12 rounded-2xl transition-all active:scale-90"
+          >
+            <X className="h-6 w-6" />
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={onClose}
-          className="bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white h-12 w-12 rounded-2xl transition-all active:scale-90"
-        >
-          <X className="h-6 w-6" />
-        </Button>
       </header>
 
       <main className="flex-1 overflow-y-auto px-6 py-8">
@@ -1213,7 +1215,7 @@ export function ShiftClosingWizard({
       </main>
 
       <footer className="p-6 border-t border-zinc-800 bg-zinc-950/80 backdrop-blur-xl absolute bottom-0 left-0 right-0 z-50">
-        <div className="max-w-6xl mx-auto">
+        <div className={cn("mx-auto w-full", step === 2 ? "max-w-4xl" : "max-w-6xl")}>
           {step === 1 ? (
             <Button
               onClick={handleStep1Submit}

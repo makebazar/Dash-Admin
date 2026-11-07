@@ -102,9 +102,11 @@ export async function getSupplies(clubId: string) {
   const res = await query(
     `
         SELECT s.*, u.full_name as created_by_name,
+        w.name as warehouse_name,
         (SELECT COUNT(*) FROM warehouse_supply_items WHERE supply_id = s.id) as items_count
         FROM warehouse_supplies s
         LEFT JOIN users u ON s.created_by = u.id
+        LEFT JOIN warehouses w ON s.warehouse_id = w.id
         WHERE s.club_id = $1
         ORDER BY s.created_at DESC
     `,
@@ -358,9 +360,11 @@ export async function getSupplyById(clubId: string, supplyId: number) {
   const res = await query(
     `
         SELECT s.*,
+            w.name as warehouse_name,
             (SELECT COUNT(*) FROM warehouse_supply_items WHERE supply_id = s.id) as items_count,
             (SELECT full_name FROM users WHERE id = s.created_by) as created_by_name
         FROM warehouse_supplies s
+        LEFT JOIN warehouses w ON s.warehouse_id = w.id
         WHERE s.club_id = $1 AND s.id = $2
     `,
     [clubId, supplyId],

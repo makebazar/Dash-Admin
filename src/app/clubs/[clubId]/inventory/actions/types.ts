@@ -72,6 +72,7 @@ export type Supply = {
   notes: string | null;
   status: "DRAFT" | "COMPLETED";
   warehouse_id: number | null;
+  warehouse_name?: string | null;
   created_at: string;
   updated_at: string;
   items_count?: number;

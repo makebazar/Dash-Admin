@@ -27,10 +27,13 @@ export async function getRevenueTrendForDates(
   const clubTimezone = await getClubTimezone(clubId);
   const metricMeta = await getReportMetricMeta(clubId);
 
+  const queryStart = new Date(startDate.getTime() - 14 * 60 * 60 * 1000);
+  const queryEnd = new Date(endDate.getTime() + 14 * 60 * 60 * 1000);
+
   const rows = await getShiftRevenueRows(
     clubId,
-    startDate.toISOString(),
-    endDate.toISOString(),
+    queryStart.toISOString(),
+    queryEnd.toISOString(),
   );
 
   const revenueByDate = new Map<string, number>();
@@ -91,9 +94,30 @@ export async function getRevenueTrendForDates(
   });
 
   const points: RevenuePoint[] = [];
-  const curr = new Date(startDate);
-  while (curr <= endDate) {
-    const key = formatDateKeyInTimezone(curr, clubTimezone);
+  const curr = new Date(
+    startDate.getFullYear(),
+    startDate.getMonth(),
+    startDate.getDate(),
+    12,
+    0,
+    0,
+    0,
+  );
+  const endNoon = new Date(
+    endDate.getFullYear(),
+    endDate.getMonth(),
+    endDate.getDate(),
+    12,
+    0,
+    0,
+    0,
+  );
+
+  while (curr <= endNoon) {
+    const year = curr.getFullYear();
+    const month = String(curr.getMonth() + 1).padStart(2, "0");
+    const day = String(curr.getDate()).padStart(2, "0");
+    const key = `${year}-${month}-${day}`;
     const dayMetricsMap = metricsByDate.get(key);
     const metrics: Record<string, number> = {};
     if (dayMetricsMap) {

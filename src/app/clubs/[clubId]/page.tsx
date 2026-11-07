@@ -5,7 +5,7 @@ import { PageShell } from "@/components/layout/PageShell";
 // Data layer
 import { getDashboardAccess } from "./_queries/access";
 import { getReportMetricMeta } from "./_queries/shiftStats";
-import { getRevenueTrendForDates } from "./_queries/revenueTrend";
+import { getClubTimezone, getRevenueTrendForDates } from "./_queries/revenueTrend";
 import { getRevenueInsights } from "./_queries/revenueInsights";
 import { getAdminPerformance } from "./_queries/adminPerformance";
 import { getActiveShiftsSnapshot, getNextScheduledShift } from "./_queries/shiftsSnapshot";
@@ -20,7 +20,7 @@ import RevenueTrendChart from "./RevenueTrendChart";
 
 import type { RevenuePoint } from "./_types";
 import { query } from "@/db";
-import { normalizeInventorySettings } from "@/lib/inventory-settings";
+import { getDatePartsInTimezone } from "@/lib/utils";
 
 
 
@@ -50,7 +50,13 @@ export default async function ClubDashboardPage({
   const access = await getDashboardAccess(clubId);
   const canViewShifts = access.permissions.view_shifts;
 
-  const metricMeta = await getReportMetricMeta(clubId);
+  const [metricMeta, clubTimezone] = await Promise.all([
+    getReportMetricMeta(clubId),
+    getClubTimezone(clubId),
+  ]);
+  const todayParts = getDatePartsInTimezone(new Date(), clubTimezone);
+  const todayKey = `${todayParts.year}-${String(todayParts.month).padStart(2, "0")}-${String(todayParts.day).padStart(2, "0")}`;
+
   let currentTrend: RevenuePoint[] = [];
   let previousTrend: RevenuePoint[] = [];
   let currentStart: Date;
@@ -59,13 +65,10 @@ export default async function ClubDashboardPage({
   let prevEnd: Date;
 
   if (days === 7) {
-    const now = new Date();
-    currentEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    currentStart = new Date(currentEnd.getTime() - 6 * 24 * 60 * 60 * 1000);
-    currentStart.setHours(0, 0, 0, 0);
-    prevEnd = new Date(currentStart.getTime() - 1000);
-    prevStart = new Date(prevEnd.getTime() - 6 * 24 * 60 * 60 * 1000);
-    prevStart.setHours(0, 0, 0, 0);
+    currentEnd = new Date(todayParts.year, todayParts.month - 1, todayParts.day, 23, 59, 59, 999);
+    currentStart = new Date(todayParts.year, todayParts.month - 1, todayParts.day - 6, 0, 0, 0, 0);
+    prevEnd = new Date(todayParts.year, todayParts.month - 1, todayParts.day - 7, 23, 59, 59, 999);
+    prevStart = new Date(todayParts.year, todayParts.month - 1, todayParts.day - 13, 0, 0, 0, 0);
 
     const [curT, prevT] = await Promise.all([
       getRevenueTrendForDates(clubId, currentStart, currentEnd),
@@ -74,12 +77,10 @@ export default async function ClubDashboardPage({
     currentTrend = curT;
     previousTrend = prevT;
   } else {
-    const now = new Date();
-    const currentDay = now.getDate();
-    currentStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    currentEnd = new Date(now.getFullYear(), now.getMonth(), currentDay, 23, 59, 59, 999);
-    prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-    prevEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    currentStart = new Date(todayParts.year, todayParts.month - 1, 1, 0, 0, 0, 0);
+    currentEnd = new Date(todayParts.year, todayParts.month - 1, todayParts.day, 23, 59, 59, 999);
+    prevStart = new Date(todayParts.year, todayParts.month - 2, 1, 0, 0, 0, 0);
+    prevEnd = new Date(todayParts.year, todayParts.month - 1, 0, 23, 59, 59, 999);
 
     const [curT, prevT] = await Promise.all([
       getRevenueTrendForDates(clubId, currentStart, currentEnd),
@@ -89,13 +90,11 @@ export default async function ClubDashboardPage({
     previousTrend = prevT;
   }
 
-  // Trim trailing zero days
-  while (currentTrend.length > 1) {
+  // Only trim today if today has no closed shift reports yet (do not trim past completed calendar days)
+  if (currentTrend.length > 1) {
     const lastItem = currentTrend[currentTrend.length - 1];
-    if (lastItem.revenue === 0 && lastItem.receiptsCount === 0) {
+    if (lastItem.date === todayKey && lastItem.revenue === 0 && lastItem.receiptsCount === 0) {
       currentTrend.pop();
-    } else {
-      break;
     }
   }
 
@@ -149,6 +148,7 @@ export default async function ClubDashboardPage({
             days={days}
             clubId={clubId}
             metricMeta={metricMeta}
+            todayKey={todayKey}
           />
           <RevenueInsightsGrid insights={revenueInsights.insights} />
         </div>
