@@ -57,6 +57,8 @@ interface MaintenanceTask {
   workstation_name?: string;
   workstation_assigned_to_name?: string | null;
   workstation_is_available_to_all?: boolean;
+  assigned_to_name?: string | null;
+  is_available_to_all?: boolean;
   due_date: string;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "REWORK";
   kpi_points: number;
@@ -912,13 +914,13 @@ function EmployeeTasksContent() {
                   >
                     {task.equipment_name}
                   </h4>
-                  {isFree && task.workstation_assigned_to_name && (
+                  {isFree && (task.workstation_assigned_to_name || task.assigned_to_name) && (
                     <Badge
                       variant="outline"
                       className="h-5 px-1.5 text-[9px] font-medium border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 whitespace-nowrap"
-                      title="Место доступно всем, ответственный закреплён"
+                      title="Доступно всем, ответственный закреплён"
                     >
-                      Ответственный: {task.workstation_assigned_to_name}
+                      Ответственный: {task.assigned_to_name || task.workstation_assigned_to_name}
                     </Badge>
                   )}
                   {isRejected && (

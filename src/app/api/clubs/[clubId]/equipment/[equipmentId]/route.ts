@@ -367,6 +367,12 @@ export async function PATCH(
     const effectiveAssignedUserId =
       effectiveAssigneeResult.rows[0]?.effective_assigned_user_id || null;
 
+    const assigneeExplicitlyChanged =
+      (body.assigned_user_id !== undefined &&
+        body.assigned_user_id !== currentEquipment.rows[0].assigned_user_id) ||
+      (body.assignment_mode !== undefined &&
+        body.assignment_mode !== currentEquipment.rows[0].assignment_mode);
+
     if (!schedulesCleaning || !updatedEquipment.maintenance_enabled) {
       await query(
         `UPDATE equipment_maintenance_tasks
@@ -386,7 +392,7 @@ export async function PATCH(
           equipmentId,
         ],
       );
-    } else if (effectiveAssignedUserId) {
+    } else if (assigneeExplicitlyChanged && effectiveAssignedUserId) {
       // Get the club timezone to determine "today" date accurately
       const clubRes = await query(
         `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
@@ -462,10 +468,7 @@ export async function PATCH(
           console.error("Auto-generation failed:", e);
         }
       }
-    } else if (
-      body.assigned_user_id !== undefined ||
-      body.assignment_mode !== undefined
-    ) {
+    } else if (assigneeExplicitlyChanged) {
       // Moving to FREE_POOL: release open tasks into the pool without skipping overdue ones
       await query(
         `UPDATE equipment_maintenance_tasks
