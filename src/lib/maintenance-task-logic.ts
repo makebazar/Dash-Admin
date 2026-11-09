@@ -356,6 +356,10 @@ export async function completeMaintenanceTask(params: {
   const isFreePool = task.effective_assignment_mode === "FREE_POOL";
   const responsibleUserIdAtCompletion =
     task.effective_task_assigned_user_id || userId;
+  const isCompletedByAnother = Boolean(
+    task.effective_task_assigned_user_id &&
+      String(task.effective_task_assigned_user_id) !== String(userId),
+  );
 
   const kpiBonus = await resolveUserMaintenanceKpiBonus(clubId, userId);
   const completedDateKey = formatDateKeyInTimezone(new Date(), clubTimezone);
@@ -371,6 +375,7 @@ export async function completeMaintenanceTask(params: {
     dueDate: task.due_date,
     clubTimezone,
     isFreePool,
+    isCompletedByAnother,
   });
 
   const allPhotos = [...photos_before, ...photos_after];
@@ -770,6 +775,7 @@ export function computeMaintenanceTaskBonusAndPenalty(params: {
   dueDate: string | Date;
   clubTimezone: string;
   isFreePool: boolean;
+  isCompletedByAnother?: boolean;
 }) {
   const {
     kpiBonus,
@@ -778,6 +784,7 @@ export function computeMaintenanceTaskBonusAndPenalty(params: {
     dueDate,
     clubTimezone,
     isFreePool,
+    isCompletedByAnother = false,
   } = params;
 
   let bonusEarned = 0;
@@ -826,7 +833,7 @@ export function computeMaintenanceTaskBonusAndPenalty(params: {
   const overdueDaysAtCompletion = isFreePool ? 0 : rawOverdueDays;
   const wasOverdue = overdueDaysAtCompletion > 0;
 
-  const overduePenalty = isFreePool
+  const overduePenalty = isFreePool || isCompletedByAnother
     ? 0
     : calculateMaintenanceOverduePenalty(
         {
@@ -888,6 +895,7 @@ export async function recalculateClubMaintenanceBonuses(params: {
         mt.overdue_penalty,
         mt.overdue_days_at_completion,
         mt.was_overdue,
+        mt.responsible_user_id_at_completion,
         e.type as equipment_type,
         CASE
           WHEN e.assignment_mode = 'DIRECT'
@@ -942,6 +950,10 @@ export async function recalculateClubMaintenanceBonuses(params: {
         clubTimezone,
       );
       const isFreePool = task.assignment_mode === "FREE_POOL";
+      const isCompletedByAnother = Boolean(
+        task.responsible_user_id_at_completion &&
+          String(task.responsible_user_id_at_completion) !== String(task.user_id),
+      );
 
       const {
         bonusEarned,
@@ -955,6 +967,7 @@ export async function recalculateClubMaintenanceBonuses(params: {
         dueDate: task.due_date,
         clubTimezone,
         isFreePool,
+        isCompletedByAnother,
       });
 
       await query(

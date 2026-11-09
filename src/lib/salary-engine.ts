@@ -935,7 +935,7 @@ export async function generateMonthlySalaryReport(
 
       // 2. Completed Tasks for Payment (Accrual) - for distributing to shifts
       const paymentTasksRes = await query(
-        `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, mt.overdue_penalty, mt.due_date, e.type as equipment_type_code, et.name_ru as equipment_type_name
+        `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, mt.overdue_penalty, mt.due_date, mt.responsible_user_id_at_completion, e.type as equipment_type_code, et.name_ru as equipment_type_name
                  FROM equipment_maintenance_tasks mt
                  JOIN equipment e ON mt.equipment_id = e.id
                  LEFT JOIN equipment_types et ON e.type = et.code
@@ -987,17 +987,28 @@ export async function generateMonthlySalaryReport(
         return dueDate >= startOfMonth && dueDate <= endOfMonth;
       });
 
-      const currentMonthPenalty = currentMonthTasks.reduce(
-        (sum, t) => sum + Math.abs(parseFloat(t.overdue_penalty) || 0),
-        0,
-      );
+      const currentMonthPenalty = currentMonthTasks.reduce((sum, t) => {
+        // If task was completed by someone other than the responsible employee, penalty is waived
+        if (
+          t.responsible_user_id_at_completion &&
+          String(t.responsible_user_id_at_completion) !== String(emp.id)
+        ) {
+          return sum;
+        }
+        return sum + Math.abs(parseFloat(t.overdue_penalty) || 0);
+      }, 0);
 
       // Add penalty to breakdown (distributed proportionally)
       for (const task of currentMonthTasks) {
         const type =
           task.equipment_type_name || task.equipment_type_code || "Другое";
         if (maintenance_breakdown_by_type[type]) {
-          const taskPenalty = Math.abs(parseFloat(task.overdue_penalty) || 0);
+          const isOtherResponsible =
+            task.responsible_user_id_at_completion &&
+            String(task.responsible_user_id_at_completion) !== String(emp.id);
+          const taskPenalty = isOtherResponsible
+            ? 0
+            : Math.abs(parseFloat(task.overdue_penalty) || 0);
           maintenance_breakdown_by_type[type].penalty += taskPenalty;
         }
       }
