@@ -946,6 +946,21 @@ export async function generateMonthlySalaryReport(
       );
       const paymentTasks = paymentTasksRes.rows;
 
+      // 2b. Rescued Tasks: where employee was responsible, but completed by someone else (50% overdue penalty applies to responsible)
+      const rescuedTasksRes = await query(
+        `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, mt.overdue_penalty, mt.due_date, mt.responsible_user_id_at_completion, e.type as equipment_type_code, et.name_ru as equipment_type_name
+                 FROM equipment_maintenance_tasks mt
+                 JOIN equipment e ON mt.equipment_id = e.id
+                 LEFT JOIN equipment_types et ON e.type = et.code
+                 WHERE mt.responsible_user_id_at_completion = $1
+                   AND (mt.completed_by IS NULL OR mt.completed_by != $1)
+                   AND mt.status = 'COMPLETED'
+                   AND e.club_id = $4
+                   AND mt.completed_at >= $2 AND mt.completed_at <= $3`,
+        [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString(), clubId],
+      );
+      const rescuedTasks = rescuedTasksRes.rows;
+
       // Gross earnings breakdown by type (full rate, before penalty)
       const maintenance_breakdown_by_type: Record<
         string,
@@ -975,9 +990,15 @@ export async function generateMonthlySalaryReport(
         const overdueDays = parseInt(task.overdue_days_at_completion) || 0;
         maintenance_breakdown_by_type[type].count++;
         maintenance_breakdown_by_type[type].gross += grossBonus;
-        maintenance_breakdown_by_type[type].overdue_days += overdueDays;
-        if (overdueDays > 0) {
-          maintenance_breakdown_by_type[type].overdue_incidents++;
+        // Overdue stats belong to employee only if they were responsible for it
+        const isSelfResponsible =
+          !task.responsible_user_id_at_completion ||
+          String(task.responsible_user_id_at_completion) === String(emp.id);
+        if (isSelfResponsible) {
+          maintenance_breakdown_by_type[type].overdue_days += overdueDays;
+          if (overdueDays > 0) {
+            maintenance_breakdown_by_type[type].overdue_incidents++;
+          }
         }
       }
 
@@ -987,8 +1008,8 @@ export async function generateMonthlySalaryReport(
         return dueDate >= startOfMonth && dueDate <= endOfMonth;
       });
 
-      const currentMonthPenalty = currentMonthTasks.reduce((sum, t) => {
-        // If task was completed by someone other than the responsible employee, penalty is waived
+      const currentMonthOwnPenalty = currentMonthTasks.reduce((sum, t) => {
+        // If task was completed by someone other than the responsible employee, penalty is not charged to the completer
         if (
           t.responsible_user_id_at_completion &&
           String(t.responsible_user_id_at_completion) !== String(emp.id)
@@ -998,7 +1019,7 @@ export async function generateMonthlySalaryReport(
         return sum + Math.abs(parseFloat(t.overdue_penalty) || 0);
       }, 0);
 
-      // Add penalty to breakdown (distributed proportionally)
+      // Add penalty to breakdown for own completed tasks
       for (const task of currentMonthTasks) {
         const type =
           task.equipment_type_name || task.equipment_type_code || "Другое";
@@ -1012,6 +1033,42 @@ export async function generateMonthlySalaryReport(
           maintenance_breakdown_by_type[type].penalty += taskPenalty;
         }
       }
+
+      // Rescued tasks: emp was responsible, but someone else completed them (50% penalty applies to responsible emp)
+      const currentMonthRescuedTasks = rescuedTasks.filter((t) => {
+        const dueDate = new Date(t.due_date);
+        return dueDate >= startOfMonth && dueDate <= endOfMonth;
+      });
+
+      const currentMonthRescuedPenalty = currentMonthRescuedTasks.reduce(
+        (sum, t) => sum + Math.abs(parseFloat(t.overdue_penalty) || 0),
+        0,
+      );
+
+      for (const task of currentMonthRescuedTasks) {
+        const type =
+          task.equipment_type_name || task.equipment_type_code || "Другое";
+        if (!maintenance_breakdown_by_type[type]) {
+          maintenance_breakdown_by_type[type] = {
+            count: 0,
+            gross: 0,
+            type,
+            penalty: 0,
+            overdue_days: 0,
+            overdue_incidents: 0,
+          };
+        }
+        const taskPenalty = Math.abs(parseFloat(task.overdue_penalty) || 0);
+        const overdueDays = parseInt(task.overdue_days_at_completion) || 0;
+        maintenance_breakdown_by_type[type].penalty += taskPenalty;
+        maintenance_breakdown_by_type[type].overdue_days += overdueDays;
+        if (overdueDays > 0) {
+          maintenance_breakdown_by_type[type].overdue_incidents++;
+        }
+      }
+
+      const currentMonthPenalty =
+        currentMonthOwnPenalty + currentMonthRescuedPenalty;
 
       const maintenance_breakdown = Object.values(
         maintenance_breakdown_by_type,

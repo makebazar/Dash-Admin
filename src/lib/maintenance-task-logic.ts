@@ -833,23 +833,27 @@ export function computeMaintenanceTaskBonusAndPenalty(params: {
   const overdueDaysAtCompletion = isFreePool ? 0 : rawOverdueDays;
   const wasOverdue = overdueDaysAtCompletion > 0;
 
-  const overduePenalty = isFreePool || isCompletedByAnother
+  const rawPenalty = calculateMaintenanceOverduePenalty(
+    {
+      overdue_tolerance_days: kpiBonus?.overdue_tolerance_days,
+      overdue_penalty_mode: kpiBonus?.overdue_penalty_mode,
+      overdue_penalty_amount: kpiBonus?.overdue_penalty_amount,
+      late_penalty_multiplier: kpiBonus?.late_penalty_multiplier,
+    },
+    [
+      {
+        overdue_days_at_completion: overdueDaysAtCompletion,
+        bonus_earned: bonusEarned,
+        was_overdue: wasOverdue,
+      },
+    ],
+  ).total;
+
+  const overduePenalty = isFreePool
     ? 0
-    : calculateMaintenanceOverduePenalty(
-        {
-          overdue_tolerance_days: kpiBonus?.overdue_tolerance_days,
-          overdue_penalty_mode: kpiBonus?.overdue_penalty_mode,
-          overdue_penalty_amount: kpiBonus?.overdue_penalty_amount,
-          late_penalty_multiplier: kpiBonus?.late_penalty_multiplier,
-        },
-        [
-          {
-            overdue_days_at_completion: overdueDaysAtCompletion,
-            bonus_earned: bonusEarned,
-            was_overdue: wasOverdue,
-          },
-        ],
-      ).total;
+    : isCompletedByAnother
+      ? Math.round(rawPenalty * 0.5 * 100) / 100
+      : rawPenalty;
 
   return {
     bonusEarned,
