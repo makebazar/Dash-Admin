@@ -3,6 +3,7 @@ import { query } from "@/db";
 import { cookies } from "next/headers";
 import { appendMaintenanceTaskEvent } from "@/lib/maintenance-task-events";
 import {
+  approveMaintenanceTasks,
   effectiveEquipmentAssigneeSql,
   hasActiveClubAccess,
 } from "@/lib/maintenance-task-logic";
@@ -75,10 +76,6 @@ export async function POST(
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const currentCycle = task.cycle_no || 1;
-    let updateQuery = "";
-    let queryParams: any[] = [];
-
     if (action === "APPROVE") {
       if (task.status !== "COMPLETED") {
         return NextResponse.json(
@@ -86,78 +83,74 @@ export async function POST(
           { status: 409 },
         );
       }
-      updateQuery = `
-                UPDATE equipment_maintenance_tasks
-                SET verification_status = 'APPROVED',
-                    verified_at = CURRENT_TIMESTAMP,
-                    verified_by = $2,
-                    verification_note = $3,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1
-                RETURNING id
-            `;
-      queryParams = [taskId, userId, comment || null];
-    } else if (action === "REJECT") {
-      // 1. Cleanup future pending tasks for this equipment
-      await query(
-        `DELETE FROM equipment_maintenance_tasks
-                 WHERE equipment_id = $1
-                   AND task_type = $2
-                   AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
-                   AND id != $3`,
-        [task.equipment_id, task.task_type, taskId],
-      );
-
-      // 2. Revert equipment last_cleaned_at
-      if (task.task_type === "CLEANING") {
-        const previousCompletedTask = await query(
-          `SELECT completed_at
-                     FROM equipment_maintenance_tasks
-                     WHERE equipment_id = $1
-                       AND task_type = 'CLEANING'
-                       AND status = 'COMPLETED'
-                       AND id != $2
-                     ORDER BY completed_at DESC
-                     LIMIT 1`,
-          [task.equipment_id, taskId],
-        );
-
-        await query(
-          `UPDATE equipment
-                     SET last_cleaned_at = $1
-                     WHERE id = $2`,
-          [
-            previousCompletedTask.rows[0]?.completed_at || null,
-            task.equipment_id,
-          ],
-        );
-      }
-
-      // 3. Reject task into REWORK (or reassign to active equipment owner / free pool if completer was dismissed)
-      updateQuery = `
-                UPDATE equipment_maintenance_tasks
-                SET verification_status = 'REJECTED',
-                    status = 'REWORK',
-                    session_id = NULL,
-                    assigned_user_id = $4,
-                    verified_at = CURRENT_TIMESTAMP,
-                    verified_by = $2,
-                    rejection_reason = $3,
-                    completed_at = NULL,
-                    bonus_earned = 0,
-                    overdue_penalty = 0,
-                    kpi_points = 0,
-                    overdue_days_at_completion = 0,
-                    was_overdue = FALSE,
-                    responsible_user_id_at_completion = NULL,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = $1
-                RETURNING id
-            `;
-      queryParams = [taskId, userId, comment, task.rework_assignee_id || null];
+      await approveMaintenanceTasks({
+        clubId,
+        taskIds: [taskId],
+        actorUserId: userId,
+        comment: comment || null,
+      });
+      return NextResponse.json({ success: true });
     }
 
-    const result = await query(updateQuery, queryParams);
+    const currentCycle = task.cycle_no || 1;
+
+    // 1. Cleanup future pending tasks for this equipment
+    await query(
+      `DELETE FROM equipment_maintenance_tasks
+               WHERE equipment_id = $1
+                 AND task_type = $2
+                 AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')
+                 AND id != $3`,
+      [task.equipment_id, task.task_type, taskId],
+    );
+
+    // 2. Revert equipment last_cleaned_at
+    if (task.task_type === "CLEANING") {
+      const previousCompletedTask = await query(
+        `SELECT completed_at
+                   FROM equipment_maintenance_tasks
+                   WHERE equipment_id = $1
+                     AND task_type = 'CLEANING'
+                     AND status = 'COMPLETED'
+                     AND id != $2
+                   ORDER BY completed_at DESC
+                   LIMIT 1`,
+        [task.equipment_id, taskId],
+      );
+
+      await query(
+        `UPDATE equipment
+                   SET last_cleaned_at = $1
+                   WHERE id = $2`,
+        [
+          previousCompletedTask.rows[0]?.completed_at || null,
+          task.equipment_id,
+        ],
+      );
+    }
+
+    // 3. Reject task into REWORK (or reassign to active equipment owner / free pool if completer was dismissed)
+    const result = await query(
+      `UPDATE equipment_maintenance_tasks
+              SET verification_status = 'REJECTED',
+                  status = 'REWORK',
+                  session_id = NULL,
+                  assigned_user_id = $4,
+                  verified_at = CURRENT_TIMESTAMP,
+                  verified_by = $2,
+                  rejection_reason = $3,
+                  completed_at = NULL,
+                  bonus_earned = 0,
+                  overdue_penalty = 0,
+                  kpi_points = 0,
+                  overdue_days_at_completion = 0,
+                  was_overdue = FALSE,
+                  responsible_user_id_at_completion = NULL,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE id = $1
+              RETURNING id`,
+      [taskId, userId, comment, task.rework_assignee_id || null],
+    );
 
     if ((result.rowCount || 0) === 0) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
@@ -166,14 +159,11 @@ export async function POST(
     await appendMaintenanceTaskEvent({
       taskId,
       cycleNo: Math.max(currentCycle, 1),
-      eventType: action === "APPROVE" ? "APPROVED" : "REJECTED",
+      eventType: "REJECTED",
       actorUserId: userId,
       note: comment || null,
       taskNotes: task.notes || null,
-      photos:
-        action === "REJECT" && Array.isArray(photos)
-          ? photos
-          : task.photos || [],
+      photos: Array.isArray(photos) ? photos : task.photos || [],
     });
 
     return NextResponse.json({ success: true });

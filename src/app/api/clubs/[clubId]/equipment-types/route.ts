@@ -59,35 +59,44 @@ async function generateUniqueCode(clubId: string, name: string) {
 
 // GET /api/clubs/[clubId]/equipment-types
 export async function GET(
-    _request: Request,
+    request: Request,
     { params }: { params: Promise<{ clubId: string }> }
 ) {
     try {
-        const userId = (await cookies()).get('session_user_id')?.value;
+        const rawUserId = (await cookies()).get('session_user_id')?.value;
+        const userId = rawUserId ? (rawUserId.includes('.') ? rawUserId.split('.')[0] : rawUserId) : null;
         const { clubId } = await params;
+        const { searchParams } = new URL(request.url);
+        const activeOnly = searchParams.get('activeOnly') === 'true';
 
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-
-        const migrationResponse = await ensureClubTypesSupport();
-        if (migrationResponse) return migrationResponse;
 
         const accessCheck = await checkReadAccess(clubId, userId);
         if ((accessCheck.rowCount || 0) === 0) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
+        const supportsClubTypes = await hasColumn('equipment_types', 'club_id');
+        if (!supportsClubTypes) {
+            const result = await query(
+                `SELECT * FROM equipment_types ORDER BY sort_order, name_ru`
+            );
+            return NextResponse.json(result.rows);
+        }
+
         const result = await query(
             `SELECT code, name, name_ru, default_cleaning_interval, icon, sort_order, club_id, is_system, is_active, created_by, base_type_code, cleaning_time_minutes
              FROM equipment_types
-             WHERE club_id IS NULL OR club_id = $1
+             WHERE (club_id IS NULL OR club_id = $1)
+               AND ($2::boolean IS FALSE OR is_active = TRUE)
              ORDER BY
                 CASE WHEN club_id = $1 THEN 0 ELSE 1 END,
                 is_active DESC,
                 sort_order,
                 name_ru`,
-            [clubId]
+            [clubId, activeOnly]
         );
 
         return NextResponse.json(result.rows);

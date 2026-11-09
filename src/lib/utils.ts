@@ -144,3 +144,29 @@ export async function optimizeFileBeforeUpload(
     URL.revokeObjectURL(objectUrl)
   }
 }
+
+export async function uploadOptimizedImages(
+  files: Iterable<File>,
+  options: UploadImageOptions = { maxDimension: 1200, quality: 0.82 }
+): Promise<string[]> {
+  const fileArray = Array.from(files)
+  if (fileArray.length === 0) return []
+
+  const urls = await Promise.all(
+    fileArray.map(async (file) => {
+      const optimized = await optimizeFileBeforeUpload(file, options)
+      const formData = new FormData()
+      formData.append("file", optimized)
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      return typeof data?.url === "string" ? data.url : null
+    })
+  )
+
+  return urls.filter((url): url is string => Boolean(url))
+}
+

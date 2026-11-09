@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { hasColumn } from '@/lib/db-compat';
+import { hasActiveClubAccess } from '@/lib/maintenance-task-logic';
 
 // GET - List all issues for equipment in a club
 export async function GET(
@@ -23,15 +24,7 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify access
-        const accessCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-             UNION
-             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((accessCheck.rowCount || 0) === 0) {
+        if (!(await hasActiveClubAccess(clubId, userId))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -151,19 +144,11 @@ export async function POST(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Verify access (employees can create issues)
-        const accessCheck = await query(
-            `SELECT 1 FROM clubs WHERE id = $1 AND owner_id = $2
-             UNION
-             SELECT 1 FROM club_employees WHERE club_id = $1 AND user_id = $2`,
-            [clubId, userId]
-        );
-
-        if ((accessCheck.rowCount || 0) === 0) {
+        if (!(await hasActiveClubAccess(clubId, userId))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
-        const { equipment_id, title, description, severity } = body;
+        const { equipment_id, title, description, severity, maintenance_task_id } = body;
 
         if (!equipment_id || !title) {
             return NextResponse.json({ error: 'Equipment ID and title are required' }, { status: 400 });
@@ -182,16 +167,16 @@ export async function POST(
         const hasClubIdColumn = await hasColumn('equipment_issues', 'club_id');
         const result = hasClubIdColumn
             ? await query(
-                `INSERT INTO equipment_issues (club_id, equipment_id, reported_by, title, description, severity)
-                 VALUES ($1, $2, $3, $4, $5, $6)
+                `INSERT INTO equipment_issues (club_id, equipment_id, reported_by, title, description, severity, maintenance_task_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                  RETURNING *`,
-                [clubId, equipment_id, userId, title, description || null, severity || 'MEDIUM']
+                [clubId, equipment_id, userId, title, description || null, severity || 'MEDIUM', maintenance_task_id || null]
             )
             : await query(
-                `INSERT INTO equipment_issues (equipment_id, reported_by, title, description, severity)
-                 VALUES ($1, $2, $3, $4, $5)
+                `INSERT INTO equipment_issues (equipment_id, reported_by, title, description, severity, maintenance_task_id)
+                 VALUES ($1, $2, $3, $4, $5, $6)
                  RETURNING *`,
-                [equipment_id, userId, title, description || null, severity || 'MEDIUM']
+                [equipment_id, userId, title, description || null, severity || 'MEDIUM', maintenance_task_id || null]
             );
 
         return NextResponse.json(result.rows[0], { status: 201 });

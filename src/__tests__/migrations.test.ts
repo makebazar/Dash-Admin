@@ -26,7 +26,7 @@ describe("Migration SQL safety checks", () => {
 describe("Instruction editor implementation", () => {
     it("uses Tiptap through RichTextEditor to avoid findDOMNode from react-quill", () => {
         const source = readFileSync(
-            resolve(process.cwd(), "src/app/clubs/[clubId]/equipment/inventory/InstructionsTab.tsx"),
+            resolve(process.cwd(), "src/app/clubs/[clubId]/equipment/settings/InstructionsTab.tsx"),
             "utf8"
         )
         expect(source).toContain('RichTextEditor')

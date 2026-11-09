@@ -6,7 +6,7 @@ import { ArrowLeft, ChevronLeft, FileText, MapPin, Settings2, Wrench } from "luc
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { PageShell } from "@/components/layout/PageShell"
-import { InstructionsTab } from "../inventory/InstructionsTab"
+import { InstructionsTab } from "./InstructionsTab"
 import { EquipmentTypesTab } from "./EquipmentTypesTab"
 import { ZonesSettingsTab } from "./ZonesSettingsTab"
 import { MaintenanceCompletionSettingsTab } from "./MaintenanceCompletionSettingsTab"

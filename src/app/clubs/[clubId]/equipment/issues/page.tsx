@@ -46,6 +46,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { PageShell } from "@/components/layout/PageShell";
+import { COMPONENT_TYPES } from "@/lib/equipment-status";
 
 interface Issue {
   id: string;
@@ -105,16 +106,6 @@ const statusTabItems = [
   { value: "IN_PROGRESS", label: "В работе" },
   { value: "CLOSED", label: "Закрытые" },
 ] as const;
-
-const COMPONENT_TYPES = [
-  "CPU",
-  "GPU",
-  "RAM",
-  "MOTHERBOARD",
-  "PSU",
-  "STORAGE",
-  "COOLING",
-];
 
 export default function IssuesBoard() {
   const router = useRouter();

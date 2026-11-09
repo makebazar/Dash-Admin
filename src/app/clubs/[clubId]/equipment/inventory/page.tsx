@@ -76,6 +76,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { renderEquipmentIcon } from "@/lib/equipment-icons";
 import {
   EQUIPMENT_STATUS_LABELS,
+  COMPONENT_TYPES,
   type EquipmentStatus,
 } from "@/lib/equipment-status";
 
@@ -231,16 +232,6 @@ const INVENTORY_STATUS_IMPORT_MAP: Record<string, EquipmentStatus> = {
 
 const SELECTION_LIMIT = 50;
 
-const COMPONENT_TYPES = [
-  "CPU",
-  "GPU",
-  "RAM",
-  "MOTHERBOARD",
-  "PSU",
-  "STORAGE",
-  "COOLING",
-];
-
 export default function EquipmentInventory() {
   const { clubId } = useParams();
   const router = useRouter();
@@ -386,7 +377,9 @@ export default function EquipmentInventory() {
           fetch(`/api/clubs/${clubId}/equipment?${params.toString()}`, {
             cache: "no-store",
           }),
-          fetch(`/api/equipment-types?clubId=${clubId}`, { cache: "no-store" }),
+          fetch(`/api/clubs/${clubId}/equipment-types?activeOnly=true`, {
+            cache: "no-store",
+          }),
           fetch(`/api/clubs/${clubId}/workstations`, { cache: "no-store" }),
           fetch(`/api/clubs/${clubId}/equipment/stats`, { cache: "no-store" }),
           fetch(`/api/clubs/${clubId}/employees`, { cache: "no-store" }),

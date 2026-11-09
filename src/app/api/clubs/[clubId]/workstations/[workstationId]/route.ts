@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
-import { formatDateKeyInTimezone } from '@/lib/utils';
 import { requireClubFullAccess } from '@/lib/club-api-access';
+import { propagateWorkstationAssigneeToEquipment } from '@/lib/maintenance-task-logic';
 
 export async function PATCH(
     request: Request,
@@ -41,6 +41,12 @@ export async function PATCH(
             paramIndex++;
         }
 
+        if (body.is_available_to_all !== undefined) {
+            updates.push(`is_available_to_all = $${paramIndex}`);
+            values.push(Boolean(body.is_available_to_all));
+            paramIndex++;
+        }
+
         if (updates.length === 0) {
             return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
         }
@@ -61,71 +67,12 @@ export async function PATCH(
 
         if (body.assigned_user_id !== undefined || body.free_pool !== undefined) {
             const assignedUserId = body.assigned_user_id === '' ? null : (body.assigned_user_id || null);
-            
-            // Update equipment
-            await query(
-                `UPDATE equipment
-                 SET assigned_user_id = $1::uuid,
-                     assignment_mode = CASE
-                        WHEN $1::uuid IS NULL THEN 'FREE_POOL'
-                        ELSE 'DIRECT'
-                     END,
-                     maintenance_enabled = TRUE,
-                     updated_at = CURRENT_TIMESTAMP
-                 WHERE workstation_id = $2`,
-                [assignedUserId, workstationId]
-            );
-
-            // Propagate to open maintenance tasks
-            await query(
-                `UPDATE equipment_maintenance_tasks 
-                 SET status = CASE
-                       WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN
-                         CASE WHEN verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
-                       ELSE status
-                     END,
-                     session_id = CASE
-                       WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN NULL
-                       ELSE session_id
-                     END,
-                     assigned_user_id = $1::uuid,
-                     updated_at = CURRENT_TIMESTAMP
-                 WHERE equipment_id IN (
-                    SELECT id FROM equipment WHERE workstation_id = $2
-                 ) AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
-                [assignedUserId, workstationId]
-            );
-
-            // If a new user is assigned, move their PENDING tasks to their next shift
-            if (assignedUserId) {
-                const clubRes = await query(
-                    `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
-                     FROM clubs
-                     WHERE id = $1`,
-                    [clubId]
-                );
-                const today = formatDateKeyInTimezone(new Date(), clubRes.rows[0]?.timezone || 'Europe/Moscow');
-                const nextShift = await query(
-                    `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
-                     FROM work_schedules 
-                     WHERE club_id = $1 AND user_id = $2 AND date >= $3
-                     ORDER BY date ASC LIMIT 1`,
-                    [clubId, assignedUserId, today]
-                );
-
-                const shiftDateStr = (nextShift.rowCount && nextShift.rowCount > 0) 
-                    ? String(nextShift.rows[0].date) 
-                    : today;
-                
-                await query(
-                    `UPDATE equipment_maintenance_tasks 
-                     SET due_date = $1
-                     WHERE equipment_id IN (
-                        SELECT id FROM equipment WHERE workstation_id = $2
-                     ) AND status = 'PENDING' AND assigned_user_id = $3`,
-                    [shiftDateStr, workstationId, assignedUserId]
-                );
-            }
+            await propagateWorkstationAssigneeToEquipment({
+                clubId,
+                workstationIds: [workstationId],
+                assignedUserId,
+                forceMaintenanceEnabled: true,
+            });
         }
 
         return NextResponse.json(result.rows[0]);

@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { optimizeFileBeforeUpload } from "@/lib/utils";
+import { uploadOptimizedImages, cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -35,7 +35,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import { ImageViewer } from "@/components/ui/image-viewer";
 import { DatePicker } from "@/components/ui/date-picker";
 
@@ -379,23 +378,7 @@ export default function IssueDetailsPage() {
 
     try {
       setIsUploadingCommentPhoto(true);
-      const uploadedUrls: string[] = [];
-
-      for (const file of files) {
-        const optimizedFile = await optimizeFileBeforeUpload(file);
-        const formData = new FormData();
-        formData.append("file", optimizedFile);
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
-        if (res.ok && data.url) {
-          uploadedUrls.push(data.url);
-        }
-      }
-
+      const uploadedUrls = await uploadOptimizedImages(files);
       setPendingPhotos((prev) => [...prev, ...uploadedUrls]);
     } catch (error) {
       console.error("Error uploading photos:", error);
@@ -436,24 +419,7 @@ export default function IssueDetailsPage() {
 
     setIsUploading(true);
     try {
-      const uploadedUrls: string[] = [];
-
-      for (const file of resolutionPhotos) {
-        const optimizedFile = await optimizeFileBeforeUpload(file);
-        const formData = new FormData();
-        formData.append("file", optimizedFile);
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) continue;
-
-        const data = await res.json();
-        if (data.url) uploadedUrls.push(data.url);
-      }
-
+      const uploadedUrls = await uploadOptimizedImages(resolutionPhotos);
       await handleUpdateStatus("RESOLVED", resolutionNotes, uploadedUrls);
       setResolutionPhotos([]);
       setResolutionNotes("");

@@ -34,6 +34,16 @@ export async function POST(
         : [];
     const notes = body.notes || null;
     const performance_data = body.performance_data || null;
+    const status_mode: "OK" | "ISSUE" | "LAUNDRY" | "SKIPPED" =
+      body.status_mode === "ISSUE" ||
+      body.status_mode === "LAUNDRY" ||
+      body.status_mode === "SKIPPED"
+        ? body.status_mode
+        : "OK";
+    const issue_title = body.issue_title ? String(body.issue_title).trim() : null;
+    const issue_description = body.issue_description
+      ? String(body.issue_description).trim()
+      : null;
 
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -68,35 +78,37 @@ export async function POST(
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const settingsRow = settingsRes.rows[0];
-    const minBefore = settingsRow.require_photo_before
-      ? Math.max(0, Number(settingsRow.min_photos_before) || 0)
-      : 0;
-    const minAfter = settingsRow.require_photo_after
-      ? Math.max(0, Number(settingsRow.min_photos_after) || 0)
-      : 0;
+    if (status_mode !== "SKIPPED") {
+      const settingsRow = settingsRes.rows[0];
+      const minBefore = settingsRow.require_photo_before
+        ? Math.max(0, Number(settingsRow.min_photos_before) || 0)
+        : 0;
+      const minAfter = settingsRow.require_photo_after
+        ? Math.max(0, Number(settingsRow.min_photos_after) || 0)
+        : 0;
 
-    if (photos_before.length < minBefore) {
-      return NextResponse.json(
-        { error: `Нужно приложить минимум фото ДО: ${minBefore}` },
-        { status: 400 },
-      );
-    }
-
-    if (photos_after.length < minAfter) {
-      return NextResponse.json(
-        { error: `Нужно приложить минимум фото ПОСЛЕ: ${minAfter}` },
-        { status: 400 },
-      );
-    }
-
-    if (settingsRow.require_comment_mode === "ALWAYS") {
-      const noteStr = String(notes || "").trim();
-      if (!noteStr) {
+      if (photos_before.length < minBefore) {
         return NextResponse.json(
-          { error: "Нужно заполнить комментарий к выполнению" },
+          { error: `Нужно приложить минимум фото ДО: ${minBefore}` },
           { status: 400 },
         );
+      }
+
+      if (photos_after.length < minAfter) {
+        return NextResponse.json(
+          { error: `Нужно приложить минимум фото ПОСЛЕ: ${minAfter}` },
+          { status: 400 },
+        );
+      }
+
+      if (settingsRow.require_comment_mode === "ALWAYS") {
+        const noteStr = String(notes || "").trim();
+        if (!noteStr) {
+          return NextResponse.json(
+            { error: "Нужно заполнить комментарий к выполнению" },
+            { status: 400 },
+          );
+        }
       }
     }
 
@@ -109,7 +121,9 @@ export async function POST(
       photos_after,
       notes,
       performance_data,
-      status_mode: "OK",
+      status_mode,
+      issue_title,
+      issue_description,
     });
 
     return NextResponse.json({ success: true });

@@ -10,8 +10,7 @@ import {
     LayoutGrid,
     ClipboardList,
     ArrowUpRight,
-    Shirt,
-    Activity
+    Shirt
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -68,14 +67,6 @@ export default function EquipmentDashboard() {
             icon: <MapPin className="h-6 w-6" />,
             color: "text-violet-500",
             bg: "bg-violet-50"
-        },
-        {
-            title: "Мониторинг",
-            description: "Подключение агентов, телеметрия ПК и обновление игр",
-            href: `/clubs/${clubId}/equipment/monitoring`,
-            icon: <Activity className="h-6 w-6" />,
-            color: "text-rose-500",
-            bg: "bg-rose-50"
         },
         {
             title: "Инвентаризация",

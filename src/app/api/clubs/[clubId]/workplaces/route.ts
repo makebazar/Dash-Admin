@@ -77,6 +77,7 @@ export async function GET(
                     w.name,
                     w.zone,
                     w.assigned_user_id,
+                    w.is_available_to_all,
                     u.full_name as assigned_user_name,
                     COALESCE(ec.equipment_count, 0)::int as equipment_count
                 FROM club_workstations w
@@ -175,7 +176,7 @@ export async function GET(
       ),
       query(
         hasClubEquipmentTypes
-          ? `SELECT code, name_ru, icon
+          ? `SELECT code, name_ru, icon, default_cleaning_interval
                        FROM equipment_types
                        WHERE is_active = TRUE
                          AND (club_id IS NULL OR club_id = $1)
@@ -183,7 +184,7 @@ export async function GET(
                          CASE WHEN club_id = $1 THEN 0 ELSE 1 END,
                          sort_order,
                          name_ru`
-          : `SELECT code, name_ru, icon
+          : `SELECT code, name_ru, icon, default_cleaning_interval
                        FROM equipment_types
                        ORDER BY name_ru`,
         hasClubEquipmentTypes ? [clubId] : [],

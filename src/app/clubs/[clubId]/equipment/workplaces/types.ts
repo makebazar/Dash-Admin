@@ -6,6 +6,7 @@ export interface Workstation {
   zone: string;
   assigned_user_id?: string | null;
   assigned_user_name?: string | null;
+  is_available_to_all?: boolean;
   equipment_count?: number;
   binding_code?: string | null;
   agent_last_seen?: string | null;

@@ -35,7 +35,7 @@ import {
   formatDateKeyInTimezone,
   getMonthRangeInTimezone,
   isLaundryEquipmentType,
-  optimizeFileBeforeUpload,
+  uploadOptimizedImages,
 } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { QRCode } from "@/components/qr/QRCode";
@@ -55,6 +55,8 @@ interface MaintenanceTask {
   equipment_type: string;
   equipment_type_name: string;
   workstation_name?: string;
+  workstation_assigned_to_name?: string | null;
+  workstation_is_available_to_all?: boolean;
   due_date: string;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "REWORK";
   kpi_points: number;
@@ -89,6 +91,8 @@ const normalizeStatus = (value?: string | null) =>
 
 const normalizeTask = (task: any): MaintenanceTask => ({
   ...task,
+  workstation_assigned_to_name: task?.workstation_assigned_to_name,
+  workstation_is_available_to_all: task?.workstation_is_available_to_all,
   due_date: normalizeDateKey(task?.due_date),
   status: normalizeStatus(task?.status) as MaintenanceTask["status"],
   verification_status: task?.verification_status
@@ -416,24 +420,10 @@ function EmployeeTasksContent() {
     else setIsUploadingAfter(true);
 
     try {
-      const urls = await Promise.all(
-        files.map(async (file) => {
-          const optimized = await optimizeFileBeforeUpload(file, { maxDimension: 1200, quality: 0.82 });
-          const formData = new FormData();
-          formData.append("file", optimized);
-          const res = await fetch("/api/upload", {
-            method: "POST",
-            body: formData,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            return data.url;
-          }
-          return null;
-        })
-      );
-
-      const validUrls = urls.filter(Boolean) as string[];
+      const validUrls = await uploadOptimizedImages(files, {
+        maxDimension: 1200,
+        quality: 0.82,
+      });
       if (type === "BEFORE") {
         setPhotosBefore((prev) => [...prev, ...validUrls]);
       } else {
@@ -520,55 +510,23 @@ function EmployeeTasksContent() {
 
     setIsSubmittingTask(true);
     try {
-      // 1. Submit completion
       const completeRes = await fetch(`/api/clubs/${clubId}/equipment/maintenance/${selectedTaskForModal}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           photos_before: photosBefore,
           photos_after: photosAfter,
-          photos: [...photosBefore, ...photosAfter], // ensure standard photo lists are filled
+          photos: [...photosBefore, ...photosAfter],
           notes: completionNotes,
+          status_mode: completionStatus,
+          issue_title: issueTitle.trim() || null,
+          issue_description: issueDescription.trim() || null,
         }),
       });
 
       if (!completeRes.ok) {
         const errData = await completeRes.json();
         throw new Error(errData.error || "Ошибка при завершении задачи");
-      }
-
-      // 2. Submit issue or laundry if selected
-      const equipmentId = modalTaskDetails.equipment.id;
-      if (completionStatus === "ISSUE") {
-        const issueRes = await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}/issues`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: issueTitle,
-            description: issueDescription || null,
-            severity: "MEDIUM",
-            maintenance_task_id: selectedTaskForModal,
-          }),
-        });
-        if (!issueRes.ok) {
-          console.error("Failed to create issue automatically");
-        }
-      } else if (completionStatus === "LAUNDRY") {
-        const laundryRes = await fetch(`/api/clubs/${clubId}/laundry`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            equipment_id: equipmentId,
-            maintenance_task_id: selectedTaskForModal,
-            title: issueTitle,
-            description: issueDescription || null,
-            photos: photosAfter,
-            source: "EMPLOYEE_SERVICE",
-          }),
-        });
-        if (!laundryRes.ok) {
-          console.error("Failed to create laundry request automatically");
-        }
       }
 
       // Successful completion
@@ -943,7 +901,7 @@ function EmployeeTasksContent() {
 
               {/* Title & Progress Bar */}
               <div className="min-w-0 flex-1 flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h4
                     className={cn(
                       "font-bold text-sm sm:text-[15px] leading-tight tracking-tight truncate",
@@ -954,6 +912,15 @@ function EmployeeTasksContent() {
                   >
                     {task.equipment_name}
                   </h4>
+                  {isFree && task.workstation_assigned_to_name && (
+                    <Badge
+                      variant="outline"
+                      className="h-5 px-1.5 text-[9px] font-medium border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 whitespace-nowrap"
+                      title="Место доступно всем, ответственный закреплён"
+                    >
+                      Ответственный: {task.workstation_assigned_to_name}
+                    </Badge>
+                  )}
                   {isRejected && (
                     <Badge
                       variant="destructive"

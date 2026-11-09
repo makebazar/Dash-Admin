@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { recalculateClubMaintenanceBonuses } from '@/lib/maintenance-task-logic';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,6 +63,11 @@ export async function POST(
             [clubId, employeeId, roleId, schemeId]
         );
 
+        await recalculateClubMaintenanceBonuses({
+            clubId,
+            targetUserId: employeeId,
+        });
+
         return NextResponse.json({ success: true });
     } catch (error: any) {
         const status = error?.status;
@@ -95,6 +101,11 @@ export async function DELETE(
             `DELETE FROM employee_role_salary_assignments WHERE club_id = $1 AND user_id = $2 AND role_id = $3`,
             [clubId, employeeId, roleId]
         );
+
+        await recalculateClubMaintenanceBonuses({
+            clubId,
+            targetUserId: employeeId,
+        });
 
         return NextResponse.json({ success: true, removed: true });
     } catch (error: any) {

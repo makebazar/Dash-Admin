@@ -74,7 +74,13 @@ export function getMaintenanceProgress(
 
   let elapsedDays: number;
 
-  if (dueDate) {
+  // Если дата чистки позже или равна плановой дате, оборудование уже обслужено!
+  // Срок отсчитывается от даты последней чистки, а старая дата плана не приводит к штрафу.
+  const isCleanedAfterDue = Boolean(
+    dueDate && lastCleanedDate && lastCleanedDate >= dueDate,
+  );
+
+  if (dueDate && !isCleanedAfterDue) {
     const diffFromDue = Math.floor(
       (todayDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24),
     );

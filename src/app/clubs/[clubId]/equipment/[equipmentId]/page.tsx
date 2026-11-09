@@ -55,14 +55,18 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { cn, uploadOptimizedImages } from "@/lib/utils";
 import {
+  COMPONENT_TYPES,
   EQUIPMENT_STATUS_LABELS,
   type EquipmentStatus,
 } from "@/lib/equipment-status";
+import { ImageViewer } from "@/components/ui/image-viewer";
+import {
+  EquipmentHistoryTimeline,
+  type EquipmentHistoryLog,
+} from "../_components/EquipmentHistoryTimeline";
 
-type HistoryActionType = "MAINTENANCE" | "REWORK" | "MOVE" | "ISSUE";
-type HistoryFilter = "all" | "maintenance" | "move" | "issue";
 type EquipmentTab =
   | "details"
   | "maintenance"
@@ -120,26 +124,6 @@ interface Employee {
   dismissed_at?: string | null;
 }
 
-interface HistoryLog {
-  id: string;
-  action_type: HistoryActionType;
-  action: string;
-  date: string;
-  user_name: string | null;
-  details: string | null;
-  photos?: string[];
-}
-
-const COMPONENT_TYPES = [
-  "CPU",
-  "GPU",
-  "RAM",
-  "MOTHERBOARD",
-  "PSU",
-  "STORAGE",
-  "COOLING",
-];
-
 export default function EquipmentDetailsPage() {
   const { clubId, equipmentId } = useParams();
   const router = useRouter();
@@ -163,10 +147,9 @@ export default function EquipmentDetailsPage() {
   const [workstations, setWorkstations] = useState<Workstation[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [pcs, setPcs] = useState<Equipment[]>([]);
-  const [history, setHistory] = useState<HistoryLog[]>([]);
+  const [history, setHistory] = useState<EquipmentHistoryLog[]>([]);
   const [performanceLogs, setPerformanceLogs] = useState<any[]>([]);
   const [performanceMetrics, setPerformanceMetrics] = useState<any[]>([]);
-  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [historyPhotoViewer, setHistoryPhotoViewer] = useState<{
     images: string[];
     index: number;
@@ -189,16 +172,8 @@ export default function EquipmentDetailsPage() {
 
     setIsUploadingPhoto(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const uploadRes = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!uploadRes.ok) throw new Error("Failed to upload photo");
-      const { url } = await uploadRes.json();
+      const [url] = await uploadOptimizedImages([file]);
+      if (!url) throw new Error("Failed to upload photo");
 
       const newPhotos = [...(equipment?.photos || []), url];
 
@@ -276,59 +251,6 @@ export default function EquipmentDetailsPage() {
     [employees],
   );
 
-  const filteredHistory = useMemo(() => {
-    if (historyFilter === "all") return history;
-    return history.filter((log) => {
-      if (historyFilter === "maintenance") {
-        return (
-          log.action_type === "MAINTENANCE" || log.action_type === "REWORK"
-        );
-      }
-      if (historyFilter === "move") {
-        return log.action_type === "MOVE";
-      }
-      return log.action_type === "ISSUE";
-    });
-  }, [history, historyFilter]);
-
-  const groupedHistory = useMemo(() => {
-    return filteredHistory.reduce<
-      Array<{ label: string; items: HistoryLog[] }>
-    >((groups, log) => {
-      const itemDate = new Date(log.date);
-      const today = new Date();
-      const yesterday = new Date();
-      yesterday.setDate(today.getDate() - 1);
-
-      const isSameDay = (a: Date, b: Date) =>
-        a.getFullYear() === b.getFullYear() &&
-        a.getMonth() === b.getMonth() &&
-        a.getDate() === b.getDate();
-
-      const label = isSameDay(itemDate, today)
-        ? "Сегодня"
-        : isSameDay(itemDate, yesterday)
-          ? "Вчера"
-          : itemDate.toLocaleDateString("ru-RU", {
-              day: "numeric",
-              month: "long",
-              year:
-                today.getFullYear() === itemDate.getFullYear()
-                  ? undefined
-                  : "numeric",
-            });
-
-      const existingGroup = groups.find((group) => group.label === label);
-      if (existingGroup) {
-        existingGroup.items.push(log);
-      } else {
-        groups.push({ label, items: [log] });
-      }
-
-      return groups;
-    }, []);
-  }, [filteredHistory]);
-
   const fetchAvailableComponents = async () => {
     try {
       const res = await fetch(
@@ -387,7 +309,9 @@ export default function EquipmentDetailsPage() {
           fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
             cache: "no-store",
           }),
-          fetch(`/api/equipment-types?clubId=${clubId}`, { cache: "no-store" }),
+          fetch(`/api/clubs/${clubId}/equipment-types?activeOnly=true`, {
+            cache: "no-store",
+          }),
           fetch(`/api/clubs/${clubId}/workstations`, { cache: "no-store" }),
           fetch(`/api/clubs/${clubId}/employees`, { cache: "no-store" }),
           fetch(`/api/clubs/${clubId}/equipment?type=PC&limit=1000`, {
@@ -521,76 +445,6 @@ export default function EquipmentDetailsPage() {
       fetchPerformanceLogs();
     }
   }, [activeTab, equipment?.id]);
-
-  const getMaintenanceActionLabel = (action: string) => {
-    switch (action) {
-      case "CLEANING":
-        return "Плановое обслуживание";
-      case "REPAIR":
-        return "Ремонт";
-      case "INSPECTION":
-        return "Проверка";
-      case "REPLACEMENT":
-        return "Замена";
-      case "PERFORMANCE_CHECK":
-        return "Проверка производительности";
-      default:
-        return action;
-    }
-  };
-
-  const getHistoryPresentation = (log: HistoryLog) => {
-    if (log.action_type === "MAINTENANCE") {
-      return {
-        icon: <Wrench className="h-4 w-4" />,
-        badgeLabel: "Обслуживание",
-        badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
-        title: getMaintenanceActionLabel(log.action),
-        description:
-          log.details?.trim() ||
-          "Задача обслуживания выполнена без дополнительного комментария.",
-      };
-    }
-
-    if (log.action_type === "MOVE") {
-      return {
-        icon: <ArrowRightLeft className="h-4 w-4" />,
-        badgeLabel: "Перемещение",
-        badgeClassName: "border-blue-200 bg-blue-50 text-blue-700",
-        title: "Перемещение оборудования",
-        description:
-          log.details?.trim() ||
-          "Оборудование было перемещено без указанной причины.",
-      };
-    }
-
-    if (log.action_type === "REWORK") {
-      return {
-        icon: <RefreshCw className="h-4 w-4" />,
-        badgeLabel: "Доработка",
-        badgeClassName: "border-amber-200 bg-amber-50 text-amber-700",
-        title: `Отправлено на доработку: ${getMaintenanceActionLabel(log.action)}`,
-        description:
-          log.details?.trim() ||
-          "Задача возвращена на доработку без указанного комментария.",
-      };
-    }
-
-    return {
-      icon: <AlertCircle className="h-4 w-4" />,
-      badgeLabel: "Инцидент",
-      badgeClassName: "border-rose-200 bg-rose-50 text-rose-700",
-      title: log.action,
-      description:
-        log.details?.trim() || "Инцидент зафиксирован без подробного описания.",
-    };
-  };
-
-  const formatHistoryTime = (date: string) =>
-    new Date(date).toLocaleTimeString("ru-RU", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
 
   const handleSave = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -1563,179 +1417,13 @@ export default function EquipmentDetailsPage() {
                 </TabsContent>
 
                 <TabsContent value="history" className="mt-0">
-                  <div className="space-y-5">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <h3 className="text-base font-semibold text-slate-950">
-                          История событий
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Перемещения, обслуживание и инциденты по этому
-                          оборудованию.
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { value: "all", label: "Все" },
-                          { value: "maintenance", label: "Обслуживание" },
-                          { value: "move", label: "Перемещения" },
-                          { value: "issue", label: "Инциденты" },
-                        ].map((filterOption) => (
-                          <Button
-                            key={filterOption.value}
-                            type="button"
-                            variant={
-                              historyFilter === filterOption.value
-                                ? "default"
-                                : "outline"
-                            }
-                            size="sm"
-                            className={cn(
-                              "h-8 rounded-full px-3 text-xs",
-                              historyFilter === filterOption.value &&
-                                "bg-primary hover:bg-primary/90",
-                            )}
-                            onClick={() =>
-                              setHistoryFilter(
-                                filterOption.value as HistoryFilter,
-                              )
-                            }
-                          >
-                            {filterOption.label}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {isHistoryLoading ? (
-                      <div className="flex justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-slate-300" />
-                      </div>
-                    ) : history.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed bg-muted px-4 py-10 text-center text-sm italic text-muted-foreground">
-                        История изменений пуста
-                      </div>
-                    ) : filteredHistory.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed bg-muted px-4 py-10 text-center text-sm italic text-muted-foreground">
-                        Для выбранного фильтра событий пока нет
-                      </div>
-                    ) : (
-                      groupedHistory.map((group) => (
-                        <div key={group.label} className="space-y-3">
-                          <div className="px-1 py-1">
-                            <div className="inline-flex items-center rounded-full border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
-                              {group.label}
-                            </div>
-                          </div>
-
-                          <div className="space-y-3">
-                            {group.items.map((log) => {
-                              const presentation = getHistoryPresentation(log);
-
-                              return (
-                                <div
-                                  key={`${group.label}-${log.id}`}
-                                  className="relative pl-12"
-                                >
-                                  <div className="absolute top-0 bottom-0 left-4.5 w-px bg-slate-200" />
-                                  <div
-                                    className={cn(
-                                      "absolute left-0 top-5 flex h-9 w-9 items-center justify-center rounded-xl border bg-card",
-                                      presentation.badgeClassName,
-                                    )}
-                                  >
-                                    {presentation.icon}
-                                  </div>
-
-                                  <div className="rounded-2xl border bg-card p-4">
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                      <div className="min-w-0 space-y-2">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <Badge
-                                            variant="outline"
-                                            className={cn(
-                                              "rounded-full border text-[10px] font-semibold",
-                                              presentation.badgeClassName,
-                                            )}
-                                          >
-                                            {presentation.badgeLabel}
-                                          </Badge>
-                                          <span className="text-xs text-muted-foreground/70">
-                                            {formatHistoryTime(log.date)}
-                                          </span>
-                                        </div>
-                                        <div>
-                                          <p className="text-sm font-semibold text-slate-950">
-                                            {presentation.title}
-                                          </p>
-                                          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                                            {presentation.description}
-                                          </p>
-                                        </div>
-
-                                        {Array.isArray(log.photos) &&
-                                          log.photos.length > 0 && (
-                                            <div className="space-y-2 pt-1">
-                                              <div className="flex items-center justify-between gap-3">
-                                                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                                  Прикреплённые фото
-                                                </p>
-                                                <span className="text-[11px] text-muted-foreground/70">
-                                                  {log.photos.length} шт.
-                                                </span>
-                                              </div>
-
-                                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                                                {log.photos.map(
-                                                  (photo, photoIndex) => (
-                                                    <button
-                                                      key={`${log.id}-photo-${photoIndex}`}
-                                                      type="button"
-                                                      onClick={() =>
-                                                        openHistoryPhotoViewer(
-                                                          log.photos || [],
-                                                          photoIndex,
-                                                        )
-                                                      }
-                                                      className="relative aspect-4/3 overflow-hidden rounded-xl border bg-accent"
-                                                    >
-                                                      <img
-                                                        src={photo}
-                                                        alt={`Фото события ${presentation.title} ${photoIndex + 1}`}
-                                                        className="h-full w-full object-cover"
-                                                      />
-                                                      <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/55 to-transparent px-2 py-1 text-left text-[10px] font-medium text-primary-foreground">
-                                                        Открыть
-                                                      </div>
-                                                    </button>
-                                                  ),
-                                                )}
-                                              </div>
-                                            </div>
-                                          )}
-                                      </div>
-
-                                      <div className="shrink-0 rounded-xl bg-muted px-3 py-2 text-right">
-                                        <p className="text-[11px] font-semibold text-foreground">
-                                          {log.user_name || "Система"}
-                                        </p>
-                                        <p className="mt-0.5 text-[10px] text-muted-foreground/70">
-                                          {new Date(
-                                            log.date,
-                                          ).toLocaleDateString("ru-RU")}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                  <EquipmentHistoryTimeline
+                    title="История событий"
+                    description="Перемещения, обслуживание и инциденты по этому оборудованию."
+                    history={history}
+                    isLoading={isHistoryLoading}
+                    onOpenPhotos={openHistoryPhotoViewer}
+                  />
                 </TabsContent>
 
                 <TabsContent value="files" className="mt-0 space-y-6">
@@ -1901,103 +1589,20 @@ export default function EquipmentDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={Boolean(historyPhotoViewer)}
-        onOpenChange={(open) => {
-          if (!open) closeHistoryPhotoViewer();
-        }}
-      >
-        <DialogContent className="left-0 top-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 rounded-none border-0 bg-primary p-0 text-primary-foreground shadow-none [&>button]:hidden">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Просмотр фото из истории оборудования</DialogTitle>
-            <DialogDescription>
-              Полноэкранный просмотр прикреплённых фотографий с возможностью
-              переключения между изображениями.
-            </DialogDescription>
-          </DialogHeader>
-          {historyPhotoViewer && (
-            <div className="relative flex h-screen flex-col">
-              <div className="pointer-events-none absolute inset-x-0 top-4 z-20 flex justify-center px-4">
-                <div className="pointer-events-auto flex max-w-[90vw] items-center gap-2 overflow-x-auto rounded-full border border-white/10 bg-primary/80 p-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={showPrevHistoryPhoto}
-                    disabled={historyPhotoViewer.index === 0}
-                    className="h-8 w-8 shrink-0 text-primary-foreground hover:bg-card/20 disabled:opacity-30"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="w-24 shrink-0 text-center text-xs text-primary-foreground/70">
-                    {historyPhotoViewer.index + 1} /{" "}
-                    {historyPhotoViewer.images.length}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={showNextHistoryPhoto}
-                    disabled={
-                      historyPhotoViewer.index >=
-                      historyPhotoViewer.images.length - 1
-                    }
-                    className="h-8 w-8 shrink-0 text-primary-foreground hover:bg-card/20 disabled:opacity-30"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <div className="mx-1 h-4 w-px shrink-0 bg-card/20" />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={closeHistoryPhotoViewer}
-                    className="h-8 w-8 shrink-0 text-primary-foreground hover:bg-card/20"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {historyPhotoViewer.images.length > 1 && (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={showPrevHistoryPhoto}
-                    disabled={historyPhotoViewer.index === 0}
-                    className="absolute bottom-8 left-6 z-20 h-12 w-12 rounded-full border border-white/10 bg-primary/80 text-primary-foreground hover:bg-card/20 disabled:opacity-30 md:top-1/2 md:bottom-auto md:-translate-y-1/2"
-                  >
-                    <ChevronLeft className="h-6 w-6" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={showNextHistoryPhoto}
-                    disabled={
-                      historyPhotoViewer.index >=
-                      historyPhotoViewer.images.length - 1
-                    }
-                    className="absolute bottom-8 right-6 z-20 h-12 w-12 rounded-full border border-white/10 bg-primary/80 text-primary-foreground hover:bg-card/20 disabled:opacity-30 md:top-1/2 md:bottom-auto md:-translate-y-1/2"
-                  >
-                    <ChevronRight className="h-6 w-6" />
-                  </Button>
-                </>
-              )}
-
-              <div className="flex min-h-0 flex-1 items-center justify-center p-4 md:p-8">
-                <img
-                  src={historyPhotoViewer.images[historyPhotoViewer.index]}
-                  alt="Фото из истории оборудования"
-                  className="max-h-full max-w-full object-contain"
-                />
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ImageViewer
+        isOpen={Boolean(historyPhotoViewer)}
+        onClose={closeHistoryPhotoViewer}
+        src={historyPhotoViewer?.images[historyPhotoViewer.index] || ""}
+        alt="Фото оборудования"
+        images={historyPhotoViewer?.images}
+        onNext={showNextHistoryPhoto}
+        onPrev={showPrevHistoryPhoto}
+        hasNext={
+          Boolean(historyPhotoViewer) &&
+          historyPhotoViewer!.index < historyPhotoViewer!.images.length - 1
+        }
+        hasPrev={Boolean(historyPhotoViewer) && historyPhotoViewer!.index > 0}
+      />
 
       {/* Add Component Dialog */}
       <Dialog

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { query } from '@/db';
 import { cookies } from 'next/headers';
 import { ensureOwnerSubscriptionActive } from '@/lib/club-subscription-guard';
+import { recalculateClubMaintenanceBonuses } from '@/lib/maintenance-task-logic';
 
 // GET: Get single salary scheme with all versions
 export async function GET(
@@ -149,6 +150,7 @@ export async function PATCH(
             );
 
             newVersion = versionResult.rows[0];
+            await recalculateClubMaintenanceBonuses({ clubId });
         }
 
         return NextResponse.json({
@@ -189,6 +191,8 @@ export async function DELETE(
             `DELETE FROM employee_salary_assignments WHERE scheme_id = $1`,
             [schemeId]
         );
+
+        await recalculateClubMaintenanceBonuses({ clubId });
 
         return NextResponse.json({ success: true });
 

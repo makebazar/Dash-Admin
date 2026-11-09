@@ -33,6 +33,7 @@ import {
   Gamepad2,
   Trophy,
   Megaphone,
+  Palette,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -258,6 +259,14 @@ export function ClubSidebarContent({
       ),
       visible:
         !isExpiredForOwnerUi && (isFullAccess || userRole === "Управляющий"),
+    },
+    {
+      href: `/clubs/${clubId}/studio`,
+      label: "Студия постов",
+      icon: (
+        <Palette className={cn("shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
+      ),
+      visible: false, // Временно скрыто по запросу
     },
     {
       href: `/clubs/${clubId}/kb`,

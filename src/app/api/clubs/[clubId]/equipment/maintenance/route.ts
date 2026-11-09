@@ -85,7 +85,10 @@ export async function GET(
                 END as rework_days,
                 e.assignment_mode as equipment_assignment_mode,
                 e.assigned_user_id as equipment_assigned_user_id,
+                e.is_available_to_all as equipment_is_available_to_all,
                 w.assigned_user_id as workstation_assigned_user_id,
+                COALESCE(w.is_available_to_all, false) as workstation_is_available_to_all,
+                COALESCE(e.is_available_to_all, w.is_available_to_all, false) as is_available_to_all,
                 wu.full_name as workstation_assigned_to_name,
                 ${effectiveTaskAssigneeSql} as assigned_user_id,
                 e.name as equipment_name,
@@ -146,7 +149,9 @@ export async function GET(
       paramIndex++;
     } else if (assignedTo) {
       if (assignedTo === "unassigned") {
-        sql += ` AND ${effectiveTaskAssigneeSql} IS NULL`;
+        sql += ` AND (${effectiveTaskAssigneeSql} IS NULL OR (COALESCE(e.is_available_to_all, w.is_available_to_all, false) = TRUE AND (${effectiveTaskAssigneeSql} IS DISTINCT FROM $${paramIndex}) AND ${effectiveStatusSql} IN ('PENDING', 'REWORK')))`;
+        queryParams.push(userId);
+        paramIndex++;
       } else {
         sql += ` AND ${effectiveTaskAssigneeSql} = $${paramIndex}`;
         queryParams.push(assignedTo);
@@ -256,7 +261,9 @@ export async function GET(
         : null;
 
     if (assignedTo === "unassigned") {
-      statsConditions.push(`${effectiveTaskAssigneeSql} IS NULL`);
+      statsConditions.push(`(${effectiveTaskAssigneeSql} IS NULL OR (COALESCE(e.is_available_to_all, w.is_available_to_all, false) = TRUE AND (${effectiveTaskAssigneeSql} IS DISTINCT FROM $${statsParamIndex}) AND ${effectiveStatusSql} IN ('PENDING', 'REWORK')))`);
+      statsParams.push(userId);
+      statsParamIndex++;
     } else if (statsAssignee) {
       statsConditions.push(`${effectiveTaskAssigneeSql} = $${statsParamIndex}`);
       statsParams.push(statsAssignee);
@@ -742,6 +749,20 @@ export async function POST(
 
       if (activeTask) {
         if (activeTask.status === "PENDING") {
+          const currentDueStr =
+            typeof activeTask.due_date === "string" &&
+            /^\d{4}-\d{2}-\d{2}$/.test(activeTask.due_date)
+              ? activeTask.due_date
+              : formatLocalDate(new Date(activeTask.due_date));
+          const currentAssignedId = activeTask.assigned_user_id ?? null;
+
+          if (
+            currentDueStr === finalDueDate &&
+            currentAssignedId === finalAssignedUserId
+          ) {
+            continue;
+          }
+
           const conflictRes = await query(
             `SELECT id
                          FROM equipment_maintenance_tasks
@@ -758,6 +779,7 @@ export async function POST(
               `DELETE FROM equipment_maintenance_tasks WHERE id = $1`,
               [activeTask.id],
             );
+            createdCount++;
           } else {
             await query(
               `UPDATE equipment_maintenance_tasks
@@ -766,6 +788,7 @@ export async function POST(
                              WHERE id = $1`,
               [activeTask.id, finalDueDate, finalAssignedUserId],
             );
+            createdCount++;
           }
         } else if (
           activeTask.status === "REWORK" &&
@@ -779,6 +802,7 @@ export async function POST(
              WHERE id = $1`,
             [activeTask.id, finalAssignedUserId],
           );
+          createdCount++;
         }
         continue;
       }

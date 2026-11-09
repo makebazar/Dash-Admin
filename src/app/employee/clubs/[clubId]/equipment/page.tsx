@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 import { renderEquipmentIcon } from "@/lib/equipment-icons";
 import { getMaintenanceProgress } from "@/lib/maintenance-progress";
 import { MaintenanceSegmentedBar } from "@/components/equipment/MaintenanceSegmentedBar";
+import { COMPONENT_TYPES } from "@/lib/equipment-status";
 
 // --- Types ---
 
@@ -85,51 +86,6 @@ interface Zone {
   assigned_user_id?: string | null;
   assigned_user_name?: string | null;
 }
-
-const getMaintenanceStatus = (
-  item: Equipment,
-): "overdue" | "serviced" | "disabled" | "unknown" => {
-  if (item.maintenance_enabled === false) return "disabled";
-
-  const intervalDays = Math.max(
-    1,
-    Number(
-      item.cleaning_interval_override_days ?? item.cleaning_interval_days,
-    ) || 30,
-  );
-  if (!item.last_cleaned_at) return "overdue";
-
-  const lastCleaned = new Date(item.last_cleaned_at);
-  if (Number.isNaN(lastCleaned.getTime())) return "unknown";
-
-  const dueDate = new Date(lastCleaned);
-  dueDate.setDate(dueDate.getDate() + intervalDays);
-
-  return dueDate.getTime() < Date.now() ? "overdue" : "serviced";
-};
-
-const getMaintenanceOverdueDays = (item: Equipment): number => {
-  if (item.maintenance_enabled === false) return 0;
-
-  const intervalDays = Math.max(
-    1,
-    Number(
-      item.cleaning_interval_override_days ?? item.cleaning_interval_days,
-    ) || 30,
-  );
-  if (!item.last_cleaned_at) return intervalDays;
-
-  const lastCleaned = new Date(item.last_cleaned_at);
-  if (Number.isNaN(lastCleaned.getTime())) return 0;
-
-  const dueDate = new Date(lastCleaned);
-  dueDate.setDate(dueDate.getDate() + intervalDays);
-
-  const overdueMs = Date.now() - dueDate.getTime();
-  if (overdueMs <= 0) return 0;
-
-  return Math.max(1, Math.floor(overdueMs / (1000 * 60 * 60 * 24)));
-};
 
 export default function EmployeeEquipmentPage() {
   const { clubId } = useParams();
@@ -387,28 +343,6 @@ export default function EmployeeEquipmentPage() {
     return new Map(zoneList.map((zone) => [zone.name, zone]));
   }, [zoneList]);
 
-  const maintenanceStatusByEquipmentId = useMemo(() => {
-    const map = new Map<
-      string,
-      "overdue" | "serviced" | "disabled" | "unknown"
-    >();
-    for (const item of equipment) {
-      map.set(item.id, getMaintenanceStatus(item));
-    }
-    return map;
-  }, [equipment]);
-
-  const overdueDaysByEquipmentId = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const item of equipment) {
-      const overdueDays = getMaintenanceOverdueDays(item);
-      if (overdueDays > 0) {
-        map.set(item.id, overdueDays);
-      }
-    }
-    return map;
-  }, [equipment]);
-
   const activeIssueCountByEquipmentId = useMemo(() => {
     const map = new Map<string, number>();
     for (const item of equipment) {
@@ -519,15 +453,6 @@ export default function EmployeeEquipmentPage() {
                     );
 
                     const pcItem = wsEquipment.find((i) => i.type === "PC");
-                    const COMPONENT_TYPES = [
-                      "CPU",
-                      "GPU",
-                      "RAM",
-                      "MOTHERBOARD",
-                      "PSU",
-                      "STORAGE",
-                      "COOLING",
-                    ];
                     const componentItems = wsEquipment.filter(
                       (i) =>
                         i.type !== "PC" &&
@@ -736,15 +661,6 @@ export default function EmployeeEquipmentPage() {
             ) : (
               (() => {
                 const pcItem = activeEquipment.find((i) => i.type === "PC");
-                const COMPONENT_TYPES = [
-                  "CPU",
-                  "GPU",
-                  "RAM",
-                  "MOTHERBOARD",
-                  "PSU",
-                  "STORAGE",
-                  "COOLING",
-                ];
                 const componentItems = activeEquipment.filter(
                   (i) =>
                     i.type !== "PC" &&

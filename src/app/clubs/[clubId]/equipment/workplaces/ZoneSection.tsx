@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { getMaintenanceProgress } from "@/lib/maintenance-progress";
 import { MaintenanceSegmentedBar } from "@/components/equipment/MaintenanceSegmentedBar";
+import { COMPONENT_TYPES } from "@/lib/equipment-status";
 import type { ZoneSectionProps } from "./types";
 
 const WORKSTATION_CARD_PLACEHOLDER_HEIGHT = 320;
@@ -245,15 +246,6 @@ export default memo(function ZoneSection({
           const pcItem = sortedEquipment.find(
             (i) => i.type === "PC" || i.base_type_code === "PC",
           );
-          const COMPONENT_TYPES = [
-            "CPU",
-            "GPU",
-            "RAM",
-            "MOTHERBOARD",
-            "PSU",
-            "STORAGE",
-            "COOLING",
-          ];
           const componentItems = sortedEquipment.filter(
             (i) =>
               i.id !== pcItem?.id &&

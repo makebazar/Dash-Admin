@@ -284,6 +284,7 @@ export async function PATCH(
       "maintenance_enabled",
       "assigned_user_id",
       "assignment_mode",
+      "is_available_to_all",
       "cpu_thermal_paste_last_changed_at",
       "cpu_thermal_paste_interval_days",
       "cpu_thermal_paste_type",

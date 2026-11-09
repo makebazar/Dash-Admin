@@ -27,7 +27,7 @@ import { ImageViewer } from "@/components/ui/image-viewer";
 import { QRCode } from "@/components/qr/QRCode";
 import {
   cn,
-  optimizeFileBeforeUpload,
+  uploadOptimizedImages,
   isLaundryEquipmentType,
 } from "@/lib/utils";
 
@@ -337,14 +337,7 @@ export default function MaintenanceTerminalPage() {
 
     setIsUploadingPhoto(true);
     try {
-      const newFiles = Array.from(files);
-      const optimized = await Promise.all(
-        newFiles.map((f) =>
-          optimizeFileBeforeUpload(f, { maxDimension: 1000 }),
-        ),
-      );
-
-      const urls = await uploadPhotos(optimized);
+      const urls = await uploadOptimizedImages(files, { maxDimension: 1000 });
 
       setReports((prev) => {
         const existing = prev[currentTask.id] || {
@@ -521,26 +514,6 @@ export default function MaintenanceTerminalPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const uploadPhotos = async (files: File[]) => {
-    if (files.length === 0) return [];
-
-    return Promise.all(
-      files.map(async (file) => {
-        const formData = new FormData();
-        formData.append("file", file);
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          return data.url;
-        }
-        return null;
-      }),
-    ).then((urls) => urls.filter(Boolean) as string[]);
   };
 
   if (isLoading)

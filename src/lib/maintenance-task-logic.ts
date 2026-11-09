@@ -357,131 +357,21 @@ export async function completeMaintenanceTask(params: {
   const responsibleUserIdAtCompletion =
     task.effective_task_assigned_user_id || userId;
 
-  const rolesRes = await query(
-    `SELECT role_id FROM club_employee_roles WHERE club_id = $1 AND user_id = $2 ORDER BY priority ASC`,
-    [clubId, userId],
-  );
-
-  const rolesList = rolesRes.rows.map((r: any) => r.role_id);
-
-  if (rolesList.length === 0) {
-    const userRes = await query(
-      `SELECT role_id FROM users WHERE id = $1`,
-      [userId],
-    );
-    if (userRes.rows[0]?.role_id) {
-      rolesList.push(userRes.rows[0].role_id);
-    }
-  }
-
-  let schemeFormula: any = null;
-
-  if (rolesList.length > 0) {
-    for (const roleId of rolesList) {
-      const roleSchemeRes = await query(
-        `SELECT sv.formula
-                 FROM employee_role_salary_assignments ersa
-                 JOIN salary_schemes ss ON ersa.scheme_id = ss.id
-                 JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
-                 WHERE ersa.user_id = $1 AND ersa.club_id = $2 AND ersa.role_id = $3 AND ss.id IS NOT NULL
-                 ORDER BY sv.version DESC
-                 LIMIT 1`,
-        [userId, clubId, roleId],
-      );
-      if (roleSchemeRes.rows.length > 0) {
-        schemeFormula = roleSchemeRes.rows[0]?.formula;
-        break;
-      }
-    }
-  }
-
-  if (!schemeFormula) {
-    const userSchemeRes = await query(
-      `SELECT sv.formula
-             FROM employee_salary_assignments esa
-             JOIN salary_schemes ss ON esa.scheme_id = ss.id
-             JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
-             WHERE esa.user_id = $1 AND esa.club_id = $2 AND ss.id IS NOT NULL
-             ORDER BY sv.version DESC
-             LIMIT 1`,
-      [userId, clubId],
-    );
-    if (userSchemeRes.rows.length > 0) {
-      schemeFormula = userSchemeRes.rows[0]?.formula;
-    }
-  }
-
-  const finalSchemeFormula = schemeFormula || {};
-  const bonuses = finalSchemeFormula.bonuses || [];
-  const kpiBonus = bonuses.find(
-    (b: any) => b.type === "maintenance_kpi" || b.type === "MAINTENANCE_KPI",
-  );
-
-  let bonusEarned = 0;
-  if (kpiBonus) {
-    const perTypeRewards =
-      kpiBonus.per_equipment_type_rewards ||
-      kpiBonus.equipment_type_rewards ||
-      kpiBonus.equipment_types ||
-      [];
-    const equipmentTypeCode = task.equipment_type;
-    const typeReward = perTypeRewards.find((r: any) => {
-      const rewardCode = (
-        r.equipment_type_code ||
-        r.type_code ||
-        r.code ||
-        r.type ||
-        ""
-      )
-        .trim()
-        .toLowerCase();
-      return rewardCode === (equipmentTypeCode || "").trim().toLowerCase();
-    });
-    const baseValue = typeReward
-      ? Number(
-          typeReward.amount ||
-            typeReward.reward ||
-            typeReward.value ||
-            typeReward.bonus ||
-            0,
-        )
-      : Number(kpiBonus.amount) || 0;
-    bonusEarned = baseValue;
-  }
-
+  const kpiBonus = await resolveUserMaintenanceKpiBonus(clubId, userId);
   const completedDateKey = formatDateKeyInTimezone(new Date(), clubTimezone);
-  const dueDateKey =
-    typeof task.due_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(task.due_date)
-      ? task.due_date
-      : formatDateKeyInTimezone(new Date(task.due_date), clubTimezone);
-  const rawOverdueDays = Math.max(
-    0,
-    Math.floor(
-      (parseDateKey(completedDateKey).getTime() -
-        parseDateKey(dueDateKey).getTime()) /
-        (1000 * 60 * 60 * 24),
-    ),
-  );
-  const overdueDaysAtCompletion = isFreePool ? 0 : rawOverdueDays;
-  const wasOverdue = overdueDaysAtCompletion > 0;
-
-  const overduePenalty = isFreePool
-    ? 0
-    : calculateMaintenanceOverduePenalty(
-        {
-          overdue_tolerance_days: kpiBonus?.overdue_tolerance_days,
-          overdue_penalty_mode: kpiBonus?.overdue_penalty_mode,
-          overdue_penalty_amount: kpiBonus?.overdue_penalty_amount,
-          late_penalty_multiplier: kpiBonus?.late_penalty_multiplier,
-        },
-        [
-          {
-            overdue_days_at_completion: overdueDaysAtCompletion,
-            bonus_earned: bonusEarned,
-            was_overdue: wasOverdue,
-          },
-        ],
-      ).total;
+  const {
+    bonusEarned,
+    overdueDaysAtCompletion,
+    wasOverdue,
+    overduePenalty,
+  } = computeMaintenanceTaskBonusAndPenalty({
+    kpiBonus,
+    equipmentType: task.equipment_type,
+    completedDateKey,
+    dueDate: task.due_date,
+    clubTimezone,
+    isFreePool,
+  });
 
   const allPhotos = [...photos_before, ...photos_after];
 
@@ -687,3 +577,404 @@ export async function completeMaintenanceTask(params: {
 
   return { success: true, task: completedRes.rows[0] };
 }
+
+export async function approveMaintenanceTasks(params: {
+  clubId: string | number;
+  taskIds: string[];
+  actorUserId: string;
+  comment?: string | null;
+}) {
+  const { clubId, taskIds, actorUserId, comment = null } = params;
+  if (!taskIds.length) return { approvedIds: [] as string[] };
+
+  const tasksRes = await query(
+    `UPDATE equipment_maintenance_tasks mt
+     SET verification_status = 'APPROVED',
+         verified_at = CURRENT_TIMESTAMP,
+         verified_by = $3,
+         verification_note = $4,
+         updated_at = CURRENT_TIMESTAMP
+     FROM equipment e
+     WHERE mt.equipment_id = e.id
+       AND mt.id = ANY($1::uuid[])
+       AND e.club_id = $2
+       AND mt.status = 'COMPLETED'
+     RETURNING mt.id, mt.notes, mt.photos, mt.cycle_no`,
+    [taskIds, clubId, actorUserId, comment || null],
+  );
+
+  for (const task of tasksRes.rows) {
+    await appendMaintenanceTaskEvent({
+      taskId: task.id,
+      cycleNo: Math.max(Number(task.cycle_no || 1), 1),
+      eventType: "APPROVED",
+      actorUserId,
+      note: comment || null,
+      taskNotes: task.notes || null,
+      photos: task.photos || [],
+    });
+  }
+
+  return { approvedIds: tasksRes.rows.map((r) => String(r.id)) };
+}
+
+export async function propagateWorkstationAssigneeToEquipment(params: {
+  clubId: string | number;
+  workstationIds: string[];
+  assignedUserId: string | null;
+  forceMaintenanceEnabled?: boolean;
+}) {
+  const {
+    clubId,
+    workstationIds,
+    assignedUserId,
+    forceMaintenanceEnabled = true,
+  } = params;
+
+  if (!workstationIds.length) return;
+
+  await query(
+    `UPDATE equipment
+     SET assigned_user_id = $1::uuid,
+         assignment_mode = CASE WHEN $1::uuid IS NULL THEN 'FREE_POOL' ELSE 'DIRECT' END,
+         maintenance_enabled = CASE WHEN $2::boolean THEN TRUE ELSE (CASE WHEN $1::uuid IS NULL THEN FALSE ELSE TRUE END) END,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE workstation_id = ANY($3::uuid[])`,
+    [assignedUserId, forceMaintenanceEnabled, workstationIds],
+  );
+
+  await query(
+    `UPDATE equipment_maintenance_tasks
+     SET status = CASE
+           WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN
+             CASE WHEN verification_status = 'REJECTED' THEN 'REWORK' ELSE 'PENDING' END
+           ELSE status
+         END,
+         session_id = CASE
+           WHEN assigned_user_id IS DISTINCT FROM $1::uuid THEN NULL
+           ELSE session_id
+         END,
+         assigned_user_id = $1::uuid,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE equipment_id IN (
+        SELECT id FROM equipment WHERE workstation_id = ANY($2::uuid[])
+     ) AND status IN ('PENDING', 'IN_PROGRESS', 'REWORK')`,
+    [assignedUserId, workstationIds],
+  );
+
+  if (assignedUserId) {
+    const clubRes = await query(
+      `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone
+       FROM clubs
+       WHERE id = $1`,
+      [clubId],
+    );
+    const today = formatDateKeyInTimezone(
+      new Date(),
+      clubRes.rows[0]?.timezone || "Europe/Moscow",
+    );
+    const nextShift = await query(
+      `SELECT TO_CHAR(date, 'YYYY-MM-DD') as date
+       FROM work_schedules
+       WHERE club_id = $1 AND user_id = $2 AND date >= $3
+       ORDER BY date ASC LIMIT 1`,
+      [clubId, assignedUserId, today],
+    );
+
+    const shiftDateStr =
+      nextShift.rowCount && nextShift.rowCount > 0
+        ? String(nextShift.rows[0].date)
+        : today;
+
+    await query(
+      `UPDATE equipment_maintenance_tasks
+       SET due_date = $1
+       WHERE equipment_id IN (
+          SELECT id FROM equipment WHERE workstation_id = ANY($2::uuid[])
+       ) AND status = 'PENDING' AND assigned_user_id = $3`,
+      [shiftDateStr, workstationIds, assignedUserId],
+    );
+  }
+}
+
+export async function resolveUserMaintenanceKpiBonus(
+  clubId: string | number,
+  userId: string,
+): Promise<any | null> {
+  const rolesRes = await query(
+    `SELECT role_id FROM club_employee_roles WHERE club_id = $1 AND user_id = $2 ORDER BY priority ASC`,
+    [clubId, userId],
+  );
+
+  const rolesList = rolesRes.rows.map((r: any) => r.role_id);
+
+  if (rolesList.length === 0) {
+    const userRes = await query(
+      `SELECT role_id FROM users WHERE id = $1`,
+      [userId],
+    );
+    if (userRes.rows[0]?.role_id) {
+      rolesList.push(userRes.rows[0].role_id);
+    }
+  }
+
+  let schemeFormula: any = null;
+
+  if (rolesList.length > 0) {
+    for (const roleId of rolesList) {
+      const roleSchemeRes = await query(
+        `SELECT sv.formula
+         FROM employee_role_salary_assignments ersa
+         JOIN salary_schemes ss ON ersa.scheme_id = ss.id
+         JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
+         WHERE ersa.user_id = $1 AND ersa.club_id = $2 AND ersa.role_id = $3 AND ss.id IS NOT NULL
+         ORDER BY sv.version DESC
+         LIMIT 1`,
+        [userId, clubId, roleId],
+      );
+      if (roleSchemeRes.rows.length > 0) {
+        schemeFormula = roleSchemeRes.rows[0]?.formula;
+        break;
+      }
+    }
+  }
+
+  if (!schemeFormula) {
+    const userSchemeRes = await query(
+      `SELECT sv.formula
+       FROM employee_salary_assignments esa
+       JOIN salary_schemes ss ON esa.scheme_id = ss.id
+       JOIN salary_scheme_versions sv ON sv.scheme_id = ss.id
+       WHERE esa.user_id = $1 AND esa.club_id = $2 AND ss.id IS NOT NULL
+       ORDER BY sv.version DESC
+       LIMIT 1`,
+      [userId, clubId],
+    );
+    if (userSchemeRes.rows.length > 0) {
+      schemeFormula = userSchemeRes.rows[0]?.formula;
+    }
+  }
+
+  const bonuses = schemeFormula?.bonuses || [];
+  return (
+    bonuses.find(
+      (b: any) => b.type === "maintenance_kpi" || b.type === "MAINTENANCE_KPI",
+    ) || null
+  );
+}
+
+export function computeMaintenanceTaskBonusAndPenalty(params: {
+  kpiBonus: any;
+  equipmentType: string | null | undefined;
+  completedDateKey: string;
+  dueDate: string | Date;
+  clubTimezone: string;
+  isFreePool: boolean;
+}) {
+  const {
+    kpiBonus,
+    equipmentType,
+    completedDateKey,
+    dueDate,
+    clubTimezone,
+    isFreePool,
+  } = params;
+
+  let bonusEarned = 0;
+  if (kpiBonus) {
+    const perTypeRewards =
+      kpiBonus.per_equipment_type_rewards ||
+      kpiBonus.equipment_type_rewards ||
+      kpiBonus.equipment_types ||
+      [];
+    const eqCode = (equipmentType || "").trim().toLowerCase();
+    const typeReward = perTypeRewards.find((r: any) => {
+      const rewardCode = (
+        r.equipment_type_code ||
+        r.type_code ||
+        r.code ||
+        r.type ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+      return rewardCode === eqCode;
+    });
+    bonusEarned = typeReward
+      ? Number(
+          typeReward.amount ||
+            typeReward.reward ||
+            typeReward.value ||
+            typeReward.bonus ||
+            0,
+        )
+      : Number(kpiBonus.amount) || 0;
+  }
+
+  const dueDateKey =
+    typeof dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)
+      ? dueDate
+      : formatDateKeyInTimezone(new Date(dueDate), clubTimezone);
+  const rawOverdueDays = Math.max(
+    0,
+    Math.floor(
+      (parseDateKey(completedDateKey).getTime() -
+        parseDateKey(dueDateKey).getTime()) /
+        (1000 * 60 * 60 * 24),
+    ),
+  );
+  const overdueDaysAtCompletion = isFreePool ? 0 : rawOverdueDays;
+  const wasOverdue = overdueDaysAtCompletion > 0;
+
+  const overduePenalty = isFreePool
+    ? 0
+    : calculateMaintenanceOverduePenalty(
+        {
+          overdue_tolerance_days: kpiBonus?.overdue_tolerance_days,
+          overdue_penalty_mode: kpiBonus?.overdue_penalty_mode,
+          overdue_penalty_amount: kpiBonus?.overdue_penalty_amount,
+          late_penalty_multiplier: kpiBonus?.late_penalty_multiplier,
+        },
+        [
+          {
+            overdue_days_at_completion: overdueDaysAtCompletion,
+            bonus_earned: bonusEarned,
+            was_overdue: wasOverdue,
+          },
+        ],
+      ).total;
+
+  return {
+    bonusEarned,
+    overdueDaysAtCompletion,
+    wasOverdue,
+    overduePenalty,
+  };
+}
+
+export async function recalculateClubMaintenanceBonuses(params: {
+  clubId: string | number;
+  month?: number;
+  year?: number;
+  targetUserId?: string;
+}) {
+  const { clubId, targetUserId } = params;
+  const now = new Date();
+  const month = params.month || now.getMonth() + 1;
+  const year = params.year || now.getFullYear();
+
+  const clubRes = await query(
+    `SELECT COALESCE(timezone, 'Europe/Moscow') as timezone FROM clubs WHERE id = $1`,
+    [clubId],
+  );
+  const clubTimezone = clubRes.rows[0]?.timezone || "Europe/Moscow";
+
+  const startOfMonth = new Date(year, month - 1, 1);
+  const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+
+  const queryParams: any[] = [clubId, startOfMonth, endOfMonth];
+  const userFilterSql = targetUserId ? `AND mt.completed_by = $4` : "";
+  if (targetUserId) {
+    queryParams.push(targetUserId);
+  }
+
+  const tasksToRecalculate = await query(
+    `SELECT 
+        mt.id as task_id,
+        mt.completed_by as user_id,
+        mt.completed_at,
+        mt.due_date,
+        mt.bonus_earned,
+        mt.overdue_penalty,
+        mt.overdue_days_at_completion,
+        mt.was_overdue,
+        e.type as equipment_type,
+        CASE
+          WHEN e.assignment_mode = 'DIRECT'
+               AND (
+                 (ce.is_active = TRUE AND ce.dismissed_at IS NULL)
+                 OR c.owner_id = e.assigned_user_id
+               )
+          THEN 'DIRECT'
+          ELSE 'FREE_POOL'
+        END as assignment_mode
+     FROM equipment_maintenance_tasks mt
+     JOIN equipment e ON mt.equipment_id = e.id
+     LEFT JOIN clubs c ON c.id = e.club_id
+     LEFT JOIN club_employees ce ON ce.club_id = e.club_id AND ce.user_id = e.assigned_user_id
+     WHERE e.club_id = $1
+       AND mt.status = 'COMPLETED'
+       AND mt.completed_at >= $2
+       AND mt.completed_at <= $3
+       ${userFilterSql}`,
+    queryParams,
+  );
+
+  if (tasksToRecalculate.rows.length === 0) {
+    return 0;
+  }
+
+  let updatedCount = 0;
+
+  const tasksByUser = tasksToRecalculate.rows.reduce(
+    (acc: Record<string, any[]>, task: any) => {
+      if (!task.user_id) return acc;
+      if (!acc[task.user_id]) {
+        acc[task.user_id] = [];
+      }
+      acc[task.user_id].push(task);
+      return acc;
+    },
+    {},
+  );
+
+  for (const userId in tasksByUser) {
+    const userTasks = tasksByUser[userId];
+    const kpiBonus = await resolveUserMaintenanceKpiBonus(clubId, userId);
+
+    if (!kpiBonus) {
+      continue;
+    }
+
+    for (const task of userTasks) {
+      const completedDateKey = formatDateKeyInTimezone(
+        new Date(task.completed_at),
+        clubTimezone,
+      );
+      const isFreePool = task.assignment_mode === "FREE_POOL";
+
+      const {
+        bonusEarned,
+        overdueDaysAtCompletion,
+        wasOverdue,
+        overduePenalty,
+      } = computeMaintenanceTaskBonusAndPenalty({
+        kpiBonus,
+        equipmentType: task.equipment_type,
+        completedDateKey,
+        dueDate: task.due_date,
+        clubTimezone,
+        isFreePool,
+      });
+
+      await query(
+        `UPDATE equipment_maintenance_tasks
+         SET bonus_earned = $1, overdue_penalty = $2, overdue_days_at_completion = $3, was_overdue = $4
+         WHERE id = $5`,
+        [
+          bonusEarned,
+          overduePenalty,
+          overdueDaysAtCompletion,
+          wasOverdue,
+          task.task_id,
+        ],
+      );
+      updatedCount++;
+    }
+  }
+
+  return updatedCount;
+}
+
+
+

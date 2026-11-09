@@ -11,6 +11,16 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentStatus, string> = {
     WRITTEN_OFF: "Списано",
 }
 
+export const COMPONENT_TYPES = [
+    "CPU",
+    "GPU",
+    "RAM",
+    "MOTHERBOARD",
+    "PSU",
+    "STORAGE",
+    "COOLING",
+]
+
 const EQUIPMENT_STATUS_SET = new Set<string>(EQUIPMENT_STATUSES)
 
 export const isEquipmentStatus = (value: unknown): value is EquipmentStatus =>

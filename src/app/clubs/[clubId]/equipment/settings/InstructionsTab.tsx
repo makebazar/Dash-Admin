@@ -120,7 +120,7 @@ export function InstructionsTab() {
   const fetchData = async () => {
     try {
       const [typesRes, instrRes, metricsRes] = await Promise.all([
-        fetch(`/api/equipment-types?clubId=${clubId}`),
+        fetch(`/api/clubs/${clubId}/equipment-types?activeOnly=true`),
         fetch(`/api/clubs/${clubId}/equipment-instructions`),
         fetch(`/api/clubs/${clubId}/equipment/performance/metrics`),
       ]);

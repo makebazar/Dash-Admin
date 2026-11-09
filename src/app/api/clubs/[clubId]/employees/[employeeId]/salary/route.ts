@@ -7,6 +7,7 @@ import {
   hasModuleAccess,
   requireModuleAccess,
 } from "@/lib/club-api-access";
+import { recalculateClubMaintenanceBonuses } from "@/lib/maintenance-task-logic";
 
 // GET: Get employee's salary assignment
 export async function GET(
@@ -83,6 +84,10 @@ export async function POST(
         `DELETE FROM employee_salary_assignments WHERE club_id = $1 AND user_id = $2`,
         [clubId, employeeId],
       );
+      await recalculateClubMaintenanceBonuses({
+        clubId,
+        targetUserId: employeeId,
+      });
       return NextResponse.json({ success: true, removed: true });
     }
 
@@ -104,6 +109,11 @@ export async function POST(
              DO UPDATE SET scheme_id = $3, assigned_at = NOW()`,
       [clubId, employeeId, scheme_id],
     );
+
+    await recalculateClubMaintenanceBonuses({
+      clubId,
+      targetUserId: employeeId,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

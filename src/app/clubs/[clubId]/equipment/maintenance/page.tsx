@@ -7,14 +7,13 @@ import {
   ChevronLeft,
   ChevronRight,
   UserPlus,
-  RefreshCw,
   Loader2,
   Shirt,
-  Search,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -25,8 +24,12 @@ import {
 import { cn } from "@/lib/utils";
 import { PageShell } from "@/components/layout/PageShell";
 import Link from "next/link";
+import { MaintenanceSegmentedBar } from "@/components/equipment/MaintenanceSegmentedBar";
+import { getMaintenanceProgress } from "@/lib/maintenance-progress";
 
 interface MaintenanceTask {
+  is_available_to_all?: boolean;
+  equipment_is_available_to_all?: boolean;
   id: string;
   equipment_id: string;
   equipment_name: string;
@@ -41,6 +44,7 @@ interface MaintenanceTask {
   equipment_assigned_user_id?: string | null;
   workstation_assigned_user_id?: string | null;
   workstation_assigned_to_name?: string | null;
+  workstation_is_available_to_all?: boolean;
   assigned_user_id: string | null;
   assigned_to_name: string | null;
   due_date: string;
@@ -71,7 +75,11 @@ interface EquipmentListItem {
   workstation_zone: string | null;
   workstation_assigned_user_id?: string | null;
   workstation_assigned_to_name?: string | null;
+  workstation_is_available_to_all?: boolean;
+  is_available_to_all?: boolean;
+  equipment_is_available_to_all?: boolean;
   type: string;
+  type_icon?: string | null;
   name: string;
   type_name: string | null;
   last_cleaned_at: string | null;
@@ -90,6 +98,7 @@ interface PlaceGroup {
   name: string;
   assignedUserId: string | null;
   assignedToName: string | null;
+  isAvailableToAll?: boolean;
   devices: DeviceGroup[];
   overdue: number;
   today: number;
@@ -103,8 +112,13 @@ interface DeviceGroup {
   key: string;
   equipmentId: string;
   equipmentName: string;
+  equipmentType: string;
   equipmentTypeName: string;
+  equipmentTypeIcon?: string | null;
   lastCleanedAt: string | null;
+  cleaningIntervalDays?: number | null;
+  maintenanceEnabled?: boolean | null;
+  isAvailableToAll: boolean;
   assignmentMode: "DIRECT" | "INHERIT" | "FREE_POOL";
   assignedUserId: string | null;
   assignedToName: string | null;
@@ -131,6 +145,7 @@ interface ZoneGroup {
   rework: number;
   future: number;
   responsibles: string[];
+  freePoolCount: number;
   places: PlaceGroup[];
 }
 
@@ -155,14 +170,6 @@ const formatDay = (value?: string | null) => {
   }
 
   return parsed.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
-};
-
-const matchesSearchTerm = (
-  term: string,
-  values: Array<string | null | undefined>,
-) => {
-  if (!term) return true;
-  return values.some((value) => value?.toLowerCase().includes(term));
 };
 
 const normalizeAssignmentMode = (
@@ -195,34 +202,8 @@ export default function MaintenanceSchedule() {
   const [equipment, setEquipment] = useState<EquipmentListItem[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isRecalculating, setIsRecalculating] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [searchQuery, setSearchQuery] = useState("");
   const [expandedZones, setExpandedZones] = useState<Set<string>>(new Set());
   const [expandedPlaces, setExpandedPlaces] = useState<Set<string>>(new Set());
-  const [editingEquipmentKey, setEditingEquipmentKey] = useState<string | null>(
-    null,
-  );
-
-  const monthNames = useMemo(
-    () => [
-      "Январь",
-      "Февраль",
-      "Март",
-      "Апрель",
-      "Май",
-      "Июнь",
-      "Июль",
-      "Август",
-      "Сентябрь",
-      "Октябрь",
-      "Ноябрь",
-      "Декабрь",
-    ],
-    [],
-  );
 
   const assignableEmployees = useMemo(() => {
     const isManagerRole = (employee: Employee) => {
@@ -242,52 +223,40 @@ export default function MaintenanceSchedule() {
     );
   }, [employees]);
 
-  const getEmployeeRoleBadgeClass = (employee: Employee) => {
+  const getEmployeeRoleTextClass = (employee: Employee) => {
     const role = String(employee.role || "").toLowerCase();
 
     if (role.includes("управ") || role.includes("manager")) {
-      return "bg-violet-50 text-violet-700 border-violet-200";
+      return "text-violet-600 font-medium";
     }
 
     if (employee.show_in_schedule !== false) {
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      return "text-emerald-600 font-medium";
     }
 
-    return "bg-slate-100 text-slate-700 border-slate-200";
+    return "text-slate-400 font-normal";
   };
 
   const ensurePlan = useCallback(
     async (firstDay: string, lastDay: string) => {
-      setIsGenerating(true);
-      try {
-        await fetch(`/api/clubs/${clubId}/equipment/maintenance`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            date_from: firstDay,
-            date_to: lastDay,
-            task_type: "CLEANING",
-          }),
-        });
-      } finally {
-        setIsGenerating(false);
-      }
+      const res = await fetch(`/api/clubs/${clubId}/equipment/maintenance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date_from: firstDay,
+          date_to: lastDay,
+          task_type: "CLEANING",
+        }),
+      });
+      if (!res.ok) return 0;
+      const data = await res.json();
+      return Number(data.created_tasks || 0);
     },
     [clubId],
   );
 
-  const fetchData = useCallback(async (silent = false) => {
-    if (!silent) setIsLoading(true);
-    try {
-      const firstDay = getLocalDateKey(
-        new Date(selectedYear, selectedMonth - 1, 1),
-      );
-      const lastDay = getLocalDateKey(new Date(selectedYear, selectedMonth, 0));
-
-      if (!silent) {
-        await ensurePlan(firstDay, lastDay);
-      }
-
+  const loadScheduleData = useCallback(
+    async (firstDay: string, lastDay: string) => {
       const [tasksRes, employeesRes, equipmentRes] = await Promise.all([
         fetch(
           `/api/clubs/${clubId}/equipment/maintenance?date_from=${firstDay}&date_to=${lastDay}&include_overdue=true`,
@@ -296,9 +265,11 @@ export default function MaintenanceSchedule() {
         fetch(`/api/clubs/${clubId}/equipment?limit=5000`),
       ]);
 
-      const tasksData = await tasksRes.json();
-      const employeesData = await employeesRes.json();
-      const equipmentData = await equipmentRes.json();
+      const [tasksData, employeesData, equipmentData] = await Promise.all([
+        tasksRes.json(),
+        employeesRes.json(),
+        equipmentRes.json(),
+      ]);
 
       const allEquipment = equipmentData.equipment || [];
       const nonComponentEquipment = allEquipment.filter(
@@ -314,48 +285,43 @@ export default function MaintenanceSchedule() {
       if (tasksRes.ok) setTasks(nonComponentTasks);
       if (employeesRes.ok) setEmployees(employeesData.employees || []);
       if (equipmentRes.ok) setEquipment(nonComponentEquipment);
-    } catch (error) {
-      console.error("Error fetching maintenance data:", error);
-    } finally {
-      if (!silent) setIsLoading(false);
-    }
-  }, [clubId, ensurePlan, selectedMonth, selectedYear]);
+    },
+    [clubId],
+  );
+
+  const fetchData = useCallback(
+    async (silent = false) => {
+      if (!silent) setIsLoading(true);
+      try {
+        const now = new Date();
+        const firstDay = getLocalDateKey(
+          new Date(now.getFullYear(), now.getMonth(), 1),
+        );
+        const lastDay = getLocalDateKey(
+          new Date(now.getFullYear(), now.getMonth() + 1, 0),
+        );
+
+        await loadScheduleData(firstDay, lastDay);
+        if (!silent) setIsLoading(false);
+
+        const created = await ensurePlan(firstDay, lastDay);
+        if (created > 0) {
+          await loadScheduleData(firstDay, lastDay);
+        }
+      } catch (error) {
+        console.error("Error fetching maintenance data:", error);
+      } finally {
+        if (!silent) setIsLoading(false);
+      }
+    },
+    [ensurePlan, loadScheduleData],
+  );
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const handleGenerateTasks = async () => {
-    try {
-      fetchData();
-    } catch (error) {
-      console.error("Error generating tasks:", error);
-    }
-  };
-
-  const handleRecalculateBonuses = async () => {
-    setIsRecalculating(true);
-    try {
-      const res = await fetch(
-        `/api/clubs/${clubId}/equipment/maintenance/recalculate-bonuses?month=${selectedMonth}&year=${selectedYear}`,
-        { method: "POST" },
-      );
-      const data = await res.json();
-      if (res.ok) {
-        alert(data.message || "Перерасчет завершен.");
-      } else {
-        alert(`Ошибка: ${data.error || "Не удалось выполнить перерасчет"}`);
-      }
-    } catch (error) {
-      console.error("Recalculation error:", error);
-      alert("Произошла ошибка при перерасчете бонусов.");
-    } finally {
-      setIsRecalculating(false);
-    }
-  };
-
   const handleAssignEquipment = async (equipmentId: string, value: string) => {
-    setEditingEquipmentKey(null);
     const isFree = value === "free_pool" || value === "unassigned" || value === "none";
     const assignmentMode = isFree ? "FREE_POOL" : "DIRECT";
 
@@ -423,88 +389,14 @@ export default function MaintenanceSchedule() {
     }
   };
 
-  const stats = useMemo(() => {
-    const todayKey = getLocalDateKey();
-
-    return {
-      open: tasks.filter(
-        (task) => task.status !== "COMPLETED" && task.status !== "SKIPPED",
-      ).length,
-      overdue: tasks.filter(
-        (task) => task.status === "PENDING" && task.due_date < todayKey,
-      ).length,
-      today: tasks.filter(
-        (task) => task.status === "PENDING" && task.due_date === todayKey,
-      ).length,
-      inProgress: tasks.filter((task) => task.status === "IN_PROGRESS").length,
-      rework: tasks.filter(
-        (task) =>
-          task.status === "REWORK" ||
-          (task.status === "IN_PROGRESS" &&
-            task.verification_status === "REJECTED"),
-      ).length,
-      unassigned: tasks.filter(
-        (task) => task.status !== "COMPLETED" && !task.assigned_user_id,
-      ).length,
-      future: tasks.filter(
-        (task) => task.status === "PENDING" && task.due_date > todayKey,
-      ).length,
-    };
-  }, [tasks]);
-
-  const summaryItems = useMemo(
-    () => [
-      {
-        label: "Просрочено",
-        value: stats.overdue,
-        tone: "text-rose-600 bg-rose-50 border-rose-100",
-      },
-      {
-        label: "Сегодня",
-        value: stats.today,
-        tone: "text-amber-700 bg-amber-50 border-amber-100",
-      },
-      {
-        label: "В работе",
-        value: stats.inProgress,
-        tone: "text-blue-700 bg-blue-50 border-blue-100",
-      },
-      {
-        label: "На доработке",
-        value: stats.rework,
-        tone: "text-fuchsia-700 bg-fuchsia-50 border-fuchsia-100",
-      },
-      {
-        label: "Свободный пул",
-        value: stats.unassigned,
-        tone: "text-slate-700 bg-slate-50 border-slate-100",
-      },
-      {
-        label: "Будущие",
-        value: stats.future,
-        tone: "text-indigo-700 bg-indigo-50 border-indigo-100",
-      },
-    ],
-    [stats],
-  );
 
   const filteredEquipment = useMemo(() => {
-    const term = searchQuery.trim().toLowerCase();
-
     return equipment.filter((item) => {
       if (item.maintenance_enabled === false) return false;
       if (item.parent_equipment_id) return false;
-
-      return matchesSearchTerm(term, [
-        item.name,
-        item.type_name,
-        item.workstation_name,
-        item.workstation_zone,
-        item.assigned_to_name,
-        item.workstation_assigned_to_name,
-      ]);
+      return true;
     });
-  }, [equipment, searchQuery]);
+  }, [equipment]);
 
   const filteredEquipmentIds = useMemo(
     () => new Set(filteredEquipment.map((item) => item.id)),
@@ -512,21 +404,8 @@ export default function MaintenanceSchedule() {
   );
 
   const filteredTasks = useMemo(() => {
-    const term = searchQuery.trim().toLowerCase();
-
-    return tasks.filter((task) => {
-      if (filteredEquipmentIds.has(task.equipment_id)) return true;
-
-      return matchesSearchTerm(term, [
-        task.equipment_name,
-        task.equipment_type_name,
-        task.workstation_name,
-        task.workstation_zone,
-        task.assigned_to_name,
-        task.completed_by_name,
-      ]);
-    });
-  }, [filteredEquipmentIds, searchQuery, tasks]);
+    return tasks.filter((task) => filteredEquipmentIds.has(task.equipment_id));
+  }, [filteredEquipmentIds, tasks]);
 
   const employeeDistribution = useMemo(() => {
     const workload = new Map<
@@ -640,6 +519,7 @@ export default function MaintenanceSchedule() {
           rework: 0,
           future: 0,
           responsibles: [],
+          freePoolCount: 0,
           places: [],
         });
       }
@@ -667,6 +547,10 @@ export default function MaintenanceSchedule() {
         zone.responsibles.push(effectiveAssignedToName);
       }
 
+      if (!effectiveAssignedUserId) {
+        zone.freePoolCount += 1;
+      }
+
       let place = zone.places.find(
         (existingPlace) => existingPlace.key === placeKey,
       );
@@ -679,6 +563,7 @@ export default function MaintenanceSchedule() {
           name: placeName,
           assignedUserId: item.workstation_assigned_user_id || null,
           assignedToName: item.workstation_assigned_to_name || null,
+          isAvailableToAll: Boolean(item.workstation_is_available_to_all),
           devices: [],
           overdue: 0,
           today: 0,
@@ -690,12 +575,23 @@ export default function MaintenanceSchedule() {
         zone.places.push(place);
       }
 
+      const isAvailableToAll =
+        item.equipment_is_available_to_all !== null &&
+        item.equipment_is_available_to_all !== undefined
+          ? Boolean(item.equipment_is_available_to_all)
+          : Boolean(item.workstation_is_available_to_all);
+
       place.devices.push({
         key: `${placeKey}::${item.id}`,
         equipmentId: item.id,
         equipmentName: item.name,
+        equipmentType: item.type,
         equipmentTypeName: item.type_name || item.type,
+        equipmentTypeIcon: item.type_icon || null,
         lastCleanedAt: item.last_cleaned_at,
+        cleaningIntervalDays: item.cleaning_interval_days,
+        maintenanceEnabled: item.maintenance_enabled !== false,
+        isAvailableToAll,
         assignmentMode,
         assignedUserId: item.assigned_user_id,
         assignedToName:
@@ -734,6 +630,7 @@ export default function MaintenanceSchedule() {
           rework: 0,
           future: 0,
           responsibles: [],
+          freePoolCount: 0,
           places: [],
         });
       }
@@ -755,6 +652,7 @@ export default function MaintenanceSchedule() {
           name: placeName,
           assignedUserId: task.workstation_assigned_user_id || null,
           assignedToName: task.workstation_assigned_to_name || null,
+          isAvailableToAll: Boolean(task.workstation_is_available_to_all),
           devices: [],
           overdue: 0,
           today: 0,
@@ -764,12 +662,17 @@ export default function MaintenanceSchedule() {
           completed: 0,
         };
         zone.places.push(place);
-      } else if (
-        task.workstation_assigned_user_id ||
-        task.workstation_assigned_to_name
-      ) {
-        place.assignedUserId = task.workstation_assigned_user_id || null;
-        place.assignedToName = task.workstation_assigned_to_name || null;
+      } else {
+        if (
+          task.workstation_assigned_user_id ||
+          task.workstation_assigned_to_name
+        ) {
+          place.assignedUserId = task.workstation_assigned_user_id || null;
+          place.assignedToName = task.workstation_assigned_to_name || null;
+        }
+        if (task.workstation_is_available_to_all !== undefined) {
+          place.isAvailableToAll = Boolean(task.workstation_is_available_to_all);
+        }
       }
 
       let device = place.devices.find(
@@ -777,12 +680,21 @@ export default function MaintenanceSchedule() {
       );
 
       if (!device) {
+        const matchedEq = equipment.find((e) => e.id === task.equipment_id);
         device = {
           key: `${placeKey}::${task.equipment_id}`,
           equipmentId: task.equipment_id,
           equipmentName: task.equipment_name,
-          equipmentTypeName: task.equipment_type_name,
+          equipmentType: task.equipment_type || matchedEq?.type || "OTHER",
+          equipmentTypeName: task.equipment_type_name || matchedEq?.type_name || task.equipment_type || "Оборудование",
+          equipmentTypeIcon: task.equipment_icon || matchedEq?.type_icon || null,
           lastCleanedAt: task.last_cleaned_at,
+          cleaningIntervalDays: matchedEq?.cleaning_interval_days ?? null,
+          maintenanceEnabled: matchedEq ? matchedEq.maintenance_enabled !== false : true,
+          isAvailableToAll:
+            task.equipment_is_available_to_all !== null && task.equipment_is_available_to_all !== undefined
+              ? Boolean(task.equipment_is_available_to_all)
+              : Boolean(task.workstation_is_available_to_all),
           assignmentMode: (task.equipment_assignment_mode || "DIRECT") as
             | "DIRECT"
             | "INHERIT"
@@ -827,8 +739,21 @@ export default function MaintenanceSchedule() {
           task.workstation_assigned_to_name || null;
       }
 
-      if (!device.nextDueDate || task.due_date < device.nextDueDate) {
-        device.nextDueDate = task.due_date;
+      // Если задача выполнена или дата задачи предшествует дате последней чистки,
+      // значит устройство уже обслужено и старый план закрыт.
+      const isTaskAlreadyCleaned = Boolean(
+        device.lastCleanedAt &&
+          task.due_date <= device.lastCleanedAt &&
+          task.status !== "REWORK" &&
+          task.status !== "IN_PROGRESS",
+      );
+
+      const isTaskObsolete = task.status === "COMPLETED" || isTaskAlreadyCleaned;
+
+      if (!isTaskObsolete) {
+        if (!device.nextDueDate || task.due_date < device.nextDueDate) {
+          device.nextDueDate = task.due_date;
+        }
       }
 
       if (
@@ -858,6 +783,10 @@ export default function MaintenanceSchedule() {
       }
 
       if (task.due_date < todayKey) {
+        if (isTaskAlreadyCleaned) {
+          // Оборудование уже обслужено после даты этой задачи
+          return;
+        }
         zone.overdue++;
         place.overdue++;
         device.overdue++;
@@ -921,6 +850,7 @@ export default function MaintenanceSchedule() {
       });
   }, [filteredEquipment, filteredTasks]);
 
+
   const toggleZone = (zoneKey: string) => {
     setExpandedZones((prev) => {
       if (prev.has(zoneKey)) {
@@ -936,7 +866,6 @@ export default function MaintenanceSchedule() {
     setExpandedPlaces((prev) =>
       prev.has(placeKey) ? new Set() : new Set([placeKey]),
     );
-    setEditingEquipmentKey(null);
   };
 
   const handleAssignPlace = async (
@@ -1002,6 +931,92 @@ export default function MaintenanceSchedule() {
     }
   };
 
+  const handleToggleDeviceAvailableToAll = async (
+    equipmentId: string,
+    checked: boolean,
+  ) => {
+    setEquipment((prev) =>
+      prev.map((item) =>
+        item.id === equipmentId
+          ? {
+              ...item,
+              is_available_to_all: checked,
+              equipment_is_available_to_all: checked,
+            }
+          : item,
+      ),
+    );
+
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.equipment_id === equipmentId
+          ? {
+              ...task,
+              is_available_to_all: checked,
+              equipment_is_available_to_all: checked,
+            }
+          : task,
+      ),
+    );
+
+    try {
+      await fetch(`/api/clubs/${clubId}/equipment/${equipmentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_available_to_all: checked }),
+      });
+      fetchData(true);
+    } catch (error) {
+      console.error("Error toggling device available to all:", error);
+      fetchData(true);
+    }
+  };
+
+  const handleToggleAvailableToAll = async (
+    workstationId: string | null,
+    checked: boolean,
+  ) => {
+    if (!workstationId) return;
+
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.workstation_id === workstationId
+          ? {
+              ...task,
+              workstation_is_available_to_all: checked,
+              is_available_to_all: checked,
+              equipment_is_available_to_all: checked,
+            }
+          : task,
+      ),
+    );
+
+    setEquipment((prev) =>
+      prev.map((item) =>
+        item.workstation_id === workstationId
+          ? {
+              ...item,
+              workstation_is_available_to_all: checked,
+              is_available_to_all: checked,
+              equipment_is_available_to_all: checked,
+            }
+          : item,
+      ),
+    );
+
+    try {
+      await fetch(`/api/clubs/${clubId}/workstations/${workstationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_available_to_all: checked }),
+      });
+      fetchData(true);
+    } catch (error) {
+      console.error("Error toggling available to all:", error);
+      fetchData(true);
+    }
+  };
+
   const getDeviceAssignmentMeta = (device: DeviceGroup, place: PlaceGroup) => {
     const resolvedAssignedUserId =
       device.assignmentMode === "DIRECT"
@@ -1015,8 +1030,8 @@ export default function MaintenanceSchedule() {
     if (!resolvedAssignedUserId) {
       return {
         selectValue: "free_pool",
-        badgeLabel: "без ответственного",
-        badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
+        badgeLabel: null,
+        badgeClass: "",
         ownerLabel: "Свободный пул",
       };
     }
@@ -1028,93 +1043,24 @@ export default function MaintenanceSchedule() {
     ) {
       return {
         selectValue: resolvedAssignedUserId,
-        badgeLabel: "свой ответственный",
-        badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
+        badgeLabel: "Свой ответственный",
+        badgeClass: "text-amber-600 font-medium",
         ownerLabel: resolvedAssignedToName || "Свободный пул",
       };
     }
 
     return {
       selectValue: resolvedAssignedUserId || "free_pool",
-      badgeLabel: "ответственный задан",
-      badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      badgeLabel: null,
+      badgeClass: "",
       ownerLabel: resolvedAssignedToName || "Свободный пул",
     };
   };
 
-  const getDeviceStatusMeta = (device: DeviceGroup) => {
-    const primaryTask = [...device.activeTasks].sort((a, b) => {
-      if (
-        (a.verification_status === "REJECTED") !==
-        (b.verification_status === "REJECTED")
-      ) {
-        return a.verification_status === "REJECTED" ? -1 : 1;
-      }
-      if (a.status !== b.status) {
-        return a.status === "IN_PROGRESS" ? -1 : 1;
-      }
-      return a.due_date.localeCompare(b.due_date);
-    })[0];
-
-    if (primaryTask?.verification_status === "REJECTED") {
-      return {
-        label: `На доработке ${primaryTask.rework_days || 0} дн.`,
-        badgeClass: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200",
-        detail: primaryTask.rejection_reason || "Центр проверок вернул задачу",
-        detailClass: "text-fuchsia-700",
-      };
-    }
-
-    if (primaryTask?.status === "IN_PROGRESS") {
-      return {
-        label: "В работе",
-        badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
-        detail: `Срок: ${formatDay(primaryTask.due_date)}`,
-        detailClass: "text-slate-600",
-      };
-    }
-
-    if (
-      primaryTask?.status === "PENDING" &&
-      (primaryTask.overdue_days || 0) > 0
-    ) {
-      return {
-        label: `Просрочено на ${primaryTask.overdue_days} дн.`,
-        badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
-        detail: `Плановая дата: ${formatDay(primaryTask.due_date)}`,
-        detailClass: "text-rose-700",
-      };
-    }
-
-    if (primaryTask?.status === "PENDING") {
-      return {
-        label: "На сегодня",
-        badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
-        detail: `Плановая дата: ${formatDay(primaryTask.due_date)}`,
-        detailClass: "text-slate-600",
-      };
-    }
-
-    if (device.nextDueDate) {
-      return {
-        label: "Обслужено",
-        badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
-        detail: `Следующая чистка: ${formatDay(device.nextDueDate)}`,
-        detailClass: "text-slate-600",
-      };
-    }
-
-    return {
-      label: "Без графика",
-      badgeClass: "bg-slate-100 text-slate-700 border-slate-200",
-      detail: "Нет плановой даты",
-      detailClass: "text-slate-600",
-    };
-  };
-
   return (
-    <PageShell maxWidth="5xl">
+    <PageShell maxWidth="7xl">
       <div className="space-y-8 pb-28 sm:pb-12">
+        {/* Header Section */}
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-8">
             <div className="min-w-0">
@@ -1122,21 +1068,10 @@ export default function MaintenanceSchedule() {
                 Обслуживание
               </h1>
               <p className="text-slate-500 text-lg mt-2">
-                График чистки, исполнители и контроль просроченных задач по
-                оборудованию
+                График чистки, исполнители и регламентный контроль состояния техники
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:justify-end">
-              <Button
-                asChild
-                variant="outline"
-                className="hidden w-full md:inline-flex md:w-auto rounded-xl h-11 px-6 font-medium"
-              >
-                <Link href={`/clubs/${clubId}/equipment`}>
-                  <ChevronLeft className="mr-2 h-4 w-4" />
-                  Назад
-                </Link>
-              </Button>
               <Button
                 asChild
                 variant="outline"
@@ -1148,276 +1083,185 @@ export default function MaintenanceSchedule() {
                 </Link>
               </Button>
               <Button
-                onClick={handleRecalculateBonuses}
-                disabled={isRecalculating}
+                asChild
                 variant="outline"
                 className="w-full sm:w-auto rounded-xl h-11 px-6 font-medium"
               >
-                {isRecalculating ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
-                Пересчитать бонусы
-              </Button>
-              <Button
-                onClick={handleGenerateTasks}
-                disabled={isGenerating}
-                className="w-full bg-slate-900 text-white shadow-sm hover:bg-slate-800 sm:w-auto rounded-xl h-11 px-6 font-medium"
-              >
-                {isGenerating ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
-                Обновить план
+                <Link href={`/clubs/${clubId}/equipment`}>
+                  <ChevronLeft className="mr-2 h-4 w-4" />
+                  Назад
+                </Link>
               </Button>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">
-          <div className="space-y-6">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
-              <div className="relative w-full">
-                <Search className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Поиск по месту, зоне, устройству"
-                  className="h-12 border-slate-200 bg-slate-50/50 pl-10 rounded-xl font-medium text-slate-900 focus:bg-white"
-                />
+        {/* Employee Distribution Card (DashFrag Style) */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-6 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 uppercase tracking-tight">
+                Распределение по сотрудникам
+              </h3>
+              <p className="text-xs text-slate-400 font-medium mt-0.5">
+                Закрепленные места и оборудование для регламентной чистки
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-bold text-slate-900">
+                {employeeDistribution.length}
               </div>
-
-              <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-10 w-10 text-slate-500 hover:bg-slate-50 rounded-xl border border-slate-100"
-                  onClick={() => {
-                    if (selectedMonth === 1) {
-                      setSelectedMonth(12);
-                      setSelectedYear((prev) => prev - 1);
-                    } else {
-                      setSelectedMonth((prev) => prev - 1);
-                    }
-                  }}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <div className="px-3 py-1 text-sm font-bold text-center min-w-37.5">
-                  {monthNames[selectedMonth - 1]} {selectedYear}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-10 w-10 text-slate-500 hover:bg-slate-50 rounded-xl border border-slate-100"
-                  onClick={() => {
-                    if (selectedMonth === 12) {
-                      setSelectedMonth(1);
-                      setSelectedYear((prev) => prev + 1);
-                    } else {
-                      setSelectedMonth((prev) => prev + 1);
-                    }
-                  }}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+              <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400">
+                Назначено
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-              {summaryItems.map((item) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {employeeDistribution.length > 0 ? (
+              employeeDistribution.map((employee) => (
                 <div
-                  key={item.label}
-                  className={cn("rounded-2xl border p-4 shadow-sm", item.tone)}
+                  key={employee.id}
+                  className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 flex items-center justify-between gap-3"
                 >
-                  <div className="text-[10px] uppercase tracking-widest font-bold opacity-70">
-                    {item.label}
-                  </div>
-                  <div className="mt-1 text-xl font-bold leading-none">
-                    {item.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">
-          <div className="space-y-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">
-                  Сотрудники
-                </div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  Распределение мест и оборудования по чистке
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold">
-                  {employeeDistribution.length}
-                </div>
-                <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">
-                  Назначено
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {employeeDistribution.length > 0 ? (
-                employeeDistribution.map((employee) => (
-                  <div
-                    key={employee.id}
-                    className="rounded-xl border bg-slate-50/70 px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold">
-                          {employee.fullName}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {employee.placesCount} мест · {employee.devicesCount}{" "}
-                          оборудований
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge className="h-6 bg-indigo-50 text-indigo-700 hover:bg-indigo-50">
-                          {employee.placesCount} мест
-                        </Badge>
-                        <Badge className="h-6 bg-sky-50 text-sky-700 hover:bg-sky-50">
-                          {employee.devicesCount} оборуд.
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-xl border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                  Нет назначений по текущему фильтру
-                </div>
-              )}
-
-              <div className="rounded-xl border border-dashed bg-slate-50/40 px-3 py-2">
-                <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-slate-700">
-                      Свободный пул
+                    <div className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                      {employee.fullName}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {freePoolDistribution.placesCount} мест ·{" "}
-                      {freePoolDistribution.devicesCount} оборудований
+                    <div className="text-xs text-slate-400 font-medium mt-0.5">
+                      {employee.placesCount} мест · {employee.devicesCount} устр.
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">
-                      {freePoolDistribution.placesCount} мест
-                    </Badge>
-                    <Badge className="h-6 bg-slate-200 text-slate-800 hover:bg-slate-200">
-                      {freePoolDistribution.devicesCount} оборуд.
-                    </Badge>
+                    <span className="text-xs font-semibold text-slate-700 bg-white border border-slate-200/80 px-2.5 py-1 rounded-xl shadow-2xs">
+                      {employee.devicesCount} устр.
+                    </span>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="col-span-full rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400 font-medium">
+                Нет назначений по текущему фильтру
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/40 p-3.5 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs sm:text-sm font-bold text-slate-700 truncate">
+                  Свободный пул
+                </div>
+                <div className="text-xs text-slate-400 font-medium mt-0.5">
+                  {freePoolDistribution.placesCount} мест · {freePoolDistribution.devicesCount} устр.
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-xs font-semibold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-xl">
+                  {freePoolDistribution.devicesCount} устр.
+                </span>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Zones & Maintenance Content */}
         {isLoading ? (
-          <div className="border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
+          <div className="border border-slate-200 rounded-3xl bg-white shadow-xs">
+            <div className="h-64 flex items-center justify-center text-slate-400">
               <Loader2 className="h-6 w-6 animate-spin" />
             </div>
           </div>
         ) : zones.length === 0 ? (
-          <div className="border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
-            <div className="h-64 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+          <div className="border border-slate-200 rounded-3xl bg-white shadow-xs">
+            <div className="h-64 flex flex-col items-center justify-center gap-3 text-slate-400">
               <Calendar className="h-8 w-8 opacity-40" />
-              <div>Ничего не найдено</div>
+              <div className="text-xs font-bold uppercase tracking-wider">Ничего не найдено</div>
             </div>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {zones.map((zone) => {
               const isZoneOpen = expandedZones.has(zone.key);
 
               return (
                 <div
                   key={zone.key}
-                  className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden"
+                  className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden"
                 >
                   <button
                     type="button"
                     onClick={() => toggleZone(zone.key)}
-                    className="w-full px-6 py-5 border-b border-slate-100 bg-slate-50/50 text-left hover:bg-slate-50 transition-colors"
+                    className="w-full px-6 py-4.5 bg-slate-50/50 border-b border-slate-100 text-left hover:bg-slate-50 transition-colors cursor-pointer"
                   >
-                    <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-                      <div className="flex flex-col gap-2 min-w-0">
+                    <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex flex-col gap-1 min-w-0">
                         <div className="flex items-center gap-2.5">
                           <ChevronRight
                             className={cn(
-                              "h-4 w-4 text-slate-500 transition-transform",
+                              "h-4 w-4 text-slate-400 transition-transform",
                               isZoneOpen && "rotate-90",
                             )}
                           />
-                          <div>
-                            <div className="text-base font-semibold">
-                              {zone.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {zone.places.length} мест
-                            </div>
+                          <div className="text-base font-bold text-slate-900">
+                            {zone.name}
                           </div>
+                          <span className="text-xs font-medium text-slate-400">
+                            • {zone.places.length} мест
+                          </span>
                         </div>
-                        {zone.responsibles.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pl-6">
-                            {zone.responsibles.slice(0, 5).map((name) => (
-                              <Badge
-                                key={name}
-                                variant="outline"
-                                className="h-6 bg-white text-slate-700 border-slate-200 hover:bg-white"
-                              >
-                                {name}
-                              </Badge>
-                            ))}
-                            {zone.responsibles.length > 5 && (
-                              <Badge
-                                variant="outline"
-                                className="h-6 bg-white text-slate-500 border-slate-200 hover:bg-white"
-                              >
-                                +{zone.responsibles.length - 5}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
+                        <div className="text-xs text-slate-400 font-medium pl-6 flex flex-wrap items-center gap-1.5">
+                          <span>Ответственные:</span>
+                          <span className="text-slate-700">
+                            {zone.responsibles.length > 0
+                              ? zone.responsibles.slice(0, 4).join(", ") +
+                                (zone.responsibles.length > 4
+                                  ? ` и ещё ${zone.responsibles.length - 4}`
+                                  : "")
+                              : "Не назначены"}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          {zone.freePoolCount > 0 ? (
+                            <span className="text-amber-600 font-semibold">
+                              Свободный пул: есть ({zone.freePoolCount} устр.)
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-normal">
+                              Свободный пул: нет
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-1.5">
+                      {/* Clean status indicators without heavy containers */}
+                      <div className="flex flex-wrap items-center gap-3">
                         {zone.overdue > 0 && (
-                          <Badge className="h-6 bg-rose-50 text-rose-700 hover:bg-rose-50">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                             {zone.overdue} просрочено
-                          </Badge>
+                          </span>
                         )}
                         {zone.today > 0 && (
-                          <Badge className="h-6 bg-amber-50 text-amber-700 hover:bg-amber-50">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                             {zone.today} сегодня
-                          </Badge>
+                          </span>
                         )}
                         {zone.inProgress > 0 && (
-                          <Badge className="h-6 bg-blue-50 text-blue-700 hover:bg-blue-50">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                             {zone.inProgress} в работе
-                          </Badge>
+                          </span>
                         )}
                         {zone.rework > 0 && (
-                          <Badge className="h-6 bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-50">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-fuchsia-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-500" />
                             {zone.rework} на доработке
-                          </Badge>
+                          </span>
                         )}
                         {zone.future > 0 && (
-                          <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
                             {zone.future} позже
-                          </Badge>
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1432,7 +1276,7 @@ export default function MaintenanceSchedule() {
                         return (
                           <div
                             key={place.key}
-                            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs"
                           >
                             <button
                               type="button"
@@ -1440,17 +1284,17 @@ export default function MaintenanceSchedule() {
                                 hasVisibleDevices && togglePlace(place.key)
                               }
                               className={cn(
-                                "w-full px-4 py-3 text-left transition-colors",
+                                "w-full px-4 py-3.5 text-left transition-colors",
                                 hasVisibleDevices
-                                  ? "bg-slate-50/80 hover:bg-slate-50"
-                                  : "bg-slate-50/50",
+                                  ? "bg-slate-50/60 hover:bg-slate-50 cursor-pointer"
+                                  : "bg-slate-50/30",
                               )}
                             >
                               <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
                                 <div className="flex items-center gap-2.5">
                                   <ChevronRight
                                     className={cn(
-                                      "h-3.5 w-3.5 text-slate-500 transition-transform",
+                                      "h-3.5 w-3.5 text-slate-400 transition-transform",
                                       isPlaceOpen &&
                                         hasVisibleDevices &&
                                         "rotate-90",
@@ -1458,300 +1302,344 @@ export default function MaintenanceSchedule() {
                                     )}
                                   />
                                   <div>
-                                    <div className="text-base font-semibold text-slate-900">
+                                    <div className="text-sm sm:text-base font-bold text-slate-900">
                                       {place.name}
                                     </div>
-                                    <div className="text-xs text-muted-foreground">
+                                    <div className="text-xs text-slate-400 font-medium">
                                       {place.zone}
                                     </div>
                                   </div>
                                 </div>
 
-                                <div className="flex flex-wrap gap-1.5">
+                                {/* Clean place indicators without bulky badge containers */}
+                                <div className="flex flex-wrap items-center gap-3">
+                                  {place.isAvailableToAll && (
+                                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                                      <Users className="w-3.5 h-3.5" />
+                                      Доступна всем
+                                    </span>
+                                  )}
                                   {place.overdue > 0 && (
-                                    <Badge className="h-6 bg-rose-50 text-rose-700 hover:bg-rose-50">
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                                       {place.overdue} просрочено
-                                    </Badge>
+                                    </span>
                                   )}
                                   {place.today > 0 && (
-                                    <Badge className="h-6 bg-amber-50 text-amber-700 hover:bg-amber-50">
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                                       {place.today} сегодня
-                                    </Badge>
+                                    </span>
                                   )}
                                   {place.inProgress > 0 && (
-                                    <Badge className="h-6 bg-blue-50 text-blue-700 hover:bg-blue-50">
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                                       {place.inProgress} в работе
-                                    </Badge>
+                                    </span>
                                   )}
                                   {place.rework > 0 && (
-                                    <Badge className="h-6 bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-50">
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-fuchsia-600">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-fuchsia-500" />
                                       {place.rework} на доработке
-                                    </Badge>
+                                    </span>
                                   )}
                                   {place.future > 0 && (
-                                    <Badge className="h-6 bg-slate-100 text-slate-700 hover:bg-slate-100">
+                                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
                                       {place.future} позже
-                                    </Badge>
+                                    </span>
                                   )}
                                 </div>
                               </div>
                             </button>
 
+                            {/* Place Assignee Bar */}
                             <div className="border-t border-slate-100 bg-white px-4 py-3">
                               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                                 <div>
-                                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                                     Ответственный за место
                                   </div>
-                                  <div className="mt-1 text-xs text-muted-foreground">
-                                    Назначение на месте автоматически
-                                    применяется ко всему оборудованию
+                                  <div className="mt-0.5 text-xs text-slate-400 font-medium">
+                                    Назначение применяется ко всему оборудованию места
                                   </div>
                                 </div>
-                                <div className="w-full xl:w-65">
-                                  <Select
-                                    value={place.assignedUserId || "unassigned"}
-                                    onValueChange={(value) =>
-                                      handleAssignPlace(
-                                        place.workstationId,
-                                        value,
-                                      )
-                                    }
-                                  >
-                                    <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-slate-50 text-sm">
-                                      <div className="flex items-center gap-2">
-                                        <UserPlus className="h-3 w-3 text-muted-foreground" />
-                                        <SelectValue placeholder="Назначить" />
-                                      </div>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="unassigned">
-                                        Свободный пул
-                                      </SelectItem>
-                                      {assignableEmployees.map((employee) => (
-                                        <SelectItem
-                                          key={employee.id}
-                                          value={employee.id}
-                                        >
-                                          <div className="flex min-w-0 w-full items-center gap-2 pr-6">
-                                            <span className="truncate">
-                                              {employee.full_name}
-                                            </span>
-                                            {employee.role ? (
-                                              <span
-                                                className={cn(
-                                                  "ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                                                  getEmployeeRoleBadgeClass(
-                                                    employee,
-                                                  ),
-                                                )}
-                                              >
-                                                {employee.role}
-                                              </span>
-                                            ) : null}
-                                          </div>
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
+                                  {place.workstationId && (
+                                    <div
+                                      className="flex items-center gap-2"
+                                      title="Если включено, ответственный остаётся за местом, но другие сотрудники также могут брать задачи чистки в работу"
+                                    >
+                                      <Switch
+                                        id={`available-to-all-${place.key}`}
+                                        checked={place.isAvailableToAll}
+                                        onCheckedChange={(checked) =>
+                                          handleToggleAvailableToAll(
+                                            place.workstationId,
+                                            checked,
+                                          )
+                                        }
+                                      />
+                                      <Label
+                                        htmlFor={`available-to-all-${place.key}`}
+                                        className="text-xs font-medium cursor-pointer select-none text-slate-700 whitespace-nowrap"
+                                      >
+                                        Доступна всем
+                                      </Label>
+                                    </div>
+                                  )}
+                                  <div className="w-full sm:w-60">
+                                    <Select
+                                      value={place.assignedUserId || "unassigned"}
+                                      onValueChange={(value) =>
+                                        handleAssignPlace(
+                                          place.workstationId,
+                                          value,
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="h-10 w-full rounded-xl border-slate-200 bg-slate-50 text-xs font-medium text-slate-800">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2 [&>span]:w-full [&>span]:block">
+                                          <UserPlus className="h-4 w-4 text-slate-400 shrink-0" />
+                                          <SelectValue placeholder="Назначить" />
+                                        </div>
+                                      </SelectTrigger>
+                                      <SelectContent className="w-[var(--radix-select-trigger-width)] min-w-64">
+                                        <SelectItem value="unassigned" className="text-xs">
+                                          Свободный пул
                                         </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                        {assignableEmployees.map((employee) => (
+                                          <SelectItem
+                                            key={employee.id}
+                                            value={employee.id}
+                                            className="text-xs"
+                                          >
+                                            <div className="flex min-w-0 w-full items-center justify-between gap-3">
+                                              <span className="truncate">
+                                                {employee.full_name}
+                                              </span>
+                                              {employee.role ? (
+                                                <span
+                                                  className={cn(
+                                                    "ml-auto shrink-0 text-[11px]",
+                                                    getEmployeeRoleTextClass(
+                                                      employee,
+                                                    ),
+                                                  )}
+                                                >
+                                                  {employee.role}
+                                                </span>
+                                              ) : null}
+                                            </div>
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
                                 </div>
                               </div>
                             </div>
 
+                            {/* Devices List with Equipment Indicator (MaintenanceSegmentedBar) */}
                             {isPlaceOpen && hasVisibleDevices && (
-                              <div className="border-t border-slate-100 bg-slate-50/60 p-3 space-y-3">
+                              <div className="border-t border-slate-100 bg-slate-50/50 p-3 sm:p-4 space-y-2.5">
                                 {place.devices.map((device) => {
                                   const assignmentMeta =
                                     getDeviceAssignmentMeta(device, place);
-                                  const statusMeta =
-                                    getDeviceStatusMeta(device);
-                                  const isEditingEquipment =
-                                    editingEquipmentKey === device.key;
+                                  const deviceProgress = getMaintenanceProgress({
+                                    maintenance_enabled:
+                                      device.maintenanceEnabled !== false,
+                                    cleaning_interval_days:
+                                      device.cleaningIntervalDays,
+                                    last_cleaned_at: device.lastCleanedAt,
+                                    due_date: device.nextDueDate,
+                                  });
+
+                                  const reworkTask = device.activeTasks.find(
+                                    (t) =>
+                                      t.status === "REWORK" ||
+                                      (t.status === "IN_PROGRESS" &&
+                                        t.verification_status === "REJECTED"),
+                                  );
+                                  const inProgressTask = device.activeTasks.find(
+                                    (t) =>
+                                      t.status === "IN_PROGRESS" &&
+                                      t.verification_status !== "REJECTED",
+                                  );
 
                                   return (
                                     <div
                                       key={device.key}
-                                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
+                                      className="rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-2xs hover:shadow-xs transition-shadow"
                                     >
-                                      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px] xl:items-start">
-                                        <div className="min-w-0">
-                                          <div className="flex items-start gap-3">
-                                            <div className="min-w-0">
-                                              <div className="flex flex-wrap items-center gap-2">
-                                                <div className="text-base font-semibold text-slate-900">
-                                                  {device.equipmentName}
-                                                </div>
-                                                <Badge
-                                                  variant="outline"
+                                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                        {/* Device Info & Status Bar */}
+                                        <div className="min-w-0 flex-1 space-y-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <h4 className="text-sm font-bold text-slate-900 leading-tight">
+                                                {device.equipmentName}
+                                              </h4>
+                                              <span className="text-xs text-slate-400 font-medium">
+                                                {device.equipmentTypeName}
+                                              </span>
+                                              {assignmentMeta.badgeLabel && (
+                                                <span
                                                   className={cn(
-                                                    "h-5 rounded-full px-2 text-[10px]",
+                                                    "text-[11px] font-medium",
                                                     assignmentMeta.badgeClass,
                                                   )}
                                                 >
                                                   {assignmentMeta.badgeLabel}
-                                                </Badge>
-                                                <Badge
-                                                  variant="outline"
-                                                  className={cn(
-                                                    "h-5 rounded-full px-2 text-[10px]",
-                                                    statusMeta.badgeClass,
-                                                  )}
-                                                >
-                                                  {statusMeta.label}
-                                                </Badge>
-                                              </div>
-                                              <div className="mt-0.5 text-sm text-muted-foreground">
-                                                {device.equipmentTypeName}
-                                              </div>
-                                              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                                <span>
-                                                  Последняя:{" "}
-                                                  {device.lastCleanedAt
-                                                    ? new Date(
-                                                        device.lastCleanedAt,
-                                                      ).toLocaleDateString(
-                                                        "ru-RU",
-                                                      )
-                                                    : "—"}
                                                 </span>
-                                                <span
-                                                  className={cn(
-                                                    "font-medium",
-                                                    statusMeta.detailClass,
-                                                  )}
-                                                >
-                                                  {statusMeta.detail}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
-                                          {isEditingEquipment ? (
-                                            <div className="space-y-2">
-                                              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                                Ответственный за оборудование
-                                              </div>
-                                              <div className="w-full">
-                                                <Select
-                                                  value={
-                                                    assignmentMeta.selectValue
-                                                  }
-                                                  onValueChange={(value) =>
-                                                    handleAssignEquipment(
-                                                      device.equipmentId,
-                                                      value,
-                                                    )
-                                                  }
-                                                >
-                                                  <SelectTrigger className="h-9 rounded-lg border-slate-200 bg-white text-sm">
-                                                    <div className="flex items-center gap-2">
-                                                      <UserPlus className="h-3 w-3 text-muted-foreground" />
-                                                      <SelectValue placeholder="Назначить" />
-                                                    </div>
-                                                  </SelectTrigger>
-                                                  <SelectContent>
-                                                    <SelectItem value="free_pool">
-                                                      Свободный пул
-                                                    </SelectItem>
-                                                    {assignableEmployees.map(
-                                                      (employee) => (
-                                                        <SelectItem
-                                                          key={employee.id}
-                                                          value={employee.id}
-                                                        >
-                                                          <div className="flex min-w-0 w-full items-center gap-2 pr-6">
-                                                            <span className="truncate">
-                                                              {
-                                                                employee.full_name
-                                                              }
-                                                            </span>
-                                                            {employee.role ? (
-                                                              <span
-                                                                className={cn(
-                                                                  "ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                                                                  getEmployeeRoleBadgeClass(
-                                                                    employee,
-                                                                  ),
-                                                                )}
-                                                              >
-                                                                {employee.role}
-                                                              </span>
-                                                            ) : null}
-                                                          </div>
-                                                        </SelectItem>
-                                                      ),
-                                                    )}
-                                                  </SelectContent>
-                                                </Select>
-                                              </div>
-                                              <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-7 w-full text-xs text-muted-foreground"
-                                                onClick={() =>
-                                                  setEditingEquipmentKey(null)
-                                                }
-                                              >
-                                                Отмена
-                                              </Button>
-                                            </div>
-                                          ) : (
-                                            <div className="space-y-2">
-                                              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                                Ответственный за оборудование
-                                              </div>
-                                              <div className="flex items-center justify-between gap-2">
-                                                <div className="flex min-w-0 items-center gap-2">
-                                                  <span className="truncate text-sm font-semibold text-slate-700">
-                                                    {assignmentMeta.ownerLabel}
-                                                  </span>
-                                                  {device.future > 0 ? (
-                                                    <Badge className="h-5 rounded-full bg-slate-200 px-2 text-[10px] text-slate-700 hover:bg-slate-200">
-                                                      {device.future} позже
-                                                    </Badge>
-                                                  ) : null}
-                                                </div>
-                                                <Button
-                                                  type="button"
-                                                  variant="outline"
-                                                  size="sm"
-                                                  className="h-7 rounded-lg border-slate-200 bg-white px-2.5 text-xs"
-                                                  onClick={() =>
-                                                    setEditingEquipmentKey(
-                                                      device.key,
-                                                    )
-                                                  }
-                                                >
-                                                  Изменить
-                                                </Button>
-                                              </div>
-                                              {device.activeTasks.some(
-                                                (t) => t.status === "IN_PROGRESS",
-                                              ) && (
-                                                <Button
-                                                  type="button"
-                                                  variant="ghost"
-                                                  size="sm"
-                                                  className="h-7 w-full rounded-lg text-xs text-blue-700 hover:bg-blue-50 hover:text-blue-800"
-                                                  onClick={() => {
-                                                    const inProg =
-                                                      device.activeTasks.find(
-                                                        (t) =>
-                                                          t.status ===
-                                                          "IN_PROGRESS",
-                                                      );
-                                                    if (inProg) {
-                                                      handleResetTask(inProg.id);
-                                                    }
-                                                  }}
-                                                >
-                                                  Вернуть из «В работе»
-                                                </Button>
                                               )}
                                             </div>
+
+                                            {/* Maintenance Segmented Bar from Equipment module */}
+                                            <div className="w-full max-w-md pt-0.5">
+                                              <MaintenanceSegmentedBar
+                                                progress={deviceProgress}
+                                              />
+                                            </div>
+
+                                            {/* Task notifications if rework or in progress */}
+                                            {reworkTask && (
+                                              <div className="text-xs font-semibold text-fuchsia-700 bg-fuchsia-50/70 border border-fuchsia-200/60 px-2.5 py-1 rounded-lg mt-1">
+                                                На доработке:{" "}
+                                                {reworkTask.rejection_reason ||
+                                                  "Центр проверок вернул задачу"}
+                                              </div>
+                                            )}
+                                            {inProgressTask && (
+                                              <div className="flex items-center gap-1.5 text-xs font-medium text-blue-600 mt-0.5">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                                В работе у{" "}
+                                                {inProgressTask.assigned_to_name ||
+                                                  "сотрудника"}
+                                              </div>
+                                            )}
+
+                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 font-medium pt-0.5">
+                                              <span>
+                                                Посл. чистка:{" "}
+                                                {device.lastCleanedAt
+                                                  ? new Date(
+                                                      device.lastCleanedAt,
+                                                    ).toLocaleDateString("ru-RU")
+                                                  : "—"}
+                                              </span>
+                                              {device.nextDueDate && (
+                                                <span>
+                                                  • План:{" "}
+                                                  {new Date(
+                                                    device.nextDueDate,
+                                                  ).toLocaleDateString("ru-RU")}
+                                                </span>
+                                              )}
+                                            </div>
+                                        </div>
+
+                                        {/* Right side: Assignee Control & Quick Actions */}
+                                        <div className="flex flex-wrap items-center gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                                          <div
+                                            className="flex items-center gap-2"
+                                            title="Если включено, ответственный остаётся за устройством, но другие сотрудники также могут брать задачу в работу"
+                                          >
+                                            <Switch
+                                              id={`device-available-to-all-${device.key}`}
+                                              checked={device.isAvailableToAll}
+                                              onCheckedChange={(checked) =>
+                                                handleToggleDeviceAvailableToAll(
+                                                  device.equipmentId,
+                                                  checked,
+                                                )
+                                              }
+                                            />
+                                            <Label
+                                              htmlFor={`device-available-to-all-${device.key}`}
+                                              className="text-xs font-medium cursor-pointer select-none text-slate-700 whitespace-nowrap"
+                                            >
+                                              Доступно всем
+                                            </Label>
+                                          </div>
+
+                                          <div className="w-48 sm:w-56">
+                                            <Select
+                                              value={
+                                                assignmentMeta.selectValue
+                                              }
+                                              onValueChange={(value) =>
+                                                handleAssignEquipment(
+                                                  device.equipmentId,
+                                                  value,
+                                                )
+                                              }
+                                            >
+                                              <SelectTrigger className="h-9 w-full rounded-xl border-slate-200 bg-slate-50 hover:bg-slate-100/70 text-xs font-medium text-slate-800">
+                                                <div className="flex items-center gap-2 min-w-0 flex-1 mr-2 [&>span]:w-full [&>span]:block">
+                                                  <UserPlus className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                  <SelectValue placeholder="Назначить" />
+                                                </div>
+                                              </SelectTrigger>
+                                              <SelectContent className="w-[var(--radix-select-trigger-width)] min-w-64">
+                                                <SelectItem
+                                                  value="free_pool"
+                                                  className="text-xs"
+                                                >
+                                                  Свободный пул
+                                                </SelectItem>
+                                                {assignableEmployees.map(
+                                                  (employee) => (
+                                                    <SelectItem
+                                                      key={employee.id}
+                                                      value={employee.id}
+                                                      className="text-xs"
+                                                    >
+                                                      <div className="flex min-w-0 w-full items-center justify-between gap-3">
+                                                        <span className="truncate">
+                                                          {employee.full_name}
+                                                        </span>
+                                                        {employee.role ? (
+                                                          <span
+                                                            className={cn(
+                                                                "ml-auto shrink-0 text-[11px]",
+                                                              getEmployeeRoleTextClass(
+                                                                employee,
+                                                              ),
+                                                            )}
+                                                          >
+                                                            {employee.role}
+                                                          </span>
+                                                        ) : null}
+                                                      </div>
+                                                    </SelectItem>
+                                                  ),
+                                                )}
+                                              </SelectContent>
+                                            </Select>
+                                          </div>
+
+                                          {device.activeTasks.some(
+                                            (t) => t.status === "IN_PROGRESS",
+                                          ) && (
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-7 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg px-2 cursor-pointer"
+                                              onClick={() => {
+                                                const inProg =
+                                                  device.activeTasks.find(
+                                                    (t) =>
+                                                      t.status ===
+                                                      "IN_PROGRESS",
+                                                  );
+                                                if (inProg) {
+                                                  handleResetTask(inProg.id);
+                                                }
+                                              }}
+                                            >
+                                              Вернуть из «В работе»
+                                            </Button>
                                           )}
                                         </div>
                                       </div>
@@ -1771,12 +1659,13 @@ export default function MaintenanceSchedule() {
           </div>
         )}
 
+        {/* Mobile sticky back button */}
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/80 p-4 backdrop-blur-xl md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <div className="mx-auto flex max-w-400 gap-2">
             <Button
               asChild
               variant="outline"
-              className="flex-1 h-12 rounded-xl border-slate-200 text-slate-700 bg-white font-medium"
+              className="flex-1 h-11 rounded-xl border-slate-200 text-slate-700 bg-white font-medium text-sm"
             >
               <Link href={`/clubs/${clubId}/equipment`}>
                 <ChevronLeft className="mr-2 h-4 w-4" />
