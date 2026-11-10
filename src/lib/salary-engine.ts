@@ -1099,13 +1099,11 @@ export async function generateMonthlySalaryReport(
             const isSelfResponsible =
               !t.responsible_user_id_at_completion ||
               String(t.responsible_user_id_at_completion) === String(emp.id);
-            return (
-              isSelfResponsible &&
-              (t.was_overdue ||
-                parseFloat(t.overdue_penalty) > 0 ||
-                t.penalty_override_status === "WAIVED" ||
-                t.penalty_override_status === "CUSTOM")
-            );
+            const rawPenalty = Math.abs(parseFloat(t.overdue_penalty) || 0);
+            const isOverridden =
+              t.penalty_override_status === "WAIVED" ||
+              t.penalty_override_status === "CUSTOM";
+            return isSelfResponsible && (rawPenalty > 0 || isOverridden);
           })
           .map((t) => ({
             id: t.id,
@@ -1128,13 +1126,13 @@ export async function generateMonthlySalaryReport(
             completed_by_name: null,
           })),
         ...currentMonthRescuedTasks
-          .filter(
-            (t) =>
-              t.was_overdue ||
-              parseFloat(t.overdue_penalty) > 0 ||
+          .filter((t) => {
+            const rawPenalty = Math.abs(parseFloat(t.overdue_penalty) || 0);
+            const isOverridden =
               t.penalty_override_status === "WAIVED" ||
-              t.penalty_override_status === "CUSTOM",
-          )
+              t.penalty_override_status === "CUSTOM";
+            return rawPenalty > 0 || isOverridden;
+          })
           .map((t) => ({
             id: t.id,
             equipment_name:
@@ -1155,7 +1153,14 @@ export async function generateMonthlySalaryReport(
             is_rescued: true,
             completed_by_name: t.completed_by_name || "Другой сотрудник",
           })),
-      ];
+      ].sort((a, b) => {
+        const wsA = a.workstation_name || "";
+        const wsB = b.workstation_name || "";
+        return wsA.localeCompare(wsB, "ru", {
+          numeric: true,
+          sensitivity: "base",
+        });
+      });
 
       const currentMonthPenalty =
         currentMonthOwnPenalty + currentMonthRescuedPenalty;

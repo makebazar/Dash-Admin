@@ -20,6 +20,7 @@ import {
   RotateCcw,
   ShieldAlert,
   Wrench,
+  X,
 } from "lucide-react";
 import { PayrollManagerKpiCard } from "@/components/employee/kpi/PayrollManagerKpiCard";
 
@@ -292,7 +293,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
         }));
         setEditingCustomPenaltyTaskId(null);
         setCustomPenaltyValue("");
-        fetchData();
+        fetchData(false);
       } else {
         const error = await response.json();
         alert(`Ошибка: ${error.error || "Не удалось изменить штраф"}`);
@@ -738,8 +739,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     useActualKpi,
   ]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
       const res = await fetch(
         `/api/clubs/${clubId}/salaries/summary?month=${selectedMonth}&year=${selectedYear}`,
@@ -797,7 +798,7 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     } catch (error) {
       console.error("Failed to load payroll data:", error);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -4125,18 +4126,57 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 <ShieldAlert className="h-6 w-6 text-rose-600" />
                 <span>Штрафы за обслуживание</span>
               </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setMaintenancePenaltyModal({
+                    open: false,
+                    employeeName: "",
+                    tasks: [],
+                  });
+                  setEditingCustomPenaltyTaskId(null);
+                  setCustomPenaltyValue("");
+                }}
+                className="h-8 w-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Закрыть"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 mb-6">
               Сотрудник: <span className="font-bold text-slate-800">{maintenancePenaltyModal.employeeName}</span>. Можно простить штраф за конкретную задачу или установить свою сумму.
             </p>
 
             <div className="space-y-3.5 pb-6 sm:pb-0">
-              {maintenancePenaltyModal.tasks.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 italic bg-slate-50 rounded-2xl">
-                  Задачи со штрафом не найдены
-                </div>
-              ) : (
-                maintenancePenaltyModal.tasks.map((task: any) => {
+              {(() => {
+                const visibleTasks = (maintenancePenaltyModal.tasks || [])
+                  .filter((task: any) => {
+                    const hasPenalty =
+                      Number(task.original_penalty || 0) > 0 ||
+                      Number(task.effective_penalty || 0) > 0;
+                    const isOverridden =
+                      task.penalty_override_status === "WAIVED" ||
+                      task.penalty_override_status === "CUSTOM";
+                    return hasPenalty || isOverridden;
+                  })
+                  .sort((a: any, b: any) => {
+                    const wsA = a.workstation_name || "";
+                    const wsB = b.workstation_name || "";
+                    return wsA.localeCompare(wsB, "ru", {
+                      numeric: true,
+                      sensitivity: "base",
+                    });
+                  });
+
+                if (visibleTasks.length === 0) {
+                  return (
+                    <div className="p-8 text-center text-slate-400 italic bg-slate-50 rounded-2xl">
+                      Задачи со штрафом не найдены
+                    </div>
+                  );
+                }
+
+                return visibleTasks.map((task: any) => {
                   const isWaived = task.penalty_override_status === "WAIVED";
                   const isCustom = task.penalty_override_status === "CUSTOM";
                   const isEditingCustom =
@@ -4325,8 +4365,8 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                       )}
                     </div>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
 
             <div className="mt-6 flex justify-end">
