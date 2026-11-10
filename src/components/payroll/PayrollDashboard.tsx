@@ -16,6 +16,8 @@ import {
   Wallet,
   Trophy,
   Lock,
+  Package,
+  RotateCcw,
 } from "lucide-react";
 import { PayrollManagerKpiCard } from "@/components/employee/kpi/PayrollManagerKpiCard";
 
@@ -236,6 +238,11 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
   }>({ open: false, employeeId: 0, employeeName: "", shift: null });
   const [customPenalty, setCustomPenalty] = useState("");
   const [processingLateness, setProcessingLateness] = useState(false);
+  const [deleteBarModal, setDeleteBarModal] = useState<{
+    open: boolean;
+    item: any | null;
+  }>({ open: false, item: null });
+  const [processingDeleteBar, setProcessingDeleteBar] = useState(false);
 
   const handleLatenessResolve = async (status: "CONFIRMED" | "CANCELLED", penaltyAmount?: number) => {
     if (!latenessModal.shift) return;
@@ -436,33 +443,37 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     }
   };
 
-  const handleDeleteBarPurchase = async (movementId: number | string) => {
-    if (
-      !confirm(
-        "Вы уверены, что хотите отменить эту покупку? Товар будет возвращен на склад, а сумма вычтена из удержаний.",
-      )
-    ) {
-      return;
-    }
+  const handleDeleteBarPurchase = async (returnStock: boolean) => {
+    if (!deleteBarModal.item) return;
 
+    setProcessingDeleteBar(true);
     try {
       const response = await fetch(
-        `/api/clubs/${clubId}/bar-purchases/${movementId}`,
+        `/api/clubs/${clubId}/bar-purchases/${deleteBarModal.item.id}`,
         {
           method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ returnStock }),
         },
       );
 
       if (response.ok) {
-        alert("Покупка отменена, товар возвращен на склад.");
+        alert(
+          returnStock
+            ? "Покупка отменена: товар возвращен на склад, сумма списана из удержаний сотрудника."
+            : "Покупка списана: сумма убрана из удержаний сотрудника (товар остался списанным со склада).",
+        );
+        setDeleteBarModal({ open: false, item: null });
         fetchData();
       } else {
         const error = await response.json();
-        alert(`Ошибка: ${error.error}`);
+        alert(`Ошибка: ${error.error || "Не удалось отменить покупку"}`);
       }
     } catch (error) {
       console.error("Delete bar purchase error:", error);
       alert("Не удалось отменить покупку");
+    } finally {
+      setProcessingDeleteBar(false);
     }
   };
 
@@ -3228,12 +3239,13 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                                                 <Button
                                                   variant="ghost"
                                                   size="icon"
-                                                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer"
                                                   onClick={(e) => {
                                                     e.stopPropagation();
-                                                    handleDeleteBarPurchase(
-                                                      item.id,
-                                                    );
+                                                    setDeleteBarModal({
+                                                      open: true,
+                                                      item,
+                                                    });
                                                   }}
                                                 >
                                                   <Trash2 className="h-3.5 w-3.5" />
@@ -3894,6 +3906,105 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 disabled={processingLateness}
               >
                 Закрыть
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteBarModal.open && deleteBarModal.item && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-stretch justify-stretch sm:items-center sm:justify-center sm:p-4">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto sm:rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 sm:max-w-md animate-in zoom-in-95 duration-150">
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-1">
+              Отмена покупки в баре
+            </h2>
+            <p className="text-xs text-slate-500 mb-5">
+              Чек №{deleteBarModal.item.id}
+            </p>
+
+            <div className="space-y-4 pb-6 sm:pb-0">
+              <div className="bg-slate-50 border rounded-2xl p-4 text-sm text-slate-600 space-y-2">
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-slate-500">Товар:</span>
+                  <span className="font-bold text-slate-900 text-right">
+                    {deleteBarModal.item.product_name || "Товар"}
+                    {Number(deleteBarModal.item.quantity || 1) > 1 && (
+                      <span className="text-muted-foreground ml-1">
+                        × {deleteBarModal.item.quantity}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Чек:</span>
+                  <span className="font-semibold text-slate-800">
+                    №{deleteBarModal.item.id}
+                  </span>
+                </div>
+                {deleteBarModal.item.date && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Дата:</span>
+                    <span className="font-medium text-slate-700">
+                      {new Date(deleteBarModal.item.date).toLocaleString("ru-RU", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                  <span className="text-slate-700 font-medium">Сумма к отмене:</span>
+                  <span className="font-black text-rose-600 text-base">
+                    {formatCurrency(deleteBarModal.item.amount)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBarPurchase(true)}
+                  disabled={processingDeleteBar}
+                  className="w-full text-left p-4 rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/50 hover:bg-emerald-50 hover:border-emerald-500 transition-all cursor-pointer group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2 font-bold text-emerald-950 group-hover:text-emerald-900">
+                    <RotateCcw className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>Удалить и вернуть товар</span>
+                  </div>
+                  <p className="text-xs text-emerald-800/80 mt-1 pl-6">
+                    Сумма спишется из долга сотрудника, а товар вернётся обратно на склад.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBarPurchase(false)}
+                  disabled={processingDeleteBar}
+                  className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all cursor-pointer group disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-2 font-bold text-slate-900 group-hover:text-black">
+                    <Package className="h-4 w-4 text-slate-600 shrink-0" />
+                    <span>Просто убрать сумму</span>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-1 pl-6">
+                    Сумма спишется из долга сотрудника, но товар останется списанным со склада.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setDeleteBarModal({ open: false, item: null });
+                }}
+                className="text-slate-500 hover:text-slate-800 cursor-pointer"
+                disabled={processingDeleteBar}
+              >
+                Отмена
               </Button>
             </div>
           </div>
