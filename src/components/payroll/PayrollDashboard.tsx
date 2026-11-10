@@ -18,6 +18,8 @@ import {
   Lock,
   Package,
   RotateCcw,
+  ShieldAlert,
+  Wrench,
 } from "lucide-react";
 import { PayrollManagerKpiCard } from "@/components/employee/kpi/PayrollManagerKpiCard";
 
@@ -243,6 +245,65 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
     item: any | null;
   }>({ open: false, item: null });
   const [processingDeleteBar, setProcessingDeleteBar] = useState(false);
+  const [maintenancePenaltyModal, setMaintenancePenaltyModal] = useState<{
+    open: boolean;
+    employeeName: string;
+    tasks: any[];
+  }>({ open: false, employeeName: "", tasks: [] });
+  const [editingCustomPenaltyTaskId, setEditingCustomPenaltyTaskId] = useState<string | null>(null);
+  const [customPenaltyValue, setCustomPenaltyValue] = useState("");
+  const [processingPenaltyOverride, setProcessingPenaltyOverride] = useState(false);
+
+  const handleMaintenancePenaltyOverride = async (
+    taskId: string,
+    status: "DEFAULT" | "WAIVED" | "CUSTOM",
+    amount?: number,
+  ) => {
+    setProcessingPenaltyOverride(true);
+    try {
+      const response = await fetch(
+        `/api/clubs/${clubId}/equipment/maintenance/${taskId}/penalty`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status, amount }),
+        },
+      );
+
+      if (response.ok) {
+        setMaintenancePenaltyModal((prev) => ({
+          ...prev,
+          tasks: prev.tasks.map((t) => {
+            if (String(t.id) === String(taskId)) {
+              return {
+                ...t,
+                penalty_override_status: status,
+                penalty_override_amount: status === "CUSTOM" ? amount : null,
+                effective_penalty:
+                  status === "WAIVED"
+                    ? 0
+                    : status === "CUSTOM"
+                    ? (amount || 0)
+                    : t.original_penalty,
+              };
+            }
+            return t;
+          }),
+        }));
+        setEditingCustomPenaltyTaskId(null);
+        setCustomPenaltyValue("");
+        fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Ошибка: ${error.error || "Не удалось изменить штраф"}`);
+      }
+    } catch (error) {
+      console.error("Penalty override error:", error);
+      alert("Ошибка при сохранении решения по штрафу");
+    } finally {
+      setProcessingPenaltyOverride(false);
+    }
+  };
 
   const handleLatenessResolve = async (status: "CONFIRMED" | "CANCELLED", penaltyAmount?: number) => {
     if (!latenessModal.shift) return;
@@ -1444,40 +1505,86 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                               Детализация работ
                             </span>
                             <div className="grid gap-2">
-                              {ms.metric_breakdown.map((m: any, mi: number) => (
-                                <div
-                                  key={mi}
-                                  className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-100 shadow-sm"
-                                >
-                                  <div className="space-y-0.5">
-                                    <div className="text-[11px] font-bold text-slate-900">
-                                      {m.source}
-                                    </div>
-                                    <div className="text-[10px] text-slate-500">
-                                      {new Intl.NumberFormat("ru-RU", {
-                                        maximumFractionDigits: 0,
-                                      }).format(m.count)}{" "}
-                                      {m.source.includes("Штраф")
-                                        ? "инцид."
-                                        : "задач"}
-                                      {m.reward_value > 0 &&
-                                        ` × ${formatCurrency(m.reward_value)}`}
-                                    </div>
-                                  </div>
+                              {ms.metric_breakdown.map((m: any, mi: number) => {
+                                const isPenaltyRow = m.source.includes("Штраф");
+                                const hasPenalizedTasks =
+                                  Array.isArray(ms.penalized_tasks) &&
+                                  ms.penalized_tasks.length > 0;
+                                return (
                                   <div
+                                    key={mi}
                                     className={cn(
-                                      "text-[11px] font-black",
-                                      m.earned < 0
-                                        ? "text-rose-600"
-                                        : "text-emerald-600",
+                                      "flex items-center justify-between p-3 rounded-xl bg-white border border-slate-100 shadow-sm transition-colors",
+                                      isPenaltyRow &&
+                                        hasPenalizedTasks &&
+                                        "cursor-pointer hover:border-rose-300 hover:bg-rose-50/40",
                                     )}
+                                    onClick={() => {
+                                      if (isPenaltyRow && hasPenalizedTasks) {
+                                        setMaintenancePenaltyModal({
+                                          open: true,
+                                          employeeName: employee.full_name,
+                                          tasks: ms.penalized_tasks,
+                                        });
+                                      }
+                                    }}
                                   >
-                                    {m.earned < 0 ? "" : "+"}
-                                    {formatCurrency(m.earned)}
+                                    <div className="space-y-0.5">
+                                      <div className="text-[11px] font-bold text-slate-900 flex items-center gap-1.5">
+                                        <span>{m.source}</span>
+                                        {isPenaltyRow && hasPenalizedTasks && (
+                                          <span className="text-[9px] font-bold uppercase tracking-wider text-rose-600 bg-rose-100/80 px-1.5 py-0.5 rounded-md">
+                                            Снять / Настроить
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500">
+                                        {new Intl.NumberFormat("ru-RU", {
+                                          maximumFractionDigits: 0,
+                                        }).format(m.count)}{" "}
+                                        {m.source.includes("Штраф")
+                                          ? "инцид."
+                                          : "задач"}
+                                        {m.reward_value > 0 &&
+                                          ` × ${formatCurrency(m.reward_value)}`}
+                                      </div>
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "text-[11px] font-black",
+                                        m.earned < 0
+                                          ? "text-rose-600"
+                                          : "text-emerald-600",
+                                      )}
+                                    >
+                                      {m.earned < 0 ? "" : "+"}
+                                      {formatCurrency(m.earned)}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
+                            {Array.isArray(ms.penalized_tasks) &&
+                              ms.penalized_tasks.length > 0 && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMaintenancePenaltyModal({
+                                      open: true,
+                                      employeeName: employee.full_name,
+                                      tasks: ms.penalized_tasks,
+                                    });
+                                  }}
+                                  className="w-full h-8 text-[11px] font-bold text-rose-700 bg-rose-50/60 hover:bg-rose-100 hover:border-rose-300 border-rose-200 flex items-center justify-center gap-1.5 cursor-pointer mt-1"
+                                >
+                                  <ShieldAlert className="h-3.5 w-3.5 text-rose-600" />
+                                  <span>
+                                    Управление штрафами за обслуживание ({ms.penalized_tasks.length})
+                                  </span>
+                                </Button>
+                              )}
                           </div>
                         )}
 
@@ -4005,6 +4112,239 @@ export default function PayrollDashboard({ clubId }: { clubId: string }) {
                 disabled={processingDeleteBar}
               >
                 Отмена
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {maintenancePenaltyModal.open && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-stretch justify-stretch sm:items-center sm:justify-center sm:p-4">
+          <div className="bg-white w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto sm:rounded-3xl border border-slate-200 shadow-2xl p-6 sm:p-8 sm:max-w-xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                <ShieldAlert className="h-6 w-6 text-rose-600" />
+                <span>Штрафы за обслуживание</span>
+              </h2>
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500 mb-6">
+              Сотрудник: <span className="font-bold text-slate-800">{maintenancePenaltyModal.employeeName}</span>. Можно простить штраф за конкретную задачу или установить свою сумму.
+            </p>
+
+            <div className="space-y-3.5 pb-6 sm:pb-0">
+              {maintenancePenaltyModal.tasks.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 italic bg-slate-50 rounded-2xl">
+                  Задачи со штрафом не найдены
+                </div>
+              ) : (
+                maintenancePenaltyModal.tasks.map((task: any) => {
+                  const isWaived = task.penalty_override_status === "WAIVED";
+                  const isCustom = task.penalty_override_status === "CUSTOM";
+                  const isEditingCustom =
+                    editingCustomPenaltyTaskId === String(task.id);
+
+                  return (
+                    <div
+                      key={task.id}
+                      className={cn(
+                        "rounded-2xl border p-4 transition-all space-y-3",
+                        isWaived
+                          ? "border-emerald-200 bg-emerald-50/30"
+                          : isCustom
+                          ? "border-amber-200 bg-amber-50/30"
+                          : "border-slate-200 bg-slate-50/60",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+                            <span>{task.workstation_name || "Место"}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-slate-700 font-semibold">
+                              {task.equipment_name}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            {task.due_date && (
+                              <span>
+                                Дедлайн:{" "}
+                                {new Date(task.due_date).toLocaleDateString(
+                                  "ru-RU",
+                                )}
+                              </span>
+                            )}
+                            {task.completed_at && (
+                              <>
+                                <span className="text-slate-300">•</span>
+                                <span>
+                                  Сдано:{" "}
+                                  {new Date(
+                                    task.completed_at,
+                                  ).toLocaleDateString("ru-RU")}
+                                </span>
+                              </>
+                            )}
+                            {task.overdue_days > 0 && (
+                              <>
+                                <span className="text-slate-300">•</span>
+                                <span className="text-rose-600 font-medium">
+                                  Просрочка {task.overdue_days} дн.
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          {task.is_rescued && (
+                            <div className="text-[11px] text-amber-700 font-medium mt-1">
+                              Почистил другой админ:{" "}
+                              {task.completed_by_name || "Коллега"} (штраф 50%)
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          {isWaived ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                              Штраф списан (0 ₽)
+                            </span>
+                          ) : isCustom ? (
+                            <div className="text-right">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                                Своя сумма
+                              </span>
+                              <div className="font-black text-rose-600 text-sm mt-0.5">
+                                -{formatCurrency(task.effective_penalty)}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="font-black text-rose-600 text-sm">
+                              -{formatCurrency(task.effective_penalty)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Controls for this task */}
+                      {isEditingCustom ? (
+                        <div className="pt-2 border-t border-slate-200/80 flex items-center gap-2 animate-in fade-in duration-150">
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="Сумма (₽)"
+                            value={customPenaltyValue}
+                            onChange={(e) =>
+                              setCustomPenaltyValue(e.target.value)
+                            }
+                            className="h-9 w-28 bg-white border border-slate-300 rounded-lg px-2.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-slate-900"
+                            autoFocus
+                          />
+                          <Button
+                            size="sm"
+                            disabled={
+                              processingPenaltyOverride ||
+                              customPenaltyValue === ""
+                            }
+                            onClick={() => {
+                              const val = parseFloat(customPenaltyValue);
+                              if (isNaN(val) || val < 0) {
+                                alert("Введите корректную сумму");
+                                return;
+                              }
+                              handleMaintenancePenaltyOverride(
+                                task.id,
+                                "CUSTOM",
+                                val,
+                              );
+                            }}
+                            className="h-9 text-xs font-semibold px-3 cursor-pointer bg-slate-900 hover:bg-slate-800 text-white"
+                          >
+                            Сохранить
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingCustomPenaltyTaskId(null);
+                              setCustomPenaltyValue("");
+                            }}
+                            className="h-9 text-xs text-slate-500 cursor-pointer"
+                          >
+                            Отмена
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="pt-2 border-t border-slate-200/70 flex flex-wrap items-center gap-2">
+                          {!isWaived && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={processingPenaltyOverride}
+                              onClick={() =>
+                                handleMaintenancePenaltyOverride(
+                                  task.id,
+                                  "WAIVED",
+                                )
+                              }
+                              className="h-8 text-xs font-semibold text-emerald-700 bg-white hover:bg-emerald-50 border-emerald-300 hover:border-emerald-400 cursor-pointer"
+                            >
+                              Простить штраф (0 ₽)
+                            </Button>
+                          )}
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={processingPenaltyOverride}
+                            onClick={() => {
+                              setEditingCustomPenaltyTaskId(String(task.id));
+                              setCustomPenaltyValue(
+                                String(task.effective_penalty || ""),
+                              );
+                            }}
+                            className="h-8 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border-slate-300 cursor-pointer"
+                          >
+                            Своя сумма
+                          </Button>
+
+                          {(isWaived || isCustom) && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={processingPenaltyOverride}
+                              onClick={() =>
+                                handleMaintenancePenaltyOverride(
+                                  task.id,
+                                  "DEFAULT",
+                                )
+                              }
+                              className="h-8 text-xs text-slate-500 hover:text-slate-800 cursor-pointer ml-auto"
+                            >
+                              Сбросить (авторасчёт:{" "}
+                              {formatCurrency(task.original_penalty)})
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setMaintenancePenaltyModal({
+                    open: false,
+                    employeeName: "",
+                    tasks: [],
+                  });
+                  setEditingCustomPenaltyTaskId(null);
+                  setCustomPenaltyValue("");
+                }}
+                className="text-slate-500 hover:text-slate-800 cursor-pointer"
+                disabled={processingPenaltyOverride}
+              >
+                Закрыть
               </Button>
             </div>
           </div>

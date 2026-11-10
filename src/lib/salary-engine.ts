@@ -935,31 +935,57 @@ export async function generateMonthlySalaryReport(
 
       // 2. Completed Tasks for Payment (Accrual) - for distributing to shifts
       const paymentTasksRes = await query(
-        `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, mt.overdue_penalty, mt.due_date, mt.responsible_user_id_at_completion, e.type as equipment_type_code, et.name_ru as equipment_type_name
-                 FROM equipment_maintenance_tasks mt
-                 JOIN equipment e ON mt.equipment_id = e.id
-                 LEFT JOIN equipment_types et ON e.type = et.code
-                 WHERE mt.completed_by = $1 AND mt.status = 'COMPLETED'
-                   AND e.club_id = $4
-                   AND mt.completed_at >= $2 AND mt.completed_at <= $3`,
+        `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, 
+                mt.overdue_penalty, mt.due_date, mt.responsible_user_id_at_completion,
+                mt.penalty_override_status, mt.penalty_override_amount, mt.penalty_override_reason,
+                e.name as equipment_name, e.type as equipment_type_code, et.name_ru as equipment_type_name,
+                w.name as workstation_name,
+                u_comp.full_name as completed_by_name
+         FROM equipment_maintenance_tasks mt
+         JOIN equipment e ON mt.equipment_id = e.id
+         LEFT JOIN equipment_types et ON e.type = et.code
+         LEFT JOIN club_workstations w ON e.workstation_id = w.id
+         LEFT JOIN users u_comp ON mt.completed_by = u_comp.id
+         WHERE mt.completed_by = $1 AND mt.status = 'COMPLETED'
+           AND e.club_id = $4
+           AND mt.completed_at >= $2 AND mt.completed_at <= $3`,
         [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString(), clubId],
       );
       const paymentTasks = paymentTasksRes.rows;
 
       // 2b. Rescued Tasks: where employee was responsible, but completed by someone else (50% overdue penalty applies to responsible)
       const rescuedTasksRes = await query(
-        `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, mt.overdue_penalty, mt.due_date, mt.responsible_user_id_at_completion, e.type as equipment_type_code, et.name_ru as equipment_type_name
-                 FROM equipment_maintenance_tasks mt
-                 JOIN equipment e ON mt.equipment_id = e.id
-                 LEFT JOIN equipment_types et ON e.type = et.code
-                 WHERE mt.responsible_user_id_at_completion = $1
-                   AND (mt.completed_by IS NULL OR mt.completed_by != $1)
-                   AND mt.status = 'COMPLETED'
-                   AND e.club_id = $4
-                   AND mt.completed_at >= $2 AND mt.completed_at <= $3`,
+        `SELECT mt.id, mt.bonus_earned, mt.completed_at, mt.overdue_days_at_completion, mt.was_overdue, 
+                mt.overdue_penalty, mt.due_date, mt.responsible_user_id_at_completion,
+                mt.penalty_override_status, mt.penalty_override_amount, mt.penalty_override_reason,
+                e.name as equipment_name, e.type as equipment_type_code, et.name_ru as equipment_type_name,
+                w.name as workstation_name,
+                u_comp.full_name as completed_by_name
+         FROM equipment_maintenance_tasks mt
+         JOIN equipment e ON mt.equipment_id = e.id
+         LEFT JOIN equipment_types et ON e.type = et.code
+         LEFT JOIN club_workstations w ON e.workstation_id = w.id
+         LEFT JOIN users u_comp ON mt.completed_by = u_comp.id
+         WHERE mt.responsible_user_id_at_completion = $1
+           AND (mt.completed_by IS NULL OR mt.completed_by != $1)
+           AND mt.status = 'COMPLETED'
+           AND e.club_id = $4
+           AND mt.completed_at >= $2 AND mt.completed_at <= $3`,
         [emp.id, startOfMonth.toISOString(), endOfMonth.toISOString(), clubId],
       );
       const rescuedTasks = rescuedTasksRes.rows;
+
+      const getEffectiveTaskPenalty = (t: any): number => {
+        if (t.penalty_override_status === "WAIVED") return 0;
+        if (
+          t.penalty_override_status === "CUSTOM" &&
+          t.penalty_override_amount !== null &&
+          t.penalty_override_amount !== undefined
+        ) {
+          return Math.max(0, parseFloat(t.penalty_override_amount) || 0);
+        }
+        return Math.abs(parseFloat(t.overdue_penalty) || 0);
+      };
 
       // Gross earnings breakdown by type (full rate, before penalty)
       const maintenance_breakdown_by_type: Record<
@@ -1016,7 +1042,7 @@ export async function generateMonthlySalaryReport(
         ) {
           return sum;
         }
-        return sum + Math.abs(parseFloat(t.overdue_penalty) || 0);
+        return sum + getEffectiveTaskPenalty(t);
       }, 0);
 
       // Add penalty to breakdown for own completed tasks
@@ -1029,7 +1055,7 @@ export async function generateMonthlySalaryReport(
             String(task.responsible_user_id_at_completion) !== String(emp.id);
           const taskPenalty = isOtherResponsible
             ? 0
-            : Math.abs(parseFloat(task.overdue_penalty) || 0);
+            : getEffectiveTaskPenalty(task);
           maintenance_breakdown_by_type[type].penalty += taskPenalty;
         }
       }
@@ -1041,7 +1067,7 @@ export async function generateMonthlySalaryReport(
       });
 
       const currentMonthRescuedPenalty = currentMonthRescuedTasks.reduce(
-        (sum, t) => sum + Math.abs(parseFloat(t.overdue_penalty) || 0),
+        (sum, t) => sum + getEffectiveTaskPenalty(t),
         0,
       );
 
@@ -1058,7 +1084,7 @@ export async function generateMonthlySalaryReport(
             overdue_incidents: 0,
           };
         }
-        const taskPenalty = Math.abs(parseFloat(task.overdue_penalty) || 0);
+        const taskPenalty = getEffectiveTaskPenalty(task);
         const overdueDays = parseInt(task.overdue_days_at_completion) || 0;
         maintenance_breakdown_by_type[type].penalty += taskPenalty;
         maintenance_breakdown_by_type[type].overdue_days += overdueDays;
@@ -1066,6 +1092,70 @@ export async function generateMonthlySalaryReport(
           maintenance_breakdown_by_type[type].overdue_incidents++;
         }
       }
+
+      const penalized_tasks = [
+        ...currentMonthTasks
+          .filter((t) => {
+            const isSelfResponsible =
+              !t.responsible_user_id_at_completion ||
+              String(t.responsible_user_id_at_completion) === String(emp.id);
+            return (
+              isSelfResponsible &&
+              (t.was_overdue ||
+                parseFloat(t.overdue_penalty) > 0 ||
+                t.penalty_override_status === "WAIVED" ||
+                t.penalty_override_status === "CUSTOM")
+            );
+          })
+          .map((t) => ({
+            id: t.id,
+            equipment_name:
+              t.equipment_name || t.equipment_type_name || "Оборудование",
+            equipment_type_name: t.equipment_type_name || "Оборудование",
+            workstation_name: t.workstation_name || "Свободное",
+            due_date: t.due_date,
+            completed_at: t.completed_at,
+            overdue_days: parseInt(t.overdue_days_at_completion) || 0,
+            original_penalty: Math.abs(parseFloat(t.overdue_penalty) || 0),
+            effective_penalty: getEffectiveTaskPenalty(t),
+            penalty_override_status: t.penalty_override_status || "DEFAULT",
+            penalty_override_amount:
+              t.penalty_override_amount !== null
+                ? parseFloat(t.penalty_override_amount)
+                : null,
+            penalty_override_reason: t.penalty_override_reason || null,
+            is_rescued: false,
+            completed_by_name: null,
+          })),
+        ...currentMonthRescuedTasks
+          .filter(
+            (t) =>
+              t.was_overdue ||
+              parseFloat(t.overdue_penalty) > 0 ||
+              t.penalty_override_status === "WAIVED" ||
+              t.penalty_override_status === "CUSTOM",
+          )
+          .map((t) => ({
+            id: t.id,
+            equipment_name:
+              t.equipment_name || t.equipment_type_name || "Оборудование",
+            equipment_type_name: t.equipment_type_name || "Оборудование",
+            workstation_name: t.workstation_name || "Свободное",
+            due_date: t.due_date,
+            completed_at: t.completed_at,
+            overdue_days: parseInt(t.overdue_days_at_completion) || 0,
+            original_penalty: Math.abs(parseFloat(t.overdue_penalty) || 0),
+            effective_penalty: getEffectiveTaskPenalty(t),
+            penalty_override_status: t.penalty_override_status || "DEFAULT",
+            penalty_override_amount:
+              t.penalty_override_amount !== null
+                ? parseFloat(t.penalty_override_amount)
+                : null,
+            penalty_override_reason: t.penalty_override_reason || null,
+            is_rescued: true,
+            completed_by_name: t.completed_by_name || "Другой сотрудник",
+          })),
+      ];
 
       const currentMonthPenalty =
         currentMonthOwnPenalty + currentMonthRescuedPenalty;
@@ -1988,6 +2078,30 @@ export async function generateMonthlySalaryReport(
           );
         }
 
+        const maintenanceMetricBreakdown = [
+          ...maintenance_breakdown.map((b) => ({
+            source: b.type,
+            count: b.count,
+            earned: b.gross,
+            reward_value: b.count > 0 ? b.gross / b.count : 0,
+            reward_type: "FIXED",
+          })),
+          ...(currentMonthPenalty > 0
+            ? [
+                {
+                  source: "Штраф за просрочку обслуживания",
+                  count: maintenanceOverdueIncidents,
+                  earned: -currentMonthPenalty,
+                  reward_value:
+                    maintenanceOverdueIncidents > 0
+                      ? currentMonthPenalty / maintenanceOverdueIncidents
+                      : currentMonthPenalty,
+                  reward_type: "FIXED",
+                },
+              ]
+            : []),
+        ];
+
         maintenance_status = {
           ...maintConfigForPayout,
           current_value: completed,
@@ -2008,6 +2122,8 @@ export async function generateMonthlySalaryReport(
           quality_penalty_units: qualityPenaltyUnits,
           thresholds: current_thresholds,
           breakdown: maintenance_breakdown,
+          metric_breakdown: maintenanceMetricBreakdown,
+          penalized_tasks,
           is_met: bonusAmount > 0,
         };
 
@@ -2016,6 +2132,53 @@ export async function generateMonthlySalaryReport(
         } else {
           kpi_bonus_amount += bonusAmount;
         }
+      } else if (
+        penalized_tasks.length > 0 ||
+        currentMonthPenalty > 0 ||
+        totalMaintenanceGross > 0
+      ) {
+        const fallbackMetricBreakdown = [
+          ...maintenance_breakdown.map((b) => ({
+            source: b.type,
+            count: b.count,
+            earned: b.gross,
+            reward_value: b.count > 0 ? b.gross / b.count : 0,
+            reward_type: "FIXED",
+          })),
+          ...(currentMonthPenalty > 0
+            ? [
+                {
+                  source: "Штраф за просрочку обслуживания",
+                  count: maintenanceOverdueIncidents,
+                  earned: -currentMonthPenalty,
+                  reward_value:
+                    maintenanceOverdueIncidents > 0
+                      ? currentMonthPenalty / maintenanceOverdueIncidents
+                      : currentMonthPenalty,
+                  reward_type: "FIXED",
+                },
+              ]
+            : []),
+        ];
+
+        maintenance_status = {
+          name: "Обслуживание ПК",
+          type: "maintenance_kpi",
+          payout_type: "REAL_MONEY",
+          current_value: paymentTasks.length,
+          target_value: paymentTasks.length,
+          efficiency: 100,
+          bonus_amount: totalMaintenanceFinal,
+          base_bonus_amount: totalMaintenanceGross,
+          final_bonus_amount: totalMaintenanceFinal,
+          penalty_raw_amount: currentMonthPenalty,
+          penalty_amount: currentMonthPenalty,
+          overdue_incidents: maintenanceOverdueIncidents,
+          breakdown: maintenance_breakdown,
+          metric_breakdown: fallbackMetricBreakdown,
+          penalized_tasks,
+          is_met: totalMaintenanceFinal > 0,
+        };
       }
 
       // standalone manual bonuses
@@ -2222,6 +2385,7 @@ export async function generateMonthlySalaryReport(
         period_bonuses: bonuses_status,
         checklist_bonuses: checklist_status,
         maintenance_status,
+        maintenance_penalized_tasks: penalized_tasks,
         shift_bonuses_breakdown,
         has_kpi_feature,
         has_virtual_balance_feature,
