@@ -337,6 +337,7 @@ export async function completeMaintenanceTask(params: {
               THEN 'DIRECT'
               ELSE 'FREE_POOL'
             END as effective_assignment_mode,
+            (${effectiveEquipmentAssigneeSql}) as effective_equipment_assigned_user_id,
             (${effectiveTaskAssigneeSql}) as effective_task_assigned_user_id,
             COALESCE(c.timezone, 'Europe/Moscow') as timezone
      FROM equipment_maintenance_tasks mt
@@ -355,10 +356,13 @@ export async function completeMaintenanceTask(params: {
   const clubTimezone = task.timezone || "Europe/Moscow";
   const isFreePool = task.effective_assignment_mode === "FREE_POOL";
   const responsibleUserIdAtCompletion =
-    task.effective_task_assigned_user_id || userId;
+    (task.effective_assignment_mode === "DIRECT" &&
+      task.effective_equipment_assigned_user_id)
+      ? task.effective_equipment_assigned_user_id
+      : (task.effective_task_assigned_user_id || userId);
   const isCompletedByAnother = Boolean(
-    task.effective_task_assigned_user_id &&
-      String(task.effective_task_assigned_user_id) !== String(userId),
+    responsibleUserIdAtCompletion &&
+      String(responsibleUserIdAtCompletion) !== String(userId),
   );
 
   const kpiBonus = await resolveUserMaintenanceKpiBonus(clubId, userId);
@@ -899,7 +903,18 @@ export async function recalculateClubMaintenanceBonuses(params: {
         mt.overdue_penalty,
         mt.overdue_days_at_completion,
         mt.was_overdue,
-        mt.responsible_user_id_at_completion,
+        COALESCE(
+          CASE
+            WHEN e.assignment_mode = 'DIRECT'
+                 AND (
+                   (ce.is_active = TRUE AND ce.dismissed_at IS NULL)
+                   OR c.owner_id = e.assigned_user_id
+                 )
+            THEN e.assigned_user_id
+            ELSE NULL
+          END,
+          mt.responsible_user_id_at_completion
+        ) as responsible_user_id_at_completion,
         e.type as equipment_type,
         CASE
           WHEN e.assignment_mode = 'DIRECT'
@@ -976,7 +991,7 @@ export async function recalculateClubMaintenanceBonuses(params: {
 
       await query(
         `UPDATE equipment_maintenance_tasks
-         SET bonus_earned = $1, overdue_penalty = $2, overdue_days_at_completion = $3, was_overdue = $4
+         SET bonus_earned = $1, overdue_penalty = $2, overdue_days_at_completion = $3, was_overdue = $4, responsible_user_id_at_completion = $6
          WHERE id = $5`,
         [
           bonusEarned,
@@ -984,6 +999,7 @@ export async function recalculateClubMaintenanceBonuses(params: {
           overdueDaysAtCompletion,
           wasOverdue,
           task.task_id,
+          task.responsible_user_id_at_completion,
         ],
       );
       updatedCount++;
